@@ -1,0 +1,3 @@
+[submodule "poc/live_stream_stability"]
+	path = poc/live_stream_stability
+	url = git@github.com:nmnWithNucleus/live-stream-stability.git
