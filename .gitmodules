@@ -1,3 +1,6 @@
 [submodule "poc/live_stream_stability"]
 	path = poc/live_stream_stability
 	url = git@github.com:nmnWithNucleus/live-stream-stability.git
+[submodule "poc/recursive_finetuning_stability"]
+	path = poc/recursive_finetuning_stability
+	url = git@github.com:nmnWithNucleus/recursive-finetuning-stability.git
