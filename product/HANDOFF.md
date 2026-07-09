@@ -18,7 +18,7 @@
 | Data Processing | chartered — awaiting kickoff | — | [canvas](services/data-processing/HANDOFF.md) |
 | Storage | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-D | [canvas](services/storage/HANDOFF.md) |
 | Input | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-A | [canvas](services/input/HANDOFF.md) |
-| Inference | **v0.0 built + mock loop runs** (mock; real vLLM scripted-but-unrun) | serve-loop WS-B | [canvas](services/inference/HANDOFF.md) |
+| Inference | **v0.0 live on real Qwen3-VL-32B** (vLLM TP=8 on node-7, verified E2E 2026-07-09) | serve-loop WS-B | [canvas](services/inference/HANDOFF.md) |
 | Output | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-C | [canvas](services/output/HANDOFF.md) |
 | Continuum | chartered — awaiting kickoff | — | [canvas](services/continuum/HANDOFF.md) |
 | Platform | **v0.0 bring-up shipped + run E2E** (ratified 2026-07-09) | serve-loop WS-E | [canvas](services/platform/HANDOFF.md) |
@@ -27,7 +27,7 @@
 
 | Aspect | File | State |
 |---|---|---|
-| Engineering | [handoff/engineering.md](handoff/engineering.md) | active — **serve-loop MVP (v0.0) built + mock loop runs E2E** (integrator, 2026-07-09); real vLLM path scripted-but-unrun |
+| Engineering | [handoff/engineering.md](handoff/engineering.md) | active — **serve-loop MVP (v0.0) live on real Qwen3-VL-32B** (node-7, verified E2E 2026-07-09); next: pick the next slice |
 | Research | [handoff/research.md](handoff/research.md) | seeded — first agenda: POC→continuum bridge, research agenda v1 |
 | Design / UX | [handoff/design.md](handoff/design.md) | seeded |
 | Hiring / Ops | [handoff/hiring-ops.md](handoff/hiring-ops.md) | seeded |
@@ -76,15 +76,22 @@
   `c9_reader.js` wired into the input surface; inference `run.sh` honors `HOST`/`PORT`; storage
   test-DB gitignored. **Real Qwen3-VL-32B (`vllm`) is scripted-but-unrun** (needs the a3mega
   node). Full result: [handoff/engineering.md](handoff/engineering.md) "Serve-loop MVP — v0.0
-  build result"; run guide: [services/README.md](services/README.md). **Not yet committed** —
-  the founders' session commits.
+  build result"; run guide: [services/README.md](services/README.md). Committed (`f6805d1`).
+
+- 2026-07-09 (later still): **v0.0 CLOSED on the real base model.** Qwen3-VL-32B-Instruct
+  launched on vLLM TP=8 on node-7 (driver 580 / CUDA-13, `vllm-vlm` env, model already cached);
+  flipped `MODEL_BACKEND=vllm` and drove a real turn end to end — genuine Qwen answer streamed in
+  the C9 format, C4 persisted with the real `model_id`. `serve_vllm.sh` updated to the verified
+  recipe. Detail: [handoff/engineering.md](handoff/engineering.md) "REAL model — v0.0 closed".
 
 ## Next
 
-- **Flip mock → real base model:** on the a3mega node run
-  [`services/inference/serve_vllm.sh`](services/inference/serve_vllm.sh) (Qwen3-VL-32B, TP=8),
-  set `MODEL_BACKEND=vllm`, `run_all.sh --restart`, and confirm a real streamed answer — the
-  one remaining step to the true v0.0 exit criterion.
-- Commit the serve-loop MVP build (founders' session).
-- Then the next slice off the walking skeleton (capture / continuum / personalization) — pick
-  in the engineering thread. CTO to read the Platform charter internals when time allows (D1).
+- **Pick the next slice** off the walking skeleton (engineering thread): capture
+  (recording → data-processing → `/context`) is the natural next — it starts the data
+  compounding the thesis rests on; alternatives are continuum/personalization or more serve-loop
+  (mentors/C7, surfaces).
+- **Deferred follow-up:** vLLM 0.19.1 → ≥0.20 CUDA-13 (cu13) wheels + flash-attn (its own slice).
+- **Now unblocked:** the D6 OCR spot-check on real screen-capture data (model is serving).
+- CTO to read the Platform charter internals when time allows (D1).
+- **Live now:** vLLM is up on node-7 (8× H100 pinned) and the surface answers at
+  `http://localhost:8081` — tear down with `run_all.sh --stop` + kill the vLLM PID to free GPUs.

@@ -137,17 +137,37 @@ format is produced by inference and consumed identically by input's relay, outpu
 `c9_reader.js`, and `c9_parse.py` — verified byte-for-byte (single 0x1e in the stream).
 
 ### Blockers / not done here
-- **Real Qwen3-VL-32B (`vllm` backend) is scripted-but-unrun** — no GPU on this box.
-  `serve_vllm.sh` + `MODEL_BACKEND=vllm` need the a3mega node (TP=8). Per the honesty rule,
-  no real-model run is claimed. Steps to go real are in `services/README.md`.
 - HTTPS / remote reach (cloudflared), CI, observability: later platform work (unchanged).
 - `c9_reader.js` is duplicated (input vendors output's copy); acceptable for v0.0, but a
   copy-on-build step should replace the manual vendoring.
 
 **Exit criterion (v0.0 done): MET for the mock loop.** A turn typed at the computer surface
 returns a streamed base-*mock* answer and the turn is persisted + re-readable by
-`session_id`/`turn_id`. The only thing between mock and "real base-model answer" is flipping
-`MODEL_BACKEND=vllm` on the GPU node.
+`session_id`/`turn_id`.
+
+### REAL model — v0.0 closed on Qwen3-VL-32B (2026-07-09, node-7)
+
+The mock ceiling is lifted — the loop now runs on the **real base model**, verified on
+`nucla3m-a3meganodeset-7` (8× H100, driver 580 / CUDA-13):
+- Launched **Qwen3-VL-32B-Instruct on vLLM 0.19.1** (the `vllm-vlm` conda env), TP=8, from the
+  existing HF cache (~63 GB, already downloaded — no pull). Came up in a few minutes, ~75 GB/GPU
+  at util 0.90. Recipe verified + recorded in [`../services/inference/serve_vllm.sh`](../services/inference/serve_vllm.sh).
+- Direct `/v1/chat/completions` sanity: *"2+2 equals 4, and the capital of France is Paris."* in ~1.9 s.
+- **Full serve-loop turn on real weights:** `POST :8081/api/turn {"text":"…Eiffel Tower…"}` →
+  streamed C9 (real answer *"The Eiffel Tower is a wrought-iron lattice tower located in Paris,
+  France."* + single `U+001E` + end frame, `model_id:"Qwen/Qwen3-VL-32B-Instruct"`, real usage
+  62→19) → C4 persisted with the real answer, re-readable by turn id. Flip was just
+  `MODEL_BACKEND=vllm` in `deploy/.env` + `run_all.sh --restart` (inference `/health` reports
+  `backend:"vllm"`).
+
+**Exit criterion for v0.0 is now MET on the real base model, not just mock.** One variable was
+changed vs. the mock loop (the backend) — everything else (contracts, wiring, persistence) was
+already proven, so the real turn worked first try.
+
+**Deliberate follow-up (its own slice):** push vLLM 0.19.1 → **≥0.20 with CUDA-13 (cu13) wheels +
+matching flash-attn** to leverage driver 580. Kept out of the finish-line step on purpose (one
+variable at a time). Also: the D6 OCR spot-check on real screen-capture data can run now that the
+model serves.
 
 ---
 
