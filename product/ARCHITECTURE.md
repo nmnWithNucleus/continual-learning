@@ -87,8 +87,8 @@ what is locked now is direction, ownership, and shape.
 
 | ID | Producer → Consumer | Carries | Notes |
 |---|---|---|---|
-| **C1** | recording → data-processing | Raw stream envelope: `user_id`, `device_id`, modality, codec, wall-clock `t_start/t_end`, sequence no, optional device location, blob ref | One envelope format for all four modalities; blobs land in storage `/raw`, the envelope carries the ref; location populated where the device has it, else data-processing infers from content |
-| **C2** | data-processing → storage `/context` | Processed record: timestamps, transcript/caption content, enrichments (speakers, known faces, geo/place tags), raw ref, pipeline version | Timestamp spine: concurrent activities from different devices must be alignable |
+| **C1** | recording → data-processing | Raw stream envelope: `user_id`, `device_id`, `stream_id`, `sequence`, `chunk_id`, modality, codec, wall-clock `t_start/t_end`, blob ref (+ sha256/bytes), optional device location/clock | **v0 frozen (learn-loop, below).** One envelope format for all four modalities; blobs land in storage `/raw` first, the envelope carries the ref; push/at-least-once, dedup on `chunk_id`, gaps via `(stream_id, sequence)`; location populated where the device has it, else data-processing infers from content |
+| **C2** | data-processing → storage `/context` | Processed record: timestamps, transcript/caption content, enrichments (speakers, known faces, geo/place tags, objects), raw ref, pipeline version | **v0 frozen (learn-loop, below).** Timestamp spine: concurrent activities from different devices must be alignable |
 | **C3** | input (QueryBuilder) → inference | **UserPrompt**: chat-templated multimodal request + session/turn ids + client capabilities | The seam where "user request" becomes "model input"; a *clarification-answer* variant binds a reply to a pending turn (see C7/C9) |
 | **C4** | inference → storage `/sessions` | Turn record incl. **full mentor traces + tool traces** | Traces are continuum's training data — never truncate |
 | **C5** | continuum → model directory | Adapter version entry: `user_id`, version, base-model hash, training window, eval report, status (active/rolled-back) | Publish is eval-gated; rollback is first-class |
@@ -105,8 +105,9 @@ The **minimal, text-only** shapes the serve-loop MVP builds against. Machine-rea
 Schemas are the source of truth in [`contracts/`](contracts/); the prose here is the summary.
 **Versioning:** these are `version: "0"`. They *will* grow (more modalities, mid-turn frames,
 adapters) — additive fields are fine without ceremony; any **breaking** change bumps the version
-and updates the schema file + this section. Only C3, C9, C4, C6 are exercised by v0.0; C1/C2/C5/
-C7/C8/C10/C11 are not touched until their slices.
+and updates the schema file + this section. The **serve-loop** v0.0 slice exercises C3, C9, C4, C6
+(below); the **learn-loop** v0.0 slice adds C1, C2 (further below). C5/C7/C8/C10/C11 are not
+touched until their slices.
 
 - **C3 UserPrompt v0** (`contracts/c3_userprompt.v0.json`): `{contract:"C3", version:"0",
   user_id, session_id, turn_id, created_at, messages:[{role:"user"|"system", text}],
@@ -123,6 +124,40 @@ C7/C8/C10/C11 are not touched until their slices.
 - **C6 resolve v0** (`contracts/c6_resolve.v0.json`): `GET resolve?user_id=…` →
   `{model_id:"Qwen/Qwen3-VL-32B-Instruct", adapter:"base", adapter_path:null}`. Trivial until
   continuum ships per-user adapters.
+
+### Frozen MVP shapes — learn-loop v0.0 (2026-07-09)
+
+The **minimal, audio-only** shapes the learn-loop (capture) MVP builds against — the barebones
+path **computer mic → ASR → `/context`**. Machine-readable JSON Schemas are the source of truth
+in [`contracts/`](contracts/); the prose here is the summary. Same versioning rule as the
+serve-loop block: `version:"0"`, additive fields free, breaking changes bump the version + edit the
+schema file + this section. v0.0 exercises **one device+modality** (computer mic, `audio`); the
+shapes carry all four modalities so the vision/text pipelines add records without a reshape.
+
+- **C1 Raw-stream envelope v0** (`contracts/c1_raw_stream_envelope.v0.json`) — C1 has **two legs**:
+  - **Blob leg (recording → storage `/raw`):** recording `PUT`s the raw chunk bytes to storage
+    `/raw` **first**; storage mints an **opaque `blob_ref`** (idempotent on `chunk_id`). Only
+    storage resolves the ref; data-processing pulls the bytes by ref for ASR. Pinned as prose here
+    (like C9's wire format), **not** a separate C-number.
+  - **Envelope leg (recording → data-processing):** `{contract:"C1", version:"0", user_id,
+    device_id, stream_id, sequence, chunk_id, modality, codec, t_start, t_end, blob_ref,
+    blob_sha256, blob_bytes, device_location?, device_clock?}`.
+  - **Delivery semantics (frozen):** **push, at-least-once**; consumers idempotent on **`chunk_id`**
+    (the dedup key — a client-minted ULID, stable across retries); ordering + gap detection via
+    **`(stream_id, sequence)`**, where `sequence` is **dense, zero-based, +1 per chunk** within a
+    **globally-unique** `stream_id` (any break — including a non-zero first-seen value — is a lost
+    chunk → "zero silent loss"); **blob-first** write invariant (blob durable in `/raw` before the
+    envelope is emitted, so `blob_ref` does not dangle at emit — consumers still tolerate a
+    since-deleted blob, since `/raw` deletion + re-pull-by-ref both exist).
+- **C2 Processed record v0** (`contracts/c2_processed_record.v0.json`): `{contract:"C2",
+  version:"0", record_id, user_id, source:{device_id, stream_id, chunk_id, blob_ref, modality},
+  t_start, t_end, content:{kind:"transcript", text, language?, segments?:[{t_start, t_end, text,
+  speaker}]}, enrichments:{speakers:[], faces:[], places:[], objects:[]}, pipeline_version,
+  processed_at}`. `record_id` is a **deterministic function of `(chunk_id, pipeline_version)`** — so
+  reprocessing is an idempotent `/context` upsert and a `pipeline_version` bump forks a new record
+  (version-forward). `enrichments` is **present-but-empty** in v0 (mirrors C4's empty trace arrays)
+  so diarization / world-data never reshape it. Storage assigns `ingest_time` + user-local tz —
+  **not** carried in C2.
 
 ## Ownership splits (pinned — cross-referenced from the charters)
 

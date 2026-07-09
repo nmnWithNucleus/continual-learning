@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nucleus.ai/contracts/c1_raw_stream_envelope.v0.json",
+  "title": "C1 Raw-stream envelope v0 (learn-loop MVP, audio-first)",
+  "description": "C1 has TWO legs. (1) BLOB LEG: recording writes the raw chunk bytes to storage /raw FIRST (PUT /raw/blobs, idempotent on chunk_id); storage mints an opaque blob_ref. (2) ENVELOPE LEG (this schema): recording then PUSHes this JSON envelope to data-processing. DELIVERY SEMANTICS: push, at-least-once; consumers (data-processing, storage /raw) are idempotent on chunk_id (the dedup key); ordering + gap detection use (stream_id, sequence), which is dense, zero-based and increments by exactly 1 within a stream (any break, including a non-zero first-seen value, = lost chunk(s)); the blob is durable in /raw BEFORE the envelope is first emitted, so blob_ref does not dangle at emit — but consumers (including the version-forward reprocess path) MUST tolerate a since-deleted blob, because /raw deletion (delete-last-N, right-to-be-forgotten) and re-pull-by-ref both exist. v0.0 exercises modality 'audio' (computer mic); the shape carries all four modalities.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract", "version", "user_id", "device_id", "stream_id", "sequence", "chunk_id", "modality", "codec", "t_start", "t_end", "blob_ref", "blob_sha256", "blob_bytes"],
+  "properties": {
+    "contract": { "const": "C1" },
+    "version": { "const": "0" },
+    "user_id": { "type": "string", "minLength": 1 },
+    "device_id": { "type": "string", "minLength": 1, "description": "Stable per capture device (v0: this computer's mic)." },
+    "stream_id": { "type": "string", "minLength": 1, "description": "One continuous capture session (mic-open->close). MUST be globally unique — client-minted like chunk_id (e.g. a ULID), never a reusable per-device boot/session counter — so (stream_id, sequence) cannot collide across concurrent devices. The namespace within which sequence is dense and gaps are detected." },
+    "sequence": { "type": "integer", "minimum": 0, "description": "The first chunk of a stream_id has sequence 0 and each subsequent chunk increments by exactly 1 (strictly increasing, dense, zero-based within stream_id). Ordering + gap detection: any break in this dense run — including a first-seen value greater than 0 — is lost chunk(s) ('zero silent loss'). NOT the dedup key." },
+    "chunk_id": { "type": "string", "minLength": 1, "description": "Client-minted stable id for this chunk (e.g. ULID); constant across retries. THE DEDUP KEY: data-processing and storage /raw are idempotent on it." },
+    "modality": { "enum": ["audio", "image", "video", "text"], "description": "v0.0 exercises 'audio'." },
+    "codec": { "type": "string", "description": "MIME/codec token of the blob, e.g. 'audio/ogg;codecs=opus', 'audio/wav'." },
+    "t_start": { "type": "string", "description": "Chunk start, device wall-clock RFC3339 UTC. The time-spine axis." },
+    "t_end": { "type": "string", "description": "Chunk end, device wall-clock RFC3339 UTC." },
+    "blob_ref": { "type": "string", "minLength": 1, "description": "Opaque ref storage minted when the bytes landed in /raw. Only storage resolves it; data-processing pulls the bytes by ref for ASR." },
+    "blob_sha256": { "type": "string", "description": "SHA-256 hex of the blob bytes; end-to-end integrity check against /raw." },
+    "blob_bytes": { "type": "integer", "minimum": 0, "description": "Blob size in bytes." },
+    "device_location": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lat": { "type": "number" },
+        "lon": { "type": "number" },
+        "accuracy_m": { "type": "number" }
+      },
+      "description": "Optional (omit when absent). Recording fills where the device has it, else omitted and data-processing infers place from content later. Feeds C2 geo-enrichment (deferred past v0)."
+    },
+    "device_clock": { "enum": ["synced", "unsynced"], "description": "Optional: whether the device wall-clock is NTP-disciplined. Input to data-processing's cross-device skew handling (M4)." }
+  }
+}

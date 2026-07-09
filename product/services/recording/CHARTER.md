@@ -51,7 +51,7 @@ our output; everything past that is theirs.
 
 | Contract | Our role | One-line role |
 |---|---|---|
-| **C1** recording → data-processing | **We own the producing side** | Raw stream envelope (user_id, device_id, modality, codec, wall-clock t_start/t_end, sequence no, optional device location, blob ref) per uploaded chunk; blobs land in storage `/raw` |
+| **C1** recording → data-processing | **We own the producing side** | **v0 FROZEN (D11).** Two legs: (1) blob leg — we `PUT` the raw bytes to storage `/raw` **first**, storage mints an opaque `blob_ref`; (2) envelope leg — we **push** the C1 envelope (user_id, device_id, `stream_id`, `sequence`, `chunk_id`, modality, codec, wall-clock t_start/t_end, `blob_ref`+sha256+bytes, optional device location/clock) to data-processing. **at-least-once, dedup on `chunk_id`, gaps via dense `(stream_id, sequence)`, blob-first.** |
 | C3 / C8 | none — boundary marker | Interactive requests go through input/QueryBuilder, never through us; we carry only the passive life stream |
 
 Contract payloads are defined in [../../ARCHITECTURE.md](../../ARCHITECTURE.md) § Contracts —
@@ -66,7 +66,7 @@ Ordered; each milestone ships client and/or ingest pieces together with its exit
 
 | M | Deliverable | Exit criterion |
 |---|---|---|
-| M0 | **Ingest spine**: C1-conformant ingest endpoint; chunked upload → storage `/raw` blob + envelope to data-processing; idempotent retry (sequence-no dedupe); device auth token issuance | Synthetic client streams 24 h across forced disconnects/restarts: zero loss, zero dupes, all envelopes validate against C1 fixtures shared with data-processing |
+| M0 | **Ingest spine**: chunked upload → **`PUT` blob to storage `/raw` first** (storage mints the `blob_ref`) → **push** the C1 envelope to data-processing; idempotent retry (**dedupe on `chunk_id`**; dense zero-based `sequence` per `stream_id` for gap/continuity — *not* the dedup key); device auth token issuance | Synthetic client streams 24 h across forced disconnects/restarts: zero loss, zero dupes, all envelopes validate against the C1 schema + fixtures shared with data-processing |
 | M1 | **Computer capture v0**: screen recording app + mic + webcam for the pilot desktop OS; local chunker, offline queue, pairing flow | One full pilot workday captured end-to-end (screen, mic, webcam frames — data-processing M2's input); blobs replayable from `/raw`; gap report empty or every gap explained |
 | M2 | **Consent controls v0**: on-device enforcement — pause / mute / delete-last-N-minutes on every client; upload holdback buffer so deletes execute on-device; always-visible capture indicator; ingest backed by platform's consent-record gate (§Ownership splits) | Red-team test: delete-last-10-min leaves zero bytes server-side; pause takes effect ≤ 2 s and is visibly indicated; no capture path bypasses the controls; ingest refuses streams with no consent record |
 | M3 | **Wearable body cam v0**: hardware pick (**camera + mic; no speaker** — speech output routes to the mobile app, §Ownership splits) + capture client, on-device buffer sized for offline hours, opportunistic Wi-Fi upload, pairing | Full-day wear test by a pilot user: footage lands with correct wall-clock timestamps; battery + thermal + gap numbers published |

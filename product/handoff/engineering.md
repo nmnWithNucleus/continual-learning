@@ -174,23 +174,93 @@ screen-capture data (model is serving).
 
 ---
 
+## Learn-loop MVP slice — the capture skeleton (2026-07-09)
+
+**Goal.** One audio chunk, end to end: the **computer microphone** captures a chunk → recording
+lands the bytes in `/raw` and emits a **C1** envelope → data-processing runs **ASR** and writes a
+**C2** processed record to storage `/context`. This proves the learn-loop spine (recording →
+data-processing → storage `/context`) with the *minimum* of every service — it starts the data
+compounding the whole thesis rests on. Deliberately **audio-only, no enrichment**: ASR transcript
++ segment timestamps, no diarization, no world-data, no vision.
+
+**Skeleton scope (decided in-session, D10).** ONE device+modality first: **computer mic → ASR-only
+→ a `/context` record** — the simplest capture path. It reuses the POC Phase-1 audio machinery
+(faster-whisper/WhisperX) and dodges the GPU-heavy vision/OCR path. Screen-frames→OCR and wearable
+A/V are later slices.
+
+**In this slice**
+
+| WS | Service | M0 deliverable | Contracts it must honor |
+|---|---|---|---|
+| A | **recording** | Computer-mic capture → chunker → **`PUT` bytes to storage `/raw`** (get `blob_ref`) → emit a **C1** envelope to data-processing. Mint globally-unique `stream_id`/`chunk_id`; dense zero-based `sequence`; device auth deferred. | produces C1 (both legs); push/at-least-once, dedup on `chunk_id` |
+| B | **data-processing** | Consume C1; **pull bytes by `blob_ref`**; run **ASR** (transcript + segment times); stamp `pipeline_version`; write a **C2** record to `/context`; idempotent on `record_id`. | consumes C1, produces C2; C8 not in this slice |
+| C | **storage** | Extend the running `:8083` service: **`/raw`** blob write (`PUT`, mints opaque `blob_ref`, idempotent on `chunk_id`) + read-by-ref; **`/context`** C2 write (idempotent on `record_id`), time-indexed on `(user_id, t_start)`. | serves the C1 blob leg + C2 write |
+| E | **platform** | One box hosting the three services + an ASR runtime (GPU optional at M0 — faster-whisper runs on CPU for the skeleton); a shared dev env. Thin — just enough to run the loop. | none (enables A–C) |
+
+**Out of this slice (later slices):** diarization + translation + full audio pipeline; text +
+image + video pipelines (OCR-specialist pass, dense captioning); world-data enrichment (speakers,
+faces, geo/place, objects); the cross-source time spine (multi-device skew); C8 synchronous API;
+C10 training-window read; C11 recency index; wearable + browser-extension + mobile capture; consent
+enforcement (recording's M2 — no always-on capture ships without it; the mic-only *dev* skeleton
+predates that gate). Each is its own slice.
+
+**Gate — interface freeze: DONE (2026-07-09).** C1 + C2 v0 frozen in
+[../ARCHITECTURE.md](../ARCHITECTURE.md) §Contracts (learn-loop block) + machine-readable in
+[../contracts/](../contracts/) (`c1_raw_stream_envelope.v0.json`, `c2_processed_record.v0.json`),
+stress-tested by a 5-lens adversarial critic pass before freeze (2 blockers + 7 fixes applied). The
+frozen forks:
+- **Skeleton (D10):** computer mic → ASR(+segment times) → `/context`; no diarization/enrichment.
+- **C1 delivery (D11):** push, at-least-once, dedup on `chunk_id`, order/gaps via dense zero-based
+  `(stream_id, sequence)`; blob-first write invariant.
+- **/raw write (D11):** recording `PUT`s bytes → storage mints an opaque `blob_ref` → recording
+  emits C1 carrying it; data-processing pulls bytes by ref. Blob leg pinned as prose (not a new
+  C-number), like C9's wire format.
+- **C2 (D10):** `record_id` deterministic on `(chunk_id, pipeline_version)` (idempotent upsert,
+  version-forward reprocess); `enrichments` present-but-empty (mirrors C4 trace arrays).
+
+**Build order + fan-out.** Storage is **not** chartered-cold — it is the running serve-loop service
+on `:8083`. So:
+1. **storage M0 lands first/ahead** — add `/raw` (blob write+read) and `/context` (C2 write) to the
+   existing service. It is the shared dependency both A and B write to.
+2. **recording M0** (mic → `/raw` PUT → C1 emit) and **data-processing M0** (C1 → ASR → C2 →
+   `/context`) **fan out in parallel** against the frozen C1/C2, both targeting storage's dev
+   endpoints. Shared **C1/C2 conformance fixtures** (recording ⇄ data-processing) from day one, as
+   the recording charter's C1-churn mitigation requires.
+3. **platform** provides the box + ASR runtime alongside.
+4. An **integrator** session wires them and drives one chunk end to end.
+
+**Integrator exit criterion (capture v0 done):** a real audio chunk captured at the computer mic
+lands in `/raw`; a C1 envelope reaches data-processing; ASR produces a C2 record that persists in
+`/context` and is re-readable by `record_id` and by `(user_id, time)` range; re-delivering the same
+`chunk_id` is a no-op (no dup blob, no dup record). No enrichment, no vision — just the capture
+spine, proven.
+
+### Learn-loop build conventions (v0) — so recording / data-processing / storage interoperate
+- **Stack:** same as serve loop — Python 3.11, FastAPI + uvicorn per service, `httpx` inter-service,
+  **pydantic** models mirroring `../contracts/*.json`, `pytest`. ASR = **faster-whisper** (POC
+  Phase-1 stack), CPU-capable for the skeleton so it runs on any box; GPU is an optimization.
+- **Storage endpoints (new, integrator finalizes exact paths):** `PUT /raw/blobs` (bytes +
+  `chunk_id`/`user_id`/codec/sha256 → `{blob_ref, bytes, sha256}`, idempotent on `chunk_id`);
+  `GET /raw/blobs/{blob_ref}` → bytes; `POST /context/records` (validates C2, idempotent on
+  `record_id`); `GET /context/records/{id}` + `GET /context?user_id=&from=&to=` (time-range). Mirror
+  the existing `/sessions` write style.
+- **`/raw` dev layout:** local blob dir (like storage's SQLite dev DB); `blob_ref` an opaque
+  storage-owned key; GCS is the production target (POC "GCS is source of truth").
+- **Contracts are tested:** recording validates the C1 it emits; data-processing validates C1 it
+  consumes + C2 it emits; storage validates C2 on write — all against `../contracts/*.json`.
+- **No agent commits;** founders' session commits after integration. Honesty rule holds — the
+  capture loop must actually run end-to-end before it is reported as run.
+
+---
+
 ## Open agenda
-0. **NEXT SLICE — Data-collection (learn) loop MVP.** The barebones capture path
-   **recording → data-processing → storage `/context`** (+ platform bring-up). Same shape as
-   the serve loop: **slice the walking skeleton, then freeze the C1/C2 contracts BEFORE fan-out.**
-   This is a **founders' engineering session (Prompt D), founder-in-the-loop** — decisions to
-   settle here, not pre-made:
-   - *Skeleton scope:* which single device+modality goes end-to-end first? (candidates: computer
-     **mic → ASR-only → /context**, the simplest; or computer **screen frames → OCR/caption → /context**;
-     wearable A/V is heavier — probably not the first skeleton.)
-   - *C1 freeze* (recording→data-processing): the raw-stream envelope + **delivery semantics**
-     (push vs pull, ordering, at-least-once + dedup key) — this is data-processing's OQ1 ("settle
-     with recording before M0") and recording's ingest OQ. Freeze a v0 shape in ARCHITECTURE
-     §Contracts + `contracts/` (mirror the C3/C9/C4 freeze).
-   - *C2 freeze* (data-processing→storage): the processed-record + `/raw` blob-ref shape.
-   - *Build order + fan-out:* recording M0 (ingest) · data-processing M0 (one-pipeline skeleton) ·
-     storage M0 (/raw + /context write) — parallel once C1/C2 are frozen. Storage already has a
-     running service from the serve loop to extend.
+0. ~~**NEXT SLICE — Data-collection (learn) loop MVP**~~ **SLICED + C1/C2 FROZEN (2026-07-09)** —
+   see "Learn-loop MVP slice — the capture skeleton" above. Skeleton = computer mic → ASR → `/context`
+   (D10); C1 (delivery: push/at-least-once/dedup-on-`chunk_id`) + C2 (`/raw` blob-ref, `record_id`
+   determinism) frozen in ARCHITECTURE §Contracts + `contracts/`, adversarially reviewed pre-freeze.
+   data-processing OQ1 (C1 delivery) + recording's ingest OQ resolved. **Next:** the M0 fan-out —
+   storage M0 (`/raw` + `/context` write) ahead, then recording M0 + data-processing M0 in parallel,
+   then an integrator wires + runs one chunk end to end.
 1. ~~Serve-loop MVP slice~~ **DONE** (see build-result sections above).
 2. Cluster split: which a3mega nodes serve (vLLM) vs train (continuum) vs pipeline work.
 3. Mobile app (now v0, D5) — one codebase serving both the chat surface (input) and the

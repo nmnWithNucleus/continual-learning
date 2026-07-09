@@ -28,13 +28,22 @@
   against live uvicorn on `:8083` (health, resolve, C4 write→read, list, 404, 422 all green).
 
 ## Scope boundary (v0.0)
-- This is **`/sessions` + model directory ONLY.** `/context` (C2), `/raw` (C1 blob leg), the
-  training-window read (C10), and the recency/semantic index (C11) are **later slices** —
-  deliberately absent. Model directory is trivial (everyone → base, no adapter) until continuum
-  ships C5 registration.
+- **Built so far: `/sessions` + model directory.** `/raw` (C1 blob leg) + `/context` (C2) are the
+  **now-active capture slice** (C1/C2 frozen 2026-07-09 — see Next). The training-window read (C10)
+  and the recency/semantic index (C11) remain **later slices** — deliberately absent. Model
+  directory is trivial (everyone → base, no adapter) until continuum ships C5 registration.
 
 ## Next
-- `/context` write path (C2) + time-ranged read (per CHARTER M1).
+- **⇐ ACTIVE: capture slice (learn-loop MVP).** C1 + C2 are **frozen** (2026-07-09, D10/D11 —
+  `../../contracts/c1_raw_stream_envelope.v0.json`, `c2_processed_record.v0.json`). Storage M0 leads
+  the fan-out (both recording and data-processing write to us):
+  - **`/raw` blob leg (C1):** `PUT /raw/blobs` (raw bytes + `chunk_id`/`user_id`/codec/sha256 →
+    **storage mints an opaque `blob_ref`**, idempotent on `chunk_id`) + `GET /raw/blobs/{blob_ref}`
+    (data-processing pulls bytes for ASR). Local blob dir for dev; GCS in prod.
+  - **`/context` write (C2):** `POST /context/records` (validate against the C2 schema like the
+    existing `/sessions` gate; idempotent upsert on `record_id`), time-indexed on `(user_id,
+    t_start)`; `GET /context/records/{id}` + `GET /context?user_id=&from=&to=` (time-range).
+- `/context` time-ranged read hardening (per CHARTER M1).
 - C5 adapter registration → per-user overrides in `model_directory` (M3).
 - Encryption at rest + per-user isolation tests (M4); deletion primitives (M5).
 - Integrator: point inference's C4 writer + C6 resolve at `:8083` (see build conventions).

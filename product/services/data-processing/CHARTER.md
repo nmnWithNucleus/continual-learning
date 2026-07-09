@@ -60,8 +60,8 @@ referenced here by ID only, never redefined.
 
 | Contract | Direction | Our role |
 |---|---|---|
-| **C1** | recording → us | Sole ingest: the raw stream envelope (device/modality/wall-clock/sequence/optional device location/blob ref). We consume it; capture semantics belong to `recording`. |
-| **C2** | us → storage | Sole output for stream data: the processed record (timestamps, transcript/caption, enrichments, raw ref, `pipeline_version`). |
+| **C1** | recording → us | **v0 FROZEN (D11).** Sole ingest: the pushed raw-stream envelope (device/`stream_id`/`sequence`/`chunk_id`/modality/codec/wall-clock/`blob_ref`/optional location+clock). at-least-once, we dedup on `chunk_id`, order via `(stream_id, sequence)`, pull bytes by `blob_ref`. Capture semantics belong to `recording`. |
+| **C2** | us → storage | **v0 FROZEN (D10).** Sole output for stream data: the processed record (`record_id` deterministic on `(chunk_id, pipeline_version)`; source provenance; `content{kind,text,segments}`; present-but-empty `enrichments`; raw ref; `pipeline_version`; `processed_at`). |
 | **C8** | input ↔ us | Serve the pipeline as a synchronous API so interactive requests are normalized by the same code that processes the life stream. |
 
 Indirect consumers (no direct contract with us): `continuum` reads /context + /sessions via
@@ -74,7 +74,7 @@ prompts from what C8 returns.
 
 | M | Deliverable | Exit criterion |
 |---|---|---|
-| **M0** | Walking skeleton: C1 fixture → audio ASR → C2 record in /context; `pipeline_version` stamped; idempotent on the envelope's dedup key | End-to-end integration test green against a storage dev target; record validates against the C2 schema |
+| **M0** | Walking skeleton: C1 fixture → **pull blob by `blob_ref`** → audio ASR (transcript + segment times) → C2 record in /context; `pipeline_version` stamped; idempotent (envelope `chunk_id` → deterministic `record_id`, so redelivery/reprocess is an upsert, not a dup) | End-to-end integration test green against a storage dev target; record validates against the C2 schema; a re-pushed `chunk_id` yields no duplicate /context record |
 | **M1** | Full audio pipeline: denoise → diarize → ASR → translate; timestamps injected from the C1 envelope | Pilot body-cam + computer-mic sample processed; WER/DER measured on a labeled sample and published as baseline |
 | **M2** | Text normalization + image pipeline (ImgProc → OCR-specialist pass → dense caption → world-data injection) | Screenshots/webcam frames from pilot computer capture land in /context with captions **and transcribed on-screen text (with frame location)**; spot-check review pass, incl. an OCR-heavy screen |
 | **M3** | Video pipeline: VidProc chunking + dense describe, ported from POC Phase-2/3 machinery | Body-cam and screen-recording chunks described end-to-end; reviewed via an explorer-style spot-check tool |
@@ -91,7 +91,7 @@ Order is strict M0→M3 (modality coverage first); M4–M7 may interleave after 
 ## Open questions
 
 **Engineering**
-1. C1 delivery semantics — push vs pull, ordering, at-least-once + dedup key. Settle with `recording` before M0.
+1. C1 delivery semantics — push vs pull, ordering, at-least-once + dedup key. **RESOLVED (D11, 2026-07-09):** **push, at-least-once**; we are **idempotent on `chunk_id`** (the dedup key); ordering + gap detection via dense zero-based `(stream_id, sequence)` (any break = lost chunk); recording writes the blob to `/raw` **first** (blob-first) and we **pull the bytes by `blob_ref`** for ASR — and must tolerate a since-deleted blob (deletion + re-pull both exist). Frozen shape: `contracts/c1_raw_stream_envelope.v0.json`.
 2. C8 latency budget vs pipeline weight: do interactive requests run a lighter captioning profile (same code, config-only difference), and what is the p95 target? Settle with `input`.
 3. GPU placement for pipeline models (ASR, diarization, captioners): dedicated allocation vs sharing the a3-mega partition with `continuum`'s nightly window — contention policy needed.
 4. Device clock discipline: does `recording` guarantee synced wall-clock stamps, or must M4 estimate skew from content? Changes the time-spine design.

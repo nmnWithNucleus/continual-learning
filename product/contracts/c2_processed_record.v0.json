@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nucleus.ai/contracts/c2_processed_record.v0.json",
+  "title": "C2 Processed record v0 (learn-loop MVP, ASR-first)",
+  "description": "The processed life-stream record data-processing writes to storage /context (POST /context/records). One record per processed unit; v0 = one ASR transcript per audio chunk (a chunk MAY yield several records in later modalities, e.g. video keyframes). record_id is deterministic on (chunk_id, pipeline_version) so a reprocess under the same version is idempotent and a version bump forks a new record (version-forward reprocessing). Storage persists verbatim, time-indexed on (user_id, t_start), and assigns its own ingest_time + user-local timezone (NOT carried here). enrichments is present-but-empty in v0 (like C4's empty trace arrays) so later diarization / world-data enrichment never change the shape.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract", "version", "record_id", "user_id", "source", "t_start", "t_end", "content", "enrichments", "pipeline_version", "processed_at"],
+  "properties": {
+    "contract": { "const": "C2" },
+    "version": { "const": "0" },
+    "record_id": { "type": "string", "minLength": 1, "description": "Stable id for this processed record; the dedup/idempotency key for the /context write. MUST be a deterministic function of the source chunk_id and pipeline_version (e.g. a hash): byte-identical across every (re)processing of the same chunk under the same pipeline_version — so a reprocess is an idempotent /context upsert, not a duplicate — and different under a bumped pipeline_version (version-forward reprocessing forks a new record). Where one chunk yields multiple records (e.g. video keyframes, original+translation), fold a within-chunk discriminator into the id so each is stable and distinct." },
+    "user_id": { "type": "string", "minLength": 1 },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["device_id", "stream_id", "chunk_id", "blob_ref", "modality"],
+      "properties": {
+        "device_id": { "type": "string", "minLength": 1 },
+        "stream_id": { "type": "string", "minLength": 1 },
+        "chunk_id": { "type": "string", "minLength": 1, "description": "The C1 chunk this record was processed from (provenance)." },
+        "blob_ref": { "type": "string", "minLength": 1, "description": "The /raw ref carried forward from C1; the raw bytes remain the source of truth." },
+        "modality": { "enum": ["audio", "image", "video", "text"] }
+      },
+      "description": "Provenance back to the raw chunk in /raw."
+    },
+    "t_start": { "type": "string", "description": "Wall-clock span start, RFC3339 UTC, carried from C1. The time-spine axis storage indexes on." },
+    "t_end": { "type": "string", "description": "Wall-clock span end, RFC3339 UTC, carried from C1." },
+    "content": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "text"],
+      "properties": {
+        "kind": { "enum": ["transcript", "caption", "ocr", "text"], "description": "v0 = 'transcript' (ASR). 'caption'/'ocr' arrive with the vision pipeline; 'text' is the normalized-text modality (extension/clipboard/typed capture)." },
+        "text": { "type": "string", "description": "The full processed text (ASR transcript in v0)." },
+        "language": { "type": "string", "description": "Detected/target language, BCP-47 (e.g. 'en'). Optional." },
+        "segments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["t_start", "t_end", "text", "speaker"],
+            "properties": {
+              "t_start": { "type": "string", "description": "Segment start, RFC3339 UTC (absolute = chunk t_start + ASR offset)." },
+              "t_end": { "type": "string", "description": "Segment end, RFC3339 UTC." },
+              "text": { "type": "string" },
+              "speaker": { "type": ["string", "null"], "description": "Diarization label; required-nullable, always null in v0 (no diarization yet) so the key never appears/disappears when diarization lands." }
+            }
+          },
+          "description": "Optional finer-grained ASR timing (the time-spine payload). Present in v0; may be omitted if the ASR run produced no segments."
+        }
+      }
+    },
+    "enrichments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["speakers", "faces", "places", "objects"],
+      "properties": {
+        "speakers": { "type": "array", "items": {}, "description": "Diarization speaker identities, once diarization lands. Empty in v0." },
+        "faces": { "type": "array", "items": {}, "description": "Known-faces registry matches, once world-data enrichment lands. Empty in v0." },
+        "places": { "type": "array", "items": {}, "description": "Geo/place tags, once world-data enrichment lands. Empty in v0." },
+        "objects": { "type": "array", "items": {}, "description": "Object tags, once world-data enrichment lands. Empty in v0." }
+      },
+      "description": "Present-but-empty in v0; shape stable so world-data enrichment never changes C2."
+    },
+    "pipeline_version": { "type": "string", "description": "data-processing pipeline version that produced this record; continuum trains on consistent dialects, reprocessing is version-forward." },
+    "processed_at": { "type": "string", "description": "When data-processing produced this record, RFC3339 UTC (distinct from storage's ingest_time)." }
+  }
+}

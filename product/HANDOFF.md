@@ -14,9 +14,9 @@
 
 | Service | Status | Lead session | Canvas |
 |---|---|---|---|
-| Recording | chartered — awaiting kickoff | — | [canvas](services/recording/HANDOFF.md) |
-| Data Processing | chartered — awaiting kickoff | — | [canvas](services/data-processing/HANDOFF.md) |
-| Storage | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-D | [canvas](services/storage/HANDOFF.md) |
+| Recording | chartered — **C1 frozen; awaiting M0 kickoff** (capture slice) | — | [canvas](services/recording/HANDOFF.md) |
+| Data Processing | chartered — **C1/C2 frozen; awaiting M0 kickoff** (capture slice) | — | [canvas](services/data-processing/HANDOFF.md) |
+| Storage | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) · next: `/raw` + `/context` (capture slice) | serve-loop WS-D | [canvas](services/storage/HANDOFF.md) |
 | Input | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-A | [canvas](services/input/HANDOFF.md) |
 | Inference | **v0.0 live on real Qwen3-VL-32B** (vLLM TP=8 on node-7, verified E2E 2026-07-09) | serve-loop WS-B | [canvas](services/inference/HANDOFF.md) |
 | Output | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-C | [canvas](services/output/HANDOFF.md) |
@@ -27,7 +27,7 @@
 
 | Aspect | File | State |
 |---|---|---|
-| Engineering | [handoff/engineering.md](handoff/engineering.md) | active — **serve-loop MVP (v0.0) live on real Qwen3-VL-32B** (node-7, verified E2E 2026-07-09); next: pick the next slice |
+| Engineering | [handoff/engineering.md](handoff/engineering.md) | active — serve-loop MVP (v0.0) live on real Qwen3-VL-32B; **learn-loop capture slice sliced + C1/C2 frozen (2026-07-09)**; next: capture M0 fan-out |
 | Research | [handoff/research.md](handoff/research.md) | seeded — first agenda: POC→continuum bridge, research agenda v1 |
 | Design / UX | [handoff/design.md](handoff/design.md) | seeded |
 | Hiring / Ops | [handoff/hiring-ops.md](handoff/hiring-ops.md) | seeded |
@@ -49,6 +49,8 @@
 | D7 | **POCs are reference, not source** — production code is written fresh; POCs inform contracts/learnings only, no lift-and-shift | 2026-07-09 | [ARCHITECTURE.md](ARCHITECTURE.md) §Decisions; [ORG.md](ORG.md) §Conventions |
 | D8 | **OCR decoupled from the BWM** — a specialist OCR-strong VLM transcribes on-screen text (+ frame location) in the data-processing pipeline; the text is woven into the description target, so BWM OCR quality never gates the product (retires the D6 caveat) | 2026-07-09 | [ARCHITECTURE.md](ARCHITECTURE.md) §Decisions; [data-processing charter](services/data-processing/CHARTER.md) |
 | D9 | **Centralized observability** — every service exposes `/metrics` + owns a Grafana dashboard JSON; **Platform runs ONE shared Prometheus + Grafana** + standard exporters (node/dcgm/DB) and provisions the per-service dashboards. Both founders open one Grafana URL. Node/CPU graphs are placeholders until multi-node; app-latency/error/GPU matter today | 2026-07-09 | [ARCHITECTURE.md](ARCHITECTURE.md) §Observability; [STACK.md](STACK.md); [platform charter](services/platform/CHARTER.md); all service charters |
+| D10 | **Learn-loop skeleton = computer mic → ASR → `/context`.** The first capture path end-to-end is audio-only: ASR (transcript + segment timestamps), **no diarization / no enrichment / no vision**. Reuses POC Phase-1 (faster-whisper). C1 + C2 v0 frozen accordingly | 2026-07-09 | [ARCHITECTURE.md](ARCHITECTURE.md) §Contracts (learn-loop block) + [contracts/](contracts/); [handoff/engineering.md](handoff/engineering.md) |
+| D11 | **C1 is two legs + push delivery.** Blob leg: recording `PUT`s raw bytes to storage `/raw` **first**, storage mints an opaque `blob_ref` (idempotent on `chunk_id`); pinned as prose, not a new C-number. Envelope leg: recording **pushes** the C1 envelope to data-processing, **at-least-once, dedup on `chunk_id`**, ordering + gap-detection via dense zero-based `(stream_id, sequence)`, blob-first write invariant. Resolves data-processing OQ1 + recording's ingest OQ | 2026-07-09 | [ARCHITECTURE.md](ARCHITECTURE.md) §Contracts; [contracts/c1_raw_stream_envelope.v0.json](contracts/c1_raw_stream_envelope.v0.json); recording + data-processing charters |
 
 ## Current state (terse)
 
@@ -85,12 +87,25 @@
   the C9 format, C4 persisted with the real `model_id`. `serve_vllm.sh` updated to the verified
   recipe. Detail: [handoff/engineering.md](handoff/engineering.md) "REAL model — v0.0 closed".
 
+- 2026-07-09 (capture slice): **learn-loop MVP sliced + C1/C2 frozen.** Founders' engineering
+  session sliced the barebones capture path **computer mic → ASR → `/context`** (D10) and froze
+  **C1** (raw-stream envelope + delivery: push/at-least-once/dedup-on-`chunk_id`/dense-`(stream_id,
+  sequence)`/blob-first; D11) and **C2** (processed record + `/raw` blob-ref; `record_id`
+  deterministic on `(chunk_id, pipeline_version)`). Shapes in [ARCHITECTURE.md](ARCHITECTURE.md)
+  §Contracts (learn-loop block) + machine-readable in [contracts/](contracts/)
+  (`c1_raw_stream_envelope.v0.json`, `c2_processed_record.v0.json`), **adversarially stress-tested
+  by a 5-lens critic pass before freeze** (13 findings → 10 verified byte-changing → 2 blockers +
+  7 fixes applied). data-processing OQ1 + recording's ingest OQ resolved. No service code built —
+  this session produced the slice + the frozen contracts; the M0 builds come next. Slice:
+  [handoff/engineering.md](handoff/engineering.md) "Learn-loop MVP slice".
+
 ## Next
 
-- **Pick the next slice** off the walking skeleton (engineering thread): capture
-  (recording → data-processing → `/context`) is the natural next — it starts the data
-  compounding the thesis rests on; alternatives are continuum/personalization or more serve-loop
-  (mentors/C7, surfaces).
+- ~~**Pick the next slice**~~ **DONE** — capture slice picked + sliced + C1/C2 frozen (2026-07-09,
+  see Current state + engineering thread). **Now: the capture M0 fan-out** — storage M0 (`/raw`
+  blob write+read + `/context` C2 write, extending the running `:8083` service) lands ahead, then
+  recording M0 (mic → `/raw` PUT → C1 emit) + data-processing M0 (C1 → ASR → C2) fan out in
+  parallel against the frozen C1/C2, then an integrator wires + runs one chunk end to end.
 - ~~Deferred follow-up: vLLM upgrade~~ **DONE 2026-07-09** — serving stack upgraded to
   **vLLM 0.24.0 / CUDA-13 (cu13) + flashinfer** (`vllm-cu13` env), validated E2E; 0.19.1 kept as
   fallback. Whole serving fleet now on the latest, CUDA-13-native. See [STACK.md](STACK.md).
