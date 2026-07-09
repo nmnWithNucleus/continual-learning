@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nucleus.ai/contracts/c4_turn_record.v0.json",
+  "title": "C4 Turn record v0 (serve-loop MVP)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract", "version", "user_id", "session_id", "turn_id", "user_prompt", "response_text", "model_id", "adapter", "created_at", "completed_at", "tool_traces", "mentor_traces"],
+  "properties": {
+    "contract": { "const": "C4" },
+    "version": { "const": "0" },
+    "user_id": { "type": "string", "minLength": 1 },
+    "session_id": { "type": "string", "minLength": 1 },
+    "turn_id": { "type": "string", "minLength": 1 },
+    "user_prompt": { "$ref": "c3_userprompt.v0.json", "description": "The full C3 UserPrompt this turn answered." },
+    "response_text": { "type": "string" },
+    "model_id": { "type": "string" },
+    "adapter": { "type": "string", "description": "v0: 'base'." },
+    "created_at": { "type": "string", "description": "Turn opened (RFC3339 UTC)." },
+    "completed_at": { "type": "string", "description": "Answer completed (RFC3339 UTC)." },
+    "tool_traces": { "type": "array", "items": {}, "description": "Empty in v0 (no agentic harness yet); present so the shape is stable when tools arrive." },
+    "mentor_traces": { "type": "array", "items": {}, "description": "Empty in v0 (no mentors yet); present so continuum's training-data shape never changes." }
+  }
+}

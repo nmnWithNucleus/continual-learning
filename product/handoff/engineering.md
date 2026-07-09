@@ -48,6 +48,36 @@ and receives a streamed base-model answer; the turn is persisted in `/sessions` 
 
 **Recommended first launch:** the **interface-freeze session** (Prompt A framing, but joint across
 input+inference+output leads) — nothing safely parallelizes until C3/C9/C4 v0 are locked.
+**Status: freeze DONE (2026-07-09)** — shapes locked in [../ARCHITECTURE.md](../ARCHITECTURE.md)
+§Contracts + machine-readable in [../contracts/](../contracts/). Fan-out is unblocked.
+
+### MVP build conventions (v0.0) — so the 5 workstreams interoperate
+
+Pinned so WS A–E produce compatible pieces; the integrator may finalize process topology.
+
+- **Stack:** Python 3.11, **FastAPI + uvicorn** per backend service; `httpx` for inter-service
+  calls; **pydantic** models mirroring the JSON Schemas in [../contracts/](../contracts/);
+  `pytest`. Surface = static HTML/CSS/JS, **no build step**, served by input.
+- **Model backend switch (critical):** env `MODEL_BACKEND=mock|vllm`. **`mock` is the default**
+  — a canned, streamed answer, **no GPU needed**, so the whole loop runs on any box. `vllm` =
+  OpenAI-compatible client to a vLLM server (real Qwen3-VL-32B, needs the a3mega node). Ship
+  BOTH; only `mock` is expected to run tonight.
+- **Ports (localhost dev):** input `8081`, inference `8010`, output `8082`, storage `8083`
+  (vLLM `8000` when real).
+- **Storage:** SQLite file DB for dev — a `/sessions` turns table (C4) + a model-directory
+  table (C6). No external DB tonight.
+- **Contracts are tested:** each service validates the payloads it produces/consumes against
+  `../contracts/*.json` in its tests.
+- **Layout per service:** `product/services/<key>/{app/, tests/, run.sh, requirements.txt}`;
+  keep the worklog in `handoff/wsN-*.md`, status in the service `HANDOFF.md`.
+- **Recommended flow (integrator finalizes):** browser → input `:8081 /api/turn` (JSON `{text}`)
+  → QueryBuilder builds C3 → inference `:8010 /infer` (streams C9; resolves C6 + writes C4 to
+  storage `:8083`) → input relays the C9 stream to the browser; **output** owns the browser-side
+  C9 reader + markdown render (served with the surface) **and** a standalone relay service for
+  future non-web surfaces.
+- **No agent commits.** Workstreams write files; the founders' session commits after integration.
+- **Honesty rule:** the `mock` loop must actually run end-to-end; the `vllm` path is
+  scripted-but-unrun until the node — never report a real-model run that didn't happen.
 
 ---
 

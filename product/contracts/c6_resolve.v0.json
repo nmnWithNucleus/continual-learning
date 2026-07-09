@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nucleus.ai/contracts/c6_resolve.v0.json",
+  "title": "C6 resolve v0 (serve-loop MVP)",
+  "description": "Response body of the model-directory resolution `GET resolve?user_id=<id>` that inference calls per request. v0 is trivial: everyone resolves to the base model with no adapter, until continuum ships per-user adapters.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["model_id", "adapter", "adapter_path"],
+  "properties": {
+    "model_id": { "type": "string", "description": "e.g. 'Qwen/Qwen3-VL-32B-Instruct'." },
+    "adapter": { "type": "string", "description": "v0: 'base'." },
+    "adapter_path": { "type": ["string", "null"], "description": "v0: null (no LoRA to load)." }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nucleus.ai/contracts/c9_response_stream.v0.json",
+  "title": "C9 Response stream v0 (serve-loop MVP)",
+  "description": "C9 is an HTTP streamed response, not a single JSON document. WIRE FORMAT: the body is a run of UTF-8 answer-text chunks, then a single U+001E (RECORD SEPARATOR, '\\u001e') byte, then exactly one JSON 'end frame' (this schema), then EOF. To parse: read/display everything before the first \\u001e as the answer; JSON-parse everything after it as the end frame. Mid-turn frames are reserved for later versions and are NOT emitted in v0.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract", "version", "turn_id", "model_id", "adapter", "finished"],
+  "properties": {
+    "contract": { "const": "C9" },
+    "version": { "const": "0" },
+    "turn_id": { "type": "string", "minLength": 1 },
+    "model_id": { "type": "string" },
+    "adapter": { "type": "string", "description": "v0: 'base' (no per-user adapter yet)." },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prompt_tokens": { "type": "integer", "minimum": 0 },
+        "output_tokens": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "finished": { "type": "boolean" },
+    "error": { "type": "string", "description": "Present only on failure; when set, the answer text before the separator may be partial or empty." }
+  }
+}

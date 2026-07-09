@@ -99,6 +99,31 @@ what is locked now is direction, ownership, and shape.
 | **C10** | storage → continuum | **Training-window read**: time-ranged, watermarked export of `/context` + `/sessions` per user | Watermark semantics (late-arriving / reprocessed records, pipeline-version bumps) are pinned here |
 | **C11** | storage → input (QueryBuilder) | **Recent-context read**: recency/semantic retrieval over `/context` + `/sessions` for same-day grounding | Bridges the gap before the nightly cycle lands in weights; the index lives in storage, QueryBuilder decides what enters the UserPrompt |
 
+### Frozen MVP shapes — serve-loop v0.0 (2026-07-09)
+
+The **minimal, text-only** shapes the serve-loop MVP builds against. Machine-readable JSON
+Schemas are the source of truth in [`contracts/`](contracts/); the prose here is the summary.
+**Versioning:** these are `version: "0"`. They *will* grow (more modalities, mid-turn frames,
+adapters) — additive fields are fine without ceremony; any **breaking** change bumps the version
+and updates the schema file + this section. Only C3, C9, C4, C6 are exercised by v0.0; C1/C2/C5/
+C7/C8/C10/C11 are not touched until their slices.
+
+- **C3 UserPrompt v0** (`contracts/c3_userprompt.v0.json`): `{contract:"C3", version:"0",
+  user_id, session_id, turn_id, created_at, messages:[{role:"user"|"system", text}],
+  client_capabilities:{surface, modalities:["text"], can_render_markdown}, template_version}`.
+  MVP: one user message; inference prepends the system prompt.
+- **C9 Response stream v0** (`contracts/c9_response_stream.v0.json`): an HTTP streamed body —
+  answer **text chunks**, then a single `\x1e` (U+001E) separator, then one JSON **end frame**
+  `{turn_id, model_id, adapter:"base", usage:{prompt_tokens, output_tokens}, finished:true}`.
+  Errors: an end frame with `{error:"..."}`. Mid-turn frames are **reserved, not emitted** in v0.
+- **C4 Turn record v0** (`contracts/c4_turn_record.v0.json`): `{contract:"C4", version:"0",
+  user_id, session_id, turn_id, user_prompt:<C3>, response_text, model_id, adapter:"base",
+  created_at, completed_at, tool_traces:[], mentor_traces:[]}`. Trace arrays are empty in v0
+  (no harness/mentors yet) but present so the shape never changes when they arrive.
+- **C6 resolve v0** (`contracts/c6_resolve.v0.json`): `GET resolve?user_id=…` →
+  `{model_id:"Qwen/Qwen3-VL-32B-Instruct", adapter:"base", adapter_path:null}`. Trivial until
+  continuum ships per-user adapters.
+
 ## Ownership splits (pinned — cross-referenced from the charters)
 
 Where a responsibility naturally touches several services, the split is decided **here**, once:
