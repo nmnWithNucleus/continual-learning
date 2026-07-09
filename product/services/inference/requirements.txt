@@ -1,0 +1,12 @@
+# Inference service — serve-loop MVP (v0.0). Python 3.11+.
+fastapi>=0.110
+uvicorn[standard]>=0.29
+httpx>=0.27
+pydantic>=2.6
+jsonschema>=4.21
+referencing>=0.34     # used to resolve C4's $ref to the C3 schema
+pytest>=8.0
+
+# The `vllm` MODEL_BACKEND talks to a vLLM server over its OpenAI-compatible HTTP
+# API via httpx (above) — no `vllm` / `openai` package is needed in THIS service.
+# Running the vLLM server itself is a separate, GPU-node task (see serve_vllm.sh).

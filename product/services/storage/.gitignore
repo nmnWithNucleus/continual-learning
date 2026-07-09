@@ -1,0 +1,6 @@
+# Storage runtime artifacts — not source.
+dev.db
+*.db
+*.sqlite3
+__pycache__/
+.pytest_cache/

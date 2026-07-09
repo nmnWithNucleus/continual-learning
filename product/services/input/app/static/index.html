@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Nucleus — chat (serve-loop MVP v0.0)</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #f6f7f9;
+      color: #14181f;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0f1115; color: #e7eaee; }
+    }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 40px; }
+    header h1 { font-size: 18px; margin: 0 0 2px; }
+    header p { margin: 0 0 20px; opacity: .65; font-size: 13px; }
+    .composer { display: flex; gap: 8px; align-items: flex-end; }
+    textarea {
+      flex: 1; resize: vertical; min-height: 52px; max-height: 240px;
+      padding: 12px 14px; border-radius: 10px; border: 1px solid #cdd2da;
+      background: #fff; color: inherit; font: inherit;
+    }
+    @media (prefers-color-scheme: dark) {
+      textarea { background: #171a21; border-color: #2a2f3a; }
+    }
+    button {
+      padding: 12px 18px; border: none; border-radius: 10px; cursor: pointer;
+      background: #2f6df6; color: #fff; font: inherit; font-weight: 600;
+    }
+    button:disabled { opacity: .5; cursor: default; }
+    .answer-card {
+      margin-top: 20px; padding: 16px 18px; border-radius: 12px;
+      border: 1px solid #e0e4ea; background: #fff; min-height: 40px;
+    }
+    @media (prefers-color-scheme: dark) {
+      .answer-card { background: #141821; border-color: #262b36; }
+    }
+    /* Answer is rendered as SAFE markdown by output's c9_reader.js (wired in by
+       the integrator). Style the block elements its renderer emits. */
+    #answer { word-break: break-word; margin: 0; }
+    #answer:empty::before { content: "The answer will stream here…"; opacity: .4; }
+    #answer p { margin: 0 0 10px; }
+    #answer p:last-child { margin-bottom: 0; }
+    #answer h1, #answer h2, #answer h3, #answer h4 { margin: 14px 0 8px; line-height: 1.25; }
+    #answer ul, #answer ol { margin: 0 0 10px; padding-left: 22px; }
+    #answer code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 90%;
+      background: rgba(127,127,127,.16); padding: 1px 5px; border-radius: 5px;
+    }
+    #answer pre {
+      background: rgba(127,127,127,.14); padding: 12px 14px; border-radius: 8px;
+      overflow-x: auto; margin: 0 0 10px;
+    }
+    #answer pre code { background: none; padding: 0; }
+    #answer.c9-error { color: #d9534f; }
+    .meta { margin-top: 10px; font-size: 12px; opacity: .6; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .meta.err { color: #d9534f; opacity: .9; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Nucleus</h1>
+      <p>serve-loop MVP v0.0 — text only, base model, no personalization yet.</p>
+    </header>
+
+    <form id="composer" class="composer">
+      <textarea id="text" placeholder="Ask something…" autofocus></textarea>
+      <button id="send" type="submit">Send</button>
+    </form>
+
+    <!--
+      ANSWER AREA.
+      The streamed body is the C9 wire format: answer text chunks, one U+001E
+      separator, then a JSON end frame. app.js hands the response to output's C9
+      client renderer (services/output/app/static/c9_reader.js, vendored here as
+      /static/c9_reader.js), which owns C9 parsing + SAFE markdown rendering into
+      this element. We deliberately do NOT bundle a second markdown library.
+    -->
+    <div class="answer-card">
+      <div id="answer"></div>
+    </div>
+    <div id="meta" class="meta"></div>
+  </div>
+
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>

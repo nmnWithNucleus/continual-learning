@@ -1,0 +1,7 @@
+# Platform bring-up runtime artifacts — not source.
+.env
+.venv/
+logs/
+run/
+selftest/.run/
+selftest/fake/__pycache__/

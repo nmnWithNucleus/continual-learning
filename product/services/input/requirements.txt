@@ -1,0 +1,10 @@
+# Input service (serve-loop MVP v0.0). Python 3.11.
+fastapi
+uvicorn[standard]
+httpx
+pydantic>=2
+jsonschema
+
+# tests
+pytest
+pytest-asyncio

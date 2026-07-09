@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>C9 reader — self-test</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      max-width: 760px; margin: 2rem auto; padding: 0 1rem;
+    }
+    h1 { font-size: 1.3rem; }
+    .row { display: flex; gap: .5rem; flex-wrap: wrap; margin: 1rem 0; }
+    button {
+      font: inherit; padding: .5rem .9rem; border-radius: 8px;
+      border: 1px solid #8884; cursor: pointer; background: #8881;
+    }
+    #answer {
+      border: 1px solid #8884; border-radius: 10px; padding: 1rem 1.2rem;
+      min-height: 3rem; background: #8880;
+    }
+    #answer.c9-error { border-color: #e5484d; }
+    #answer pre {
+      background: #8882; padding: .7rem .9rem; border-radius: 8px; overflow-x: auto;
+    }
+    #answer code { background: #8882; padding: .05em .35em; border-radius: 4px; }
+    #answer pre code { background: none; padding: 0; }
+    .meta { margin-top: 1rem; font-size: .85rem; color: #888; }
+    .meta code { background: #8882; padding: .05em .35em; border-radius: 4px; }
+    .ok { color: #30a46c; } .bad { color: #e5484d; }
+  </style>
+</head>
+<body>
+  <h1>C9 reader — self-test</h1>
+  <p>
+    Feeds a synthetic <strong>C9</strong> stream (answer text + <code>U+001E</code>
+    + JSON end frame) through <code>c9_reader.js</code> and renders it. No network,
+    no backend — the stream is built in-page from a mock <code>Response</code>.
+  </p>
+
+  <div class="row">
+    <button id="run-md">Stream a markdown answer</button>
+    <button id="run-xss">Stream an XSS attempt (must be inert)</button>
+    <button id="run-err">Stream an error end frame</button>
+    <button id="run-assert">Run assertions</button>
+  </div>
+
+  <div id="answer" aria-live="polite"></div>
+  <div class="meta" id="meta"></div>
+
+  <script type="module">
+    import { renderC9Stream, renderMarkdown, RECORD_SEPARATOR }
+      from './c9_reader.js';
+
+    const answerEl = document.getElementById('answer');
+    const metaEl = document.getElementById('meta');
+
+    // Build a mock fetch() Response whose body streams `text` in small chunks,
+    // so we exercise the incremental reader (chunk boundaries land anywhere,
+    // including inside the separator's neighbourhood and multibyte chars).
+    function mockC9Response(text, { chunk = 7, delayMs = 12 } = {}) {
+      const bytes = new TextEncoder().encode(text);
+      const stream = new ReadableStream({
+        async start(controller) {
+          for (let i = 0; i < bytes.length; i += chunk) {
+            controller.enqueue(bytes.slice(i, i + chunk));
+            if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
+          }
+          controller.close();
+        },
+      });
+      return new Response(stream, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+    }
+
+    function c9(answer, endFrame) {
+      return answer + RECORD_SEPARATOR + JSON.stringify(endFrame);
+    }
+
+    const MD_ANSWER = [
+      '# Serve-loop lives',
+      '',
+      'Here is a **streamed** answer with _emphasis_, `inline code`, and a list:',
+      '',
+      '- first point',
+      '- second point with `code`',
+      '',
+      '1. step one',
+      '2. step two',
+      '',
+      '```python',
+      "print('hello <world> & \"friends\"')",
+      '```',
+      '',
+      'A closing paragraph. Snake_case_words stay intact.',
+    ].join('\n');
+
+    const END_OK = {
+      contract: 'C9', version: '0', turn_id: 'turn-selftest',
+      model_id: 'Qwen/Qwen3-VL-32B-Instruct', adapter: 'base',
+      usage: { prompt_tokens: 42, output_tokens: 128 }, finished: true,
+    };
+
+    async function runStream(text) {
+      answerEl.textContent = '';
+      metaEl.textContent = 'streaming…';
+      const { answer, endFrame, usage } = await renderC9Stream(
+        mockC9Response(text), answerEl,
+      );
+      metaEl.innerHTML =
+        'end frame: <code>' + escapeForMeta(JSON.stringify(endFrame)) + '</code><br>' +
+        'usage: <code>' + escapeForMeta(JSON.stringify(usage)) + '</code>';
+      return { answer, endFrame, usage };
+    }
+
+    function escapeForMeta(s) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    document.getElementById('run-md').onclick =
+      () => runStream(c9(MD_ANSWER, END_OK));
+
+    document.getElementById('run-xss').onclick =
+      () => runStream(c9(
+        'Try this: <img src=x onerror=alert(1)> and <script>alert(2)</script> plus **bold**.',
+        END_OK));
+
+    document.getElementById('run-err').onclick =
+      () => runStream(c9(
+        'partial answer before failure',
+        { contract: 'C9', version: '0', turn_id: 'turn-err', model_id: 'm',
+          adapter: 'base', finished: false, error: 'simulated upstream failure' }));
+
+    // In-page assertions so the page is a genuine test, not just a demo.
+    document.getElementById('run-assert').onclick = async () => {
+      const results = [];
+      const check = (name, cond) => results.push([name, !!cond]);
+
+      // 1) markdown escapes HTML (no live tags)
+      const html = renderMarkdown('<script>alert(1)</script> <img src=x onerror=alert(1)>');
+      check('no <script> tag', !/<script>/i.test(html));
+      check('no onerror attribute survives as markup', !/<img/i.test(html));
+      check('angle brackets escaped', html.includes('&lt;script&gt;'));
+
+      // 2) streamed answer text + end frame recovered correctly
+      const r = await renderC9Stream(mockC9Response(c9(MD_ANSWER, END_OK), { delayMs: 0 }), answerEl);
+      check('answer round-trips', r.answer === MD_ANSWER);
+      check('end frame turn_id', r.endFrame.turn_id === 'turn-selftest');
+      check('usage output_tokens', r.usage && r.usage.output_tokens === 128);
+
+      // 3) error frame surfaces
+      const e = await renderC9Stream(
+        mockC9Response(c9('partial', { contract: 'C9', version: '0', turn_id: 't', model_id: 'm', adapter: 'base', finished: false, error: 'boom' }), { delayMs: 0 }),
+        answerEl);
+      check('error frame captured', e.endFrame.error === 'boom');
+      check('partial answer preserved', e.answer === 'partial');
+
+      const pass = results.every(([, ok]) => ok);
+      answerEl.classList.remove('c9-error');
+      answerEl.innerHTML = '<strong>' + (pass ? 'ALL PASS' : 'FAILURES') + '</strong><ul>' +
+        results.map(([n, ok]) =>
+          '<li class="' + (ok ? 'ok' : 'bad') + '">' + (ok ? '✓' : '✗') + ' ' + n + '</li>').join('') +
+        '</ul>';
+      metaEl.textContent = pass ? 'self-test passed' : 'self-test FAILED';
+    };
+  </script>
+</body>
+</html>

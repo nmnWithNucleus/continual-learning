@@ -1,0 +1,16 @@
+# Runtime + build artifacts across all services — never source.
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# Local dev data / runtime state
+*.db
+*.sqlite3
+logs/
+run/
+
+# Local env (keep .env.example, ignore the real one)
+.env

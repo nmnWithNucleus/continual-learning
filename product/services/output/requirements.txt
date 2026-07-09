@@ -1,0 +1,10 @@
+# Nucleus Output Service (:8082) — serve-loop MVP v0.0
+# Python 3.11 (dev box ran 3.12; both fine). No model backend — output moves C9 streams.
+fastapi>=0.111,<1.0
+uvicorn[standard]>=0.30,<1.0
+httpx>=0.27,<1.0
+pydantic>=2.6,<3.0
+
+# Test-only (validate produced/consumed payloads against the frozen JSON Schemas).
+pytest>=8.0
+jsonschema>=4.20

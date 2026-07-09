@@ -6,7 +6,7 @@
 > [ARCHITECTURE.md](ARCHITECTURE.md) · [ORG.md](ORG.md) · [PROMPTS.md](PROMPTS.md).
 > Service-level state lives in each service's own HANDOFF.md — this board links, not restates.
 
-**Last updated:** 2026-07-08 · maintained across founders' sessions.
+**Last updated:** 2026-07-09 · maintained across founders' sessions.
 
 ---
 
@@ -16,18 +16,18 @@
 |---|---|---|---|
 | Recording | chartered — awaiting kickoff | — | [canvas](services/recording/HANDOFF.md) |
 | Data Processing | chartered — awaiting kickoff | — | [canvas](services/data-processing/HANDOFF.md) |
-| Storage | chartered — awaiting kickoff | — | [canvas](services/storage/HANDOFF.md) |
-| Input | chartered — awaiting kickoff | — | [canvas](services/input/HANDOFF.md) |
-| Inference | chartered — awaiting kickoff | — | [canvas](services/inference/HANDOFF.md) |
-| Output | chartered — awaiting kickoff | — | [canvas](services/output/HANDOFF.md) |
+| Storage | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-D | [canvas](services/storage/HANDOFF.md) |
+| Input | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-A | [canvas](services/input/HANDOFF.md) |
+| Inference | **v0.0 built + mock loop runs** (mock; real vLLM scripted-but-unrun) | serve-loop WS-B | [canvas](services/inference/HANDOFF.md) |
+| Output | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-C | [canvas](services/output/HANDOFF.md) |
 | Continuum | chartered — awaiting kickoff | — | [canvas](services/continuum/HANDOFF.md) |
-| Platform | chartered — awaiting kickoff (ratified 2026-07-09) | — | [canvas](services/platform/HANDOFF.md) |
+| Platform | **v0.0 bring-up shipped + run E2E** (ratified 2026-07-09) | serve-loop WS-E | [canvas](services/platform/HANDOFF.md) |
 
 ## Founders' aspect threads
 
 | Aspect | File | State |
 |---|---|---|
-| Engineering | [handoff/engineering.md](handoff/engineering.md) | active — **serve-loop MVP slice (v0.0) drafted**: WS A–E + interface-freeze gate |
+| Engineering | [handoff/engineering.md](handoff/engineering.md) | active — **serve-loop MVP (v0.0) built + mock loop runs E2E** (integrator, 2026-07-09); real vLLM path scripted-but-unrun |
 | Research | [handoff/research.md](handoff/research.md) | seeded — first agenda: POC→continuum bridge, research agenda v1 |
 | Design / UX | [handoff/design.md](handoff/design.md) | seeded |
 | Hiring / Ops | [handoff/hiring-ops.md](handoff/hiring-ops.md) | seeded |
@@ -67,10 +67,24 @@
   into a data-processing specialist pass (D8). Serve-loop MVP slice (v0.0) drafted in the
   engineering thread. `product/` tree committed to git.
 
+- 2026-07-09 (later): interface-freeze done (C3/C9/C4/C6 v0 locked in
+  [ARCHITECTURE.md](ARCHITECTURE.md) §Contracts + [contracts/](contracts/)); WS A–E built their
+  services; **integrator wired them and ran the mock loop end to end.** A turn typed at the
+  computer surface (`:8081`) streams a base-*mock* answer in the C9 format and the C4 turn is
+  persisted + re-readable by `session_id`/`turn_id`; C6 resolves to base. All suites green
+  (storage 10 · inference 6 · input 19 · output 46 = **81 passed**). Deltas: output's
+  `c9_reader.js` wired into the input surface; inference `run.sh` honors `HOST`/`PORT`; storage
+  test-DB gitignored. **Real Qwen3-VL-32B (`vllm`) is scripted-but-unrun** (needs the a3mega
+  node). Full result: [handoff/engineering.md](handoff/engineering.md) "Serve-loop MVP — v0.0
+  build result"; run guide: [services/README.md](services/README.md). **Not yet committed** —
+  the founders' session commits.
+
 ## Next
 
-- **Launch the interface-freeze session** (input + inference + output leads) to lock the
-  MVP-minimal C3 / C9 / C4 shapes — the gate before WS A–E fan out. See the serve-loop MVP
-  slice in [handoff/engineering.md](handoff/engineering.md).
-- Then fan out WS A–E against the frozen shapes; open an integrator session ([PROMPTS.md](PROMPTS.md) §E) to wire them.
-- CTO to read the Platform charter internals when time allows (scope already ratified, D1).
+- **Flip mock → real base model:** on the a3mega node run
+  [`services/inference/serve_vllm.sh`](services/inference/serve_vllm.sh) (Qwen3-VL-32B, TP=8),
+  set `MODEL_BACKEND=vllm`, `run_all.sh --restart`, and confirm a real streamed answer — the
+  one remaining step to the true v0.0 exit criterion.
+- Commit the serve-loop MVP build (founders' session).
+- Then the next slice off the walking skeleton (capture / continuum / personalization) — pick
+  in the engineering thread. CTO to read the Platform charter internals when time allows (D1).
