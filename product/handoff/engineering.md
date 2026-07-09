@@ -175,11 +175,23 @@ screen-capture data (model is serving).
 ---
 
 ## Open agenda
-1. **Serve-loop MVP slice** — build order is locked (serve-loop first, D3). Next: cut the
-   thin backbone (computer text surface → QueryBuilder → inference on base Qwen3-VL-32B →
-   output text stream; session/turn stored) into workstreams and decide which service leads
-   to launch first. Inference is the heart; input's M0 interface-freeze (C3/C8) gates the
-   others, so it likely goes first or jointly.
+0. **NEXT SLICE — Data-collection (learn) loop MVP.** The barebones capture path
+   **recording → data-processing → storage `/context`** (+ platform bring-up). Same shape as
+   the serve loop: **slice the walking skeleton, then freeze the C1/C2 contracts BEFORE fan-out.**
+   This is a **founders' engineering session (Prompt D), founder-in-the-loop** — decisions to
+   settle here, not pre-made:
+   - *Skeleton scope:* which single device+modality goes end-to-end first? (candidates: computer
+     **mic → ASR-only → /context**, the simplest; or computer **screen frames → OCR/caption → /context**;
+     wearable A/V is heavier — probably not the first skeleton.)
+   - *C1 freeze* (recording→data-processing): the raw-stream envelope + **delivery semantics**
+     (push vs pull, ordering, at-least-once + dedup key) — this is data-processing's OQ1 ("settle
+     with recording before M0") and recording's ingest OQ. Freeze a v0 shape in ARCHITECTURE
+     §Contracts + `contracts/` (mirror the C3/C9/C4 freeze).
+   - *C2 freeze* (data-processing→storage): the processed-record + `/raw` blob-ref shape.
+   - *Build order + fan-out:* recording M0 (ingest) · data-processing M0 (one-pipeline skeleton) ·
+     storage M0 (/raw + /context write) — parallel once C1/C2 are frozen. Storage already has a
+     running service from the serve loop to extend.
+1. ~~Serve-loop MVP slice~~ **DONE** (see build-result sections above).
 2. Cluster split: which a3mega nodes serve (vLLM) vs train (continuum) vs pipeline work.
 3. Mobile app (now v0, D5) — one codebase serving both the chat surface (input) and the
    speech-output playback sink (output); sequence it after the computer text slice proves the loop.
