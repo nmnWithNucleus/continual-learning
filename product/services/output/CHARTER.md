@@ -30,7 +30,7 @@ what inference produced to where the user is. Its future is the **proactive chan
 | **In** | Mid-turn clarification-frame delivery | mentor clarification questions arrive as C9 frames and render as a **distinct message type** on the origin surface (the relay loop is inference's OQ); answers return via input's C3 clarification-answer variant — not through us |
 | **In** | Render formats | markdown for text surfaces; audio to the mobile app |
 | **In** | Delivery acks + failure handling | per-turn ack, retry/timeout, device-offline behavior |
-| **In** | Delivery-side observability | per-turn delivery latency, ack/failure rates |
+| **In** | Delivery-side observability — **`/metrics` + Grafana dashboard JSON** (D9) | Exposes `/metrics` (Prometheus) on :8082 — baseline request rate/latency/errors **+** delivery latency, C9 stream-relay throughput, delivery ack/failure rates, TTS latency (when the speech path lands); owns `dashboards/*.json`. Platform runs the ONE shared Prometheus/Grafana + scrapes us — see [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability |
 | **Future (sketch only, NOT v0)** | Proactive channel | notifications, nudges, coach-mode interventions — the service's growth path |
 | **Out** | Generating the response (agentic loop, mentor traffic) | Inference Service |
 | **Out** | Capturing the life stream | Recording Service |
@@ -71,6 +71,7 @@ ID only, never redefined here):
 | M1 | **Computer text path** — relay the inference token stream to browser extension + computer app, markdown render | A pilot-user turn streams token-by-token into the computer surface; delivery ack recorded |
 | M2 | **Mobile speech path** — sentence-boundary TTS, audio streamed to the mobile app, which plays to connected BT headphones/earbuds (§Ownership splits: mobile is the speech sink; the v0 wearable has no speaker). Needs the mobile app's playback surface (input owns the app) | A wearable/mobile query gets a spoken answer end-to-end into the mobile app → BT audio; first audio within ~2 s of first token |
 | M3 | **Failure handling** — per-turn acks, idempotent retry keyed by turn id, undeliverable queue, surface fallback | Injected failures (device offline, mid-stream drop) yield correct ack states; zero lost or duplicated responses |
+| M4 | **Metrics + dashboard** (D9) — `/metrics` on :8082 + a Grafana dashboard JSON (`dashboards/*.json`); baseline request rate/latency/errors + delivery latency, C9 relay throughput, ack/failure rates, TTS latency. Platform owns the shared backbone ([../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability) | Service `/metrics` scraped by the shared Prometheus; dashboard shows request rate/latency/errors + delivery latency + ack/failure rates |
 
 ---
 

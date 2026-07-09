@@ -30,6 +30,7 @@ mentorship.
 | Mentor protocol (C7) | When-to-consult policy; assistance-prompt generation (user prompt + system prompt + everything the model knows about the user); invoking Claude/GPT/Gemini; relaying mentors' clarification questions through our model to the user and back; integrating the handoff into a final grounded response |
 | Response stream (C9) | Emit the grounded response-stream envelope to output: token stream, mid-turn frames (mentor clarification questions, status), end-of-turn metadata |
 | Turn logging (C4) | Full turn records to storage `/sessions`, incl. complete mentor traces (thinking, plan, outputs) and tool traces — these are continuum's training data |
+| Observability (D9) | Expose `/metrics` (Prometheus) on `:8010` — baseline request rate / latency-histogram / error rate **plus GPU via dcgm-exporter** (util, mem, temp, power), tokens/sec, time-to-first-token, model backend (mock/vllm), generation queue depth; own a Grafana dashboard JSON at `dashboards/*.json`. Platform runs the ONE shared Prometheus/Grafana backbone + provisions the dashboard — see [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability |
 
 **Out of scope** (not chartered here — see the owning sibling's charter)
 
@@ -69,6 +70,7 @@ active/rolled-back status) is continuum's call; honoring it per request is ours.
 | M3 | **Mentor protocol v1 (C7)** — assistance-prompt builder, Claude/GPT/Gemini invocation, clarification relay, handoff integration, full trace logging | An end-to-end mentored turn incl. one clarification round-trip; continuum signs off that the logged trace is trainable |
 | M4 | **Consult policy v1 + graduation instrumentation** — start always-consult, add a skip rubric; shadow-solo answer logged per turn and blind-judged vs the mentored answer | Policy tunable per user/task from config; a standing solo-vs-mentored quality report exists for pilot traffic |
 | M5 | **Pilot hardening** — concurrency across pilot users, per-stage latency budgets, mentor-outage fallback ladder | Pilot users served concurrently for a week; every failure mode degrades to a defined behavior, not a hang |
+| M6 | **Metrics + dashboard (D9)** — `/metrics` endpoint + a `dashboards/*.json` Grafana dashboard (see [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability) | Service `/metrics` scraped by the shared Prometheus; dashboard shows request rate/latency/errors **plus GPU (util/mem/temp/power), tokens/sec, time-to-first-token, generation queue depth** |
 
 ## Open questions
 

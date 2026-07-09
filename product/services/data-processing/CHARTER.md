@@ -4,7 +4,7 @@
 > enriched records out. Stable doc — working state lives in [HANDOFF.md](HANDOFF.md);
 > system-wide architecture + contracts in [../../ARCHITECTURE.md](../../ARCHITECTURE.md).
 
-**Status:** chartered · **Last updated:** 2026-07-08
+**Status:** chartered · **Last updated:** 2026-07-09
 
 ---
 
@@ -32,6 +32,7 @@ and interactive requests (synchronous, C8), so the model always sees data in one
 | World-data enrichment | geolocation, known-faces/people registry lookups, place/object tagging |
 | /context writes | emit processed records to storage per **C2** |
 | Sync pipeline API | expose the whole pipeline synchronously to QueryBuilder per **C8** |
+| Observability | expose a `/metrics` endpoint (Prometheus text) + own a Grafana dashboard JSON (`dashboards/*.json`); baseline request rate / latency / error rate **plus** pipeline throughput + queue depth per modality, per-stage latency (denoise/diarize/ASR/translate, OCR pass, dense-caption, world-data injection), C8 sync-request latency, enrichment counts. Platform owns the shared backbone — see [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability (D9) |
 
 ### Out of scope (owning sibling)
 | Area | Owner |
@@ -81,6 +82,7 @@ prompts from what C8 returns.
 | **M5** | World-data enrichment: known-faces/people registry, geolocation, place/object tags | Registry-known faces tagged in pilot streams; geo/place tags from the C1 optional device-location field where captured, content-inferred otherwise |
 | **M6** | C8 synchronous API — same pipeline code, interactive profile | `input` round-trips a multimodal request through C8; p95 latency within the budget agreed in ARCHITECTURE.md |
 | **M7** | Production hardening: backpressure, dead-letter + backfill, reprocess-by-version | Kill/restart mid-stream loses zero records; a `pipeline_version` bump cleanly reprocesses one full pilot day |
+| **M8** | Metrics + dashboard (D9): `/metrics` endpoint + Grafana dashboard JSON, per [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability | Service `/metrics` scraped by the shared Prometheus; dashboard shows request rate / latency / errors + pipeline throughput/queue depth per modality, per-stage + C8 latency, enrichment counts |
 
 Order is strict M0→M3 (modality coverage first); M4–M7 may interleave after M3.
 

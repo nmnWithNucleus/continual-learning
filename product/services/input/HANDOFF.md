@@ -39,3 +39,8 @@
   "Serve-loop MVP — v0.0 build result").
 - Later slices: mobile / extension / wearable surfaces; speech/image/video via C8; C11
   recent-context injection; clarification-answer C3 variant.
+- **D9 observability (2026-07-09) — now on this service's backlog:** expose `/metrics` on :8081
+  (request rate/latency/errors + QueryBuilder build time, C3 validation-failure rate, per-surface
+  request counts, upstream inference-call latency) + own a Grafana dashboard JSON in `dashboards/`;
+  Platform runs the shared Prometheus/Grafana backbone (see [CHARTER.md](CHARTER.md) scope M5 +
+  [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability).

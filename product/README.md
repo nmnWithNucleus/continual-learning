@@ -22,10 +22,12 @@ A service lead only needs 1–2 above plus their own `services/<key>/CHARTER.md`
 product/
 ├── README.md            ← you are here
 ├── VISION.md            why (stable)
-├── ARCHITECTURE.md      system + contracts C1–C8 (stable, owns the seams)
+├── ARCHITECTURE.md      system + contracts C1–C11 (stable, owns the seams)
+├── STACK.md             stack registry: shared runtime, serving stack, per-service manifests
 ├── ORG.md               operating model + doc protocol (stable)
 ├── PROMPTS.md           session launch prompts (stable)
 ├── HANDOFF.md           founders' working canvas (volatile)
+├── contracts/           frozen machine-readable payload schemas (C3/C9/C4/C6 v0…)
 ├── handoff/             founders' aspect threads: engineering · research · design · hiring-ops
 └── services/            one node per service — CHARTER.md (stable) + HANDOFF.md (volatile)
     ├── recording/         life capture: wearable + computer → ingest
@@ -35,7 +37,7 @@ product/
     ├── inference/         vLLM + per-user LoRA, agentic harness, mentors
     ├── output/            delivery: text to computer, speech to mobile→BT audio
     ├── continuum/         nightly per-user fine-tuning, eval-gated
-    └── platform/          infra · CI/CD · security/privacy · cost (pending ratification)
+    └── platform/          infra · CI/CD · security/privacy · cost · observability
 ```
 
 ## Conventions (short form — law lives in [ORG.md](ORG.md))

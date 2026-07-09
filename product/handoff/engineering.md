@@ -180,6 +180,20 @@ model serves.
 2. Cluster split: which a3mega nodes serve (vLLM) vs train (continuum) vs pipeline work.
 3. Mobile app (now v0, D5) — one codebase serving both the chat surface (input) and the
    speech-output playback sink (output); sequence it after the computer text slice proves the loop.
+4. **Observability & per-service dashboards** (CTO ask, **RATIFIED 2026-07-09, D9** — see
+   [../ARCHITECTURE.md](../ARCHITECTURE.md) §Observability + [../STACK.md](../STACK.md) ports):
+   each service **exposes a `/metrics` endpoint** (Prometheus text; instrumentation
+   owned by the service — the service knows what to measure: request rate, latency histogram,
+   error rate; inference adds GPU via dcgm-exporter; DB-touching services add query metrics).
+   **Platform runs ONE shared Prometheus + Grafana** (pinned port) rather than 8 bespoke dashboard
+   servers — each service ships a **Grafana dashboard JSON in its own repo** (per-service
+   ownership), Platform provisions them into the shared Grafana. Both founders open one Grafana
+   URL and pick any service. Standard exporters (node/dcgm/db) cover hardware/GPU/DB so services
+   don't hand-roll them. Ports + the Grafana URL get pinned in [../STACK.md](../STACK.md) +
+   [../ARCHITECTURE.md](../ARCHITECTURE.md) and each service's HANDOFF. Note: node/CPU graphs are
+   placeholders until the true multi-node microservice split (CTO's own point); app-latency,
+   error-rate, and GPU are the metrics that mean something today. Build as a near-term Platform
+   slice (service agents instrument; Platform builds the backbone).
 
 ## Decisions
 - **D3 Serve-loop first** (2026-07-09) — thin end-to-end backbone before capture/continuum.

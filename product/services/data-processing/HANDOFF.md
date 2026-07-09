@@ -4,7 +4,7 @@
 > Read [CHARTER.md](CHARTER.md) first (mission/scope/interfaces), then this file — the
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
-**Status:** chartered — awaiting kickoff · **Last updated:** 2026-07-08
+**Status:** chartered — awaiting kickoff · **Last updated:** 2026-07-09
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
@@ -16,3 +16,4 @@
 
 ## Next
 - Kickoff session: turn CHARTER.md § v0 deliverables (M0) into a concrete plan and open the first workstreams.
+- **D9 (2026-07-09) ratified — centralized observability:** this service now owes a `/metrics` endpoint + Grafana dashboard JSON (throughput/queue depth, per-stage + C8 latency, enrichment counts). On the backlog — see CHARTER.md § Scope (Observability) + deliverable **M8**.

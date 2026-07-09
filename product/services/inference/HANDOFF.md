@@ -42,6 +42,7 @@
 - **M1:** per-user LoRA hot-swap once continuum publishes adapters via C5 (C6 stops being trivial).
 - **Integrator:** input relays this `/infer` C9 stream to the browser; output owns the browser-side
   C9 reader + markdown render. C9/C4 shapes are already exercised against real storage.
+- **Observability (D9, now on backlog):** ship `/metrics` on `:8010` (request rate/latency/errors + **GPU via dcgm-exporter**, tokens/sec, time-to-first-token, backend, queue depth) + a `dashboards/*.json` Grafana dashboard; Platform runs the shared scrape/UI — see CHARTER M6 + [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability.
 
 ## Gotchas
 - **C9 is a wire format, not one JSON doc.** Split the body on the FIRST `\x1e` (U+001E): before =

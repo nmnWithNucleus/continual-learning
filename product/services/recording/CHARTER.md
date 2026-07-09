@@ -33,6 +33,7 @@ No capture fidelity is worth a consent violation.
 | **In** | Device location capture where hardware allows — fills C1's optional location field (data-processing's geo-enrichment source) | recording |
 | **In** | On-device consent **enforcement**: pause / mute / delete-last-N-minutes; visible capture indicator | recording |
 | **In** | Capture-health telemetry (per-device uptime, gaps, queue depth, battery) | recording |
+| **In** | Observability: expose `/metrics` (request rate/latency/errors **+ ingest rate, capture-health, consent-gate rejections**) + own Grafana dashboard JSON in `dashboards/*.json`; Platform runs the shared Prometheus/Grafana — [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability | recording |
 | **Out** | Interpreting/enriching the stream (ASR, diarization, timestamp injection, world data) | data-processing |
 | **Out** | Interactive chat requests + their capture devices | input |
 | **Out** | Consent policy + the consent-record store/gate ("no consent record ⇒ no ingest") — [ARCHITECTURE.md](../../ARCHITECTURE.md) §Ownership splits | platform (recording is fallback owner if platform isn't ratified) |
@@ -71,6 +72,7 @@ Ordered; each milestone ships client and/or ingest pieces together with its exit
 | M3 | **Wearable body cam v0**: hardware pick (**camera + mic; no speaker** — speech output routes to the mobile app, §Ownership splits) + capture client, on-device buffer sized for offline hours, opportunistic Wi-Fi upload, pairing | Full-day wear test by a pilot user: footage lands with correct wall-clock timestamps; battery + thermal + gap numbers published |
 | M4 | **Browser extension**: in-browser capture complementing the screen recorder (page/tab context the OS-level recorder can't attribute) | Extension stream flows through the same chunk/retry/consent path as M1; C1 envelopes carry the browser device_id/modality |
 | M5 | **Fleet telemetry + pilot hardening**: capture-health dashboard, automatic gap/staleness alerting, crash watchdogs | Handful-of-users pilot fleet streaming for 7 consecutive days with measured per-device uptime; every gap auto-flagged, none discovered manually |
+| M6 | **Metrics + dashboard** (D9, [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability): `/metrics` endpoint + `dashboards/*.json`; Platform owns the shared Prometheus/Grafana backbone | Service `/metrics` scraped by the shared Prometheus; dashboard shows request rate/latency/errors + ingest rate, capture-health, consent-gate rejections |
 
 Consent (M2) intentionally lands **before** the wearable (M3): no always-on camera leaves the
 lab without pause/delete working.

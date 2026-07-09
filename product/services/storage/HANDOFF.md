@@ -38,6 +38,7 @@
 - C5 adapter registration → per-user overrides in `model_directory` (M3).
 - Encryption at rest + per-user isolation tests (M4); deletion primitives (M5).
 - Integrator: point inference's C4 writer + C6 resolve at `:8083` (see build conventions).
+- **Observability (D9, ratified 2026-07-09) — now on backlog:** expose `/metrics` (request rate/latency/errors + DB/query metrics: query latency, rows read/written, DB/file size, pool health) and own the Grafana dashboard JSON (`dashboards/*.json`); shared Prometheus/Grafana is Platform's. See [CHARTER.md](CHARTER.md) scope/M7 + [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability.
 
 ## Gotchas
 - **Contracts are the source of truth.** Schema validation uses a `referencing` registry so

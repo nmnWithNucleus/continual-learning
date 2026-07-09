@@ -51,3 +51,6 @@
 ## Next (later slices — NOT v0.0)
 - M2 mobile speech path (TTS → mobile app → BT audio); M3 failure handling (idempotent retry,
   undeliverable queue, surface fallback); the proactive channel. See CHARTER.md § v0 deliverables.
+- **D9 observability (backlog, 2026-07-09)**: expose `/metrics` on :8082 (request rate/latency/errors
+  + delivery latency, C9 relay throughput, ack/failure rates, TTS latency) + own `dashboards/*.json`;
+  Platform runs the shared Prometheus/Grafana. See CHARTER.md M4 + [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability.

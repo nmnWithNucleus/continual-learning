@@ -35,6 +35,7 @@ trains no models; it keeps what others produce safe, ordered, and fast to read.
 | In | Encryption at rest | all stores and backups |
 | In | Retention + deletion primitives | full-user delete (incl. `/raw` + adapter artifacts) and time-slice delete, auditable |
 | In | Backup/restore | scheduled backups, tested restore |
+| In | Observability (`/metrics` + dashboard JSON) | expose `/metrics` (request rate/latency/errors **plus** DB/query metrics — query latency, rows read/written, DB/file size, connection/pool health for the `/sessions` + model-directory stores) and own the Grafana dashboard JSON; shared Prometheus/Grafana backbone is Platform's — see [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability |
 | Out | Producing processed records | Data Processing Service |
 | Out | Raw capture + upload | Recording Service (the durable blobs those uploads land in are ours) |
 | Out | Cross-store deletion orchestration + proof-of-deletion | Platform Service (its M2), calling our per-store primitives |
@@ -81,6 +82,7 @@ redefined.
 | M4 | Security baseline: encryption at rest everywhere + isolation test suite | cross-user access attempts fail closed under test; encryption verified on DB, blobs, and backups |
 | M5 | Retention + deletion primitives: full-user delete + time-slice delete | full-user delete purges `/raw`, `/context`, `/sessions`, directory entries + adapter artifacts and schedules backup expiry; deletion manifest is auditable; platform's orchestration + proof-of-deletion (its M2) calls these primitives — we don't own the end-to-end pipeline |
 | M6 | Backup/restore | scheduled backups running; point-in-time restore drill passes on a dev instance |
+| M7 | Metrics + dashboard | service `/metrics` scraped by the shared Prometheus; dashboard (`dashboards/*.json`) shows request rate/latency/errors + DB/query metrics (query latency, rows read/written, DB/file size, pool health); Platform provisions it (§Observability) |
 
 ## Open questions
 

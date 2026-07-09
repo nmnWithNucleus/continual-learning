@@ -139,6 +139,33 @@ Where a responsibility naturally touches several services, the split is decided 
 | **BWM (base world model)** | The pick is recorded in §Decisions below. Inference owns artifact custody + serving. Continuum pins the base-model hash per adapter (C5) and executes upgrade migrations (fleet retrain) — upgrades are explicit, never hot. |
 | **People/known-faces registry** | Data-processing owns matching/enrichment; storage persists the registry; input owns the curation + consent UX surface. Voice-to-person linking (known-vs-unknown *speakers*) rides the same registry — deferred-vs-v0 is data-processing's call, recorded in its charter. |
 | **Same-day context** | Weights only know up to the last nightly cycle. The recent-context read path (C11) is owned by input's QueryBuilder; the recency/semantic index behind it lives in storage. |
+| **Observability** | **Every service exposes a `/metrics` endpoint and ships its Grafana dashboard JSON** (per-service ownership). Platform runs the ONE shared Prometheus + Grafana + standard exporters and provisions those dashboards. See §Observability. |
+
+## Observability (cross-cutting requirement — every service)
+
+Decided 2026-07-09 (D9). Observability is a **standing obligation on every service**, not an
+add-on: an always-on system needs both founders to open one place and see any service's health.
+
+- **Each service exposes `/metrics`** (Prometheus text format) on its own port. Baseline every
+  service emits: **request rate, request-latency histogram, error rate** (the FastAPI services
+  get these from `prometheus-fastapi-instrumentator`; non-HTTP work emits equivalent counters).
+  Service-specific additions: **inference → GPU** (via dcgm-exporter), **storage → DB/query**
+  metrics, **data-processing → pipeline throughput/queue depth**, **recording → ingest rate +
+  capture-health**, **continuum → training-job + eval-gate** metrics.
+- **Each service owns a Grafana dashboard JSON** in its repo (`services/<key>/dashboards/*.json`)
+  — the service knows what's worth showing.
+- **Platform runs ONE shared Prometheus + Grafana** (pinned port, see [STACK.md](STACK.md)),
+  scrapes all `/metrics`, runs the standard exporters (node/CPU, dcgm/GPU, DB), routes alerts,
+  and **auto-provisions** each service's dashboard JSON. Both founders use a single Grafana URL
+  and pick any service.
+- **Build split:** service agents instrument (`/metrics` + dashboard JSON); Platform builds the
+  backbone (Prometheus/Grafana/exporters/provisioning). This is the *design pattern*, not an
+  inter-service payload — it is **not** a C-series contract; it is a convention pinned here +ports
+  in [STACK.md](STACK.md).
+- **Scope note (CTO):** node/CPU/host graphs are **placeholders** until the true multi-node
+  microservice split (today everything shares one box). The metrics that mean something *now* are
+  **app latency, error rate, and GPU** (inference). We wire the plumbing anyway so the graphs
+  light up for free when services spread across nodes.
 
 ## Request walkthrough (serve loop)
 

@@ -28,6 +28,7 @@ component — every prompt-shape evolution lands there, nowhere else.
 | ✅ In | Recent-context read (C11): QueryBuilder pulls same-day grounding from storage's recency/semantic index into the UserPrompt — weights only know up to the last nightly cycle (split pinned in [../../ARCHITECTURE.md](../../ARCHITECTURE.md) § Ownership splits) | input |
 | ✅ In | People-registry curation + consent UX — the small v0 surface where users review/confirm known people; data-processing matches, storage persists (split pinned in [../../ARCHITECTURE.md](../../ARCHITECTURE.md) § Ownership splits) | input |
 | ✅ In | **Mobile app** (v0, CTO-ratified 2026-07-09): an interaction chat surface **and** the device that plays output's synthesized speech to connected BT headphones/earbuds (mobile is the speech-output sink, §Ownership splits). Only mobile *screen capture* is deferred — that's recording's scope (iOS restriction), not ours | input |
+| ✅ In | **Observability** (D9, 2026-07-09): expose `/metrics` on :8081 (request rate/latency/errors + QueryBuilder build time, C3 validation-failure rate, per-surface request counts, upstream inference-call latency) and own a Grafana dashboard JSON at `dashboards/*.json`; Platform runs the shared Prometheus/Grafana backbone (see [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability) | input |
 | ❌ Out | Passive life capture / continuous stream uplink | Recording Service |
 | ❌ Out | Normalization internals (ASR, diarization, enrichment, timestamp injection) — we only call them | Data Processing Service |
 | ❌ Out | Model serving, agentic harness, mentor-model calls (C7) | Inference Service |
@@ -62,6 +63,7 @@ envelope and hit data-processing only via C8.
 | M2 | **QueryBuilder v1.** All four modalities normalized via C8 (speech→transcript, image, video clip); chat template + tags v1; client capabilities populated; template version stamped into every C3 payload | Golden-payload fixture suite green for all 4 modalities; interactive C8 round-trip inside the M0 latency budget (p95) |
 | M3 | **All surfaces.** Browser extension chat, mobile app (chat + speech-output playback surface for output), and wearable push-to-talk voice, all emitting the identical envelope; surface-specific code limited to capture + display/playback | The same turn succeeds from all four surfaces against one unchanged backend |
 | M4 | **Pilot hardening.** Idempotent request creation, payload size limits, retries, auth via platform, envelope/template version telemetry | 7 consecutive pilot days with zero failures attributable to envelope or prompt assembly |
+| M5 | **Metrics + dashboard** (D9; see [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability). `/metrics` on :8081 + a Grafana dashboard JSON in `dashboards/` | Service `/metrics` scraped by the shared Prometheus; dashboard shows request rate/latency/errors + QueryBuilder build time, C3 validation-failure rate, per-surface request counts, upstream inference-call latency |
 
 ## Open questions
 

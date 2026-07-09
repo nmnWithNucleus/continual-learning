@@ -13,6 +13,7 @@
 
 ## Current state
 - Charter written 2026-07-08. No implementation started.
+- **D9 (2026-07-09) centralized observability:** metrics obligation now on this service's backlog — ship a `/metrics` endpoint (training-job + eval-gate + cycle/publish/rollback counters, off the request path) and a Grafana dashboard JSON (`dashboards/*.json`); see [CHARTER.md](CHARTER.md) § v0 deliverables (Obs) + [§Observability](../../ARCHITECTURE.md). Platform owns the shared Prometheus/Grafana backbone.
 
 ## Next
 - Kickoff session: turn CHARTER.md § v0 deliverables (M0) into a concrete plan and open the first workstreams.

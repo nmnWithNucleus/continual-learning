@@ -30,6 +30,7 @@ long-term retention, self-distillation, and the LoRA → MoE-experts-per-user sc
 | Per-user scheduling | Cadence orchestration across pilot users; retries, idempotency, cost accounting |
 | Deletion support primitive | The continuum leg platform's deletion orchestrator calls ([platform M2](../platform/CHARTER.md)): halt the user's scheduled cycles, then retrain-from-retained-records-minus-deletions (v0 default per [§Ownership splits](../../ARCHITECTURE.md)); adapter *artifact* purge itself is storage's primitive |
 | Continual-learning research | Stability, retention, self-distillation, recursive-training drift, MoE-experts-per-user path |
+| Observability (`/metrics` + dashboard) | D9 obligation ([§Observability](../../ARCHITECTURE.md)): expose `/metrics` (batch/job counters — off the request path) + own a Grafana dashboard JSON (`dashboards/*.json`). Emit training-job metrics (job status, GPU during training, step/loss, throughput), eval-gate pass/fail rates, cycle cadence, publish/rollback counts. Platform runs the shared Prometheus + Grafana backbone |
 
 | Out of scope | Owner |
 |---|---|
@@ -65,6 +66,7 @@ trigger ownership is tracked as output's proactive open question ([../output/CHA
 | M3 | **Replay v1 + mentor distillation.** Capability-aligned replay mixture in every cycle; loss-masked mentor-trace targets in the personal mix | Forgetting suite stays within its threshold band over 7 consecutive real cycles; recall suite beats the Day-0 baseline on each cycle's window |
 | M4 | **Fleet scheduler.** Cadence orchestration for all pilot users on the shared partition; failure isolation, min-data skip rule, missed-cycle alerting | All pilot users cycle nightly unattended for 14 days; every skip/failure is alerted with cause |
 | M5 | **Longitudinal retention study.** Recency vs long-term retention measured across weeks of cycles; self-replay of past personal windows; tuned ratios | Retention report: week-old-day recall quantified, degradation bounded, mixture ratios re-tuned from evidence |
+| Obs | **Metrics + dashboard.** `/metrics` (batch/job counters) + Grafana dashboard JSON, per [§Observability](../../ARCHITECTURE.md) (D9) | Service `/metrics` scraped by the shared Prometheus; dashboard shows training-job status/throughput + step/loss, eval-gate pass/fail, cycle cadence, publish/rollback counts (batch metrics, not request rate/latency — off the request path) |
 
 ## Open questions
 
