@@ -35,10 +35,10 @@
 | Concern | Choice | Notes |
 |---|---|---|
 | Base model (BWM) | **Qwen/Qwen3-VL-32B-Instruct** (dense) | cached in the HF hub cache on node-7 (~63 GB) |
-| Server | **vLLM**, OpenAI-compatible, TP=8 | see the per-env row below |
-| Serving env (proven) | conda **`vllm-vlm`** — vLLM **0.19.1**, torch 2.10/cu128, transformers 5.12.1 | the stack that closed v0.0 (2026-07-09); kept as the known-good fallback |
-| Serving env (upgrade) | conda **`vllm-cu13`** — vLLM **≥0.20 / CUDA-13 wheels** (+ matching flash-attn) | leverages driver 580; built + validated 2026-07-09 — see [handoff/engineering.md](handoff/engineering.md) |
-| Launch recipe | [`services/inference/serve_vllm.sh`](services/inference/serve_vllm.sh) | env-selectable via `VLLM_BIN` |
+| Server | **vLLM**, OpenAI-compatible, TP=8 | see the per-env rows below |
+| Serving env (**primary**) | conda **`vllm-cu13`** — vLLM **0.24.0**, torch **2.11.0**, transformers **5.13.0**, **CUDA-13 (cu13) wheels + flashinfer** | validated E2E 2026-07-09 on node-7 (driver 580); the current serving stack |
+| Serving env (fallback) | conda **`vllm-vlm`** — vLLM **0.19.1**, torch 2.10/cu128, transformers 5.12.1 | the POC-proven stack that first closed v0.0; kept intact as the known-good fallback |
+| Launch recipe | [`services/inference/serve_vllm.sh`](services/inference/serve_vllm.sh) | defaults to `vllm-cu13`; `VLLM_BIN=…/vllm-vlm/bin/vllm` to fall back |
 
 ## Observability endpoints & ports (pinned)
 

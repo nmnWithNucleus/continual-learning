@@ -91,7 +91,9 @@
   (recording → data-processing → `/context`) is the natural next — it starts the data
   compounding the thesis rests on; alternatives are continuum/personalization or more serve-loop
   (mentors/C7, surfaces).
-- **Deferred follow-up:** vLLM 0.19.1 → ≥0.20 CUDA-13 (cu13) wheels + flash-attn (its own slice).
+- ~~Deferred follow-up: vLLM upgrade~~ **DONE 2026-07-09** — serving stack upgraded to
+  **vLLM 0.24.0 / CUDA-13 (cu13) + flashinfer** (`vllm-cu13` env), validated E2E; 0.19.1 kept as
+  fallback. Whole serving fleet now on the latest, CUDA-13-native. See [STACK.md](STACK.md).
 - **Now unblocked:** the D6 OCR spot-check on real screen-capture data (model is serving).
 - CTO to read the Platform charter internals when time allows (D1).
 - **Live now:** vLLM is up on node-7 (8× H100 pinned) and the surface answers at

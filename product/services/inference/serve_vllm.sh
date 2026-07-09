@@ -10,16 +10,18 @@
 #   >>> VLLM_URL=http://<node>:8000 (or restart run_all.sh with .env flipped).
 #
 # VERIFIED 2026-07-09 on node nucla3m-a3meganodeset-7 (driver 580.159.03,
-# 8x H100 80GB): came up TP=8 from the HF cache, a short text completion
-# returned in ~1.9 s, and a full serve-loop turn streamed a real C9 answer.
+# 8x H100 80GB): came up TP=8 from the HF cache, short text completions
+# returned in ~2-3 s, and full serve-loop turns streamed real C9 answers —
+# on BOTH vLLM 0.24.0 (primary, below) and 0.19.1 (fallback).
 # =============================================================================
 set -euo pipefail
 
 # --- environment ---------------------------------------------------------------
-# We serve from the `vllm-vlm` conda env (vLLM 0.19.1, torch 2.10/cu128,
-# transformers 5.12.1) — the stack the POC validated for this exact model.
-# Point VLLM_BIN elsewhere to use a different env.
-VLLM_BIN="${VLLM_BIN:-/home/ubuntu/miniconda3/envs/vllm-vlm/bin/vllm}"
+# PRIMARY: conda `vllm-cu13` — vLLM 0.24.0, torch 2.11.0, transformers 5.13.0,
+# CUDA-13 (cu13) wheels + flashinfer. Validated 2026-07-09 on driver 580.
+# FALLBACK: conda `vllm-vlm` — vLLM 0.19.1 / cu128 (the POC-proven stack). To
+# fall back: VLLM_BIN=/home/ubuntu/miniconda3/envs/vllm-vlm/bin/vllm bash serve_vllm.sh
+VLLM_BIN="${VLLM_BIN:-/home/ubuntu/miniconda3/envs/vllm-cu13/bin/vllm}"
 
 MODEL_ID="${MODEL_ID:-Qwen/Qwen3-VL-32B-Instruct}"
 PORT="${VLLM_PORT:-8000}"
@@ -36,12 +38,11 @@ GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.90}"
 
 # -----------------------------------------------------------------------------
 # Runtime notes (verified 2026-07-09):
-#   * Cluster is now on CUDA-13 (driver 580). The cu128 vLLM 0.19.1 wheels run
-#     fine here (driver 580 is backward-compatible with the CUDA-12.8 runtime).
-#   * FOLLOW-UP (separate slice): push to vLLM >= 0.20 with CUDA-13 (cu13) wheels
-#     + a matching flash-attn to leverage the new driver. Deferred deliberately —
-#     not bundled into the v0.0 finish so a version bump can't be confused with
-#     an app-wiring bug. Track in handoff/engineering.md.
+#   * Cluster is on CUDA-13 (driver 580). PRIMARY is now vLLM 0.24.0 with cu13
+#     wheels + flashinfer (the modern attention backend — no separate flash-attn
+#     build needed). Done as its own step AFTER v0.0 closed on 0.19.1, so the
+#     version bump was isolated from app wiring (it validated first try).
+#   * 0.19.1/cu128 (vllm-vlm) stays as the fallback env; both serve this model.
 #   * Head-count check for TP=8 (Qwen3-VL-32B config): text attn heads 64, kv
 #     heads 8, vision heads 16 — all divisible by 8, so TP=8 is valid. Re-verify
 #     if the base model changes.

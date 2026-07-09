@@ -164,10 +164,13 @@ The mock ceiling is lifted — the loop now runs on the **real base model**, ver
 changed vs. the mock loop (the backend) — everything else (contracts, wiring, persistence) was
 already proven, so the real turn worked first try.
 
-**Deliberate follow-up (its own slice):** push vLLM 0.19.1 → **≥0.20 with CUDA-13 (cu13) wheels +
-matching flash-attn** to leverage driver 580. Kept out of the finish-line step on purpose (one
-variable at a time). Also: the D6 OCR spot-check on real screen-capture data can run now that the
-model serves.
+**Follow-up DONE (2026-07-09):** upgraded the serving stack to **vLLM 0.24.0 / torch 2.11 /
+transformers 5.13 / CUDA-13 (cu13) wheels + flashinfer** in a fresh `vllm-cu13` env, and
+validated it end to end (direct completion + a real loop turn) — swapped in as primary with the
+0.19.1 `vllm-vlm` env kept as fallback. Done as its own step *after* v0.0 closed, so the version
+bump was isolated from app wiring; it validated first try. Recipe: `serve_vllm.sh` (now defaults
+to `vllm-cu13`); stack in [../STACK.md](../STACK.md). Still open: the D6 OCR spot-check on real
+screen-capture data (model is serving).
 
 ---
 
