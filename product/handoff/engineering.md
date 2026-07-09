@@ -183,6 +183,17 @@ data-processing → storage `/context`) with the *minimum* of every service — 
 compounding the whole thesis rests on. Deliberately **audio-only, no enrichment**: ASR transcript
 + segment timestamps, no diarization, no world-data, no vision.
 
+**Capture model (hold this — it's the user→recording reality).** The user→recording feed is a
+**continuous, always-on** life stream (body-cam / always-on computer mic + screen), **not** a
+press-to-record clip. Recording **carves** that live stream into dense, sequential,
+wall-clock-stamped chunks (C1's `(stream_id, sequence)` + `t_start/t_end`). So downstream — to
+data-processing — data arrives as **bounded chunks with start/end times**, but those boundaries are
+**recording's artifact, not semantic units**: an utterance or word can straddle a chunk edge. For
+the M0 skeleton, ASR each chunk independently; cross-chunk **boundary stitching** is a later
+refinement, **not** an M0 gate — but build data-processing *knowing* the stream is continuous
+underneath. This is also exactly why consent + delete-last-N (recording's M2) are load-bearing:
+capture is always-on, so there is no natural "stop" the user leans on.
+
 **Skeleton scope (decided in-session, D10).** ONE device+modality first: **computer mic → ASR-only
 → a `/context` record** — the simplest capture path. It reuses the POC Phase-1 audio machinery
 (faster-whisper/WhisperX) and dodges the GPU-heavy vision/OCR path. Screen-frames→OCR and wearable
