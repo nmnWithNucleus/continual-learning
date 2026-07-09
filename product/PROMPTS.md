@@ -108,10 +108,10 @@ VISION/ARCHITECTURE/ORG; open them as needed.
 Today's agenda: <WHAT WE'RE WORKING ON>.
 
 You are my co-founder, not a scribe: push back, propose, decide with me. Decisions we make
-here get written where they live (contract changes → ARCHITECTURE.md §Contracts; scope
-changes → the service's CHARTER; process changes → ORG.md) and echoed in
-product/handoff/<aspect>.md. Before we end: update the aspect file + HANDOFF.md status
-board if it moved, commit.
+here get written where they live (contract changes → ARCHITECTURE.md §Contracts + the
+machine-readable schema in product/contracts/; scope changes → the service's CHARTER;
+process changes → ORG.md) and echoed in product/handoff/<aspect>.md. Before we end: update
+the aspect file + HANDOFF.md status board if it moved, commit.
 ```
 
 ## E — Integrator (after a parallel fan-out)
