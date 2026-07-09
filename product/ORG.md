@@ -81,6 +81,18 @@ it twice. (CTO to ratify; reversible if it fails us.)
 - **Launching work** = opening a new session (Cursor/Claude Code tab) and pasting the
   matching prompt from [PROMPTS.md](PROMPTS.md). Prompts encode the read-order and the
   end-of-session duties, so any model/agent can be slotted in.
+- **Ask vs. decide (the founder-in-the-loop rule).** A service's **initial kickoff (Prompt A)
+  is consultative**: the lead produces a kickoff brief — M0 plan + the blocking open questions
+  with recommendations — and **stops for founder answers before designing or building.** Every
+  **resume (Prompt B) is autonomous**: proceed from the canvas's Next, make + document decisions,
+  escalate only true blockers. Cross-service / contract questions are *never* decided by one
+  service session — they route to a founders' session (or a joint interface-freeze), regardless
+  of A vs B.
+- **Lead plans and dispatches; workers advance ws files.** An A/B lead decomposes M0 into
+  `handoff/wsN-*.md` files and may either build inline or fan out workers. **Prompt C** is a
+  scoped worker that **presupposes its ws file already exists** — C is how you (or a human hire)
+  drive one workstream directly, especially interactive/stateful work a fire-and-forget sub-agent
+  can't. No ws file yet ⇒ an A/B planning pass writes it first.
 - **Git is the message bus.** Sessions communicate by committing doc + code updates;
   superiors monitor by reading canvases (and `git log`), not by being present. Frequent
   small commits; the repo is always the ground truth.
