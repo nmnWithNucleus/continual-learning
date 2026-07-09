@@ -331,11 +331,17 @@ real-ASR transcript byte-for-byte). Honest result below.
    build result" above. Skeleton = computer mic → ASR → `/context` (D10); C1/C2 frozen (D11),
    adversarially reviewed pre-freeze; M0 fan-out built (storage/data-processing/recording/platform),
    **the mock capture loop runs E2E on live ports + real-ASR leg ran once** (62 tests, idempotency
-   proven, independently verified). **Next (capture M1):** (1) **enforce gap-detection** on
-   `(stream_id, sequence)` — the top item, it's recording's "zero silent loss" guarantee, currently
-   emit-side only; (2) real computer-mic capture (recording M1) replacing the file source; (3)
-   consent gate (recording M2) before any always-on capture; (4) full audio pipeline
-   (denoise/diarize/translate) + real-ASR as the standing backend.
+   proven, independently verified). **Next (capture M1, audio stream — staying on this component):**
+   (1) **enforce gap-detection** on `(stream_id, sequence)` — the top item, it's recording's "zero
+   silent loss" guarantee, currently emit-side only (a break/dup detector on data-processing ingest
+   feeding recording's continuity report); (2) **async `/ingest`** — ACK `202` + process on a
+   worker/queue so capture cadence decouples from ASR latency (dedup + `record_id` determinism keep
+   retry safe; M0 is inline); (3) real computer-mic capture (recording M1) replacing the file
+   source; (4) consent gate (recording M2) before any always-on capture; (5) **fuller audio
+   pipeline** — **VAD gate → diarize → ASR → translate → acoustic-event captioning** (non-speech
+   audio is *captioned, not dropped* — ambient sound is life-context signal; VAD also kills
+   Whisper's silence-hallucination) + real faster-whisper as the standing backend; (6) chunk length:
+   lift the M0 5 s placeholder to **~20–30 s + overlap** (recording OQ4, joint with DP).
 1. ~~Serve-loop MVP slice~~ **DONE** (see build-result sections above).
 2. Cluster split: which a3mega nodes serve (vLLM) vs train (continuum) vs pipeline work.
 3. Mobile app (now v0, D5) — one codebase serving both the chat surface (input) and the

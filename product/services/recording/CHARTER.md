@@ -92,8 +92,11 @@ lab without pause/delete working.
    to storage's `/raw` purge primitives (platform orchestrates) — raise with CTO/ARCHITECTURE.md.
 3. Codec/bitrate ladder: what fidelity does data-processing actually need per modality? Sets
    battery, disk, and upload budgets. Joint decision with data-processing.
-4. Chunk duration for C1: retry cost vs. ingest latency vs. blob count. Tune with
-   data-processing against their pipeline granularity.
+4. Chunk duration for C1: retry cost vs. ingest latency vs. blob count. **NOT frozen — decided
+   here (recording × data-processing), not at the architecture level.** Recommendation
+   (2026-07-09): **~20–30 s per audio chunk with a few seconds of overlap** — matches Whisper's
+   30 s window (better WER) and gives overlap for later cross-chunk stitching. M0 built **5 s as a
+   placeholder only**. Tune with data-processing against their pipeline granularity.
 5. Pilot desktop OS: which OS(es) do the actual pilot users run? Pin the fleet; don't build
    three clients for a handful of users.
 6. Device identity/auth: platform-owned identity with device-scoped tokens, or self-issued
@@ -101,9 +104,19 @@ lab without pause/delete working.
 7. Bystander audio/video: policy is platform's call (§Ownership splits — platform decides,
    we enforce): two-party-consent jurisdictions, default mute zones, wearable indicator
    brightness/placement. Needs platform's decision before M3 wear tests.
+8. Raw-blob upload path to `/raw` (storage owns the bucket/custody; we are the writer). **M0**
+   proxies bytes through storage's `PUT /raw/blobs`. **Prod lean (2026-07-09):** storage mints a
+   **signed GCS URL**, we upload the bytes **directly to GCS** (so storage isn't a bandwidth
+   bottleneck for tens-of-GB/day/user), then `blob_ref` points at that object (the POC "GCS is
+   source of truth, signed URLs" pattern). Uploads run **async / concurrent** — a new chunk starts
+   uploading immediately; the C1 push fires on that chunk's **upload-complete callback**, so capture
+   is never blocked on an upload. Settle the mint→upload→confirm handshake with storage + platform.
+   Also: the wearable sends **combined A/V** on the device→backend link; **we demux** into
+   per-modality C1 streams (each its own `stream_id`, same `device_id`, wall-clock-aligned) — C1's
+   `modality` is per-envelope, so the split happens **here**, before emission.
 
 **Research**
-8. Capture-everything vs. activity-gated capture (VAD/motion gating): gating saves battery and
+9. Capture-everything vs. activity-gated capture (VAD/motion gating): gating saves battery and
    volume but may starve the training signal continuum depends on. Needs a joint experiment
    with continuum once fine-tuning on real streams begins.
 
