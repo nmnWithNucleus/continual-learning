@@ -264,14 +264,78 @@ spine, proven.
 
 ---
 
+## Learn-loop capture M0 — build result (2026-07-09)
+
+**Fan-out + integrator + adversarial verify.** The four workstreams (storage / data-processing /
+recording / platform) built M0 in parallel against the frozen C1/C2; an integrator wired them and
+drove one continuous-capture chunk end to end on live ports; an **independent verifier** re-ran the
+suites and re-drove the loop itself (proving idempotency with its own `chunk_id`, reproducing the
+real-ASR transcript byte-for-byte). Honest result below.
+
+### What runs (executed, not claimed — independently re-verified)
+- **The mock capture loop runs end to end on real uvicorn ports** (`run_learn.sh` health-gates
+  storage:8083 → data-processing:8085 → recording:8084 — **first try, zero seam fixes**). One
+  `/capture/run` carved a 12 s sample WAV into **3 dense, zero-based, wall-clock-stamped chunks**
+  (`sequence=[0,1,2]`, one `stream_id`), each going **blob-first**: `PUT /raw/blobs` (storage mints
+  the opaque `blob_ref`) → **push C1** to data-processing `/ingest` → C1 schema-validated → **pull
+  bytes by `blob_ref`** → mock ASR → **C2** → `POST /context/records`.
+- **Persistence + reads proven:** every C2 re-read by `record_id` **and** by `(user_id, time)`
+  range (half-open `[from,to)`, matching C10), each provably sourced from a re-pullable `/raw` blob
+  whose sha256 matches; per-user isolation holds (another user sees zero).
+- **Idempotency proven on both legs:** re-delivering the same `chunk_id` returned the identical
+  `blob_ref` and identical `record_id`, DB row counts unchanged (no dup blob, no dup record) —
+  exactly-once under at-least-once. `record_id` verified deterministic: `sha256(chunk_id \x00 pipeline_version)`.
+- **Contracts validated end-to-end** against the frozen JSON Schemas: the exact on-wire C1
+  (captured via a validating tee) and all stored C2s validate with zero errors.
+- **Bonus — real ASR genuinely ran:** the optional `faster_whisper` leg (base/int8/CPU) was
+  installed + run live, producing a real transcript persisted as a schema-valid C2
+  (`pipeline_version=asr-fw-v0`); the verifier reproduced it byte-for-byte. Standing backend
+  restored to **mock**.
+
+### Tests (re-run independently by the verifier, real counts)
+| Service | Result |
+|---|---|
+| storage | **26 passed** (10 serve-loop unregressed + 16 capture-M0) |
+| data-processing | **9 passed** |
+| recording | **27 passed** |
+| **total** | **62 passed, 0 failed** |
+
+### Residual risks / explicitly NOT in M0 (feed the next slices)
+- **Gap-detection is emit-side only, NOT enforced.** `(stream_id, sequence)` is emitted densely +
+  schema-min-validated, but **no consumer detects a gap / lost chunk / duplicate sequence** at
+  runtime. "Zero silent loss" is currently an affordance, not a check — closing it (a gap-detector
+  on data-processing ingest feeding recording's continuity report) is the **top M1 item**: it is
+  recording's headline mission guarantee.
+- **Consent / authz: none.** Anyone can drive `/capture/run` + `/ingest`; delete-last-N /
+  right-to-be-forgotten unimplemented. Recording's M2 (consent enforcement) must land **before any
+  real always-on capture** — load-bearing precisely because capture is continuous.
+- **Mock + file-source + single-stream:** mock ASR is the standing backend; capture reads a sample
+  WAV (no real mic on this box); single device, single modality (audio), single process. Real mic
+  (recording M1), diarization/enrichment, multi-device time-spine, vision/text pipelines,
+  C8/C10/C11 are later slices.
+- **Cross-chunk boundary stitching: out of M0 by design** — each chunk is ASR'd independently, so an
+  utterance straddling a chunk edge is split (per the capture-model note). Later refinement.
+- **Single-process in-memory dedup:** data-processing dedup is a per-process dict; cross-restart /
+  multi-replica idempotency leans on `record_id` determinism → storage `/context` upsert (the
+  durable backstop, exercised). A shared dedup store is later hardening.
+
+**Exit criterion (capture v0 done): MET for the mock loop**, independently verified. Ports: storage
+8083 · recording 8084 · data-processing 8085. Run guide: `services/platform/deploy/run_learn.sh`
+(`--smoke` / `--status` / `--stop`).
+
+---
+
 ## Open agenda
-0. ~~**NEXT SLICE — Data-collection (learn) loop MVP**~~ **SLICED + C1/C2 FROZEN (2026-07-09)** —
-   see "Learn-loop MVP slice — the capture skeleton" above. Skeleton = computer mic → ASR → `/context`
-   (D10); C1 (delivery: push/at-least-once/dedup-on-`chunk_id`) + C2 (`/raw` blob-ref, `record_id`
-   determinism) frozen in ARCHITECTURE §Contracts + `contracts/`, adversarially reviewed pre-freeze.
-   data-processing OQ1 (C1 delivery) + recording's ingest OQ resolved. **Next:** the M0 fan-out —
-   storage M0 (`/raw` + `/context` write) ahead, then recording M0 + data-processing M0 in parallel,
-   then an integrator wires + runs one chunk end to end.
+0. ~~**NEXT SLICE — Data-collection (learn) loop MVP**~~ **SLICED + C1/C2 FROZEN + M0 BUILT,
+   INTEGRATED & VERIFIED (2026-07-09)** — see "Learn-loop MVP slice" + "Learn-loop capture M0 —
+   build result" above. Skeleton = computer mic → ASR → `/context` (D10); C1/C2 frozen (D11),
+   adversarially reviewed pre-freeze; M0 fan-out built (storage/data-processing/recording/platform),
+   **the mock capture loop runs E2E on live ports + real-ASR leg ran once** (62 tests, idempotency
+   proven, independently verified). **Next (capture M1):** (1) **enforce gap-detection** on
+   `(stream_id, sequence)` — the top item, it's recording's "zero silent loss" guarantee, currently
+   emit-side only; (2) real computer-mic capture (recording M1) replacing the file source; (3)
+   consent gate (recording M2) before any always-on capture; (4) full audio pipeline
+   (denoise/diarize/translate) + real-ASR as the standing backend.
 1. ~~Serve-loop MVP slice~~ **DONE** (see build-result sections above).
 2. Cluster split: which a3mega nodes serve (vLLM) vs train (continuum) vs pipeline work.
 3. Mobile app (now v0, D5) — one codebase serving both the chat surface (input) and the

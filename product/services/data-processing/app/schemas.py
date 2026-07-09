@@ -1,10 +1,12 @@
 """Contract-schema loading + validation.
 
-The JSON Schemas in ``product/contracts/*.json`` are the SOURCE OF TRUTH. This module
-loads them into a ``referencing`` registry (so C4's ``$ref`` to C3 resolves) and exposes
-``validate_c4`` / ``validate_c6`` helpers that return a list of human-readable errors
-(empty list == valid). We validate the payloads storage produces/consumes against these
-in both the request path and the tests.
+The JSON Schemas in ``product/contracts/*.json`` are the SOURCE OF TRUTH. This
+module loads them into a ``referencing`` registry (the same approach storage uses
+for C4's ``$ref`` to C3 — C1/C2 have no ``$ref`` but we reuse the pattern for
+consistency and future-proofing) and exposes ``validate_c1`` / ``validate_c2``
+helpers returning a list of human-readable errors (empty list == valid).
+
+We validate the C1 we consume on ingest, and the C2 we produce before writing it.
 """
 from __future__ import annotations
 
@@ -17,13 +19,11 @@ from typing import Any
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 
-# product/services/storage/app/schemas.py -> parents[3] == product/
+# product/services/data-processing/app/schemas.py -> parents[3] == product/
 _DEFAULT_CONTRACTS_DIR = Path(__file__).resolve().parents[3] / "contracts"
 
+C1_ID = "https://nucleus.ai/contracts/c1_raw_stream_envelope.v0.json"
 C2_ID = "https://nucleus.ai/contracts/c2_processed_record.v0.json"
-C3_ID = "https://nucleus.ai/contracts/c3_userprompt.v0.json"
-C4_ID = "https://nucleus.ai/contracts/c4_turn_record.v0.json"
-C6_ID = "https://nucleus.ai/contracts/c6_resolve.v0.json"
 
 
 def contracts_dir() -> Path:
@@ -63,13 +63,9 @@ def errors(schema_id: str, payload: Any) -> list[dict[str, str]]:
     return out
 
 
+def validate_c1(payload: Any) -> list[dict[str, str]]:
+    return errors(C1_ID, payload)
+
+
 def validate_c2(payload: Any) -> list[dict[str, str]]:
     return errors(C2_ID, payload)
-
-
-def validate_c4(payload: Any) -> list[dict[str, str]]:
-    return errors(C4_ID, payload)
-
-
-def validate_c6(payload: Any) -> list[dict[str, str]]:
-    return errors(C6_ID, payload)

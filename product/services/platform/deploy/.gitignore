@@ -5,3 +5,11 @@ logs/
 run/
 selftest/.run/
 selftest/fake/__pycache__/
+
+# Learn-loop bring-up runtime artifacts — not source.
+learn.env
+.venv-learn/
+run-learn/
+sample/
+selftest/.run-learn/
+selftest/fake_learn/__pycache__/

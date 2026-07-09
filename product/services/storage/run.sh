@@ -5,8 +5,9 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$HERE"
 
-# Dev SQLite DB lives beside the app unless overridden.
+# Dev SQLite DB + local /raw blob store live beside the app unless overridden.
 export STORAGE_DB_PATH="${STORAGE_DB_PATH:-$HERE/app/dev.db}"
+export STORAGE_RAW_DIR="${STORAGE_RAW_DIR:-$HERE/app/raw_store}"
 
 HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-8083}"

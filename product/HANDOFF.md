@@ -14,14 +14,14 @@
 
 | Service | Status | Lead session | Canvas |
 |---|---|---|---|
-| Recording | chartered — **C1 frozen; awaiting M0 kickoff** (capture slice) | — | [canvas](services/recording/HANDOFF.md) |
-| Data Processing | chartered — **C1/C2 frozen; awaiting M0 kickoff** (capture slice) | — | [canvas](services/data-processing/HANDOFF.md) |
-| Storage | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) · next: `/raw` + `/context` (capture slice) | serve-loop WS-D | [canvas](services/storage/HANDOFF.md) |
+| Recording | **v0 M0 built + integrated E2E** (mock capture loop live 2026-07-09; carver → `/raw` → C1 push) | learn-loop | [canvas](services/recording/HANDOFF.md) |
+| Data Processing | **v0 M0 built + integrated E2E** (C1 → ASR → C2 mock loop live 2026-07-09; real faster-whisper leg ran once) | learn-loop | [canvas](services/data-processing/HANDOFF.md) |
+| Storage | **v0.0 + capture M0 built + integrated E2E** (serve loop + `/raw`/`/context` mock capture loop 2026-07-09) | serve + learn | [canvas](services/storage/HANDOFF.md) |
 | Input | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-A | [canvas](services/input/HANDOFF.md) |
 | Inference | **v0.0 live on real Qwen3-VL-32B** (vLLM TP=8 on node-7, verified E2E 2026-07-09) | serve-loop WS-B | [canvas](services/inference/HANDOFF.md) |
 | Output | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-C | [canvas](services/output/HANDOFF.md) |
 | Continuum | chartered — awaiting kickoff | — | [canvas](services/continuum/HANDOFF.md) |
-| Platform | **v0.0 bring-up shipped + run E2E** (ratified 2026-07-09) | serve-loop WS-E | [canvas](services/platform/HANDOFF.md) |
+| Platform | **v0.0 serve bring-up + learn-loop bring-up** (`run_all.sh` + `run_learn.sh`, both run E2E 2026-07-09) | serve + learn | [canvas](services/platform/HANDOFF.md) |
 
 ## Founders' aspect threads
 
@@ -99,13 +99,28 @@
   this session produced the slice + the frozen contracts; the M0 builds come next. Slice:
   [handoff/engineering.md](handoff/engineering.md) "Learn-loop MVP slice".
 
+- 2026-07-09 (capture M0 built): **learn-loop capture M0 built, integrated & independently
+  verified.** A 4-workstream fan-out (storage/data-processing/recording/platform) built M0 against
+  the frozen C1/C2; an integrator wired them and drove one continuous-capture chunk **end to end on
+  live ports** (carve WAV → `/raw` blob-first → C1 push → `/ingest` → mock ASR → C2 → `/context`),
+  and an adversarial verifier re-ran the suites + re-drove the loop. **62 tests pass** (storage 26 ·
+  data-processing 9 · recording 27); idempotency proven on both legs (same `chunk_id` → no dup
+  blob/record); C1+C2 schema-valid E2E; the optional **real faster-whisper** leg genuinely ran once
+  (restored to mock). **Zero seam fixes** — the frozen wire interoperated first try. Committed by
+  this founders' session (no agent commits). Honest residuals feed capture M1: **gap-detection is
+  emit-side only (not enforced)**, no consent gate, mock+file-source (no real mic). Detail:
+  [handoff/engineering.md](handoff/engineering.md) "Learn-loop capture M0 — build result".
+
 ## Next
 
-- ~~**Pick the next slice**~~ **DONE** — capture slice picked + sliced + C1/C2 frozen (2026-07-09,
-  see Current state + engineering thread). **Now: the capture M0 fan-out** — storage M0 (`/raw`
-  blob write+read + `/context` C2 write, extending the running `:8083` service) lands ahead, then
-  recording M0 (mic → `/raw` PUT → C1 emit) + data-processing M0 (C1 → ASR → C2) fan out in
-  parallel against the frozen C1/C2, then an integrator wires + runs one chunk end to end.
+- ~~**Pick the next slice**~~ ~~**capture M0 fan-out**~~ **DONE** — capture slice sliced, C1/C2
+  frozen, and **M0 built + integrated E2E + verified** (2026-07-09; mock capture loop live, 62
+  tests, see Current state + engineering thread). **Now: capture M1** — (1) **enforce gap-detection**
+  on `(stream_id, sequence)` (top item — recording's "zero silent loss" is currently emit-side
+  only); (2) real computer-mic capture (recording M1) replacing the file source; (3) consent gate
+  (recording M2) before any always-on capture; (4) full audio pipeline + real-ASR as the standing
+  backend. Alternatives off the skeleton: continuum/personalization (nightly LoRA), or screen/OCR
+  capture (data-processing M2).
 - ~~Deferred follow-up: vLLM upgrade~~ **DONE 2026-07-09** — serving stack upgraded to
   **vLLM 0.24.0 / CUDA-13 (cu13) + flashinfer** (`vllm-cu13` env), validated E2E; 0.19.1 kept as
   fallback. Whole serving fleet now on the latest, CUDA-13-native. See [STACK.md](STACK.md).

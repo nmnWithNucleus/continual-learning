@@ -4,3 +4,8 @@ dev.db
 *.sqlite3
 __pycache__/
 .pytest_cache/
+# Local dev blob store (/raw bytes) — never commit captured bytes.
+raw_store/
+app/raw_store/
+# Isolated per-service venv for unit tests.
+.venv/

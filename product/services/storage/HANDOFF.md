@@ -4,15 +4,16 @@
 > Read [CHARTER.md](CHARTER.md) first (mission/scope/interfaces), then this file — the
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
-**Status:** serve-loop MVP (v0.0) built + tested + **integrated E2E** (integrator ran the live loop 2026-07-09: C4 written by inference, re-read by `turn_id` + `session_id`; C6 resolved base) · **Last updated:** 2026-07-09
+**Status:** serve-loop MVP (v0.0) built + tested + **integrated E2E** (integrator ran the live loop 2026-07-09: C4 written by inference, re-read by `turn_id` + `session_id`; C6 resolved base). **Learn-loop capture M0 added 2026-07-09: `/raw` blob leg (C1) + `/context` store (C2) built + tested (26 tests pass) + live-smoke-run; awaiting integrator.** · **Last updated:** 2026-07-09
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
 |---|---|---|---|---|
-| WS-D | serve-loop MVP: `/sessions` (C4 write/read) + model directory (C6 resolve) | done (built, tested, smoke-run on :8083) | [handoff/ws-storage-mvp.md](handoff/ws-storage-mvp.md) | this session |
+| WS-D | serve-loop MVP: `/sessions` (C4 write/read) + model directory (C6 resolve) | done (built, tested, smoke-run on :8083) | [handoff/ws-storage-mvp.md](handoff/ws-storage-mvp.md) | prior session |
+| WS-C | learn-loop capture M0: `/raw` blob leg (C1) + `/context` store (C2) | built + tested (26 pass) + live-smoke-run; not yet integrator-wired | this file (below) | this session |
 
 ## Current state
-- **Built (v0.0):** FastAPI + SQLite storage service on `:8083`. Endpoints:
+- **Built (v0.0 serve-loop):** FastAPI + SQLite storage service on `:8083`. Endpoints:
   - `POST /sessions/turns` — validates a **C4** turn record against
     `../../contracts/c4_turn_record.v0.json` (authoritative gate, incl. the nested-C3 `$ref`),
     persists verbatim (idempotent upsert on `turn_id`), returns `{ok, turn_id}`.
@@ -20,12 +21,37 @@
   - `GET /sessions/{session_id}/turns` — the session's C4 turns, ordered by `created_at`.
   - `GET /model-directory/resolve?user_id=…` — **C6** body (seeded base entry, `adapter_path:null`).
   - `GET /health` → `{ok:true}`.
-- **Storage:** SQLite dev file DB (`STORAGE_DB_PATH`, default `app/dev.db`). Tables: `turns`
-  (PK `turn_id`, index `(session_id, created_at)`, full C4 stored as JSON) + `model_directory`
-  (seeded base row). Fresh connection per op (dev volume).
-- **Tested:** 10 pytest tests pass (round-trip + schema-validate, list-by-session ordering +
-  isolation, idempotent write, invalid-C4 → 422, C6 resolve + schema-validate). Also smoke-run
-  against live uvicorn on `:8083` (health, resolve, C4 write→read, list, 404, 422 all green).
+- **Built (capture M0 — learn-loop) — the exact wire the integrator + recording + data-processing bind to:**
+  - `PUT /raw/blobs?user_id=&device_id=&chunk_id=&codec=&sha256=&bytes=` — body = raw bytes
+    (`application/octet-stream`). Verifies the body's SHA-256 == `sha256` (and `len` == `bytes`
+    if sent) → **422** on mismatch; mints an **opaque** `blob_ref`; stores the bytes under the
+    dev blob dir. **Idempotent on `chunk_id`** (re-PUT → same `blob_ref`, no dup blob/row).
+    → `200 {blob_ref, bytes, sha256}`. `blob_ref` is storage-owned, may contain `/`.
+  - `GET /raw/blobs?ref=<blob_ref>` — `ref` is a **query param** (not a path segment, since it
+    may contain `/`) → `200` raw bytes (`application/octet-stream`); **404** if the ref is
+    unknown **or the blob was since-deleted** (consumers must tolerate the latter).
+  - `POST /context/records` — body = **C2** JSON. Validates against
+    `../../contracts/c2_processed_record.v0.json` (same authoritative-gate style as the C4 write) →
+    **422** on violation; **idempotent upsert on `record_id`**; stores the full C2 verbatim,
+    time-indexed on `(user_id, t_start)`; assigns its own `ingest_time` (audit axis, NOT in C2,
+    preserved across reprocess). → `200 {ok:true, record_id}`.
+  - `GET /context/records/{record_id}` — the stored C2 (404 if absent). `record_id` is URL-safe.
+  - `GET /context/records?user_id=&from=&to=` — that user's C2 records ordered by `t_start`.
+    Window is **half-open `[from, to)`** (from inclusive, to exclusive — matches C10's
+    `[last_trained_t, now)`); either bound omittable. Per-user isolation enforced by the
+    mandatory `user_id` filter.
+- **Storage:** SQLite dev file DB (`STORAGE_DB_PATH`, default `app/dev.db`) + local dev blob dir
+  (`STORAGE_RAW_DIR`, default `app/raw_store/`, gitignored). Tables: `turns`, `model_directory`,
+  **`raw_blobs`** (PK `chunk_id`, index on `blob_ref`; bytes on disk at the ref's hex-sharded
+  path), **`context_records`** (PK `record_id`, index `(user_id, t_start)`, full C2 as JSON).
+  Fresh connection per op (dev volume). GCS is the prod target for the bytes; metadata stays here.
+- **Tested (isolated `.venv`, FastAPI TestClient, in-process — no real port bound):** **26 pytest
+  pass** — the original **10** (serve-loop, unregressed) + **16** new: `/raw` PUT→GET round-trip +
+  sha256 verify + idempotent-on-`chunk_id` (same ref, no dup) + distinct-chunk refs + sha/bytes
+  mismatch → 422 + unknown-ref 404 + since-deleted 404; `/context` round-trip + schema-validate +
+  idempotent upsert on `record_id` + time-range ordering/bounds + per-user isolation + invalid-C2
+  → 422. Also **live-smoke-run** against real uvicorn (blob-first PUT, idempotent re-PUT, GET-by-ref
+  byte round-trip with `/` in ref, C2 POST/GET/time-range) — all green; server torn down.
 
 ## Scope boundary (v0.0)
 - **Built so far: `/sessions` + model directory.** `/raw` (C1 blob leg) + `/context` (C2) are the
@@ -34,15 +60,15 @@
   directory is trivial (everyone → base, no adapter) until continuum ships C5 registration.
 
 ## Next
-- **⇐ ACTIVE: capture slice (learn-loop MVP).** C1 + C2 are **frozen** (2026-07-09, D10/D11 —
-  `../../contracts/c1_raw_stream_envelope.v0.json`, `c2_processed_record.v0.json`). Storage M0 leads
-  the fan-out (both recording and data-processing write to us):
-  - **`/raw` blob leg (C1):** `PUT /raw/blobs` (raw bytes + `chunk_id`/`user_id`/codec/sha256 →
-    **storage mints an opaque `blob_ref`**, idempotent on `chunk_id`) + `GET /raw/blobs/{blob_ref}`
-    (data-processing pulls bytes for ASR). Local blob dir for dev; GCS in prod.
-  - **`/context` write (C2):** `POST /context/records` (validate against the C2 schema like the
-    existing `/sessions` gate; idempotent upsert on `record_id`), time-indexed on `(user_id,
-    t_start)`; `GET /context/records/{id}` + `GET /context?user_id=&from=&to=` (time-range).
+- **✅ DONE (this session): capture slice (learn-loop MVP) storage M0.** C1 + C2 were **frozen**
+  (2026-07-09, D10/D11 — `../../contracts/c1_raw_stream_envelope.v0.json`,
+  `c2_processed_record.v0.json`); storage M0 built the shared write targets (see Current state for
+  the exact wire). One deviation from the earlier sketch below, pinned by the integrator's frozen
+  wire spec: **`GET /raw/blobs?ref=<blob_ref>` takes the ref as a QUERY param, not a path segment**
+  (`GET /raw/blobs/{blob_ref}`) — because a `blob_ref` may contain `/`. recording + data-processing
+  must call the query-param form. Remaining fan-out: recording M0 (mic → `/raw` PUT → C1 emit) +
+  data-processing M0 (C1 → ASR → C2 → `/context`) target these endpoints; integrator wires + runs
+  one chunk end to end.
 - `/context` time-ranged read hardening (per CHARTER M1).
 - C5 adapter registration → per-user overrides in `model_directory` (M3).
 - Encryption at rest + per-user isolation tests (M4); deletion primitives (M5).
