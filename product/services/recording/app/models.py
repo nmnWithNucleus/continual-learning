@@ -55,6 +55,7 @@ class CaptureRunRequest(_Strict):
 
     storage_url: str = Field(min_length=1)
     dp_url: str = Field(min_length=1)
+    modality: Modality = "audio"         # selects the ChunkSource (registry); v0 => audio
     source: str | None = None            # path to a .wav; None -> synthetic sample
     chunk_seconds: float | None = None
     base_wallclock: str | None = None    # RFC3339; pins frame-0 wall-clock (determinism)
@@ -68,7 +69,7 @@ class CaptureRunResponse(_Strict):
     chunks_emitted: int
     chunk_ids: list[str]
     sequences: list[int]
-    record_ids: list[str]                # data-processing's C2 record_id per chunk (provenance)
+    record_ids: list[str]                # all C2 record_ids across the session, flattened (a chunk may fan out to >1, e.g. video keyframes) — provenance
 
 
 class Health(_Strict):

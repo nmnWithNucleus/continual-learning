@@ -4,12 +4,38 @@
 > Read [CHARTER.md](CHARTER.md) first (mission/scope/interfaces), then this file — the
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
-**Status:** M0 built (mock loop green) · **Last updated:** 2026-07-09
+**Status:** M0 built + modality-agnostic Processor seam landed (mock loop green) · **Last updated:** 2026-07-10
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
 |---|---|---|---|---|
 | B | M0 capture skeleton: C1 → ASR → C2 (`:8085`) | built, mock tests green | this dir (`app/`, `tests/`) | learn-loop M0 |
+| B+ | Modality-agnostic **Processor seam** + image/video/text **stubs** | built, 24 tests green | `app/processing/`, `tests/test_processor_seam.py` | seam session |
+
+## Processor seam — how to add a modality (READ THIS before owning image/video/text)
+The core (`app/main.py` `POST /ingest` + `app/pipeline.py` `build_c2`) is **modality-agnostic**:
+validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) → pull blob →
+**dispatch by `envelope.modality` to a Processor** → for **each** returned unit assemble a C2 and
+`POST` it to `/context` → return `{ok, record_ids:[…]}`.
+
+- **A modality = ONE disjoint file** in `app/processing/processors/` that subclasses
+  `processing.base.Processor`, sets `modality` + `content_kind`, implements `pipeline_version(settings)`
+  + `process(c1, blob, settings, span_seconds) -> list[ProcessedUnit]`, and is decorated with
+  `@register` (`processing.registry`). The registry **auto-imports** every module in that package, so
+  **you never edit a shared-core file** (not even a registry line) — just drop the file + a fixture.
+- **`process` returns a LIST (≥1)**: audio/image/text → 1 unit; **video → many** (one keyframe →
+  one unit, `discriminator = keyframe index`). `discriminator=''` is the 1:1 case.
+- **`ProcessedUnit`** = `{content{kind,text,language?,segments?}, enrichments{speakers,faces,places,objects}, discriminator}`.
+  `content.kind` ∈ frozen C2 enum `transcript|caption|ocr|text`. Emit `segments` already in C2 shape
+  (absolute RFC3339); the core assembles content verbatim.
+- **`record_id = sha256(chunk_id \0 pipeline_version [\0 discriminator])`** (discriminator folded in
+  only when non-empty, so audio's 1:1 id is **byte-identical to the pre-seam v0 id** → reprocess is
+  an idempotent upsert). Deterministic + distinct per keyframe.
+- Stubs today (`image`/`video`/`text`) are **mock transforms** — real VLM/OCR/normalizer models
+  replace only the plugin body. `audio` is the real mock-ASR path moved behind the seam unchanged.
+- **`/ingest` response is now `{ok, record_ids:[…]}`** (was `{ok, record_id}`). NOTE for the
+  integrator: recording's live `capturer.py` reads `ack.get("record_id")` — update it to
+  `record_ids` (recording's own unit tests fake the old shape, so they don't flag this).
 
 ## Current state
 - **M0 built (`:8085`).** `POST /ingest` receives a pushed **C1** envelope → schema-validates it

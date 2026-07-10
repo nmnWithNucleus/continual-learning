@@ -24,6 +24,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="python -m app.cli", description="Run one capture session.")
     p.add_argument("--storage-url", default=settings.storage_url, help="storage base URL (/raw)")
     p.add_argument("--dp-url", default=settings.dp_url, help="data-processing base URL (/ingest)")
+    p.add_argument("--modality", default="audio", help="ChunkSource modality (default audio)")
     p.add_argument("--source", default=None, help="path to a .wav; omit for a synthetic sample")
     p.add_argument("--chunk-seconds", type=float, default=None, help="chunk duration (default 5s)")
     p.add_argument("--base-wallclock", default=None, help="RFC3339 UTC frame-0 wall-clock")
@@ -37,6 +38,7 @@ async def _run(args: argparse.Namespace) -> dict:
         settings=get_settings(),
         storage_url=args.storage_url,
         dp_url=args.dp_url,
+        modality=args.modality,
         source=args.source,
         chunk_seconds=args.chunk_seconds,
         base_wallclock=args.base_wallclock,

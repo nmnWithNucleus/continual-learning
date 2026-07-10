@@ -1,24 +1,28 @@
-"""The capture session — carve the continuous stream, then per chunk, blob-first:
+"""The capture session — pull a modality's ChunkSource, then per chunk, blob-first:
 
   1. compute bytes + sha256 for the chunk
   2. mint a stable chunk_id (reused on retry; the dedup key)
   3. PUT the bytes to storage /raw/blobs  -> blob_ref            (BLOB LEG, first)
   4. build the C1 envelope carrying that blob_ref + integrity fields
   5. validate the envelope against the frozen C1 schema (defensive)
-  6. POST the C1 envelope to data-processing /ingest -> record_id (ENVELOPE LEG)
+  6. POST the C1 envelope to data-processing /ingest -> record_ids (ENVELOPE LEG)
+
+This emit path is MODALITY-AGNOSTIC: it consumes a ``ChunkSource`` (see app/sources/)
+which yields ordered ``SourceChunk``s of opaque bytes + wall-clock span for one
+modality+codec. Audio (WAV) is the one M0 source; future modalities (image/video/text,
+screen/webcam/wearable) drop in a new source file — this path never changes.
 
 One globally-unique stream_id for the whole session; dense zero-based sequence
-(0,1,2,... +1 per chunk); at-least-once with retry on both legs (retry inside the
-client, so chunk_id/sequence never change across attempts).
+(0,1,2,... assigned here as chunks emit); at-least-once with retry on both legs (retry
+inside the client, so chunk_id/sequence never change across attempts).
 """
 from __future__ import annotations
 
 import hashlib
 import logging
-from pathlib import Path
 from typing import Any
 
-from . import contracts, timeutil, wav
+from . import contracts, sources
 from .clients import DataProcessingClient, StorageClient
 from .config import Settings
 from .ids import new_ulid
@@ -27,31 +31,17 @@ from .models import C1Envelope
 logger = logging.getLogger("recording.capturer")
 
 
-def _load_source(
-    source: str | None, settings: Settings, sample_seconds: float | None
-) -> wav.WavAudio:
-    """Resolve the continuous audio source: a caller .wav path, else a synthetic sample.
-
-    Models the always-on stream — there is no real mic on this box (CHARTER M1+).
-    """
-    if source:
-        data = Path(source).read_bytes()
-        return wav.read_wav(data)
-    seconds = sample_seconds if sample_seconds is not None else settings.sample_seconds
-    sample = wav.generate_sample_wav(seconds=seconds, sample_rate=settings.sample_rate)
-    return wav.read_wav(sample)
-
-
 def _build_envelope(
     *,
-    settings: Settings,
     user_id: str,
     device_id: str,
     stream_id: str,
     sequence: int,
     chunk_id: str,
-    base,
-    chunk: wav.Chunk,
+    modality: str,
+    codec: str,
+    t_start: str,
+    t_end: str,
     blob_ref: str,
     sha256: str,
     nbytes: int,
@@ -64,10 +54,10 @@ def _build_envelope(
         "stream_id": stream_id,
         "sequence": sequence,
         "chunk_id": chunk_id,
-        "modality": "audio",
-        "codec": settings.codec,
-        "t_start": timeutil.offset(base, chunk.t_start_seconds),
-        "t_end": timeutil.offset(base, chunk.t_end_seconds),
+        "modality": modality,
+        "codec": codec,
+        "t_start": t_start,
+        "t_end": t_end,
         "blob_ref": blob_ref,
         "blob_sha256": sha256,
         "blob_bytes": nbytes,
@@ -89,18 +79,29 @@ async def run_session(
     user_id: str | None = None,
     device_id: str | None = None,
     sample_seconds: float | None = None,
+    modality: str = "audio",
 ) -> dict[str, Any]:
-    """Run one capture session end-to-end. Returns the session summary dict."""
-    chunk_seconds = chunk_seconds if chunk_seconds is not None else settings.chunk_seconds
+    """Run one capture session end-to-end. Returns the session summary dict.
+
+    ``modality`` selects the ChunkSource from the registry (default 'audio'). The rest of
+    this function is modality-agnostic — it only reads ``source.modality`` / ``.codec``
+    and each ``SourceChunk``'s bytes + wall-clock span.
+    """
     user_id = user_id or settings.user_id
     device_id = device_id or settings.device_id
 
-    audio = _load_source(source, settings, sample_seconds)
-    chunks = wav.carve(audio, chunk_seconds)
+    # The modality-agnostic source: audio (WAV) today, image/video/text/etc. tomorrow.
+    source_obj = sources.build_source(
+        modality,
+        settings=settings,
+        source=source,
+        chunk_seconds=chunk_seconds,
+        sample_seconds=sample_seconds,
+        base_wallclock=base_wallclock,
+    )
 
     # ONE globally-unique stream_id for the whole always-on session.
     stream_id = new_ulid()
-    base = timeutil.parse_wallclock(base_wallclock)
 
     storage = StorageClient(
         storage_url,
@@ -119,8 +120,9 @@ async def run_session(
     sequences: list[int] = []
     record_ids: list[str] = []
     try:
-        for chunk in chunks:
-            sequence = chunk.index                 # dense, zero-based, +1 per chunk
+        # sequence assigned HERE (dense, zero-based, +1 per emitted chunk) — a stream
+        # concern, not the source's; the source only promises capture order.
+        for sequence, chunk in enumerate(source_obj.chunks()):
             chunk_id = new_ulid()                   # stable per chunk; reused on retry
             data = chunk.data
             sha256 = hashlib.sha256(data).hexdigest()
@@ -131,7 +133,7 @@ async def run_session(
                 user_id=user_id,
                 device_id=device_id,
                 chunk_id=chunk_id,
-                codec=settings.codec,
+                codec=source_obj.codec,
                 sha256=sha256,
                 nbytes=nbytes,
                 data=data,
@@ -148,14 +150,15 @@ async def run_session(
 
             # --- ENVELOPE LEG: push the validated C1 to data-processing ---
             envelope = _build_envelope(
-                settings=settings,
                 user_id=user_id,
                 device_id=device_id,
                 stream_id=stream_id,
                 sequence=sequence,
                 chunk_id=chunk_id,
-                base=base,
-                chunk=chunk,
+                modality=source_obj.modality,
+                codec=source_obj.codec,
+                t_start=chunk.t_start,
+                t_end=chunk.t_end,
                 blob_ref=blob_ref,
                 sha256=sha256,
                 nbytes=nbytes,
@@ -164,7 +167,9 @@ async def run_session(
 
             chunk_ids.append(chunk_id)
             sequences.append(sequence)
-            record_ids.append(ack.get("record_id"))
+            # /ingest returns {ok, record_ids:[...]}: one C1 (chunk) may fan out to
+            # >1 C2 record (e.g. video keyframes), so flatten across chunks.
+            record_ids.extend(ack.get("record_ids") or [])
     finally:
         await storage.aclose()
         await dp.aclose()

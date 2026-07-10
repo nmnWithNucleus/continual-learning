@@ -49,6 +49,22 @@ def test_capture_response_shape_and_single_stream_id(wiring):
     ]
 
 
+def test_ingest_fanout_flattens_record_ids(make_wiring):
+    """One C1 (chunk) may fan out to >1 C2 record (e.g. video keyframes): /ingest
+    returns {ok, record_ids:[...]} and the session flattens them across chunks.
+    Regression guard for the /ingest response reshape (record_id -> record_ids):
+    with the old singular read, record_ids would be [None, ...] and the response
+    model (list[str]) would 500."""
+    w = make_wiring(dp_fanout=3)
+    out = w.run(sample_seconds=12, chunk_seconds=5)          # 3 chunks
+
+    assert out["chunks_emitted"] == 3
+    assert len(out["record_ids"]) == 9                       # 3 chunks x 3 records/chunk, flattened
+    assert all(isinstance(r, str) and r for r in out["record_ids"])
+    expected = [rid for cid in out["chunk_ids"] for rid in w.dp.records[cid]]
+    assert out["record_ids"] == expected
+
+
 # ------------------------------------------------------------ C1 schema conformance
 
 def test_emitted_c1_validates_against_schema(wiring):
@@ -180,7 +196,7 @@ def test_dup_drill_dataprocessing_exactly_once(make_wiring):
     dup_envs = [e for e in w.dp.envelopes if e["chunk_id"] == first_cid]
     assert len(dup_envs) == 2                            # sent twice
     assert {e["sequence"] for e in dup_envs} == {0}      # same sequence, not advanced
-    assert out["record_ids"][0] == w.dp.records[first_cid]
+    assert out["record_ids"][0] == w.dp.records[first_cid][0]
     # No duplicate blob either (storage untouched by the /ingest retry).
     assert w.storage.put_count == 3
 

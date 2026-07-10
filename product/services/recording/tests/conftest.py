@@ -36,11 +36,11 @@ class Wiring:
         return resp.json()
 
 
-def _make_wiring(monkeypatch, *, storage_fail_first=False, dp_fail_first=False) -> Wiring:
+def _make_wiring(monkeypatch, *, storage_fail_first=False, dp_fail_first=False, dp_fanout=1) -> Wiring:
     monkeypatch.setenv("RECORDING_RETRY_BACKOFF", "0")   # no sleeps between retries
     events: list = []
     storage = FakeStorage(events, fail_first=storage_fail_first)
-    dp = FakeDataProcessing(events, fail_first=dp_fail_first)
+    dp = FakeDataProcessing(events, fail_first=dp_fail_first, fanout=dp_fanout)
 
     def fake_async_client(base_url: str, timeout: float) -> httpx.AsyncClient:
         handler = storage if "storage" in base_url else dp
@@ -64,10 +64,11 @@ def wiring(monkeypatch) -> Wiring:
 @pytest.fixture()
 def make_wiring(monkeypatch):
     """Factory for fault-injected wiring (drills)."""
-    def _factory(*, storage_fail_first=False, dp_fail_first=False) -> Wiring:
+    def _factory(*, storage_fail_first=False, dp_fail_first=False, dp_fanout=1) -> Wiring:
         return _make_wiring(
             monkeypatch,
             storage_fail_first=storage_fail_first,
             dp_fail_first=dp_fail_first,
+            dp_fanout=dp_fanout,
         )
     return _factory

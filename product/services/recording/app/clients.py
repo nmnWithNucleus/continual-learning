@@ -110,7 +110,7 @@ class StorageClient:
 
 
 class DataProcessingClient:
-    """data-processing /ingest — the C1 push receiver. POST C1 -> {ok, record_id}."""
+    """data-processing /ingest — the C1 push receiver. POST C1 -> {ok, record_ids:[...]}."""
 
     def __init__(self, base_url: str, *, timeout: float, attempts: int, backoff: float) -> None:
         self._ac = async_client(base_url, timeout)

@@ -1,10 +1,16 @@
-"""data-processing service HTTP surface (FastAPI, :8085).
+"""data-processing service HTTP surface (FastAPI, :8085) — MODALITY-AGNOSTIC core.
 
 POST /ingest  — body = a pushed C1 raw-stream envelope. Validate C1 -> dedup on
-                chunk_id -> pull the blob by ref from storage -> run ASR ->
-                build a C2 record -> POST it to storage /context -> return
-                {ok, record_id}. This is the C1 push receiver (learn-loop M0).
+                chunk_id -> pull the blob by ref from storage -> dispatch to the
+                Processor registered for envelope.modality -> for EACH ProcessedUnit
+                it returns, assemble a C2 record and POST it to storage /context ->
+                return {ok, record_ids:[...]}. This is the C1 push receiver.
 GET  /health  — liveness + effective ASR backend.
+
+The core knows nothing about audio/image/video/text: modality behavior lives in
+disjoint plugin files under ``processing/processors/`` (see ``processing/``), so a
+future session owns a modality by dropping in one file. One chunk MAY yield many
+records (e.g. video keyframes); audio/image/text yield a single-element list.
 
 The whole loop runs headless on any box: ASR_BACKEND defaults to `mock` (no GPU).
 """
@@ -18,11 +24,12 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
-from . import asr, schemas
+from . import schemas
 from .config import get_settings
 from .dedup import DedupStore
 from .models import C1Envelope, C2Record
 from .pipeline import build_c2, chunk_span_seconds
+from .processing.registry import get_processor
 from .storage_client import StorageClient
 from .timeutil import now_iso
 
@@ -35,7 +42,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Nucleus data-processing service",
         version="0.0",
-        summary="C1 -> ASR -> C2 capture skeleton for the learn loop.",
+        summary="C1 -> Processor -> C2 capture skeleton for the learn loop.",
     )
     settings = get_settings()
     app.state.storage = StorageClient(settings.storage_url, timeout=settings.http_timeout)
@@ -66,13 +73,26 @@ def create_app() -> FastAPI:
         C1Envelope.model_validate(c1)
 
         chunk_id = c1["chunk_id"]
+        modality = c1["modality"]
         dedup: DedupStore = request.app.state.dedup
 
-        # ---- Dedup (fast path): already-processed chunk_id -> prior record_id -
+        # ---- Dedup (fast path): already-processed chunk_id -> prior record_ids -
         prior = dedup.get(chunk_id)
         if prior is not None:
             logger.info("dedup hit (processed) chunk_id=%s -> %s", chunk_id, prior)
-            return JSONResponse(content={"ok": True, "record_id": prior})
+            return JSONResponse(content={"ok": True, "record_ids": prior})
+
+        # ---- Select the Processor for this modality (before any I/O) ----------
+        # C1 schema already restricts modality to the enum; a valid modality with no
+        # registered plugin is a clean 501, not a crash.
+        try:
+            processor = get_processor(modality)
+        except KeyError:
+            raise HTTPException(
+                status_code=501,
+                detail={"error": f"no processor registered for modality {modality!r}"},
+            )
+        pipeline_version = processor.pipeline_version(settings)
 
         # Serialize concurrent redeliveries of the same in-flight chunk_id.
         lock = await dedup.lock_for(chunk_id)
@@ -80,14 +100,13 @@ def create_app() -> FastAPI:
             prior = dedup.get(chunk_id)
             if prior is not None:  # resolved while we waited on the lock (in-flight)
                 logger.info("dedup hit (in-flight) chunk_id=%s -> %s", chunk_id, prior)
-                return JSONResponse(content={"ok": True, "record_id": prior})
+                return JSONResponse(content={"ok": True, "record_ids": prior})
 
             storage: StorageClient = request.app.state.storage
-            backend = asr.select(settings)
 
             # ---- Pull the raw chunk bytes by blob_ref ------------------------
             try:
-                audio_bytes = await storage.get_blob(c1["blob_ref"])
+                blob_bytes = await storage.get_blob(c1["blob_ref"])
             except httpx.HTTPStatusError as exc:
                 raise HTTPException(
                     status_code=502,
@@ -105,7 +124,7 @@ def create_app() -> FastAPI:
 
             # End-to-end integrity check against /raw (C1 carries the sha256).
             if settings.verify_blob_sha256:
-                actual = hashlib.sha256(audio_bytes).hexdigest()
+                actual = hashlib.sha256(blob_bytes).hexdigest()
                 if actual != c1["blob_sha256"]:
                     raise HTTPException(
                         status_code=502,
@@ -116,38 +135,44 @@ def create_app() -> FastAPI:
                         },
                     )
 
-            # ---- Run ASR (off the event loop; faster_whisper is blocking) ----
+            # ---- Run the modality Processor (off the event loop; may be heavy) -
             span_seconds = chunk_span_seconds(c1)
-            asr_result = await run_in_threadpool(
-                backend.transcribe,
-                settings,
-                audio_bytes,
-                c1["codec"],
-                span_seconds,
-                chunk_id,
+            units = await run_in_threadpool(
+                processor.process, c1, blob_bytes, settings, span_seconds
             )
-
-            # ---- Build + self-validate the C2 record -------------------------
-            c2 = build_c2(c1, asr_result, backend.PIPELINE_VERSION, now_iso())
-            c2_problems = schemas.validate_c2(c2)
-            if c2_problems:  # pragma: no cover - would indicate a builder bug
+            if not units:  # a Processor must return >= 1 unit
                 raise HTTPException(
                     status_code=500,
-                    detail={"error": "produced C2 failed schema validation", "violations": c2_problems},
-                )
-            C2Record.model_validate(c2)
-
-            # ---- Write to storage /context (idempotent upsert on record_id) --
-            try:
-                resp = await storage.post_record(c2)
-            except httpx.HTTPError as exc:
-                raise HTTPException(
-                    status_code=502, detail={"error": f"context write failed: {exc}"}
+                    detail={"error": f"processor for {modality!r} returned no units"},
                 )
 
-            record_id = (resp or {}).get("record_id") or c2["record_id"]
-            dedup.put(chunk_id, record_id)
-            return JSONResponse(content={"ok": True, "record_id": record_id})
+            # ---- Assemble + write a C2 per unit (idempotent upsert on record_id)
+            processed_at = now_iso()  # one stamp for the whole processing run
+            record_ids: list[str] = []
+            for unit in units:
+                c2 = build_c2(c1, unit, pipeline_version, processed_at)
+
+                c2_problems = schemas.validate_c2(c2)
+                if c2_problems:  # pragma: no cover - would indicate a builder bug
+                    raise HTTPException(
+                        status_code=500,
+                        detail={
+                            "error": "produced C2 failed schema validation",
+                            "violations": c2_problems,
+                        },
+                    )
+                C2Record.model_validate(c2)
+
+                try:
+                    resp = await storage.post_record(c2)
+                except httpx.HTTPError as exc:
+                    raise HTTPException(
+                        status_code=502, detail={"error": f"context write failed: {exc}"}
+                    )
+                record_ids.append((resp or {}).get("record_id") or c2["record_id"])
+
+            dedup.put(chunk_id, record_ids)
+            return JSONResponse(content={"ok": True, "record_ids": record_ids})
 
     return app
 

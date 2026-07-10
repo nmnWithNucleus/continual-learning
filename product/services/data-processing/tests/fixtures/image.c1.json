@@ -1,0 +1,16 @@
+{
+  "contract": "C1",
+  "version": "0",
+  "user_id": "pilot-user",
+  "device_id": "computer-screen-1",
+  "stream_id": "stream-image-BBBB",
+  "sequence": 0,
+  "chunk_id": "chunk-image-0001",
+  "modality": "image",
+  "codec": "image/png",
+  "t_start": "2026-07-10T09:01:00Z",
+  "t_end": "2026-07-10T09:01:01Z",
+  "blob_ref": "raw/pilot-user/chunk-image-0001.png",
+  "blob_sha256": "fcedbc4889e0da9f56e0e573b87c330a6fdff572d300fb99f999b9bf428b09be",
+  "blob_bytes": 39
+}

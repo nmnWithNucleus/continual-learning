@@ -67,15 +67,20 @@ class FakeStorage:
 
 
 class FakeDataProcessing:
-    """POST /ingest (C1 envelope) -> {ok, record_id}. Dedups on chunk_id."""
+    """POST /ingest (C1 envelope) -> {ok, record_ids:[...]}. Dedups on chunk_id.
 
-    def __init__(self, events: list, *, fail_first: bool = False) -> None:
+    ``fanout`` mirrors data-processing's one-chunk-many-records case (e.g. video
+    keyframes): each chunk yields ``fanout`` deterministic record_ids (default 1).
+    """
+
+    def __init__(self, events: list, *, fail_first: bool = False, fanout: int = 1) -> None:
         self.events = events
-        self.records: dict[str, str] = {}   # chunk_id -> record_id
+        self.records: dict[str, list[str]] = {}   # chunk_id -> [record_id, ...]
         self.envelopes: list[dict] = []      # every C1 received (dupes included)
         self.post_count = 0
         self._fail_first = fail_first
         self._failed = False
+        self._fanout = fanout
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         assert request.method == "POST", request.method
@@ -88,13 +93,17 @@ class FakeDataProcessing:
         self.envelopes.append(envelope)
 
         if chunk_id not in self.records:
-            self.records[chunk_id] = deterministic_record_id(envelope)
-        record_id = self.records[chunk_id]
+            base = deterministic_record_id(envelope)
+            self.records[chunk_id] = (
+                [base] if self._fanout == 1
+                else [f"{base}-{i}" for i in range(self._fanout)]
+            )
+        record_ids = self.records[chunk_id]
 
         if self._fail_first and not self._failed:
             self._failed = True
             return httpx.Response(503, json={"error": "transient (stored, ack lost)"})
-        return httpx.Response(200, json={"ok": True, "record_id": record_id})
+        return httpx.Response(200, json={"ok": True, "record_ids": record_ids})
 
     def unique_envelopes(self) -> list[dict]:
         """First-seen C1 per chunk_id, in arrival order (drops retry duplicates)."""

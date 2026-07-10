@@ -35,6 +35,7 @@ async def capture_run(req: CaptureRunRequest) -> CaptureRunResponse:
         settings=settings,
         storage_url=req.storage_url,
         dp_url=req.dp_url,
+        modality=req.modality,
         source=req.source,
         chunk_seconds=req.chunk_seconds,
         base_wallclock=req.base_wallclock,

@@ -14,8 +14,8 @@
 
 | Service | Status | Lead session | Canvas |
 |---|---|---|---|
-| Recording | **v0 M0 built + integrated E2E** (mock capture loop live 2026-07-09; carver → `/raw` → C1 push) | learn-loop | [canvas](services/recording/HANDOFF.md) |
-| Data Processing | **v0 M0 built + integrated E2E** (C1 → ASR → C2 mock loop live 2026-07-09; real faster-whisper leg ran once) | learn-loop | [canvas](services/data-processing/HANDOFF.md) |
+| Recording | **v0 M0 + `ChunkSource` seam** (mock capture loop live; carver → `/raw` → C1 push; modality sources plug in — 2026-07-10) | learn-loop | [canvas](services/recording/HANDOFF.md) |
+| Data Processing | **v0 M0 + modality-agnostic `Processor` seam** (audio real-mock + image/video/text stubs; all 4 `content.kind`s E2E to `/context` — 2026-07-10) | learn-loop | [canvas](services/data-processing/HANDOFF.md) |
 | Storage | **v0.0 + capture M0 built + integrated E2E** (serve loop + `/raw`/`/context` mock capture loop 2026-07-09) | serve + learn | [canvas](services/storage/HANDOFF.md) |
 | Input | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-A | [canvas](services/input/HANDOFF.md) |
 | Inference | **v0.0 live on real Qwen3-VL-32B** (vLLM TP=8 on node-7, verified E2E 2026-07-09) | serve-loop WS-B | [canvas](services/inference/HANDOFF.md) |
@@ -110,6 +110,19 @@
   this founders' session (no agent commits). Honest residuals feed capture M1: **gap-detection is
   emit-side only (not enforced)**, no consent gate, mock+file-source (no real mic). Detail:
   [handoff/engineering.md](handoff/engineering.md) "Learn-loop capture M0 — build result".
+
+- 2026-07-10 (modality seam): **data-processing made modality-agnostic** so parallel sessions can
+  each own a modality. DP refactored to a core + `Processor` plugin seam (self-registering,
+  **one file to add a modality, zero core edits**; `process()` returns a **list** so one chunk → many
+  records is native); audio moved behind the seam unchanged (`record_id` byte-identical);
+  image/video/text **stub** processors + fixtures; recording carver generalized to a `ChunkSource`
+  seam. **All 4 `content.kind`s proven E2E to `/context`** (incl. video's 3-keyframe fan-out),
+  verified live + adversarially (**84 tests**: storage 26 · DP 24 · recording 34). The verifier
+  caught a real live regression — DP's `/ingest` reshape (`record_id`→`record_ids[]`) 500'd
+  recording's `/capture/run`, masked by stale test fakes — **fixed + re-verified 200 live**. Two
+  C2-additive gaps surfaced (video per-keyframe timing, image OCR bbox) — **both deferred to the
+  modality sessions, no version bump; frozen C2 untouched.** Detail + seam handoff:
+  [handoff/engineering.md](handoff/engineering.md) "Modality seam".
 
 ## Next
 

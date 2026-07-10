@@ -33,7 +33,10 @@ def test_ingest_validates_c1_and_writes_c2(client):
     assert resp.status_code == 200
     body = resp.json()
     assert body["ok"] is True
-    record_id = body["record_id"]
+    # Audio is 1:1 — exactly one record_id in the list-return response.
+    record_ids = body["record_ids"]
+    assert len(record_ids) == 1
+    record_id = record_ids[0]
     assert record_id
 
     # Exactly one C2 written to storage, and it is schema-valid.
@@ -129,7 +132,7 @@ def test_emitted_record_id_matches_deterministic_function(client):
     resp = client.post("/ingest", json=c1)
     assert resp.status_code == 200
     expected = compute_record_id("chunk-determ", mock_asr.PIPELINE_VERSION)
-    assert resp.json()["record_id"] == expected
+    assert resp.json()["record_ids"] == [expected]
 
 
 # ---- Dedup on chunk_id -------------------------------------------------------
@@ -142,8 +145,8 @@ def test_redelivery_same_chunk_id_is_idempotent(client):
     r2 = client.post("/ingest", json=c1)  # exact redelivery (at-least-once)
     assert r1.status_code == r2.status_code == 200
 
-    # Same record_id both times.
-    assert r1.json()["record_id"] == r2.json()["record_id"]
+    # Same record_ids both times.
+    assert r1.json()["record_ids"] == r2.json()["record_ids"]
 
     # Storage POSTed at most once; the blob pulled at most once (fast path skips it).
     assert len(fs.record_posts) == 1

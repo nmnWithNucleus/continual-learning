@@ -1,0 +1,16 @@
+{
+  "contract": "C1",
+  "version": "0",
+  "user_id": "pilot-user",
+  "device_id": "browser-ext-1",
+  "stream_id": "stream-text-DDDD",
+  "sequence": 0,
+  "chunk_id": "chunk-text-0001",
+  "modality": "text",
+  "codec": "text/plain; charset=utf-8",
+  "t_start": "2026-07-10T09:03:00Z",
+  "t_end": "2026-07-10T09:03:00Z",
+  "blob_ref": "raw/pilot-user/chunk-text-0001.bin",
+  "blob_sha256": "0ca059672ef58a77c5b1a44a3218fecadff6d08e32ea75a402bbf08e8db9be63",
+  "blob_bytes": 53
+}

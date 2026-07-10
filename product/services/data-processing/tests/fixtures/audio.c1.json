@@ -1,0 +1,16 @@
+{
+  "contract": "C1",
+  "version": "0",
+  "user_id": "pilot-user",
+  "device_id": "computer-mic-1",
+  "stream_id": "stream-audio-AAAA",
+  "sequence": 0,
+  "chunk_id": "chunk-audio-0001",
+  "modality": "audio",
+  "codec": "audio/wav",
+  "t_start": "2026-07-10T09:00:00Z",
+  "t_end": "2026-07-10T09:00:05Z",
+  "blob_ref": "raw/pilot-user/chunk-audio-0001.wav",
+  "blob_sha256": "82c045369ef662728131ae7fa59d0c91488ca4527bc0b341f1663baaf353a0ca",
+  "blob_bytes": 43
+}

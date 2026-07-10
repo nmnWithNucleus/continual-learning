@@ -325,6 +325,62 @@ real-ASR transcript byte-for-byte). Honest result below.
 
 ---
 
+## Modality seam — data-processing goes multi-modal (2026-07-10)
+
+**Why.** The audio path was built; the C2 contract is modality-agnostic. So we refactored DP to a
+**modality-agnostic core + a `Processor` plugin seam** so future sessions can each own one modality
+(video / image / text) as a **disjoint, self-registering plugin** — zero shared-core edits. Two
+parallel skeleton agents (DP seam + recording `ChunkSource` seam) + an adversarial verifier.
+
+**What's built + proven (verified live + adversarially, 84 tests: storage 26 · DP 24 · recording 34).**
+- **DP core** (`app/main.py` `/ingest` + `app/pipeline.py` + `app/dedup.py`): validate C1 → dedup on
+  `chunk_id` (now caches `chunk_id → [record_id,…]`) → pull blob → dispatch by `modality` to a
+  registered `Processor` → **for each returned unit** assemble+validate a C2 and POST `/context` →
+  return `{ok, record_ids:[…]}`. Audio moved behind the seam **unchanged** (its `record_id` is
+  byte-identical to the pre-seam value — backward compatible).
+- **`Processor` seam** (`app/processing/`): a plugin sets `modality`+`content_kind` and implements
+  `process(c1, blob, …) -> list[ProcessedUnit]` (a **list**, so *one chunk → many records* is native).
+  Self-registering via `@register` + package auto-import — **adding a modality is one new file + a
+  fixture, no core edit.** `record_id = sha256(chunk_id ∥ pipeline_version [∥ discriminator])`.
+- **Stubs (mock transforms):** image→1 `caption` (OCR woven in per D8), **video→3 keyframe
+  `caption`s (one-chunk-many-records, discriminator=index)**, text→1 `text`. All four `content.kind`s
+  proven E2E to `/context` on live services against real storage-minted `blob_ref`s; every C2
+  schema-valid; `record_id`s deterministic (recomputed + idempotent on re-POST).
+- **Recording `ChunkSource` seam** (`app/sources/`): the carver generalized so future capturers plug
+  in; the WAV source is one impl; C1 emit path unchanged; **no new real capturers**. C1 absorbed a
+  non-audio (`image`) modality with **no additive field**.
+
+**Regression caught + fixed (the verifier's honesty audit earned its keep).** DP's `/ingest` reshape
+(`record_id` → `record_ids:[…]`) **broke recording's `/capture/run` live (HTTP 500** — `capturer.py`
+still read the singular field, feeding `None`s into a `list[str]` model); green unit tests **masked**
+it because recording's fake still returned the old shape. Fixed: capturer reads + **flattens**
+`record_ids` across chunks; the fake returns the new shape (with a `fanout` knob); added a
+**fan-out regression test** (3 chunks × 3 records → 9 flattened); **re-verified `/capture/run` → 200
+live** with populated `record_ids`, C2 re-readable. Data was never lost (C2s always landed) — only
+the API envelope was broken.
+
+**Two C2-additive gaps surfaced by the pressure-test — both DEFERRED, both NON-blocking, neither
+needs a version bump now** (recorded as DP charter OQs; the frozen C2 was NOT touched):
+- **Video per-keyframe timing:** N keyframe records share the chunk's `t_start/t_end` → they collide
+  on storage's `(user_id, t_start)` index. Fix is an **internal seam hook** (optional per-`ProcessedUnit`
+  `t_start/t_end`; C2 already has per-record timestamps) — **no schema change.** Defer to the video session.
+- **Image / keyframe OCR frame-location (bbox):** C2 `content` has no home for structured region
+  geometry (OCR *text* survives, woven into the caption; only the bbox is lost). Fix = an **additive
+  optional** field (`content.regions` / `enrichments.text_regions`) — touches the schema additively
+  (old records still validate). Freeze-additive **when a real OCR pass lands.** Defer to the image session.
+
+**Launch a modality session (the seam handoff).** To bolster video / image / text end-to-end:
+1. DP: drop `app/processing/processors/<modality>.py` (a `Processor` subclass, `@register`) + a
+   `tests/fixtures/<modality>.*` C1+blob — **no core edit**. Build the real pipeline (video: VidProc +
+   keyframe captioning, wire per-keyframe timing via the seam hook; image: ImgProc + OCR-specialist +
+   dense caption, add the bbox field additively; text: real normalization).
+2. Recording (when its real capturer is wanted): drop `app/sources/<modality>_source.py` + one
+   `SOURCE_BUILDERS` entry — no `capturer.py` edit, no C1 change.
+3. Both write to the same frozen C1/C2 + the running storage `/raw`+`/context`; verify against
+   `contracts/*.json` and drive via `run_learn.sh`.
+
+---
+
 ## Open agenda
 0. ~~**NEXT SLICE — Data-collection (learn) loop MVP**~~ **SLICED + C1/C2 FROZEN + M0 BUILT,
    INTEGRATED & VERIFIED (2026-07-09)** — see "Learn-loop MVP slice" + "Learn-loop capture M0 —
