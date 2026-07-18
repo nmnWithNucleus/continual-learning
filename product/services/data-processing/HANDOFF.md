@@ -4,13 +4,16 @@
 > Read [CHARTER.md](CHARTER.md) first (mission/scope/interfaces), then this file — the
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
-**Status:** M0 built + modality-agnostic Processor seam landed (mock loop green) · **Last updated:** 2026-07-10
+**Status:** M0 + Processor seam + **capture-M1 pair landed** (continuity detector on `/ingest`,
+faster-whisper standing w/ VAD gate, pipeline-shape stubs) — **38 tests** · **Last updated:**
+2026-07-18 (recording M1 lead session)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
 |---|---|---|---|---|
 | B | M0 capture skeleton: C1 → ASR → C2 (`:8085`) | built, mock tests green | this dir (`app/`, `tests/`) | learn-loop M0 |
 | B+ | Modality-agnostic **Processor seam** + image/video/text **stubs** | built, 24 tests green | `app/processing/`, `tests/test_processor_seam.py` | seam session |
+| M1 | **Continuity detector** (`/continuity`) + **real ASR + VAD gate** + audio pipeline stubs | built + verified live 2026-07-18 | [handoff/ws-m1-continuity-asr.md](handoff/ws-m1-continuity-asr.md) | recording M1 lead |
 
 ## Processor seam — how to add a modality (READ THIS before owning image/video/text)
 The core (`app/main.py` `POST /ingest` + `app/pipeline.py` `build_c2`) is **modality-agnostic**:
@@ -33,9 +36,8 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
   an idempotent upsert). Deterministic + distinct per keyframe.
 - Stubs today (`image`/`video`/`text`) are **mock transforms** — real VLM/OCR/normalizer models
   replace only the plugin body. `audio` is the real mock-ASR path moved behind the seam unchanged.
-- **`/ingest` response is now `{ok, record_ids:[…]}`** (was `{ok, record_id}`). NOTE for the
-  integrator: recording's live `capturer.py` reads `ack.get("record_id")` — update it to
-  `record_ids` (recording's own unit tests fake the old shape, so they don't flag this).
+- **`/ingest` response is `{ok, record_ids:[…]}`** (was `{ok, record_id}`; recording's
+  capturer was updated + regression-tested 2026-07-10 — resolved).
 
 ## Current state
 - **M0 built (`:8085`).** `POST /ingest` receives a pushed **C1** envelope → schema-validates it
@@ -56,11 +58,32 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
   FastAPI `TestClient` in-process — no real port bound). Covers: C1 validate + bad-C1 422; emitted
   C2 schema-valid + provenance carried; `record_id` determinism + version sensitivity; dedup
   (storage POSTed at most once); segment times within span; blob integrity/missing.
-- Not run here: the `faster_whisper` path (scripted-but-unrun — mock is the only path exercised) and
-  a live cross-service run against real storage `:8085`↔`:8083` (integrator owns live ports).
+- **Capture M1 (2026-07-18, [handoff/ws-m1-continuity-asr.md](handoff/ws-m1-continuity-asr.md)):**
+  - **Continuity detector** (`app/continuity.py`): every schema-valid `/ingest` (incl. dedup
+    hits) is noted per `(stream_id, sequence, chunk_id)`; `GET /continuity` +
+    `GET /continuity/{stream_id}` report max_sequence, merged seen-intervals, **missing**
+    (incl. leading gap), duplicate_deliveries, sequence_conflicts. In-memory single-process
+    (DedupStore posture). Recording's gap report cross-checks it live — "zero silent loss" is
+    now checked on the C1 leg, not assumed.
+  - **faster-whisper is STANDING** (in requirements.txt, lazy-imported; `ASR_BACKEND=mock`
+    stays default). **VAD gate** (`ASR_VAD`, default on): Silero `vad_filter` before ASR —
+    all-silence chunk → honest empty transcript (kills Whisper silence-hallucination).
+    `PIPELINE_VERSION` → **`asr-fw-v1`** (version-forward fork; mock dialect untouched).
+  - **Audio pipeline shape** behind the seam: explicit stages asr → diarize → translate →
+    acoustic_events; the last three are documented no-op stubs pinning their future contracts
+    (speaker fill, `translation` unit, `acoustic` caption unit). Output today byte-identical.
+  - Verified live by the lead session: real transcripts (`asr-fw-v1`) from phone-path segments
+    in `/context`; empty transcript on silence; continuity reports consistent through
+    clean/loss/dup drills. Tests: **38 passed** (24 + 14 new).
 
 ## Next
-- Integrator: wire recording `:8084` → data-processing `:8085` → storage `:8083` and drive one real
-  chunk end to end (exit criterion in `../../handoff/engineering.md`).
-- M1+: full audio pipeline (denoise/diarize/translate), then text/image/video per CHARTER M-order.
+- **Real audio pipeline stages**: diarization, translation, acoustic-event captioning replace
+  their stubs one at a time (each is a stage-body swap, no seam change). VAD-cut chunk
+  boundaries (recording's D-M1-2) mean chunks arrive pause-aligned — revisit cross-chunk
+  stitching need after real-data experience.
+- Continuity tracker durability (survives restart) + `sequence_conflicts` surfacing beyond the
+  warning log, when multi-replica/serious-scale arrives.
+- Real video/image processors (current ones are mock stubs — phone video chunks currently get
+  mock keyframe captions in `/context`; fine for beta, flagged for the modality sessions).
+- text/image/video real pipelines per CHARTER M-order.
 - **D9 (2026-07-09) ratified — centralized observability:** this service now owes a `/metrics` endpoint + Grafana dashboard JSON (throughput/queue depth, per-stage + C8 latency, enrichment counts). On the backlog — see CHARTER.md § Scope (Observability) + deliverable **M8**.

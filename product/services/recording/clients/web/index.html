@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<!--
+  WS-B — Nucleus phone web client (recording-led capture M1).
+  Static shell only: all behaviour lives in app.js, all styling in style.css.
+  Served by the recording server at /client/ and talks to it same-origin
+  (absolute /ingest/... paths) — no external resources, works offline once loaded.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0f14">
+  <title>Nucleus Recorder</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-state="idle">
+  <header>
+    <h1>Nucleus Recorder</h1>
+    <span id="state-pill">idle</span>
+  </header>
+
+  <main>
+    <div id="error-banner" role="alert" hidden></div>
+
+    <section id="preview-wrap">
+      <video id="preview" playsinline muted autoplay></video>
+      <div id="preview-hint">camera preview appears while recording</div>
+      <div id="mic-only" hidden>
+        <div class="mic-glyph" aria-hidden="true"></div>
+        <p>audio-only capture</p>
+      </div>
+      <div id="timer">0:00</div>
+    </section>
+
+    <section id="controls">
+      <button id="pause-btn" type="button" hidden>Pause</button>
+      <button id="record-btn" type="button" aria-label="record">
+        <span id="record-glyph"></span>
+      </button>
+    </section>
+
+    <section id="identity" class="card">
+      <label class="field">
+        <span class="k">user</span>
+        <input id="user-id" type="text" autocomplete="off" autocapitalize="none" spellcheck="false">
+      </label>
+      <label class="field toggle">
+        <span class="k">camera</span>
+        <input id="camera-toggle" type="checkbox" checked>
+      </label>
+    </section>
+
+    <section id="status" class="card" aria-live="polite">
+      <div class="row"><span class="k">session</span><span class="v mono" id="session-id">—</span></div>
+      <div class="row"><span class="k">device</span><span class="v mono" id="device-id">—</span></div>
+      <div class="row"><span class="k">segments</span>
+        <span class="v"><b id="captured">0</b> captured · <b id="uploaded">0</b> uploaded · <b id="queued">0</b> queued</span>
+      </div>
+      <div class="row" id="upload-error-row" hidden>
+        <span class="k">upload</span><span class="v err" id="upload-error"></span>
+      </div>
+      <div class="row" id="dropped-row" hidden>
+        <span class="k">dropped</span>
+        <span class="v err"><b id="dropped">0</b> segment(s) rejected with a 4xx — not retried, ledger will flag them</span>
+      </div>
+      <div class="row"><span class="k">server</span><span class="v" id="report-verdict">—</span></div>
+      <div id="report-streams"></div>
+    </section>
+  </main>
+
+  <noscript><p class="noscript">This client needs JavaScript.</p></noscript>
+  <script src="app.js"></script>
+</body>
+</html>

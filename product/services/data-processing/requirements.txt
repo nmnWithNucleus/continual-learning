@@ -7,7 +7,7 @@ jsonschema>=4.21
 referencing>=0.34     # registry-based schema loading (matches storage); C1/C2 have no $ref
 pytest>=8.0
 
-# The `faster_whisper` ASR_BACKEND is LAZY-IMPORTED only when selected — the mock
-# default (and every mock unit test) needs none of the below. Install on the ASR
-# box to run real speech-to-text:
-# faster-whisper>=1.0
+# Real ASR — a STANDING backend since capture M1 (flip ASR_BACKEND=faster_whisper).
+# No torch: the stack is ctranslate2/onnxruntime/av/tokenizers. LAZY-IMPORTED only
+# when selected, so the mock default (and every mock unit test) never loads it.
+faster-whisper>=1.0

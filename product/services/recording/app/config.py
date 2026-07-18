@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 # The two downstream services this capturer talks to (pinned dev ports).
 DEFAULT_STORAGE_URL = "http://localhost:8083"   # storage /raw blob leg
@@ -28,6 +29,23 @@ DEFAULT_USER_ID = "dev-user"
 DEFAULT_DEVICE_ID = "dev-computer-mic"
 CHUNK_CODEC = "audio/wav"
 
+# M1 ingest (segment upload + demux + ledger): where operational state lives and
+# which ffmpeg/ffprobe demux the phone segments (default: whatever is on PATH).
+DEFAULT_FFMPEG_BIN = "ffmpeg"
+DEFAULT_FFPROBE_BIN = "ffprobe"
+
+
+def default_var_dir() -> str:
+    """<service>/var — ledger.db + segment spool + demux scratch (D-M1-3 layout)."""
+    return str(Path(__file__).resolve().parents[1] / "var")
+
+
+def _flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -42,6 +60,12 @@ class Settings:
     http_timeout: float
     retry_attempts: int      # total attempts per PUT/POST (1 try + N-1 retries)
     retry_backoff: float     # base backoff seconds between retries (0 in tests)
+    var_dir: str             # ledger.db + spool/ + chunks/ scratch live here
+    ffmpeg_bin: str
+    ffprobe_bin: str
+    ingest_sync: bool        # 1 => /ingest/segments awaits demux+emit before acking
+    keep_spool: bool         # 1 => keep spooled segments after emit (consent-gate seam)
+    max_segment_bytes: int   # /ingest/segments body cap (413 past it)
 
 
 def get_settings() -> Settings:
@@ -57,4 +81,12 @@ def get_settings() -> Settings:
         http_timeout=float(os.getenv("RECORDING_HTTP_TIMEOUT", "30")),
         retry_attempts=int(os.getenv("RECORDING_RETRY_ATTEMPTS", "4")),
         retry_backoff=float(os.getenv("RECORDING_RETRY_BACKOFF", "0.25")),
+        var_dir=os.getenv("RECORDING_VAR_DIR", default_var_dir()),
+        ffmpeg_bin=os.getenv("FFMPEG_BIN", DEFAULT_FFMPEG_BIN),
+        ffprobe_bin=os.getenv("FFPROBE_BIN", DEFAULT_FFPROBE_BIN),
+        ingest_sync=_flag("RECORDING_INGEST_SYNC"),
+        keep_spool=_flag("RECORDING_KEEP_SPOOL"),
+        # ~10 s phone segments run 1–5 MB; 64 MB leaves room for higher-res/longer
+        # clients while bounding what one request can buffer server-side.
+        max_segment_bytes=int(float(os.getenv("RECORDING_MAX_SEGMENT_MB", "64")) * 1024 * 1024),
     )
