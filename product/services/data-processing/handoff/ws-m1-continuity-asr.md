@@ -80,3 +80,9 @@ covered by the existing mock-output tests (byte-identical assertion).
   faster-whisper (base/int8/CPU, VAD on) transcribed phone-path segments correctly
   (`asr-fw-v1` C2s in `/context`), and an all-silence segment produced an honest EMPTY
   transcript (VAD gate kills the Whisper silence-hallucination).
+- 2026-07-18 — **first REAL phone data** (CTO's iPhone sessions) surfaced a quality bug:
+  with auto language detection, faint room audio that slipped past VAD was hallucinated as
+  Hindi/Korean-script text. Added `asr_language` (`ASR_LANGUAGE`, default `''` = auto;
+  runtime knob, NOT a pipeline-version fork) passed to `model.transcribe(language=…)`; the
+  beta fleet pins `en` via `deploy/learn.env`. Verified live post-restart (English pin →
+  correct transcript on the speech sample).

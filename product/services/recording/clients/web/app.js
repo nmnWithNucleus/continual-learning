@@ -156,8 +156,7 @@
   // ---------------------------------------------------------------- status UI
   function renderStatus() {
     const s = session;
-    el.sessionId.textContent = s ? s.id.slice(0, 8) + "…" : "—";
-    el.sessionId.title = s ? s.id : "";
+    el.sessionId.textContent = s ? s.id : "—"; // full id (wraps): new id = new session
     el.captured.textContent = s ? s.captured : "0";
     el.uploaded.textContent = s ? s.uploaded : "0";
     el.queued.textContent = s ? s.queue.length : "0";

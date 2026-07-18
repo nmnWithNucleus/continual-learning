@@ -5,8 +5,8 @@
 > step**, served by the recording server and talking to it same-origin. Reference (not lift,
 > D7): `poc/live_video_chat` — iOS capture/MediaRecorder/tunnel lessons.
 
-**Status:** built + verified E2E server-side (synthetic driver, live ports, HTTPS tunnel) —
-**the real-phone tap is the tester's step** · **Owner session:** recording M1 lead
+**Status:** built + **REAL-PHONE VERIFIED** (2026-07-18, CTO's iPhone Safari over the tunnel)
+· **Owner session:** recording M1 lead
 
 ---
 
@@ -88,6 +88,15 @@ Pinned jointly with WS-C; WS-C owns the server side.
 - 2026-07-18 — **verified**: syntax (deno check), served through the recording server at
   `/client/` locally AND over the cloudflared HTTPS tunnel; the full upload wire exercised
   E2E by a synthetic driver mimicking this client byte-for-byte (segments → demux → C1 →
-  real ASR transcripts in `/context`; clean/gap/dup drills all behaved). **NOT yet exercised
-  by a real phone browser** — MediaRecorder/getUserMedia/wake-lock behavior on iOS Safari
-  awaits the tester's press-record (the POC proved the primitives on this exact leg).
+  real ASR transcripts in `/context`; clean/gap/dup drills all behaved).
+- 2026-07-18 — **REAL-PHONE VERIFIED** (CTO, iPhone Safari via the tunnel): two sessions,
+  7/7 and 9/9 segments received+emitted, 0 failed, verdict `clean`, camera preview /
+  pause / stop / report poll all behaved; transcripts + video-caption records landed in
+  `/context` with correct spans. Three UI leaks found and fixed from the screenshots:
+  (1) the empty `upload`/`dropped: 0` rows showed despite `hidden` — the `.row`
+  `display:flex` overrode the UA's `[hidden]` rule; fixed with a global
+  `[hidden]{display:none !important}`; (2) session id was ellipsized — now shown in full
+  (it's the "new session started" signal); (3) `dropped` wording de-jargonned. Also
+  surfaced by the real data: Whisper AUTO language detection hallucinated
+  Hindi/Korean-script text on faint room audio → DP gained `ASR_LANGUAGE` (beta fleet
+  pins `en`; see DP ws file).
