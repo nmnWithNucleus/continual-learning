@@ -4,7 +4,7 @@
 > Cross-service build sequencing, integration plans, infra calls. Service-internal
 > engineering lives in each service's canvas, not here.
 
-**Status:** active · **Last updated:** 2026-07-09
+**Status:** active · **Last updated:** 2026-07-18
 
 ---
 
@@ -398,8 +398,22 @@ needs a version bump now** (recorded as DP charter OQs; the frozen C2 was NOT to
    audio is *captioned, not dropped* — ambient sound is life-context signal; VAD also kills
    Whisper's silence-hallucination) + real faster-whisper as the standing backend; (6) chunk length:
    lift the M0 5 s placeholder to **~20–30 s + overlap** (recording OQ4, joint with DP).
+   **Founders' sequencing (2026-07-18): recording-led.** Wrap the recording service as the next
+   big gain (user-facing; gives the beta tester a touch-and-feel surface): items **(1)
+   gap-detection** and **(5) the ASR pipeline** are the priority pair; capture surfaces to build
+   behind the `ChunkSource` seam are **bodycam (device)** and **computer** — mic, screen
+   recording, and browser-extension screen capture. Capture-modeling note: screen *video* and
+   any system/tab *audio* are **separate C1 streams** (each with its own `stream_id`, like the
+   wearable's A/V demux) — browsers expose tab/system audio via `getDisplayMedia`/`tabCapture`
+   only on some platforms (Chrome: tab audio broadly, system audio Windows/ChromeOS; macOS needs
+   a native-app loopback), and the mic is always captured as its own stream, never through the
+   screen recorder. A recording-lead session (Prompt B + this scope) owns the slice.
 1. ~~Serve-loop MVP slice~~ **DONE** (see build-result sections above).
 2. Cluster split: which a3mega nodes serve (vLLM) vs train (continuum) vs pipeline work.
+   **2026-07-18 interim answer:** Gnandeep runs continuum-side model-stabilization experiments
+   across the wider cluster (the `engram` SLURM jobs — his workspace, outside this repo);
+   product components keep **node-7**; allocate beyond one node on demand. Revisit when
+   continuum's nightly window lands.
 3. Mobile app (now v0, D5) — one codebase serving both the chat surface (input) and the
    speech-output playback sink (output); sequence it after the computer text slice proves the loop.
 4. **Observability & per-service dashboards** (CTO ask, **RATIFIED 2026-07-09, D9** — see
@@ -426,3 +440,14 @@ needs a version bump now** (recorded as DP charter OQs; the frozen C2 was NOT to
 - 2026-07-08 — thread seeded at product-structure standup.
 - 2026-07-09 — build order locked (D3); BWM = Qwen3-VL-32B (D6); mobile app in v0 (D5);
   POC-no-reuse recorded (D7). Agenda refocused on slicing the serve-loop MVP.
+- 2026-07-18 — **return sync (founders).** Cluster custody clarified: the vacation-week jobs
+  are Gnandeep's continuum-side experiments; product keeps node-7 (agenda item 2 note). All
+  repos committed + pushed (umbrella `main`, both POC submodules; `poc/live_video_chat` now
+  tracked in the umbrella). Doc-hygiene pass over stale canvases (inference/storage/recording
+  HANDOFFs, ARCHITECTURE/ORG ratification remnants, root README). Fleet on node-7 verified
+  down — stale "Live now" note removed from the founders' board. **D12 recorded: branching +
+  beta model** — service branches → `main` when solid; standing `dev` branch as the beta
+  playground. First beta: Gnandeep drives the serve + learn loops against his fine-tunable
+  model; storage's `/context` range read (`GET /context/records?user_id=&from=&to=`, half-open
+  `[from,to)` — deliberately C10's read shape) is his training-window feed until C10 lands.
+  **Next slice pinned: recording-led capture M1** (see agenda item 0 sequencing).

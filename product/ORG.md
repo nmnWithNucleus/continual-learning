@@ -61,7 +61,7 @@ drop that: **structured markdown is already both.** Agents parse the same headin
 and links humans read; two copies of one truth guarantees drift, and every stale copy
 poisons every future session that cold-starts from it. If a machine-consumable index ever
 becomes necessary (e.g. a dashboard), we *generate* it from the markdown — never hand-author
-it twice. (CTO to ratify; reversible if it fails us.)
+it twice. (Ratified 2026-07-09, D2; reversible if it fails us.)
 
 **Rules (inherited from the POCs, now law):**
 

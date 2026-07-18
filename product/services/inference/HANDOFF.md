@@ -4,7 +4,7 @@
 > Read [CHARTER.md](CHARTER.md) first (mission/scope/interfaces), then this file — the
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
-**Status:** serve-loop MVP (v0.0) built + tested + **integrated E2E** (integrator ran the full input→inference→output→storage mock loop 2026-07-09; C9 stream + C4 write verified live) · **Last updated:** 2026-07-09
+**Status:** serve-loop MVP (v0.0) **CLOSED on the real model** — integrated E2E on the mock loop, then a genuine turn driven on **Qwen3-VL-32B-Instruct (vLLM TP=8, node-7)** 2026-07-09; `mock` stays the no-GPU dev default · **Last updated:** 2026-07-18 (post-return doc sync)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
@@ -24,7 +24,9 @@
   token-by-token with small async delays + word-count usage; `vllm` is an OpenAI-compatible
   streaming client to `{VLLM_URL}/v1/chat/completions` (real Qwen3-VL-32B, GPU node).
 - **serve_vllm.sh** — from-scratch launch for real Qwen3-VL-32B on vLLM (TP=8, one a3mega node,
-  text-only, `--max-model-len 32768`). **GPU node only; NOT run by the mock loop or run.sh.**
+  text-only, `--max-model-len 32768`); defaults to the `vllm-cu13` env (vLLM 0.24.0 / CUDA-13 +
+  flashinfer, validated E2E 2026-07-09), `VLLM_BIN` overrides back to `vllm-vlm` (0.19.1 fallback).
+  **GPU node only; NOT run by the mock loop or run.sh.**
 - **Tested:** 6 pytest tests pass (C9 stream + schema-validate, C4 persisted + schema-validate,
   malformed-C3 → 422, health, backend selection, mock chunk reassembly). Tests are hermetic (mock
   backend + a live in-process storage stub on an ephemeral port).
@@ -37,8 +39,10 @@
   harness/mentors arrive. Mid-turn C9 frames are reserved, not emitted.
 
 ## Next
-- **Real model (M0 finish):** stand up `serve_vllm.sh` on the a3mega node; run `/infer` with
-  `MODEL_BACKEND=vllm` + `VLLM_URL`; confirm the C9 stream maps deltas + real usage.
+- ~~**Real model (M0 finish)**~~ **DONE 2026-07-09** — `serve_vllm.sh` ran on node-7 (TP=8);
+  `/infer` with `MODEL_BACKEND=vllm` drove a genuine turn E2E (real usage in the C9 end frame;
+  C4 persisted with the real `model_id`). Fleet verified **down** 2026-07-17 — relaunch via
+  `serve_vllm.sh` when needed (node-7 is the product node; wider cluster busy with teammate runs).
 - **M1:** per-user LoRA hot-swap once continuum publishes adapters via C5 (C6 stops being trivial).
 - **Integrator:** input relays this `/infer` C9 stream to the browser; output owns the browser-side
   C9 reader + markdown render. C9/C4 shapes are already exercised against real storage.
