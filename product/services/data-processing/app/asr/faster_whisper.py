@@ -58,9 +58,14 @@ def transcribe(
     # faster-whisper decodes a file-like object via ffmpeg/av; no temp file needed.
     # vad_parameters applies only when the gate is on; 500ms keeps natural pauses
     # inside one segment instead of shredding speech into fragments.
+    # language: pinned via ASR_LANGUAGE ('' = auto-detect). Auto-detect on faint
+    # ambient audio guesses wrong scripts and hallucinates (seen on the first real
+    # phone session), so beta deployments pin 'en'. Runtime knob, not a pipeline
+    # dialect: same-language reprocessing stays an idempotent upsert.
     segment_iter, info = model.transcribe(
         io.BytesIO(audio_bytes),
         beam_size=settings.asr_beam_size,
+        language=settings.asr_language or None,
         vad_filter=settings.asr_vad,
         vad_parameters={"min_silence_duration_ms": 500},
     )

@@ -69,6 +69,9 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
     stays default). **VAD gate** (`ASR_VAD`, default on): Silero `vad_filter` before ASR —
     all-silence chunk → honest empty transcript (kills Whisper silence-hallucination).
     `PIPELINE_VERSION` → **`asr-fw-v1`** (version-forward fork; mock dialect untouched).
+    **`ASR_LANGUAGE`** pins the ASR language (beta fleet: `en`) — auto-detect hallucinated
+    other scripts on faint room audio in the first real phone session (runtime knob, no
+    version fork).
   - **Audio pipeline shape** behind the seam: explicit stages asr → diarize → translate →
     acoustic_events; the last three are documented no-op stubs pinning their future contracts
     (speaker fill, `translation` unit, `acoustic` caption unit). Output today byte-identical.

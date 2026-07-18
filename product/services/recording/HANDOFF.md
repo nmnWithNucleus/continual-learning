@@ -4,10 +4,11 @@
 > Read [CHARTER.md](CHARTER.md) first (mission/scope/interfaces), then this file — the
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
-**Status:** capture **M1 slice built + verified E2E + adversarially reviewed** (2026-07-18):
-phone web client + ingest server (demux → two C1 streams) + checked gap detection + VAD-cut
-chunking (OQ4 decided) + real ASR standing on the DP side · recording suite **72 tests** ·
-**Last updated:** 2026-07-18 (recording M1 lead session)
+**Status:** capture **M1 slice DONE — built, adversarially reviewed, and REAL-PHONE
+VERIFIED** (2026-07-18: CTO's iPhone over the tunnel → `clean` verdict, transcripts in
+`/context`): phone web client + ingest server (demux → two C1 streams) + checked gap
+detection + VAD-cut chunking (OQ4 decided) + real ASR standing on the DP side · recording
+suite **72 tests** · **Last updated:** 2026-07-18 (recording M1 lead session)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
@@ -67,14 +68,17 @@ chunking (OQ4 decided) + real ASR standing on the DP side · recording suite **7
   rewrite-on-demand; the unit suite covers the same paths hermetically.
 
 ## Next
-- **Real-phone verification** (the one unexecuted leg): tester opens
-  `bash run_tunnel.sh --url` + `/client/`, presses record, speaks ~1 min → check the on-page
-  verdict goes `clean` and transcripts appear in `/context` (storage
-  `GET /context/records?user_id=&from=&to=`). iOS Safari MediaRecorder quirks are the risk
-  the POC already de-risked; fixes (if any) belong in `clients/web/app.js`.
-  *As of 2026-07-18 the learn fleet (ASR_BACKEND=faster_whisper) + tunnel were left UP on
-  node-7 for exactly this hand-off — the URL rotates per tunnel restart, so ALWAYS read it
-  from `var/tunnel_url.txt` (never from a doc); `run_learn.sh --status` checks the fleet.*
+- ~~Real-phone verification~~ **DONE 2026-07-18** — CTO's iPhone (Safari, tunnel): two
+  sessions 7/7 + 9/9 clean; UI leaks + an ASR auto-language hallucination found and fixed
+  same day (ws-B worklog). *The learn fleet (faster_whisper, `ASR_LANGUAGE=en` via
+  `deploy/learn.env`) + tunnel remain UP on node-7 — the URL rotates per tunnel restart, so
+  ALWAYS read it from `var/tunnel_url.txt`; `run_learn.sh --status` checks the fleet.*
+- **Computer capture surfaces** (next slice, founders 2026-07-18 follow-up): browser
+  extension (`clients/extension/` — screen-share video + `tabCapture` tab audio, separate C1
+  streams, NO system audio) + a basic mac capture client (`clients/mac/` — lean: an
+  ffmpeg/avfoundation CLI segmenter + uploader speaking the SAME `/ingest/segments` wire; a
+  GUI app later). The server side needs nothing new. Then **metrics emission** (D9) across
+  recording + DP once the surfaces exist.
 - **Browser extension** (slice priority 5, not built — time-boxed out): `clients/extension/`,
   screen-share video + `tabCapture` tab audio as separate C1 streams; NO system audio.
   Same segment-upload wire; the server side is ready for it (any self-contained A/V upload).
