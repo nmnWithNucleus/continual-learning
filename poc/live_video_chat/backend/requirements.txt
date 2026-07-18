@@ -1,0 +1,9 @@
+# WS2 backend (FastAPI hub) dependencies.
+# The conda `moe` env already satisfies these; pins reflect what's installed/known-good.
+# NOTE: ASR (faster-whisper) deps live in WS4's backend/requirements-asr.txt, not here.
+fastapi>=0.110
+uvicorn[standard]>=0.29
+httpx>=0.27
+python-multipart>=0.0.9
+# ffmpeg/ffprobe (system binaries) are used for best-effort clip-duration checks;
+# they ship with the `moe` env. No extra Python package needed for that.

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <!-- viewport-fit=cover + safe-area handling for iPhone notch/home indicator -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#0b0d12" />
+  <title>Live Video Chat</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- Vendored libs (self-contained, no CDN at runtime). If either fails to load,
+       app.js falls back to plain-text rendering so the page never breaks. -->
+  <script src="vendor/marked.min.js"></script>
+  <script src="vendor/purify.min.js"></script>
+</head>
+<body>
+  <div id="app">
+    <header id="topbar">
+      <div class="topbar-left">
+        <h1>Live Video Chat</h1>
+        <button id="settings-btn" class="icon-btn" type="button" title="Settings" aria-label="Settings">&#9881;&#65038;</button>
+      </div>
+      <div class="topbar-right">
+        <!-- Active serving preset; tap to open the model-config picker. -->
+        <button id="cfg-chip" class="cfg-chip" type="button" title="Model config">cfg: …</button>
+        <span id="status-dot" class="dot dot--idle" title="status"></span>
+      </div>
+    </header>
+
+    <!-- Camera preview -->
+    <section id="preview-wrap">
+      <!-- playsinline + muted + autoplay are required so iOS does not hijack fullscreen -->
+      <video id="preview" autoplay playsinline muted></video>
+
+      <!-- Overlay shown before the camera is started (tap-to-start, gesture requirement) -->
+      <div id="camera-overlay" class="overlay">
+        <button id="start-camera" class="big-btn" type="button">&#9654;&#65038; Tap to start camera</button>
+        <p id="camera-msg" class="overlay-msg"></p>
+      </div>
+
+      <!-- Recording indicator / countdown -->
+      <div id="rec-badge" class="rec-badge hidden">
+        <span class="rec-led"></span>
+        <span id="rec-time">0.0s</span>
+      </div>
+    </section>
+
+    <!-- Controls -->
+    <section id="controls">
+      <!-- Pre-recorded clip loader (sanity-test mode): load a long, known clip server-side
+           instead of recording. Populated from /api/config → prerecorded_clips. -->
+      <div class="row">
+        <button id="load-clip-btn" class="ctl-btn ctl-btn--ghost" type="button" disabled>
+          &#10515; Load pre-recorded clip
+        </button>
+      </div>
+      <div id="prerec-status" class="prerec-status hidden">
+        <span class="prerec-dot"></span>
+        <span id="prerec-label" class="prerec-label"></span>
+        <button id="prerec-clear" class="prerec-clear" type="button" aria-label="Unload clip">&#10005;</button>
+      </div>
+
+      <div class="row">
+        <!-- Order: Record (left) then Hold to ask (right) — record the scene, then ask. -->
+        <button id="record-btn" class="ctl-btn" type="button" disabled>&#9679; Record</button>
+        <button id="mic-btn" class="ctl-btn" type="button" disabled>&#127908; Hold to ask</button>
+      </div>
+
+      <textarea id="text-box" rows="2"
+        placeholder="Ask about what you see… (or hold the mic to speak)"
+        autocomplete="off" autocorrect="on" autocapitalize="sentences"></textarea>
+
+      <div class="row">
+        <span id="clip-info" class="clip-info">No clip yet</span>
+        <button id="send-btn" class="ctl-btn ctl-btn--primary" type="button" disabled>Send &#9656;</button>
+      </div>
+    </section>
+
+    <!-- Output / answer — a flowing region; the PAGE scrolls (no inner box). -->
+    <section id="output-wrap">
+      <div id="output" class="output" aria-live="polite"></div>
+      <!-- per-turn usage affordance is injected here by app.js after a metric'd answer -->
+      <div id="usage-slot"></div>
+      <!-- per-turn thumbs up/down feedback is injected here after a (non-error) answer -->
+      <div id="feedback-slot"></div>
+    </section>
+  </div>
+
+  <!-- ============ Reusable modal (used by Settings #7 and Usage #8) ============ -->
+  <div id="modal-root" class="modal-root hidden" aria-hidden="true">
+    <div id="modal-backdrop" class="modal-backdrop"></div>
+    <div id="modal-card" class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <button id="modal-close" class="modal-close" type="button" aria-label="Close">&#10005;</button>
+      <h2 id="modal-title" class="modal-title"></h2>
+      <div id="modal-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
