@@ -76,7 +76,7 @@ flowchart LR
 | Inference Service | The brain: vLLM + per-user LoRA hot-swap, agentic harness, mentor protocol, turn logging | [charter](services/inference/CHARTER.md) |
 | Output Service | Delivers responses to the right device in the right form; future home of the proactive channel | [charter](services/output/CHARTER.md) |
 | Continuum Service | The magic: nightly per-user fine-tuning with replay mixtures and eval gates; publishes adapters | [charter](services/continuum/CHARTER.md) |
-| Platform Service | Cross-cutting: infra, CI/CD, observability, security/privacy/compliance, cost. **Added beyond the original HLD — pending CTO ratification** | [charter](services/platform/CHARTER.md) |
+| Platform Service | Cross-cutting: infra, CI/CD, observability, security/privacy/compliance, cost. **Added beyond the original HLD — ratified 2026-07-09 (D1)** | [charter](services/platform/CHARTER.md) |
 
 ## Contracts (the spine)
 

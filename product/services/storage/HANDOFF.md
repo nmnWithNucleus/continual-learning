@@ -4,13 +4,13 @@
 > Read [CHARTER.md](CHARTER.md) first (mission/scope/interfaces), then this file — the
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
-**Status:** serve-loop MVP (v0.0) built + tested + **integrated E2E** (integrator ran the live loop 2026-07-09: C4 written by inference, re-read by `turn_id` + `session_id`; C6 resolved base). **Learn-loop capture M0 added 2026-07-09: `/raw` blob leg (C1) + `/context` store (C2) built + tested (26 tests pass) + live-smoke-run; awaiting integrator.** · **Last updated:** 2026-07-09
+**Status:** serve-loop MVP (v0.0) built + tested + **integrated E2E** (integrator ran the live loop 2026-07-09: C4 written by inference, re-read by `turn_id` + `session_id`; C6 resolved base). **Learn-loop capture M0: `/raw` blob leg (C1) + `/context` store (C2) built + tested (26 pass) + integrated E2E + independently verified 2026-07-09** (blob-first + push loop live; idempotency proven on both legs); unchanged through the 2026-07-10 DP modality-seam pass (still 26 tests) · **Last updated:** 2026-07-18 (post-return doc sync)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
 |---|---|---|---|---|
 | WS-D | serve-loop MVP: `/sessions` (C4 write/read) + model directory (C6 resolve) | done (built, tested, smoke-run on :8083) | [handoff/ws-storage-mvp.md](handoff/ws-storage-mvp.md) | prior session |
-| WS-C | learn-loop capture M0: `/raw` blob leg (C1) + `/context` store (C2) | built + tested (26 pass) + live-smoke-run; not yet integrator-wired | this file (below) | this session |
+| WS-C | learn-loop capture M0: `/raw` blob leg (C1) + `/context` store (C2) | done (integrated E2E + independently verified 2026-07-09) | this file (below) | learn-loop M0 fan-out |
 
 ## Current state
 - **Built (v0.0 serve-loop):** FastAPI + SQLite storage service on `:8083`. Endpoints:
