@@ -16,8 +16,8 @@
  *   ledger flags exactly which (IndexedDB persistence is a later hardening).
  *
  * - Wire (same-origin, pinned jointly with WS-C — internal, not a C-contract):
- *   POST /ingest/segments?session_id=&seq=&...  (raw blob body) -> {ok, status};
- *   POST /ingest/sessions/{id}/end {last_seq};  GET /ingest/sessions/{id}/report
+ *   POST /capture/segments?session_id=&seq=&...  (raw blob body) -> {ok, status};
+ *   POST /capture/sessions/{id}/end {last_seq};  GET /capture/sessions/{id}/report
  *   polled every 5s — its verdict is the tester's "it landed" signal.
  *
  * No dependencies, no build step, no external resources: this IIFE is the client.
@@ -237,7 +237,7 @@
   async function pollReport(s) {
     let report;
     try {
-      const res = await fetch("/ingest/sessions/" + encodeURIComponent(s.id) + "/report");
+      const res = await fetch("/capture/sessions/" + encodeURIComponent(s.id) + "/report");
       if (!res.ok) return; // 404 until the first segment lands; 5xx: just poll again
       report = await res.json();
     } catch { return; } // offline — keep polling
@@ -265,7 +265,7 @@
     });
     let res;
     try {
-      res = await fetch("/ingest/segments?" + qs.toString(), {
+      res = await fetch("/capture/segments?" + qs.toString(), {
         method: "POST",
         headers: { "content-type": "application/octet-stream" },
         body: seg.blob,
@@ -331,7 +331,7 @@
   async function postEnd(s, lastSeq) {
     for (let attempt = 0; ; attempt++) {
       try {
-        const res = await fetch("/ingest/sessions/" + encodeURIComponent(s.id) + "/end", {
+        const res = await fetch("/capture/sessions/" + encodeURIComponent(s.id) + "/end", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ last_seq: lastSeq }),
@@ -352,7 +352,7 @@
   function beaconEnd() {
     const s = session;
     if (!s || s.ended || s.nextSeq === 0) return;
-    const url = "/ingest/sessions/" + encodeURIComponent(s.id) + "/end";
+    const url = "/capture/sessions/" + encodeURIComponent(s.id) + "/end";
     const body = JSON.stringify({ last_seq: s.nextSeq - 1 });
     let sent = false;
     try {

@@ -4,11 +4,15 @@
 > Read [CHARTER.md](CHARTER.md) first (mission/scope/interfaces), then this file — the
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
-**Status:** capture **M1 slice DONE — built, adversarially reviewed, and REAL-PHONE
-VERIFIED** (2026-07-18: CTO's iPhone over the tunnel → `clean` verdict, transcripts in
-`/context`): phone web client + ingest server (demux → two C1 streams) + checked gap
-detection + VAD-cut chunking (OQ4 decided) + real ASR standing on the DP side · recording
-suite **72 tests** · **Last updated:** 2026-07-18 (recording M1 lead session)
+**Status:** **COMPUTER CAPTURE SURFACES slice DONE code-side** (2026-07-18, after the
+real-phone-verified M1): browser extension (Chrome MV3, passive: screen + tab audio →
+separate C1 streams) + mac capture CLI (ffmpeg avfoundation → same wire), both built,
+adversarially reviewed (10 confirmed defects fixed), wire-conformance-tested, and the CLI
+**live-E2E-verified on this box in `--source test` mode** (verdict `clean`, C2s in
+`/context`). Client wire renamed **`/ingest/*` → `/capture/*`** (founders; hidden
+deprecated alias kept). **Two human legs pending: Chrome load-unpacked + mac
+avfoundation run** (ws-E/ws-F runbooks) · recording suite **109 tests** ·
+**Last updated:** 2026-07-18 (recording computer-capture lead session)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
@@ -18,6 +22,8 @@ suite **72 tests** · **Last updated:** 2026-07-18 (recording M1 lead session)
 | C | **Ingest server**: segment upload, A/V demux, continuity ledger, gap report | built + verified live (loss/dup drills) | [handoff/ws-c-ingest-demux-ledger.md](handoff/ws-c-ingest-demux-ledger.md) | recording M1 lead |
 | D | **VAD-cut chunking** (charter OQ4 → D-M1-2) | built + verified on real speech | [handoff/ws-d-vad-carve.md](handoff/ws-d-vad-carve.md) | recording M1 lead |
 | — | DP-side pair (continuity detector + real ASR + VAD gate) | built + verified | [../data-processing/handoff/ws-m1-continuity-asr.md](../data-processing/handoff/ws-m1-continuity-asr.md) | recording M1 lead |
+| E | **Browser extension** (MV3 passive: screen + tab audio) | built + reviewed + asset/deno-tested; **human Chrome leg = tester's step** | [handoff/ws-e-extension.md](handoff/ws-e-extension.md) | computer-capture lead |
+| F | **Mac capture CLI** (ffmpeg avfoundation → segments → wire) | built + reviewed + live-E2E (test source); **human mac leg = tester's step** | [handoff/ws-f-mac-cli.md](handoff/ws-f-mac-cli.md) | computer-capture lead |
 
 ## Current state
 - **M0 spine unchanged and green** (`:8084`, `/capture/run`, blob-first PUT → C1 push,
@@ -27,8 +33,12 @@ suite **72 tests** · **Last updated:** 2026-07-18 (recording M1 lead session)
   recorder restart** — D-M1-1; timeslice fragments aren't self-contained), record/pause/stop,
   camera-off mic-only mode, serialized offline upload queue with retry/backoff, end marker
   (+ `sendBeacon` on pagehide), wake lock, live gap-report poll with verdict badge.
-- **Ingest server** (`app/ingest_web.py` + `ledger.py` + `demux.py` + `emitter.py`):
-  `POST /ingest/segments` (idempotent on `(session_id, seq)`, sha-verified, spool→ledger ack),
+- **Capture-wire server** (`app/capture_web.py` + `ledger.py` + `demux.py` + `emitter.py`):
+  **client wire renamed `/ingest/*` → `/capture/*` 2026-07-18 (founders)** so `/ingest` is
+  uniquely data-processing's C1 receiver; `/ingest/*` stays mounted as a hidden
+  (`include_in_schema=False`) deprecated alias of the same router until already-loaded
+  phone pages refresh — tested + drilled live (ws-C worklog).
+  `POST /capture/segments` (idempotent on `(session_id, seq)`, sha-verified, spool→ledger ack),
   per-session FIFO emit worker: ffmpeg **demux into per-modality chunks** (audio → `audio/wav`
   16 kHz mono; video → container copy mp4/webm) → per modality get-or-create stream
   (**own `stream_id`, same `device_id`**) → chunk identity minted + persisted BEFORE first
@@ -37,7 +47,7 @@ suite **72 tests** · **Last updated:** 2026-07-18 (recording M1 lead session)
   Spool deleted after emit (`RECORDING_KEEP_SPOOL=1` keeps it — the D13 consent-holdback seam).
 - **Gap detection is now a CHECKED guarantee** (was emit-side-only affordance in M0):
   the SQLite **continuity ledger** (`var/ledger.db`) tracks both legs;
-  `GET /ingest/sessions/{id}/report` joins client leg (missing seqs, dups, unterminated),
+  `GET /capture/sessions/{id}/report` joins client leg (missing seqs, dups, unterminated),
   emit leg (per-stream dense sequences, pending/failed, `segment_states` drain signal), and a
   **live DP cross-check** (`GET /continuity/{stream_id}` on data-processing) into a
   `clean|gaps|recording` verdict. Client-side loss appears in the client leg and NEVER as a
@@ -62,8 +72,39 @@ suite **72 tests** · **Last updated:** 2026-07-18 (recording M1 lead session)
   DP-missing against ledger ack receipts — `dp.missing_unacked`), stale pagehide end
   marker (monotonic + reopen), retry sequence-order, demux subprocess timeout, and a
   client Pause→Resume double-recorder race. Live E2E re-verified after the fixes.
-- **Tests:** recording 72 · data-processing 38 · storage 26 (unregressed) — all re-run by the
-  lead session. E2E drills ran on the live run_learn fleet (mock AND faster_whisper backends).
+- **Browser extension** (`clients/extension/`, Chrome MV3 — ws-E): a PASSIVE capture
+  surface (no content scripts, no page/DOM access, no static host permissions — runtime
+  origin grant instead of server CORS). Screen video (`desktopCapture` picker) + tab audio
+  (`tabCapture`, AudioContext passthrough keeps the tab audible) as **one ingest session
+  per source** → separate C1 streams, same `device_id` (`ext-chrome-<suffix>`). D-M1-1
+  segmented recorder + the phone client's serialized uploader as DI'd ES modules
+  (deno-tested); popup mirrors the phone status panel with per-source verdict badges.
+  Server URL is a popup setting (tunnel or localhost). **Not run in a real Chrome here
+  (headless box) — load-unpacked runbook in ws-E §Human test steps.**
+- **Mac capture CLI** (`clients/mac/nucleus_capture.py` — ws-F): single-file stdlib-only
+  python3 + ffmpeg; avfoundation screen+mic muxed → ~10 s self-contained mp4 segments
+  (forced keyframes) → serialized uploader on the same wire; duration-chained wall-clock
+  stamps (exact adjacency); graceful Ctrl-C (drain → end marker → report poll → verdict
+  exit code); `--source test` (lavfi) drives the identical path headless. macOS
+  Screen-Recording permission grant + device-index discovery documented in ws-F.
+  **avfoundation leg itself needs a human mac** (ws-F §Runbook); everything else
+  live-E2E-verified on this box.
+- **Wire conformance** (`tests/test_wire_conformance.py`): the client-shape matrix —
+  video-only webm/vp8 (extension screen), audio-only webm/opus (extension tab), muxed mp4
+  h264+aac (mac CLI) — each demuxes to exactly the right C1 streams with spans preserved;
+  the D-E3 two-session-same-device pattern and client-agnostic gap detection proven
+  against the real app.
+- **Adversarial review round #2** (computer-capture slice: 5-lens find → 2-skeptic verify,
+  19 findings → 10 confirmed) — all fixed + regression-tested; detail in ws-E/ws-F
+  worklogs. Headliners: extension tab-capture stream-id expiry behind the human-paced
+  screen picker (acquisition reordered + failed sources surfaced), offscreen
+  drained-vs-restart races, mac CLI Ctrl-C stamp corruption (idempotent duration slotting),
+  stale-spool reuse refusal, HTTPException escaping the retry pump.
+- **Tests:** recording **109** (72 M1 + 37 new: 27 mac CLI + 3 extension assets + 5
+  wire conformance + 2 deprecated-alias) · data-processing 38 · storage 26 (both re-run,
+  unregressed) · extension deno suite 17.
+  Live E2E this slice: mac CLI test-source → verdict `clean` + 12 C2 records with exact
+  spans; deprecated-alias drill clean.
 - E2E driver (synthetic phone, clean/gap/dup modes) lives in the session scratchpad —
   rewrite-on-demand; the unit suite covers the same paths hermetically.
 
@@ -71,18 +112,25 @@ suite **72 tests** · **Last updated:** 2026-07-18 (recording M1 lead session)
 - ~~Real-phone verification~~ **DONE 2026-07-18** — CTO's iPhone (Safari, tunnel): two
   sessions 7/7 + 9/9 clean; UI leaks + an ASR auto-language hallucination found and fixed
   same day (ws-B worklog). *The learn fleet (faster_whisper, `ASR_LANGUAGE=en` via
-  `deploy/learn.env`) + tunnel remain UP on node-7 — the URL rotates per tunnel restart, so
-  ALWAYS read it from `var/tunnel_url.txt`; `run_learn.sh --status` checks the fleet.*
-- **Computer capture surfaces** (next slice, founders 2026-07-18 follow-up): browser
-  extension (`clients/extension/` — screen-share video + `tabCapture` tab audio, separate C1
-  streams, NO system audio) + a basic mac capture client (`clients/mac/` — lean: an
-  ffmpeg/avfoundation CLI segmenter + uploader speaking the SAME `/ingest/segments` wire; a
-  GUI app later). The server side needs nothing new. Then **metrics emission** (D9) across
-  recording + DP once the surfaces exist.
-- **Browser extension** (slice priority 5, not built — time-boxed out): `clients/extension/`,
-  screen-share video + `tabCapture` tab audio as separate C1 streams; NO system audio.
-  Same segment-upload wire; the server side is ready for it (any self-contained A/V upload).
-- Retry ergonomics: `/ingest/sessions/{id}/retry` is manual; consider an automatic periodic
+  `deploy/learn.env`) + tunnel remain UP on node-7 — restarted 2026-07-18 by the
+  computer-capture lead onto the renamed `/capture/*` wire (tunnel URL unchanged,
+  `/health` + `/client/` + alias re-verified through it). The URL rotates per tunnel
+  restart, so ALWAYS read it from `var/tunnel_url.txt`; `run_learn.sh --status` checks
+  the fleet.*
+- ~~Computer capture surfaces~~ **BUILT + REVIEWED + (test-mode) LIVE-VERIFIED
+  2026-07-18** (this slice — ws-E extension, ws-F mac CLI; server needed nothing new, as
+  designed). **Two HUMAN legs owed** (this box is headless Linux — cannot run Chrome or
+  avfoundation; never claim them from here):
+  1. **Chrome leg** — ws-E §Human test steps: load-unpacked, Save the server URL (grant),
+     Record → both verdict badges `clean`; try the Stop-sharing drill.
+  2. **Mac leg** — ws-F §Runbook: one-time Screen Recording grant, `list-devices`,
+     `record` against the tunnel URL → Ctrl-C → verdict `clean`.
+- **Later capture surfaces, explicitly recorded**: system/desktop audio for the extension
+  (kept OUT of this slice by scope); a mac menu-bar/GUI app (ScreenCaptureKit, visible
+  capture indicator, autostart) — capability exists today via the CLI, UX later.
+- **Metrics emission (D9)** across recording + DP is the founders' sequenced NEXT once the
+  capture surfaces are human-verified solid.
+- Retry ergonomics: `/capture/sessions/{id}/retry` is manual; consider an automatic periodic
   re-drive of `failed` segments once real-world failure modes are seen.
 - Continuity ledger growth: rows are permanent (fine at beta scale); add retention/compaction
   before fleet scale (M5 telemetry work).
