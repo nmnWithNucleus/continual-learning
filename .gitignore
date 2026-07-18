@@ -1,0 +1,5 @@
+# One-off installers (e.g. cloudflared.deb — the binary is installed system-wide; not source)
+*.deb
+
+# Agent session state
+.claude/scheduled_tasks.lock

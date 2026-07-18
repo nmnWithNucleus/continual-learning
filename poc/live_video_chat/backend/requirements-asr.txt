@@ -1,0 +1,17 @@
+# WS4 — ASR module deps (faster-whisper). Kept separate from WS2's
+# requirements.txt to avoid a write collision; WS6 merges these in at integration.
+#
+# Versions below are what was validated in the `moe` conda env on an H100.
+# faster-whisper pulls in ctranslate2 (the inference runtime) and av/PyAV.
+# numpy is used directly by asr.py to pass decoded PCM to the model.
+#
+# SYSTEM DEP (not pip-installable here): ffmpeg >= 7 must be on PATH. It is
+# already present in the `moe` env; asr.py shells out to it to decode the
+# browser audio blob (iOS audio/mp4 AAC and audio/webm Opus) to 16 kHz mono PCM.
+#
+# For CUDA, ctranslate2 needs the matching CUDA/cuDNN runtime libs (already
+# provided by the env's torch 2.8 / cu128 install). On CPU it just works.
+
+faster-whisper==1.1.0
+ctranslate2==4.7.2
+numpy>=1.24

@@ -1,0 +1,849 @@
+# Polyhive a3mega Slurm blueprint. Pair with a3mega-slurm-deployment-polyhive.yaml.
+# Differs from the Nucleus blueprint ONLY in blueprint_name (the ghpc_blueprint label).
+---
+
+blueprint_name: polyhive-a3mega-slurm
+
+validators:
+- validator: test_deployment_variable_not_used
+  inputs: {}
+  skip: true
+
+vars:
+  sys_net_range: 172.16.0.0/16
+  source_image_family: ubuntu-accelerator-2204-amd64-with-nvidia-570
+  source_image_project_id: [ubuntu-os-accelerator-images]
+  a3mega_partition_name: a3mega
+  a3mega_maintenance_interval: PERIODIC
+  local_mount_homefs: /home
+  instance_image:
+    family: $(vars.final_image_family)
+    project: $(vars.project_id)
+  enable_login_public_ips: true
+  enable_controller_public_ips: true
+  localssd_mountpoint: /mnt/localssd
+  # Per-node extra data disks; set in the deployment file (Polyhive = one 2 TB /mnt/disk).
+  a3mega_additional_disks: []
+
+  a3mega_reservation_name: nvidia-h100-dkydfas6m486t
+  a3mega_dws_flex_enabled: false
+  a3mega_enable_spot_vm: false
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: sysnet
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.network_name_system)
+      network_address_range: $(vars.sys_net_range)
+      mtu: 8244
+      # External SSH access to VMs in this network. Admins SSH from variable
+      # residential IPs so target_tags-scoped rules don't fit our pattern.
+      # In practice only the controller and login VMs are reachable from the
+      # internet — they're the only ones with enable_*_public_ips: true; the
+      # a3mega nodeset also has enable_public_ips: true so they can be reached
+      # directly when needed for debugging. SSH auth is publickey-only.
+      firewall_rules:
+      - name: $(vars.deployment_name)-allow-ssh-external
+        description: Allow external SSH (tcp/22) to VMs with public IPs in this network
+        direction: INGRESS
+        ranges: [0.0.0.0/0]
+        allow:
+        - protocol: tcp
+          ports: ["22"]
+      subnetworks:
+      - subnet_name: $(vars.subnetwork_name_system)
+        subnet_region: $(vars.region)
+        new_bits: 4
+        subnet_private_access: true
+        description: primary subnetwork in gsc-sys-net
+    outputs:
+    - network_name
+    - subnetwork_name
+
+- group: build_script
+  modules:
+  - id: image_build_script
+    source: modules/scripts/startup-script
+    settings:
+      install_ansible: true
+      enable_gpu_network_wait_online: true
+      configure_ssh_host_patterns:
+      - 10.0.0.*
+      - 10.1.0.*
+      - 10.2.0.*
+      - 10.3.0.*
+      - 10.4.0.*
+      - 10.5.0.*
+      - 10.6.0.*
+      - 10.7.0.*
+      - $(vars.slurm_cluster_name)*
+      docker:
+        enabled: true
+        world_writable: true
+      runners:
+
+      # The following holds NVIDIA software that was already installed on the
+      # accelerator base image to be the same driver version. This reduces the
+      # risk of a driver version mismatch.
+      - type: ansible-local
+        destination: hold-nvidia-packages.yml
+        content: |
+          ---
+          - name: Hold nvidia packages
+            hosts: all
+            become: true
+            vars:
+              nvidia_packages_to_hold:
+              - libnvidia-cfg1-*-server
+              - libnvidia-compute-*-server
+              - libnvidia-nscq-*
+              - nvidia-compute-utils-*-server
+              - nvidia-fabricmanager-*
+              - nvidia-utils-*-server
+            tasks:
+            - name: Hold nvidia packages
+              ansible.builtin.command:
+                argv:
+                - apt-mark
+                - hold
+                - "{{ item }}"
+              loop: "{{ nvidia_packages_to_hold }}"
+
+      - type: shell
+        destination: prevent_google_compute_upgrades.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          apt-mark hold google-compute-engine
+          apt-mark hold google-compute-engine-oslogin
+          apt-mark hold google-guest-agent
+          apt-mark hold google-osconfig-agent
+
+      # Second layer: keep unattended-upgrades away from the GPU/kernel stack.
+      - type: data
+        destination: /etc/apt/apt.conf.d/51-block-nvidia-kernel-unattended
+        content: |
+          Unattended-Upgrade::Package-Blacklist {
+              "nvidia-";
+              "libnvidia-";
+              "linux-image-";
+              "linux-modules-";
+              "linux-headers-";
+          };
+
+      - type: data
+        destination: /var/tmp/slurm_vars.json
+        content: |
+          {
+            "reboot": false,
+            "install_cuda": false,
+            "install_ompi": true,
+            "install_lustre": false,
+            "install_managed_lustre": false,
+            "install_gcsfuse": true,
+            "monitoring_agent": "cloud-ops",
+            "use_open_drivers": true
+          }
+      - type: shell
+        destination: install_slurm.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          apt-get update
+          apt-get install -y git
+          ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
+          ansible-pull \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.10.6 \
+              -i localhost, --limit localhost --connection=local \
+              -e @/var/tmp/slurm_vars.json \
+              ansible/playbook.yml
+      - type: ansible-local
+        destination: update-gvnic.yml
+        content: |
+          ---
+          - name: Install updated gVNIC driver from GitHub
+            hosts: all
+            become: true
+            vars:
+              package_url: https://github.com/GoogleCloudPlatform/compute-virtual-ethernet-linux/releases/download/v1.4.3/gve-dkms_1.4.3_all.deb
+              package_filename: /tmp/{{ package_url | basename }}
+            tasks:
+            - name: Install driver dependencies
+              ansible.builtin.apt:
+                name:
+                - dkms
+            - name: Download gVNIC package
+              ansible.builtin.get_url:
+                url: "{{ package_url }}"
+                dest: "{{ package_filename }}"
+            - name: Install updated gVNIC
+              ansible.builtin.apt:
+                deb: "{{ package_filename }}"
+                state: present
+      - type: shell
+        destination: install-nvidia.sh
+        content: |
+          #!/bin/bash
+          set -ex -o pipefail
+          curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
+            gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg  && \
+            curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+            sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+            tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+          apt-get update -y
+          apt-get install -y nvidia-container-toolkit
+      - type: data
+        destination: /etc/security/limits.d/99-unlimited.conf
+        content: |
+          * - memlock unlimited
+          * - nproc unlimited
+          * - stack unlimited
+          * - nofile 1048576
+          * - cpu unlimited
+          * - rtprio unlimited
+      - type: data
+        destination: /etc/enroot/enroot.conf
+        content: |
+          ENROOT_CONFIG_PATH     ${HOME}/.enroot
+          ENROOT_RUNTIME_PATH    /mnt/localssd/${UID}/enroot/runtime
+          ENROOT_CACHE_PATH      /mnt/localssd/${UID}/enroot/cache
+          ENROOT_DATA_PATH       /mnt/localssd/${UID}/enroot/data
+          ENROOT_TEMP_PATH       /mnt/localssd/${UID}/enroot
+      - type: ansible-local
+        destination: configure_gpu_monitoring.yml
+        content: |
+          ---
+          - name: Install CUDA & DCGM & Configure Ops Agent
+            hosts: all
+            become: true
+            vars:
+              enable_ops_agent: $(vars.enable_ops_agent)
+              enable_nvidia_dcgm: $(vars.enable_nvidia_dcgm)
+              nvidia_packages:
+              - cuda-toolkit-12-8
+              - datacenter-gpu-manager-4-cuda12
+            tasks:
+            - name: Install CUDA & DCGM
+              ansible.builtin.apt:
+                name: "{{ item }}"
+                update_cache: true
+              loop: "{{ nvidia_packages }}"
+            - name: Create nvidia-persistenced override directory
+              ansible.builtin.file:
+                path: /etc/systemd/system/nvidia-persistenced.service.d
+                state: directory
+                owner: root
+                group: root
+                mode: 0o755
+            - name: Configure nvidia-persistenced override
+              ansible.builtin.copy:
+                dest: /etc/systemd/system/nvidia-persistenced.service.d/persistence_mode.conf
+                owner: root
+                group: root
+                mode: 0o644
+                content: |
+                  [Service]
+                  ExecStart=
+                  ExecStart=/usr/bin/nvidia-persistenced --user nvidia-persistenced --verbose
+              notify: Reload SystemD
+            handlers:
+            - name: Reload SystemD
+              ansible.builtin.systemd:
+                daemon_reload: true
+            post_tasks:
+            - name: Enable Google Cloud Ops Agent
+              ansible.builtin.service:
+                name: google-cloud-ops-agent.service
+                state: "{{ 'started' if enable_ops_agent else 'stopped' }}"
+                enabled: "{{ enable_ops_agent }}"
+            - name: Disable NVIDIA DCGM by default (enable during boot on GPU nodes)
+              ansible.builtin.service:
+                name: nvidia-dcgm.service
+                state: stopped
+                enabled: false
+            - name: Disable nvidia-persistenced SystemD unit (enable during boot on GPU nodes)
+              ansible.builtin.service:
+                name: nvidia-persistenced.service
+                state: stopped
+                enabled: false
+
+      - type: ansible-local
+        destination: install_dmabuf.yml
+        content: |
+          ---
+          - name: Install DMBABUF import helper
+            hosts: all
+            become: true
+            tasks:
+            - name: Setup apt-transport-artifact-registry repository
+              ansible.builtin.apt_repository:
+                repo: deb http://packages.cloud.google.com/apt apt-transport-artifact-registry-stable main
+                state: present
+            - name: Install driver dependencies
+              ansible.builtin.apt:
+                name:
+                - dkms
+                - apt-transport-artifact-registry
+            - name: Setup gpudirect-tcpxo apt repository
+              ansible.builtin.apt_repository:
+                repo: deb [arch=all trusted=yes ] ar+https://us-apt.pkg.dev/projects/gce-ai-infra gpudirect-tcpxo-apt main
+                state: present
+            - name: Install DMABUF import helper DKMS package
+              ansible.builtin.apt:
+                name: dmabuf-import-helper
+                state: present
+      - type: ansible-local
+        destination: aperture_devices.yml
+        content: |
+          ---
+          - name: Setup GPUDirect-TCPXO aperture devices
+            hosts: all
+            become: true
+            tasks:
+            - name: Mount aperture devices to /dev and make writable
+              ansible.builtin.copy:
+                dest: /etc/udev/rules.d/00-a3-megagpu.rules
+                owner: root
+                group: root
+                mode: 0o644
+                content: |
+                  ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x1ae0", ATTR{device}=="0x0084", TAG+="systemd", \
+                      RUN+="/usr/bin/mkdir --mode=0755 -p /dev/aperture_devices", \
+                      RUN+="/usr/bin/systemd-mount --type=none --options=bind --collect %S/%p /dev/aperture_devices/%k", \
+                      RUN+="/usr/bin/bash -c '/usr/bin/chmod 0666 /dev/aperture_devices/%k/resource*'"
+              notify: Update initramfs
+            handlers:
+            - name: Update initramfs
+              ansible.builtin.command: /usr/sbin/update-initramfs -u -k all
+
+      # Aperture-devices safety net: a systemd oneshot that re-runs the bind-mounts
+      # after systemd-manager is fully up. The udev rule above synchronously calls
+      # `systemd-mount` from inside udev, which udev kills if it takes >59s — losing
+      # the race against systemd-manager startup. We observed this hit 3/8 of a fresh
+      # Nucleus fleet on first boot. This service mounts whatever the udev rule didn't.
+      - type: data
+        destination: /usr/local/sbin/aperture-devices-mount.sh
+        content: |
+          #!/bin/bash
+          mkdir -p /dev/aperture_devices
+          for d in \$(lspci -d 1ae0:0084 -D 2>/dev/null | awk '{print $1}'); do
+            syspath=\$(readlink -f /sys/bus/pci/devices/$d 2>/dev/null)
+            [ -n "$syspath" ] || continue
+            mountpoint -q "/dev/aperture_devices/$d" && continue
+            systemd-mount --type=none --options=bind --collect "$syspath" "/dev/aperture_devices/$d" >/dev/null 2>&1
+            chmod 0666 /dev/aperture_devices/$d/resource* 2>/dev/null || true
+          done
+          exit 0
+      - type: data
+        destination: /etc/systemd/system/aperture-devices-mount.service
+        content: |
+          [Unit]
+          Description=Bind-mount a3-megagpu-8g PCI sysfs paths into /dev/aperture_devices
+          After=systemd-udev-settle.service multi-user.target
+          Wants=systemd-udev-settle.service
+          [Service]
+          Type=oneshot
+          RemainAfterExit=true
+          ExecStart=/usr/local/sbin/aperture-devices-mount.sh
+          [Install]
+          WantedBy=multi-user.target
+      - type: shell
+        destination: enable_aperture_service.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          chmod 0755 /usr/local/sbin/aperture-devices-mount.sh
+          systemctl daemon-reload
+          systemctl enable aperture-devices-mount.service
+
+      - type: shell
+        destination: remove_snap_gcloud.sh
+        content: |
+          #!/bin/bash
+          # Must run *last* in any sequence that uses gsutil/gcloud.
+          set -e -o pipefail
+          snap remove google-cloud-cli lxd
+          GCLOUD_APT_SOURCE="/etc/apt/sources.list.d/google-cloud-sdk.list"
+          if [ ! -f "${GCLOUD_APT_SOURCE}" ]; then
+              cat <<EOT > "${GCLOUD_APT_SOURCE}"
+          deb [signed-by=/usr/share/keyrings/cloud.google.asc] https://packages.cloud.google.com/apt cloud-sdk main
+          EOT
+          fi
+          curl -o /usr/share/keyrings/cloud.google.asc https://packages.cloud.google.com/apt/doc/apt-key.gpg
+          apt-get update
+          apt-get install --assume-yes google-cloud-cli
+          hash -r
+
+- group: slurm-build
+  modules:
+  - id: slurm-image
+    source: modules/packer/custom-image
+    kind: packer
+    use:
+    - image_build_script
+    - sysnet
+    settings:
+      machine_type: c2-standard-8
+      source_image_family: $(vars.source_image_family)
+      source_image_project_id: $(vars.source_image_project_id)
+      image_family: $(vars.final_image_family)
+      disk_size: $(vars.disk_size_gb)
+      omit_external_ip: false
+      metadata:
+        user-data: |
+          #cloud-config
+          write_files:
+          - path: /etc/apt/apt.conf.d/20auto-upgrades
+            permissions: '0644'
+            owner: root
+            content: |
+              APT::Periodic::Update-Package-Lists "0";
+              APT::Periodic::Unattended-Upgrade "0";
+
+- group: cluster
+  modules:
+  - id: data-bucket
+    source: community/modules/file-system/cloud-storage-bucket
+    settings:
+      local_mount: /gcs
+      mount_options: defaults,rw,_netdev,implicit_dirs,allow_other,implicit_dirs,file_mode=777,dir_mode=777
+      random_suffix: true
+
+  - id: gpunets
+    source: modules/network/multivpc
+    settings:
+      network_name_prefix: $(vars.deployment_name)-gpunet
+      global_ip_address_range: 10.0.0.0/9
+      network_count: 8
+      subnetwork_cidr_suffix: 20
+
+  - id: private_service_access
+    source: community/modules/network/private-service-access
+    use:
+    - sysnet
+  - id: homefs
+    source: modules/file-system/filestore
+    use:
+    - sysnet
+    - private_service_access
+    settings:
+      filestore_tier: HIGH_SCALE_SSD
+      size_gb: 10240
+      local_mount: /home
+      mount_options: "defaults,hard"
+      deletion_protection:
+        enabled: true
+        reason: Avoid data loss
+    outputs:
+    - network_storage
+
+  - id: debug_nodeset
+    use: [sysnet]
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    settings:
+      node_count_static: 0
+      node_count_dynamic_max: 4
+      machine_type: n2-standard-2
+
+  - id: debug_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - debug_nodeset
+    settings:
+      partition_name: debug
+      exclusive: false
+
+  - id: a3mega_startup
+    source: modules/scripts/startup-script
+    settings:
+      local_ssd_filesystem:
+        mountpoint: $(vars.localssd_mountpoint)
+        permissions: "1777"
+      docker:
+        enabled: true
+        world_writable: true
+        daemon_config: |
+          {
+            "data-root": "$(vars.localssd_mountpoint)/docker"
+          }
+      runners:
+      - type: ansible-local
+        destination: slurm_aperture.yml
+        content: |
+          ---
+          - name: Configure Slurm to depend upon aperture devices
+            hosts: all
+            become: true
+            vars: {}
+            tasks:
+            - name: Ensure slurmd starts after aperture devices are ready
+              ansible.builtin.copy:
+                dest: /etc/systemd/system/slurmd.service.d/aperture.conf
+                owner: root
+                group: root
+                mode: 0o644
+                content: |
+                  [Service]
+                  ExecCondition=/usr/bin/test -d /dev/aperture_devices/
+              notify: Reload SystemD
+            handlers:
+            - name: Reload SystemD
+              ansible.builtin.systemd:
+                daemon_reload: true
+      - type: ansible-local
+        destination: enable_dcgm.yml
+        content: |
+          ---
+          - name: Enable NVIDIA DCGM on GPU nodes
+            hosts: all
+            become: true
+            vars:
+              enable_ops_agent: $(vars.enable_ops_agent)
+              enable_nvidia_dcgm: $(vars.enable_nvidia_dcgm)
+              enable_nvidia_persistenced: $(vars.enable_nvidia_persistenced)
+            tasks:
+            - name: Update Ops Agent configuration
+              ansible.builtin.blockinfile:
+                path: /etc/google-cloud-ops-agent/config.yaml
+                insertafter: EOF
+                block: |
+                  metrics:
+                    receivers:
+                      dcgm:
+                        type: dcgm
+                    service:
+                      pipelines:
+                        dcgm:
+                          receivers:
+                            - dcgm
+              notify:
+              - Restart Google Cloud Ops Agent
+            handlers:
+            - name: Restart Google Cloud Ops Agent
+              ansible.builtin.service:
+                name: google-cloud-ops-agent.service
+                state: "{{ 'restarted' if enable_ops_agent else 'stopped' }}"
+                enabled: "{{ enable_ops_agent }}"
+            post_tasks:
+            - name: Enable Google Cloud Ops Agent
+              ansible.builtin.service:
+                name: google-cloud-ops-agent.service
+                state: "{{ 'started' if enable_ops_agent else 'stopped' }}"
+                enabled: "{{ enable_ops_agent }}"
+            - name: Enable NVIDIA DCGM
+              ansible.builtin.service:
+                name: nvidia-dcgm.service
+                state: "{{ 'started' if enable_nvidia_dcgm else 'stopped' }}"
+                enabled: "{{ enable_nvidia_dcgm }}"
+            - name: Enable NVIDIA Persistence Daemon
+              ansible.builtin.service:
+                name: nvidia-persistenced.service
+                state: "{{ 'started' if enable_nvidia_persistenced else 'stopped' }}"
+                enabled: "{{ enable_nvidia_persistenced }}"
+
+      # Format + mount the per-node data disk at /mnt/disk. Idempotent and a no-op on
+      # clusters/nodes without the disk (the empty additional_disks list on Nucleus).
+      - type: shell
+        destination: mount_data_disk.sh
+        content: |
+          #!/bin/bash
+          set -u -o pipefail
+          DEV=/dev/disk/by-id/google-phive-data-disk
+          MNT=/mnt/disk
+          [ -e "$DEV" ] || { echo "no data disk; skipping"; exit 0; }
+          if ! blkid "$DEV" >/dev/null 2>&1; then
+              mkfs.ext4 -F -m 0 "$DEV"
+          fi
+          mkdir -p "$MNT"
+          grep -q google-phive-data-disk /etc/fstab || \
+              echo "$DEV $MNT ext4 defaults,nofail 0 2" >> /etc/fstab
+          mountpoint -q "$MNT" || mount "$MNT"
+          chmod 1777 "$MNT"
+
+      # Pin each worker's nic0 external IP to its reserved static address
+      # p-node-<N>, so the node->IP mapping (and `ssh p-node-N`) survives every
+      # POWER_DOWN_FORCE recreate. The slurm-gcp nodeset builds ONE shared
+      # instance template and creates nodes via bulkInsert with empty
+      # per-instance overrides, so a distinct static IP per node cannot be set in
+      # the template -- each node rebinds its own reserved address at boot. Driven
+      # by a systemd oneshot (after network-online) + reconcile timer so it never
+      # runs inline in the startup script (can't stall slurmd) and never strips a
+      # working IP without a validated replacement.
+      - type: data
+        destination: /usr/local/sbin/pin-static-ip.sh
+        content: |
+          #!/bin/bash
+          set -u
+          LOG="logger -t pin-static-ip"
+          MD="http://metadata.google.internal/computeMetadata/v1"
+          md() { curl -s -m 5 -H "Metadata-Flavor: Google" "$MD/$1"; }
+          g() { timeout 60 gcloud "$@"; }
+
+          # spread ~24 simultaneous recreates to dodge Compute API write throttling
+          sleep \$(( RANDOM % 25 ))
+
+          # wait for the SA token (metadata route + token endpoint must be serving)
+          for i in \$(seq 1 30); do
+            md instance/service-accounts/default/token | grep -q access_token && break
+            sleep 2
+          done
+
+          NAME="\$(md instance/name)"
+          ZONE="\$(md instance/zone | awk -F/ '{print $NF}')"
+          [ -n "$NAME" ] && [ -n "$ZONE" ] || { $LOG "metadata not ready; will retry"; exit 0; }
+          REGION="${ZONE%-*}"
+
+          case "$NAME" in
+            *-a3meganodeset-*) N="${NAME##*-}" ;;
+            *) exit 0 ;;
+          esac
+          [[ "$N" =~ ^[0-9]+$ ]] || { $LOG "no numeric index in $NAME"; exit 0; }
+          ADDR="p-node-${N}"
+
+          # desired address + its status/tier (all scalar -> safe to tab-split)
+          INFO="\$(g compute addresses describe "$ADDR" --region="$REGION" \
+                    --format='value(address,status,networkTier)' 2>/dev/null)"
+          [ -n "$INFO" ] || { $LOG "no reservation $ADDR; skip"; exit 0; }
+          IFS=$'\t' read -r WANT STATUS TIER <<<"$INFO"
+          [ -n "$WANT" ] || { $LOG "could not resolve $ADDR; will retry"; exit 0; }
+          [ -n "$TIER" ] || TIER=PREMIUM
+
+          # current nic0 access-config name + IP
+          CFG="\$(g compute instances describe "$NAME" --zone="$ZONE" \
+                   --format='value(networkInterfaces[0].accessConfigs[0].name)' 2>/dev/null)"
+          CUR="\$(g compute instances describe "$NAME" --zone="$ZONE" \
+                   --format='value(networkInterfaces[0].accessConfigs[0].natIP)' 2>/dev/null)"
+          [ -n "$CFG" ] || CFG="external-nat"
+
+          [ "$CUR" = "$WANT" ] && { $LOG "$NAME already on $ADDR ($WANT)"; exit 0; }
+
+          # target held elsewhere (or a not-yet-reaped prior incarnation): do NOT
+          # strip our working IP -- the timer retries once it returns to RESERVED.
+          if [ "$STATUS" = "IN_USE" ]; then
+            $LOG "$ADDR IN_USE elsewhere; leaving $NAME on ${CUR:-none}, will retry"; exit 0
+          fi
+
+          $LOG "rebinding $NAME: ${CUR:-none} -> $ADDR ($WANT/$TIER)"
+          g compute instances delete-access-config "$NAME" --zone="$ZONE" \
+             --access-config-name="$CFG" || $LOG "delete-access-config non-zero (continuing)"
+
+          ok=
+          for i in \$(seq 1 5); do
+            if g compute instances add-access-config "$NAME" --zone="$ZONE" \
+                  --access-config-name="$CFG" --address="$WANT" --network-tier="$TIER"; then
+              ok=1; break
+            fi
+            $LOG "add-access-config attempt $i failed; backing off"; sleep \$(( i * 5 ))
+          done
+
+          if [ -z "$ok" ]; then
+            # never leave the node without connectivity: re-add an ephemeral IP
+            $LOG "CRITICAL: could not attach $ADDR; falling back to ephemeral"
+            g compute instances add-access-config "$NAME" --zone="$ZONE" \
+               --access-config-name="$CFG" --network-tier="$TIER" \
+               || $LOG "CRITICAL: ephemeral fallback also failed for $NAME"
+            exit 0
+          fi
+          $LOG "rebind complete: $NAME -> $WANT"
+          exit 0
+      - type: data
+        destination: /etc/systemd/system/pin-static-ip.service
+        content: |
+          [Unit]
+          Description=Pin a3mega worker nic0 external IP to its reserved p-node-N address
+          After=network-online.target google-guest-agent.service
+          Wants=network-online.target
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/sbin/pin-static-ip.sh
+      - type: data
+        destination: /etc/systemd/system/pin-static-ip.timer
+        content: |
+          [Unit]
+          Description=Reconcile a3mega worker static external IP
+          [Timer]
+          OnBootSec=30
+          OnUnitActiveSec=10min
+          [Install]
+          WantedBy=timers.target
+      - type: shell
+        destination: enable_pin_static_ip.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          chmod 0755 /usr/local/sbin/pin-static-ip.sh
+          systemctl daemon-reload
+          systemctl enable --now pin-static-ip.timer
+          systemctl start --no-block pin-static-ip.service
+
+  - id: a3mega_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use:
+    - sysnet
+    - gpunets
+    settings:
+      node_count_static: $(vars.a3mega_cluster_size)
+      node_count_dynamic_max: 0
+      disk_type: pd-ssd
+      machine_type: a3-megagpu-8g
+      # Compute nodes get an external IP on nic0 (the sysnet NIC). The 8 gpunets
+      # remain internal-only — GPUDirect-TCPXO doesn't use public IPs.
+      enable_public_ips: true
+      additional_disks: $(vars.a3mega_additional_disks)
+      advanced_machine_features:
+        threads_per_core: null # Use platform default value
+      node_conf:
+        CoresPerSocket: 52
+        ThreadsPerCore: 2
+      on_host_maintenance: TERMINATE
+      bandwidth_tier: gvnic_enabled
+      reservation_name: $(vars.a3mega_reservation_name)
+      enable_spot_vm: $(vars.a3mega_enable_spot_vm)
+      dws_flex:
+        enabled: $(vars.a3mega_dws_flex_enabled)
+      startup_script: $(a3mega_startup.startup_script)
+
+  - id: a3mega_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - a3mega_nodeset
+    settings:
+      partition_name: $(vars.a3mega_partition_name)
+      exclusive: false
+      is_default: true
+      partition_conf:
+        OverSubscribe: EXCLUSIVE
+        ResumeTimeout: 900
+        SuspendTimeout: 600
+
+  - id: controller_startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      # Two post-deploy fixes baked into the blueprint so the next deploy
+      # doesn't repeat the SSH-bootstrap dance + manual /gcs mount we hit on
+      # the Nucleus 052926 redeploy:
+      #
+      #   (a) Pre-create /home/ubuntu so guest-agent can write authorized_keys
+      #       from project/instance ssh-keys metadata. Without this, the first
+      #       SSH attempt as `ubuntu` fails with "Permission denied (publickey)"
+      #       because /home/ubuntu doesn't exist on a freshly-mounted homefs
+      #       and guest-agent errors with
+      #       "mkdir /home/ubuntu/.ssh: no such file or directory".
+      #       This eliminates the OS-Login on/off flip we previously needed
+      #       to bootstrap a working `ssh ubuntu@<controller>`.
+      #
+      #   (b) Mount any gcsfuse entries in /slurm/scripts/config.yaml on the
+      #       controller. slurm-gcp 6.10 setup_network_storage.py mounts NFS
+      #       only on the controller and silently skips gcsfuse — only compute
+      #       nodes get /gcs by default. We replay the gcsfuse entries here so
+      #       /gcs is also available on the controller.
+      - type: shell
+        destination: bootstrap_controller_environment.sh
+        content: |
+          #!/bin/bash
+          set -e
+          # (a) Ensure /home/ubuntu exists (idempotent).
+          if [ ! -d /home/ubuntu ]; then
+              install -d -o ubuntu -g ubuntu -m 0755 /home/ubuntu
+          fi
+          # (b) Replay gcsfuse mounts from slurm-gcp config.
+          CONFIG=/slurm/scripts/config.yaml
+          if [ -r "$CONFIG" ]; then
+              python3 -c "
+          import yaml
+          cfg = yaml.safe_load(open('$CONFIG')) or {}
+          for ns in cfg.get('network_storage') or []:
+              if ns.get('fs_type') == 'gcsfuse':
+                  opts = ns.get('mount_options','defaults,rw,_netdev,implicit_dirs,allow_other,file_mode=777,dir_mode=777')
+                  print(f\"{ns['remote_mount']}|{ns['local_mount']}|{opts}\")
+          " | while IFS='|' read -r bucket mnt opts; do
+                  [ -n "$bucket" ] || continue
+                  mkdir -p "$mnt"
+                  if ! grep -qE "[[:space:]]${mnt}[[:space:]]" /etc/fstab; then
+                      printf '%s %s gcsfuse %s 0 0\n' "$bucket" "$mnt" "$opts" >> /etc/fstab
+                  fi
+                  mountpoint -q "$mnt" || mount "$mnt" || true
+              done
+          fi
+      - type: shell
+        destination: stage_scripts.sh
+        content: |
+          #!/bin/bash
+          SLURM_ROOT=/opt/apps/adm/slurm
+          mkdir -m 0755 -p "${SLURM_ROOT}/scripts"
+          mkdir -p "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-prolog_slurmd.d"
+          mkdir -p "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-epilog_slurmd.d"
+          mkdir -p "${SLURM_ROOT}/prolog_slurmd.d"
+          mkdir -p "${SLURM_ROOT}/epilog_slurmd.d"
+          curl -s -o "${SLURM_ROOT}/scripts/sudo-oslogin" \
+              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/sudo-oslogin
+          chmod 0755 "${SLURM_ROOT}/scripts/sudo-oslogin"
+          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/prolog_slurmd.d/sudo-oslogin.prolog_slurmd"
+          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/epilog_slurmd.d/sudo-oslogin.epilog_slurmd"
+          curl -s -o "${SLURM_ROOT}/scripts/rxdm" \
+              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/receive-data-path-manager-mega
+          chmod 0755 "${SLURM_ROOT}/scripts/rxdm"
+          # RxDM ulimit fix (GPUDirect-TCPXO bug NVIDIA/Megatron-LM#4660): the upstream
+          # receive-datapath-manager runs with docker's default nofile soft=1024, which it
+          # exhausts under multi-node load and then cannot install the SCM_RIGHTS
+          # buffer-registration FD -> "Buffer registration request does not have a valid fd
+          # set". Re-inject the raised limits after every curl so the fix survives redeploys.
+          if ! grep -q -- '--ulimit nofile=65535' "${SLURM_ROOT}/scripts/rxdm"; then
+            awk '/--privileged \\$/{print; print "\t\t--ulimit nofile=65535:65535 \\"; print "\t\t--ulimit nproc=65535:65535 \\"; print "\t\t--ulimit memlock=-1:-1 \\"; next}{print}' "${SLURM_ROOT}/scripts/rxdm" > "${SLURM_ROOT}/scripts/rxdm.patched"
+            mv "${SLURM_ROOT}/scripts/rxdm.patched" "${SLURM_ROOT}/scripts/rxdm"
+            chmod 0755 "${SLURM_ROOT}/scripts/rxdm"
+          fi
+          ln -s "${SLURM_ROOT}/scripts/rxdm" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-prolog_slurmd.d/rxdm.prolog_slurmd"
+          ln -s "${SLURM_ROOT}/scripts/rxdm" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-epilog_slurmd.d/rxdm.epilog_slurmd"
+          # NOTE: the gpu-test epilog symlink from the Google example is intentionally
+          # NOT created here. /slurm/scripts/tools/gpu-test does `grep -i fail` over
+          # `dcgmi diag` output; with DCGM 4.5.3+ that grep matches the benign warning
+          # "Failed to get hostengine environment variable" (printed because
+          # CUDA_VISIBLE_DEVICES is set on dcgmi by slurm) — flagging every healthy
+          # job as a GPU failure and draining every allocated node. The original
+          # Polyhive Dec-2025 deploy also runs without it (verified). Re-enable only
+          # after upstreaming a fix to the grep or unset CUDA_VISIBLE_DEVICES inside
+          # gpu-test before dcgmi.
+      - type: shell
+        destination: reset_enroot.sh
+        content: |
+          #!/bin/bash
+          rm -f /etc/enroot/enroot.conf
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use:
+    - sysnet
+    settings:
+      enable_login_public_ips: $(vars.enable_login_public_ips)
+      name_prefix: login
+      disk_type: pd-balanced
+      machine_type: c2-standard-4
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - sysnet
+    - a3mega_partition
+    - debug_partition
+    - slurm_login
+    - homefs
+    - data-bucket
+    settings:
+      enable_controller_public_ips: $(vars.enable_controller_public_ips)
+      machine_type: c2-standard-8
+      enable_cleanup_compute: true
+      enable_external_prolog_epilog: true
+      slurm_conf_tpl: modules/embedded/community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/long-prolog-slurm.conf.tpl
+      controller_startup_script: $(controller_startup.startup_script)
+      login_startup_script: |
+        #!/bin/bash
+        rm -f /etc/enroot/enroot.conf
+      prolog_scripts:
+      - filename: set_hostname_for_enroot.sh
+        content: |
+          #!/bin/bash
+          hostname | tee /etc/hostname
