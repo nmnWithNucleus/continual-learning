@@ -2,3 +2,6 @@
 __pycache__/
 .pytest_cache/
 *.pyc
+# Runtime state: continuity ledger + segment spool + tunnel artifacts. The spool
+# holds captured bytes in transit — never commit them.
+var/

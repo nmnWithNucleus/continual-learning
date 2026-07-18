@@ -6,6 +6,10 @@ POST /ingest  — body = a pushed C1 raw-stream envelope. Validate C1 -> dedup o
                 it returns, assemble a C2 record and POST it to storage /context ->
                 return {ok, record_ids:[...]}. This is the C1 push receiver.
 GET  /health  — liveness + effective ASR backend.
+GET  /continuity              — per-stream break/dup report (ContinuityTracker),
+                the check behind "zero silent loss": recording's gap report
+                queries it to close the loop across both capture legs.
+GET  /continuity/{stream_id}  — one stream's entry (404 unknown).
 
 The core knows nothing about audio/image/video/text: modality behavior lives in
 disjoint plugin files under ``processing/processors/`` (see ``processing/``), so a
@@ -26,6 +30,7 @@ from starlette.concurrency import run_in_threadpool
 
 from . import schemas
 from .config import get_settings
+from .continuity import ContinuityTracker
 from .dedup import DedupStore
 from .models import C1Envelope, C2Record
 from .pipeline import build_c2, chunk_span_seconds
@@ -47,6 +52,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app.state.storage = StorageClient(settings.storage_url, timeout=settings.http_timeout)
     app.state.dedup = DedupStore()
+    app.state.continuity = ContinuityTracker()
 
     @app.get("/health")
     def health() -> dict:
@@ -74,6 +80,22 @@ def create_app() -> FastAPI:
 
         chunk_id = c1["chunk_id"]
         modality = c1["modality"]
+
+        # ---- Continuity observation (EVERY schema-valid delivery) --------------
+        # Noted here — after the C1 gate, before any return — so ALL paths count:
+        # fresh process, dedup fast path, in-flight dup. Dedup must never silently
+        # absorb a break/duplicate signal; an invalid C1 must never register one.
+        tracker: ContinuityTracker = request.app.state.continuity
+        tracker.note(
+            c1["stream_id"],
+            c1["sequence"],
+            chunk_id,
+            user_id=c1["user_id"],
+            device_id=c1["device_id"],
+            modality=modality,
+            now_iso=now_iso(),
+        )
+
         dedup: DedupStore = request.app.state.dedup
 
         # ---- Dedup (fast path): already-processed chunk_id -> prior record_ids -
@@ -173,6 +195,20 @@ def create_app() -> FastAPI:
 
             dedup.put(chunk_id, record_ids)
             return JSONResponse(content={"ok": True, "record_ids": record_ids})
+
+    @app.get("/continuity")
+    def continuity_report(request: Request) -> dict:
+        return request.app.state.continuity.report()
+
+    @app.get("/continuity/{stream_id}")
+    def continuity_stream(request: Request, stream_id: str) -> dict:
+        entry = request.app.state.continuity.report_stream(stream_id)
+        if entry is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": f"unknown stream_id {stream_id!r}"},
+            )
+        return entry
 
     return app
 

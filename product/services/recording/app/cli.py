@@ -26,7 +26,8 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--dp-url", default=settings.dp_url, help="data-processing base URL (/ingest)")
     p.add_argument("--modality", default="audio", help="ChunkSource modality (default audio)")
     p.add_argument("--source", default=None, help="path to a .wav; omit for a synthetic sample")
-    p.add_argument("--chunk-seconds", type=float, default=None, help="chunk duration (default 5s)")
+    p.add_argument("--chunk-seconds", type=float, default=None,
+                   help="fixed chunk duration; omitted -> VAD-cut variable chunks (OQ4)")
     p.add_argument("--base-wallclock", default=None, help="RFC3339 UTC frame-0 wall-clock")
     p.add_argument("--user-id", default=None)
     p.add_argument("--device-id", default=None)

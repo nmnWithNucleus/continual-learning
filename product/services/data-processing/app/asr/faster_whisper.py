@@ -8,6 +8,12 @@ CPU-capable for the skeleton (device=cpu, compute_type=int8 by default), GPU is 
 optimization. Segment times come out chunk-relative (seconds from the start of the
 audio we handed it, i.e. the chunk start); the pipeline maps them to absolute
 wall-clock. NOT exercised by the mock unit tests.
+
+VAD gate (ASR_VAD, default on): drop no-speech spans before decoding, so an
+all-silence chunk yields NO segments -> ``AsrResult(text="", segments=[])`` -> a
+valid C2 with an empty transcript (C2 allows ``text: ""``; the record still
+documents the span). This kills the Whisper silence-hallucination failure mode:
+ambient-only chunks come out honest instead of inventing speech.
 """
 from __future__ import annotations
 
@@ -17,8 +23,10 @@ from ..config import Settings
 from .result import AsrResult, AsrSegment
 
 # Stamped into every C2 this backend produces; distinct from the mock dialect so a
-# reprocess under a different backend forks a new record_id.
-PIPELINE_VERSION = "asr-fw-v0"
+# reprocess under a different backend forks a new record_id. v0 -> v1: the VAD
+# gate changed the output dialect (silence now transcribes empty), so the bump
+# forks new records — version-forward reprocessing, per the C2 contract.
+PIPELINE_VERSION = "asr-fw-v1"
 
 # Loading a Whisper model is expensive; cache per (model, device, compute_type).
 _MODEL_CACHE: dict[tuple[str, str, str], object] = {}
@@ -48,9 +56,13 @@ def transcribe(
 ) -> AsrResult:
     model = _get_model(settings)
     # faster-whisper decodes a file-like object via ffmpeg/av; no temp file needed.
+    # vad_parameters applies only when the gate is on; 500ms keeps natural pauses
+    # inside one segment instead of shredding speech into fragments.
     segment_iter, info = model.transcribe(
         io.BytesIO(audio_bytes),
         beam_size=settings.asr_beam_size,
+        vad_filter=settings.asr_vad,
+        vad_parameters={"min_silence_duration_ms": 500},
     )
 
     segments: list[AsrSegment] = []

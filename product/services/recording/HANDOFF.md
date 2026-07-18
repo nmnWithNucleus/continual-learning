@@ -4,52 +4,84 @@
 > Read [CHARTER.md](CHARTER.md) first (mission/scope/interfaces), then this file — the
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
-**Status:** M0 **integrated E2E + independently verified** (2026-07-09) · **`ChunkSource` seam added 2026-07-10** — 34 tests · **Last updated:** 2026-07-18 (post-return doc sync)
+**Status:** capture **M1 slice built + verified E2E + adversarially reviewed** (2026-07-18):
+phone web client + ingest server (demux → two C1 streams) + checked gap detection + VAD-cut
+chunking (OQ4 decided) + real ASR standing on the DP side · recording suite **72 tests** ·
+**Last updated:** 2026-07-18 (recording M1 lead session)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
 |---|---|---|---|---|
-| A | M0 ingest spine (capturer + `/capture/run` + CLI) | done — integrated E2E 2026-07-09; **34 tests** after the 2026-07-10 seam pass | `app/`, `tests/` | learn-loop M0 fan-out |
+| A | M0 ingest spine (capturer + `/capture/run` + CLI) | done — integrated E2E 2026-07-09 | `app/`, `tests/` | learn-loop M0 fan-out |
+| B | **Phone web client** (camera+mic → segments → upload) | built + verified server-side; **real-phone tap = tester's step** | [handoff/ws-b-phone-web-client.md](handoff/ws-b-phone-web-client.md) | recording M1 lead |
+| C | **Ingest server**: segment upload, A/V demux, continuity ledger, gap report | built + verified live (loss/dup drills) | [handoff/ws-c-ingest-demux-ledger.md](handoff/ws-c-ingest-demux-ledger.md) | recording M1 lead |
+| D | **VAD-cut chunking** (charter OQ4 → D-M1-2) | built + verified on real speech | [handoff/ws-d-vad-carve.md](handoff/ws-d-vad-carve.md) | recording M1 lead |
+| — | DP-side pair (continuity detector + real ASR + VAD gate) | built + verified | [../data-processing/handoff/ws-m1-continuity-asr.md](../data-processing/handoff/ws-m1-continuity-asr.md) | recording M1 lead |
 
 ## Current state
-- **M0 ingest spine built** (`:8084`, FastAPI + uvicorn, isolated `.venv`). Carves a
-  continuous audio source (synthetic WAV default; caller `.wav` path via `source=`) into
-  fixed 5s chunks; per chunk **blob-first**: PUT bytes to storage `/raw/blobs` -> POST a
-  **C1** envelope to data-processing `/ingest`. One ULID-like `stream_id`; dense zero-based
-  `sequence`; stable ULID-like `chunk_id` reused on retry; at-least-once retry on both legs
-  (transient/5xx only) that never advances `sequence`. Emitted C1 validated against the
-  frozen schema on the emit path.
-- **Drivable headless:** `POST /capture/run {storage_url, dp_url, source?, chunk_seconds?,
-  base_wallclock?, user_id?, device_id?, sample_seconds?}` -> `{stream_id, chunks_emitted,
-  chunk_ids, sequences, record_ids}`; `GET /health` -> `{ok:true}`; module CLI
-  `python -m app.cli` / `python -m app`.
-- **Tests: 27 passed** (own `.venv`, TestClient + httpx MockTransport fakes; no real ports).
-  Covers: emitted C1 schema-valid; dense/zero-based/+1 sequence; single stream_id; blob-first
-  ordering; retry reuses chunk_id + holds sequence; ceil(N/K) chunk count; contiguous
-  wall-clock spans; storage+data-processing loss/dup drills (exactly-once via chunk_id).
-  Also verified end-to-end over **real sockets** against an emulator that schema-validates
-  each received C1 (scratchpad `e2e_check.py`).
-- Downstream calls made (integrator: confirm they match the pinned wire):
-  `PUT {storage_url}/raw/blobs?user_id=&device_id=&chunk_id=&codec=&sha256=&bytes=` (octet-stream body)
-  and `POST {dp_url}/ingest` (C1 JSON body).
-- **`ChunkSource` seam (2026-07-10):** the carver is generalized behind `app/sources/`
-  (self-registering; the WAV file source is one impl — a future mic/screen/bodycam source is
-  **one new file, no C1 change**). DP's `/ingest` now returns `record_ids[]` (one chunk → many
-  records); the capturer flattens them — regression-tested (3 chunks × 3 records → 9) after the
-  verifier caught a live 500 that stale test fakes had masked.
-- Not in M0 (later milestones/backlog): real OS/browser mic capture (M1); consent controls
-  (M2); device auth; `/metrics` + Grafana dashboard (M6 / D9 observability).
+- **M0 spine unchanged and green** (`:8084`, `/capture/run`, blob-first PUT → C1 push,
+  at-least-once, dedup on `chunk_id`). See the M0 notes in git history / ws-A tests.
+- **Phone web client** (`clients/web/`, static, no build step; served at `/client/`, `GET /`
+  redirects): getUserMedia + segmented MediaRecorder (**~10 s self-contained segments via
+  recorder restart** — D-M1-1; timeslice fragments aren't self-contained), record/pause/stop,
+  camera-off mic-only mode, serialized offline upload queue with retry/backoff, end marker
+  (+ `sendBeacon` on pagehide), wake lock, live gap-report poll with verdict badge.
+- **Ingest server** (`app/ingest_web.py` + `ledger.py` + `demux.py` + `emitter.py`):
+  `POST /ingest/segments` (idempotent on `(session_id, seq)`, sha-verified, spool→ledger ack),
+  per-session FIFO emit worker: ffmpeg **demux into per-modality chunks** (audio → `audio/wav`
+  16 kHz mono; video → container copy mp4/webm) → per modality get-or-create stream
+  (**own `stream_id`, same `device_id`**) → chunk identity minted + persisted BEFORE first
+  emit (crash-safe; restart re-emits the same `chunk_id`s) → blob-first PUT → validated C1
+  push → acks recorded. `RECORDING_INGEST_SYNC=1` for inline processing (tests/small ops).
+  Spool deleted after emit (`RECORDING_KEEP_SPOOL=1` keeps it — the D13 consent-holdback seam).
+- **Gap detection is now a CHECKED guarantee** (was emit-side-only affordance in M0):
+  the SQLite **continuity ledger** (`var/ledger.db`) tracks both legs;
+  `GET /ingest/sessions/{id}/report` joins client leg (missing seqs, dups, unterminated),
+  emit leg (per-stream dense sequences, pending/failed, `segment_states` drain signal), and a
+  **live DP cross-check** (`GET /continuity/{stream_id}` on data-processing) into a
+  `clean|gaps|recording` verdict. Client-side loss appears in the client leg and NEVER as a
+  fabricated C1 gap (two continuity domains, joined by the ledger). Verified live: clean,
+  loss-drill (`gaps` + `missing_seqs`), dup-drill (acked `duplicate`, not re-emitted).
+- **Chunking (OQ4) DECIDED — D-M1-2** (charter §Open questions 4 updated): VAD-cut variable
+  chunks [5–30 s] where the server owns a continuous feed (`app/carve.py`, now the audio
+  ChunkSource **default**; explicit `chunk_seconds`/`CHUNK_SECONDS` = fixed); phone = fixed
+  ~10 s edge segments; video = fixed windows. Verified live on real speech: cut lands in the
+  natural pause, exact `t_end[n]==t_start[n+1]` adjacency.
+- **DP-side pair landed** (their ws file above): `/ingest` break/dup **continuity tracker** +
+  `/continuity` endpoints; **faster-whisper standing** (`asr-fw-v1`, mock stays default) with
+  **VAD gate** (all-silence chunk → honest empty transcript, no hallucination). Verified live
+  on real speech through the whole phone path.
+- **Tunnel**: `run_tunnel.sh` (`--bg/--stop/--url`) exposes `:8084` over HTTPS
+  (cloudflared quick tunnel; URL rotates per restart, written to `var/tunnel_url.txt`).
+  Full upload path verified through the tunnel. **Beta handover = that URL + `/client/`.**
+- **Adversarial review round** (multi-agent find → 2-skeptic verify) confirmed 7 defects
+  (5 server, 2 client) — all fixed + regression-tested, detail in
+  [ws-c](handoff/ws-c-ingest-demux-ledger.md) §Worklog: ack-before-spool loss window,
+  unbounded gap walk / body size, DP-restart false `gaps` verdict (report now reconciles
+  DP-missing against ledger ack receipts — `dp.missing_unacked`), stale pagehide end
+  marker (monotonic + reopen), retry sequence-order, demux subprocess timeout, and a
+  client Pause→Resume double-recorder race. Live E2E re-verified after the fixes.
+- **Tests:** recording 72 · data-processing 38 · storage 26 (unregressed) — all re-run by the
+  lead session. E2E drills ran on the live run_learn fleet (mock AND faster_whisper backends).
+- E2E driver (synthetic phone, clean/gap/dup modes) lives in the session scratchpad —
+  rewrite-on-demand; the unit suite covers the same paths hermetically.
 
 ## Next
-- ~~Integration~~ **DONE 2026-07-09** — one `/capture/run` drove 3 chunks E2E into `/context`
-  on live ports; idempotency proven on both legs; independently verified.
-- **Recording-led capture M1 (founders' pick 2026-07-18 — the next lead session owns this):**
-  real capture sources behind the `ChunkSource` seam, in order: **(1) phone web client**
-  (camera + mic over HTTPS/tunnel — bodycam stand-in + the structured beta handover: a
-  press-record URL for the tester); **(2) computer** — screen video via app + browser-extension
-  screen share, **tab audio** via the extension (no system audio for now; mic continues from M0).
-  Bodycam hardware swaps in for the phone later (charter OQ1). Plus the **gap-detection
-  continuity ledger/report** (joint with data-processing: break/dup detector on `/ingest`
-  feeding recording's report) and the **fuller ASR pipeline** on the DP side as the paired
-  priority. Consent gate (M2): **back-burner per D13** (pre-pilot, not pre-beta). Chunk length
-  (OQ4, pin with DP): lean = variable-length chunks cut at VAD pauses within ~5–30 s bounds.
+- **Real-phone verification** (the one unexecuted leg): tester opens
+  `bash run_tunnel.sh --url` + `/client/`, presses record, speaks ~1 min → check the on-page
+  verdict goes `clean` and transcripts appear in `/context` (storage
+  `GET /context/records?user_id=&from=&to=`). iOS Safari MediaRecorder quirks are the risk
+  the POC already de-risked; fixes (if any) belong in `clients/web/app.js`.
+  *As of 2026-07-18 the learn fleet (ASR_BACKEND=faster_whisper) + tunnel were left UP on
+  node-7 for exactly this hand-off — the URL rotates per tunnel restart, so ALWAYS read it
+  from `var/tunnel_url.txt` (never from a doc); `run_learn.sh --status` checks the fleet.*
+- **Browser extension** (slice priority 5, not built — time-boxed out): `clients/extension/`,
+  screen-share video + `tabCapture` tab audio as separate C1 streams; NO system audio.
+  Same segment-upload wire; the server side is ready for it (any self-contained A/V upload).
+- Retry ergonomics: `/ingest/sessions/{id}/retry` is manual; consider an automatic periodic
+  re-drive of `failed` segments once real-world failure modes are seen.
+- Continuity ledger growth: rows are permanent (fine at beta scale); add retention/compaction
+  before fleet scale (M5 telemetry work).
+- Consent gate (M2) stays **back-burner (D13)** — the spool+ledger is the designed holdback
+  point; nothing here forecloses it.
+- `/metrics` + dashboard JSON (M6/D9) still owed once Platform's shared backbone lands.

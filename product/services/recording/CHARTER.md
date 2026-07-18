@@ -96,11 +96,14 @@ founders' board + this note).
    to storage's `/raw` purge primitives (platform orchestrates) — raise with CTO/ARCHITECTURE.md.
 3. Codec/bitrate ladder: what fidelity does data-processing actually need per modality? Sets
    battery, disk, and upload budgets. Joint decision with data-processing.
-4. Chunk duration for C1: retry cost vs. ingest latency vs. blob count. **NOT frozen — decided
-   here (recording × data-processing), not at the architecture level.** Recommendation
-   (2026-07-09): **~20–30 s per audio chunk with a few seconds of overlap** — matches Whisper's
-   30 s window (better WER) and gives overlap for later cross-chunk stitching. M0 built **5 s as a
-   placeholder only**. Tune with data-processing against their pipeline granularity.
+4. ~~Chunk duration for C1~~ **DECIDED 2026-07-18 (D-M1-2, recording × data-processing —
+   [handoff/ws-d-vad-carve.md](handoff/ws-d-vad-carve.md)):** per client/source — continuous
+   audio the server owns: **variable-length chunks cut at VAD speech pauses within [5 s, 30 s]**
+   (pause-aligned cuts supersede the 2026-07-09 "20–30 s + overlap" lean; exact
+   `t_end[n]==t_start[n+1]` adjacency becomes a second continuity signal); phone web client:
+   **fixed ~10 s edge segments** (recorder restart — MediaRecorder fragments aren't
+   self-contained); video/screen streams: **fixed windows**. C1 untouched (frozen shape already
+   supports variable length). DP's side of the pair: a VAD gate before ASR.
 5. Pilot desktop OS: which OS(es) do the actual pilot users run? Pin the fleet; don't build
    three clients for a handful of users.
 6. Device identity/auth: platform-owned identity with device-scoped tokens, or self-issued

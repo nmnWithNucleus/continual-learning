@@ -25,6 +25,9 @@ class Settings:
     asr_device: str
     asr_compute_type: str
     asr_beam_size: int
+    asr_vad: bool             # VAD gate: skip no-speech spans (default ON) so an
+                              # all-silence chunk yields an honest empty
+                              # transcript, not a Whisper hallucination
 
 
 def get_settings() -> Settings:
@@ -37,4 +40,5 @@ def get_settings() -> Settings:
         asr_device=os.getenv("ASR_DEVICE", "cpu"),
         asr_compute_type=os.getenv("ASR_COMPUTE_TYPE", "int8"),
         asr_beam_size=int(os.getenv("ASR_BEAM_SIZE", "1")),
+        asr_vad=_as_bool(os.getenv("ASR_VAD", "1")),
     )
