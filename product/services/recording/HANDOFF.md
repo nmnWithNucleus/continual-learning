@@ -44,9 +44,12 @@
 - ~~Integration~~ **DONE 2026-07-09** — one `/capture/run` drove 3 chunks E2E into `/context`
   on live ports; idempotency proven on both legs; independently verified.
 - **Recording-led capture M1 (founders' pick 2026-07-18 — the next lead session owns this):**
-  real capture sources behind the `ChunkSource` seam — computer mic (M1); computer screen +
-  browser-extension screen capture; bodycam/wearable ingest — plus the **gap-detection
-  continuity report** (joint with data-processing: break/dup detector on `/ingest` feeding
-  recording's report) and the **fuller ASR pipeline** on the DP side as the paired priority.
-  Consent gate (M2) stays the hard gate before any real always-on capture. Chunk length
-  5 s → ~20–30 s + overlap (OQ4, joint with DP).
+  real capture sources behind the `ChunkSource` seam, in order: **(1) phone web client**
+  (camera + mic over HTTPS/tunnel — bodycam stand-in + the structured beta handover: a
+  press-record URL for the tester); **(2) computer** — screen video via app + browser-extension
+  screen share, **tab audio** via the extension (no system audio for now; mic continues from M0).
+  Bodycam hardware swaps in for the phone later (charter OQ1). Plus the **gap-detection
+  continuity ledger/report** (joint with data-processing: break/dup detector on `/ingest`
+  feeding recording's report) and the **fuller ASR pipeline** on the DP side as the paired
+  priority. Consent gate (M2): **back-burner per D13** (pre-pilot, not pre-beta). Chunk length
+  (OQ4, pin with DP): lean = variable-length chunks cut at VAD pauses within ~5–30 s bounds.

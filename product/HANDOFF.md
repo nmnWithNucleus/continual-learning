@@ -52,6 +52,7 @@
 | D10 | **Learn-loop skeleton = computer mic → ASR → `/context`.** The first capture path end-to-end is audio-only: ASR (transcript + segment timestamps), **no diarization / no enrichment / no vision**. Reuses POC Phase-1 (faster-whisper). C1 + C2 v0 frozen accordingly | 2026-07-09 | [ARCHITECTURE.md](ARCHITECTURE.md) §Contracts (learn-loop block) + [contracts/](contracts/); [handoff/engineering.md](handoff/engineering.md) |
 | D11 | **C1 is two legs + push delivery.** Blob leg: recording `PUT`s raw bytes to storage `/raw` **first**, storage mints an opaque `blob_ref` (idempotent on `chunk_id`); pinned as prose, not a new C-number. Envelope leg: recording **pushes** the C1 envelope to data-processing, **at-least-once, dedup on `chunk_id`**, ordering + gap-detection via dense zero-based `(stream_id, sequence)`, blob-first write invariant. Resolves data-processing OQ1 + recording's ingest OQ | 2026-07-09 | [ARCHITECTURE.md](ARCHITECTURE.md) §Contracts; [contracts/c1_raw_stream_envelope.v0.json](contracts/c1_raw_stream_envelope.v0.json); recording + data-processing charters |
 | D12 | **Branching + beta model.** Service work happens on branches off `main`, merged once coded + tested at a decent revision. A standing **`dev` branch (forked from `main`) is the beta playground** handed to testers — it may carry beta-only conveniences, never contract changes. First beta hand-off: the two proven loops (serve + learn) to Gnandeep, who drives them against his externally-stabilized fine-tunable model; storage's `GET /context/records?user_id=&from=&to=` range read is his training-window feed until C10 lands | 2026-07-18 | this board; [handoff/engineering.md](handoff/engineering.md) worklog; root `README.md` §Branches |
+| D13 | **Consent gate de-prioritized (back-burner).** Ship-fast posture: the capture surfaces + learn loop mature first; the consent/deletion layer (recording M2 + platform's consent store) lands **before any non-team pilot user**, not before beta (beta testers are consenting teammates). The M2 red-team exit bar is unchanged whenever it lands | 2026-07-18 | this board; recording charter §v0 deliverables |
 
 ## Current state (terse)
 
@@ -147,11 +148,13 @@
   (recording's "zero silent loss" is currently emit-side only; detector on DP `/ingest` feeding
   recording's continuity report) and **(b) the fuller ASR pipeline** (VAD → diarize → ASR →
   translate → acoustic-event captioning; real faster-whisper as standing backend). Capture
-  surfaces to build behind the `ChunkSource` seam: **bodycam (device)** + **computer** (mic;
-  screen recording; browser-extension screen capture — screen video and any system/tab audio are
-  *separate C1 streams*; mic is always its own stream). Consent gate (recording M2) remains the
-  hard gate before any real always-on capture. Full 6-item M1 sequencing:
-  [handoff/engineering.md](handoff/engineering.md) §Open agenda item 0.
+  surfaces behind the `ChunkSource` seam, in order: **(1) phone web client** (camera + mic over
+  HTTPS/tunnel — the bodycam stand-in **and** the structured beta handover: a press-record URL);
+  **(2) computer** — screen video via app + browser-extension screen share, **tab audio** via the
+  extension (no system audio for now; mic continues from M0; screen video / tab audio / mic are
+  *separate C1 streams*). Consent gate: **back-burner per D13**. Chunk length (OQ4, pin with DP
+  in-session): lean = **variable-length chunks cut at VAD pauses within ~5–30 s bounds**. Full
+  M1 sequencing: [handoff/engineering.md](handoff/engineering.md) §Open agenda item 0.
 - **Beta hand-off (D12):** standing `dev` branch forked from `main` for Gnandeep — serve loop
   (mock or real backend) + learn loop (mock ASR) both run today; storage's `/context` range read
   is his training-window feed for the black-box fine-tuning tests until C10 lands.

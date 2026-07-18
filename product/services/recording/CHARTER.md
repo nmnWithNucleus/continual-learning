@@ -74,8 +74,12 @@ Ordered; each milestone ships client and/or ingest pieces together with its exit
 | M5 | **Fleet telemetry + pilot hardening**: capture-health dashboard, automatic gap/staleness alerting, crash watchdogs | Handful-of-users pilot fleet streaming for 7 consecutive days with measured per-device uptime; every gap auto-flagged, none discovered manually |
 | M6 | **Metrics + dashboard** (D9, [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability): `/metrics` endpoint + `dashboards/*.json`; Platform owns the shared Prometheus/Grafana backbone | Service `/metrics` scraped by the shared Prometheus; dashboard shows request rate/latency/errors + ingest rate, capture-health, consent-gate rejections |
 
-Consent (M2) intentionally lands **before** the wearable (M3): no always-on camera leaves the
-lab without pause/delete working.
+~~Consent (M2) intentionally lands **before** the wearable (M3)~~ — **re-sequenced 2026-07-18
+(D13, founders):** consent controls move to the back-burner while the capture surfaces + learn
+loop mature; they land **before any non-team pilot user** (beta testers are consenting
+teammates). The M2 red-team exit bar is unchanged whenever it lands. Milestone numbers keep
+their names (M-numbers are identifiers, not a fixed order — sequencing is owned by the
+founders' board + this note).
 
 ---
 
