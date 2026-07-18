@@ -408,6 +408,19 @@ needs a version bump now** (recorded as DP charter OQs; the frozen C2 was NOT to
    only on some platforms (Chrome: tab audio broadly, system audio Windows/ChromeOS; macOS needs
    a native-app loopback), and the mic is always captured as its own stream, never through the
    screen recorder. A recording-lead session (Prompt B + this scope) owns the slice.
+   **Founders' refinement (2026-07-18, second pass):** consent gate → **back-burner (D13** —
+   pre-pilot, not pre-beta). Capture-surface order: **(1) phone web client** (camera + mic via
+   `getUserMedia` over HTTPS/tunnel — the bodycam stand-in AND the structured beta handover:
+   Gnandeep gets a press-record URL; the live_video_chat POC already proved iOS capture +
+   MediaRecorder + tunnel on this exact leg — reference, not lift, D7); **(2) computer** —
+   screen video via app + browser-extension screen share, **tab audio** via the extension
+   (`tabCapture`); system audio out of scope for now; computer mic continues from M0. The
+   recording server demuxes phone A/V into per-modality C1 streams (charter OQ8 pattern).
+   **Chunk-length lean (OQ4, pin in-session with DP): variable-length chunks cut at VAD speech
+   pauses within ~5–30 s bounds** — frozen C1 already supports it (per-chunk `t_start`/`t_end`;
+   `sequence` density is length-independent); semantic cuts avoid mid-sentence splits and may
+   obviate audio overlap (exact `t_end[n] == t_start[n+1]` adjacency becomes a clean second
+   continuity signal); fixed windows remain fine for video/screen streams.
 1. ~~Serve-loop MVP slice~~ **DONE** (see build-result sections above).
 2. Cluster split: which a3mega nodes serve (vLLM) vs train (continuum) vs pipeline work.
    **2026-07-18 interim answer:** Gnandeep runs continuum-side model-stabilization experiments
