@@ -1,0 +1,212 @@
+/*
+ * WS-E — Nucleus Capture popup styles.
+ *
+ * Same dark register + palette as the phone client (clients/web/style.css) so
+ * the two capture surfaces read as one product: verdict badges clean=green /
+ * gaps=red, and — extension-specific — recording=amber. State coloring hangs
+ * off body[data-state] (idle | recording | draining) set by popup.js. No
+ * external fonts/assets.
+ */
+
+:root {
+  --bg: #0b0f14;
+  --card: #131a22;
+  --edge: #24303d;
+  --text: #e7edf3;
+  --dim: #8b98a5;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --red: #ef4444;
+  --red-deep: #b91c1c;
+  --amber: #f59e0b;
+  --blue: #3b82f6;
+  --green: #22c55e;
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; padding: 0; }
+
+body {
+  width: 360px;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 6px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--dim);
+}
+
+main {
+  padding: 0 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* The hidden attribute must beat any display rule below (lesson learned on the
+   phone client: a flex row silently overrode the UA's [hidden] rule). */
+[hidden] { display: none !important; }
+
+/* ---- state pill -------------------------------------------------------- */
+
+#state-pill {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  color: var(--dim);
+  text-transform: lowercase;
+}
+body[data-state="recording"] #state-pill { background: var(--red); border-color: var(--red); color: #fff; }
+body[data-state="draining"]  #state-pill { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+/* ---- error banner ------------------------------------------------------ */
+
+#error-banner {
+  background: rgba(185, 28, 28, 0.18);
+  border: 1px solid var(--red-deep);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.85rem;
+}
+
+/* ---- cards + fields ---------------------------------------------------- */
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  min-width: 0;
+}
+
+.k {
+  color: var(--dim);
+  font-size: 0.75rem;
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  flex: 0 0 58px;
+}
+
+.field input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  padding: 5px 8px;
+}
+.field input:disabled { opacity: 0.5; }
+
+.toggles { gap: 14px; }
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+.toggle input { width: 16px; height: 16px; accent-color: var(--red); }
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 6px;
+}
+
+.note { color: var(--dim); font-size: 0.78rem; overflow-wrap: anywhere; }
+
+/* ---- controls ---------------------------------------------------------- */
+
+#controls { display: flex; justify-content: center; padding: 2px 0; }
+
+#record-btn, #stop-btn, #save-btn {
+  border: 1px solid var(--edge);
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  border-radius: 999px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+#save-btn { padding: 5px 16px; font-size: 0.85rem; }
+
+#record-btn, #stop-btn { padding: 9px 34px; font-size: 0.95rem; }
+#record-btn { border-color: var(--red); color: var(--red); }
+#stop-btn   { background: var(--red); border-color: var(--red); color: #fff; }
+#record-btn:disabled, #stop-btn:disabled, #save-btn:disabled { opacity: 0.55; cursor: default; }
+
+button:focus-visible, input:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* ---- status ------------------------------------------------------------ */
+
+#status { font-size: 0.85rem; }
+
+.row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 3px 0;
+}
+
+.v { min-width: 0; overflow-wrap: anywhere; }
+.v b { font-weight: 600; }
+.v.mono, .mono { font-family: var(--mono); font-size: 0.78rem; }
+.v.err { color: var(--red); }
+
+.source {
+  border-top: 1px solid var(--edge);
+  margin-top: 6px;
+  padding-top: 6px;
+}
+.source-name { font-weight: 600; }
+
+.idle-hint { color: var(--dim); padding: 4px 0 1px; }
+
+/* verdict badge from the report poll: clean green / gaps red / recording
+   amber (extension palette decision; base colors shared with the phone UI) */
+.v.none { color: var(--dim); }
+.v.clean, .v.gaps, .v.recording {
+  font-weight: 700;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+}
+.v.clean     { background: rgba(34, 197, 94, 0.15);  color: var(--green); }
+.v.gaps      { background: rgba(239, 68, 68, 0.15);  color: var(--red); }
+.v.recording { background: rgba(245, 158, 11, 0.15); color: var(--amber); }
+
+.stream-line {
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  padding: 2px 0 2px 68px;
+  overflow-wrap: anywhere;
+}

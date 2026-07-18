@@ -1,4 +1,7 @@
-"""Ingest server behaviour (WS-C): segment upload -> demux -> ledger -> gap report.
+"""Capture-wire server behaviour (WS-C): segment upload -> demux -> ledger -> gap
+report. Canonical prefix /capture/* (renamed from /ingest/* 2026-07-18 so /ingest
+stays uniquely data-processing's C1 receiver); /ingest/* lives on as a hidden
+deprecated alias, covered at the bottom of this module.
 
 Same fake pattern as test_capture.py (httpx MockTransport via the clients.async_client
 seam) plus the DP M1 continuity surface (FakeDataProcessingM1). ffmpeg-dependent tests
@@ -109,17 +112,17 @@ class IngestWiring:
             "sha256": hashlib.sha256(data).hexdigest() if sha256 is None else sha256,
         }
         return self.client.post(
-            "/ingest/segments",
+            "/capture/segments",
             params=params,
             content=data,
             headers={"content-type": "application/octet-stream"},
         )
 
     def end(self, session_id: str, last_seq: int) -> httpx.Response:
-        return self.client.post(f"/ingest/sessions/{session_id}/end", json={"last_seq": last_seq})
+        return self.client.post(f"/capture/sessions/{session_id}/end", json={"last_seq": last_seq})
 
     def report(self, session_id: str) -> dict:
-        resp = self.client.get(f"/ingest/sessions/{session_id}/report")
+        resp = self.client.get(f"/capture/sessions/{session_id}/report")
         assert resp.status_code == 200, resp.text
         return resp.json()
 
@@ -188,9 +191,9 @@ def test_root_redirects_to_client(ingest):
 
 
 def test_report_unknown_session_404(ingest):
-    assert ingest.client.get("/ingest/sessions/nope/report").status_code == 404
-    assert ingest.client.post("/ingest/sessions/nope/retry").status_code == 404
-    assert ingest.client.post("/ingest/sessions/nope/end", json={"last_seq": 0}).status_code == 404
+    assert ingest.client.get("/capture/sessions/nope/report").status_code == 404
+    assert ingest.client.post("/capture/sessions/nope/retry").status_code == 404
+    assert ingest.client.post("/capture/sessions/nope/end", json={"last_seq": 0}).status_code == 404
 
 
 # --------------------------------------------------------- upload validation legs
@@ -332,7 +335,7 @@ def test_end_marker_idempotent_and_sets_expected(ingest):
     assert ingest.end(sid, last_seq=0).status_code == 200
     assert ingest.end(sid, last_seq=0).status_code == 200  # idempotent
 
-    sessions = ingest.client.get("/ingest/sessions").json()["sessions"]
+    sessions = ingest.client.get("/capture/sessions").json()["sessions"]
     entry = next(s for s in sessions if s["session_id"] == sid)
     assert entry["ended"] is True
     assert entry["expected_segments"] == 1
@@ -360,7 +363,7 @@ def test_sessions_list_covers_all_sessions(ingest):
     a, b = new_ulid(), new_ulid()
     ingest.post_segment(a, 0, b"garbage-1")
     ingest.post_segment(b, 0, b"garbage-2", user_id="u-2")
-    ids = {s["session_id"] for s in ingest.client.get("/ingest/sessions").json()["sessions"]}
+    ids = {s["session_id"] for s in ingest.client.get("/capture/sessions").json()["sessions"]}
     assert {a, b} <= ids
 
 
@@ -396,7 +399,7 @@ def test_failed_emit_marked_and_retry_reuses_chunk_id(ingest, av_segment_bytes, 
     assert audio_leg["failed"] == 1 and audio_leg["chunks_emitted"] == 0
 
     # DP recovers; /retry re-enqueues the failure and re-emits with the SAME identity.
-    resp = ingest.client.post(f"/ingest/sessions/{sid}/retry")
+    resp = ingest.client.post(f"/capture/sessions/{sid}/retry")
     assert resp.json() == {"ok": True, "session_id": sid, "retried": 1}
 
     report = ingest.report(sid)
@@ -415,7 +418,7 @@ def test_failed_emit_marked_and_retry_reuses_chunk_id(ingest, av_segment_bytes, 
     assert {e["sequence"] for e in audio_deliveries} == {0}
     assert len(ingest.dp.records[chunk_id_before]) == 1
 
-    resp = ingest.client.post(f"/ingest/sessions/{sid}/retry")   # nothing left to retry
+    resp = ingest.client.post(f"/capture/sessions/{sid}/retry")   # nothing left to retry
     assert resp.json()["retried"] == 0
 
 
@@ -620,7 +623,7 @@ def test_partial_emit_failure_keeps_sequence_order(ingest, av_segment_bytes):
     ingest.end(sid, last_seq=2)
     assert ingest.report(sid)["verdict"] == "gaps"  # the failure is visible
 
-    resp = ingest.client.post(f"/ingest/sessions/{sid}/retry")
+    resp = ingest.client.post(f"/capture/sessions/{sid}/retry")
     assert resp.json()["retried"] == 1
     report = ingest.report(sid)
     assert report["verdict"] == "clean"
@@ -633,3 +636,39 @@ def test_partial_emit_failure_keeps_sequence_order(ingest, av_segment_bytes):
             ).fetchall()
             assert [r["sequence"] for r in rows] == sorted(r["sequence"] for r in rows)
             assert [r["seq"] for r in rows] == [0, 1, 2]
+
+
+# ------------------------------------------------- /ingest deprecated alias
+
+def test_deprecated_ingest_alias_serves_the_same_wire(ingest, av_segment_bytes):
+    """A phone page loaded before the /capture rename keeps uploading through
+    /ingest/* until its next refresh — same handlers, same ledger."""
+    sid = new_ulid()
+    t_start, t_end = span(0)
+    resp = ingest.client.post(
+        "/ingest/segments",
+        params={
+            "session_id": sid, "seq": 0, "user_id": "beta-user",
+            "device_id": "phone-web-prerename", "t_start": t_start,
+            "t_end": t_end, "mime": "video/mp4",
+            "sha256": hashlib.sha256(av_segment_bytes).hexdigest(),
+        },
+        content=av_segment_bytes,
+        headers={"content-type": "application/octet-stream"},
+    )
+    assert resp.status_code == 200 and resp.json()["status"] == "received"
+    assert ingest.client.post(
+        f"/ingest/sessions/{sid}/end", json={"last_seq": 0}
+    ).status_code == 200
+    # Old and new prefixes read the SAME session state.
+    old = ingest.client.get(f"/ingest/sessions/{sid}/report").json()
+    new = ingest.client.get(f"/capture/sessions/{sid}/report").json()
+    assert old["verdict"] == new["verdict"] == "clean"
+    assert old["received_segments"] == new["received_segments"] == 1
+
+
+def test_openapi_shows_capture_and_hides_the_ingest_alias(ingest):
+    paths = ingest.client.get("/openapi.json").json()["paths"]
+    assert "/capture/segments" in paths
+    assert "/capture/sessions/{session_id}/report" in paths
+    assert not any(p.startswith("/ingest/") for p in paths)

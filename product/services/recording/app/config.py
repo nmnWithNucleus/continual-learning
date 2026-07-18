@@ -63,9 +63,9 @@ class Settings:
     var_dir: str             # ledger.db + spool/ + chunks/ scratch live here
     ffmpeg_bin: str
     ffprobe_bin: str
-    ingest_sync: bool        # 1 => /ingest/segments awaits demux+emit before acking
+    ingest_sync: bool        # 1 => /capture/segments awaits demux+emit before acking
     keep_spool: bool         # 1 => keep spooled segments after emit (consent-gate seam)
-    max_segment_bytes: int   # /ingest/segments body cap (413 past it)
+    max_segment_bytes: int   # /capture/segments body cap (413 past it)
 
 
 def get_settings() -> Settings:

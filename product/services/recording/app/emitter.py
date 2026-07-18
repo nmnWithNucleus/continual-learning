@@ -11,7 +11,7 @@ future consent-gate holdback point, D13).
 Ordering: one asyncio worker task per session drains a per-session FIFO queue, so a
 session's segments are processed strictly in received order while sessions proceed
 concurrently. A terminal per-segment failure marks it ``failed`` (visible in the gap
-report; re-enqueued only by /ingest/sessions/{id}/retry) and does NOT stall the
+report; re-enqueued only by /capture/sessions/{id}/retry) and does NOT stall the
 session's later segments. Chunks allocated before the failure keep their sequence, so
 a retry slots back into the stream exactly where it was minted.
 
@@ -115,7 +115,7 @@ def reenqueue_pending(app: FastAPI) -> int:
     """Re-enqueue every acked-but-unemitted segment (startup, via main.lifespan).
 
     Only state='received' comes back — an ack-then-crash must not silently lose
-    segments. 'failed' stays failed until an explicit /ingest/sessions/{id}/retry.
+    segments. 'failed' stays failed until an explicit /capture/sessions/{id}/retry.
     """
     led = ledger.for_settings(get_settings())
     emitter = get_emitter(app)

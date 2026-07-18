@@ -50,26 +50,29 @@ same-origin fetch, no dependencies, phone-first layout (large record button).
   `crypto.subtle.digest` (secure context; if unavailable send `sha256=`, server computes).
   Queue is in-memory: a page reload loses queued segments — the ledger flags exactly which
   (unterminated session / missing tail). IndexedDB persistence is a later hardening.
-- **End marker:** on Stop (after drain) `POST /ingest/sessions/{id}/end {last_seq}`. On
+- **End marker:** on Stop (after drain) `POST /capture/sessions/{id}/end {last_seq}`. On
   `pagehide`/`visibilitychange`-hidden, `navigator.sendBeacon` the end marker with the last
   *enqueued* seq so a killed page still terminates the ledger session.
 - **Keep-alive:** `navigator.wakeLock.request('screen')` while recording (iOS 16.4+/Chrome),
   re-acquired on visibilitychange; best-effort try/catch.
 - **Status UI (minimal, honest):** recording timer, current session_id (short form), segments
   captured / uploaded / queued, last upload error, and a 5 s poll of
-  `GET /ingest/sessions/{id}/report` rendering the verdict (`clean` / `gaps` / `recording`)
+  `GET /capture/sessions/{id}/report` rendering the verdict (`clean` / `gaps` / `recording`)
   plus per-stream chunks-emitted counts. That poll is the tester's "it landed" signal.
 
 ## Wire (client ⇄ recording server) — internal to recording, NOT a C-contract
 
-Pinned jointly with WS-C; WS-C owns the server side.
+Pinned jointly with WS-C; WS-C owns the server side. **Renamed `/ingest/*` →
+`/capture/*` 2026-07-18 (founders + recording lead) so `/ingest` stays uniquely
+data-processing's C1 receiver; `/ingest/*` remains mounted as a hidden deprecated
+alias (same handlers) until already-loaded phone pages refresh.**
 
-- `POST /ingest/segments?session_id=&seq=&user_id=&device_id=&t_start=&t_end=&mime=&sha256=`
+- `POST /capture/segments?session_id=&seq=&user_id=&device_id=&t_start=&t_end=&mime=&sha256=`
   — body = raw segment bytes (`application/octet-stream`). `t_*` RFC3339 UTC (ms precision),
   `mime` URL-encoded. → `{ok, session_id, seq, status:"received"|"duplicate"}`; idempotent on
   `(session_id, seq)`.
-- `POST /ingest/sessions/{session_id}/end` — JSON `{last_seq}` → `{ok}`; idempotent.
-- `GET /ingest/sessions/{session_id}/report` — the continuity/gap report (shape in WS-C).
+- `POST /capture/sessions/{session_id}/end` — JSON `{last_seq}` → `{ok}`; idempotent.
+- `GET /capture/sessions/{session_id}/report` — the continuity/gap report (shape in WS-C).
 
 ## Worklog
 - 2026-07-18 — spec written (decisions above); handed to the build fan-out.
@@ -100,3 +103,6 @@ Pinned jointly with WS-C; WS-C owns the server side.
   surfaced by the real data: Whisper AUTO language detection hallucinated
   Hindi/Korean-script text on faint room audio → DP gained `ASR_LANGUAGE` (beta fleet
   pins `en`; see DP ws file).
+- 2026-07-18 (computer-capture lead) — **wire rename adopted** (founders): `app.js` now
+  calls `/capture/*`; a page loaded before the rename keeps working through the hidden
+  `/ingest/*` alias until refresh (alias covered by tests + drilled live on the fleet).

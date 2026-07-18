@@ -1,6 +1,12 @@
-"""Ingest router — the server half of the phone web client wire (WS-B <-> WS-C).
+"""Capture-wire router — the server half of the client segment-upload wire
+(WS-B <-> WS-C; also spoken by the extension WS-E and the mac CLI WS-F).
 
-POST /ingest/segments                  — one self-contained A/V segment (raw bytes body).
+Renamed /ingest/* -> /capture/* (founders + recording M1 lead, 2026-07-18) so
+/ingest remains uniquely data-processing's C1 receiver. Routes are defined
+relative here; app/main.py mounts them at /capture (canonical) AND at /ingest
+(hidden deprecated alias, kept until already-loaded phone pages refresh).
+
+POST /capture/segments                 — one self-contained A/V segment (raw bytes body).
                                          Idempotent on (session_id, seq): same sha again
                                          -> {status:"duplicate"} (counted, not re-emitted);
                                          different sha -> 409. sha256 param verified when
@@ -8,12 +14,12 @@ POST /ingest/segments                  — one self-contained A/V segment (raw b
                                          Ack = spool + ledger row are durable. Async mode
                                          acks immediately; RECORDING_INGEST_SYNC=1 awaits
                                          this segment's demux+emit first (tests/small ops).
-POST /ingest/sessions/{id}/end         — client end marker {last_seq}; fixes
+POST /capture/sessions/{id}/end        — client end marker {last_seq}; fixes
                                          expected_segments so the report can name a lost tail.
-GET  /ingest/sessions                  — per-session summaries.
-GET  /ingest/sessions/{id}/report      — the continuity/gap report joining both legs
+GET  /capture/sessions                 — per-session summaries.
+GET  /capture/sessions/{id}/report     — the continuity/gap report joining both legs
                                          (client->server seq, server->DP C1 sequence).
-POST /ingest/sessions/{id}/retry       — re-enqueue this session's failed segments.
+POST /capture/sessions/{id}/retry      — re-enqueue this session's failed segments.
 
 The report's DP side is checked LIVE against data-processing GET /continuity/{stream_id}
 (short timeout; unreachable/unknown -> checked:false, never a fabricated verdict).
@@ -36,7 +42,9 @@ from .config import Settings, get_settings
 
 logger = logging.getLogger("recording.ingest")
 
-router = APIRouter(prefix="/ingest")
+# No prefix here: main.py mounts this router at /capture (canonical) and at
+# /ingest (hidden deprecated alias) — one code path, two mounts.
+router = APIRouter()
 
 # DP /continuity probe: short and best-effort — the report must not hang on DP.
 _CONTINUITY_TIMEOUT = 2.0

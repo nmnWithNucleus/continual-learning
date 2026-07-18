@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<!--
+  WS-E — offscreen capture engine host (D-E5). No UI: this document exists only
+  because MV3 service workers have no DOM/getUserMedia; all behaviour lives in
+  offscreen.js (module — it imports uploader.js/segmenter.js). It stays alive
+  while capture is active and is closed by background.js after the drain.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Nucleus Capture — offscreen engine</title>
+</head>
+<body>
+  <script type="module" src="offscreen.js"></script>
+</body>
+</html>
