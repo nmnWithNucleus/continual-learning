@@ -88,6 +88,9 @@ python3 nucleus_capture.py list-devices
 python3 nucleus_capture.py record --server $TUNNEL --user nmn \
   --screen-index 1 --audio-index 0
 #    if ffmpeg refuses the framerate: add --framerate 30
+#    "Configuration of video device failed, falling back to default" + pixel-format
+#    override lines are warnings, not failures. The real liveness signal is a
+#    "seg 0 ..." line within ~15 s; if none appears, Ctrl-C and report it.
 ```
 
 | Step | Expect |

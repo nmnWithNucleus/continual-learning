@@ -163,7 +163,12 @@ def test_ffmpeg_argv_avfoundation_x264():
     assert argv[argv.index("-capture_cursor") + 1] == "1"
     assert argv[argv.index("-framerate") + 1] == "30"
     assert argv[argv.index("-i") + 1] == "3:1"
-    assert "min(1728,iw)" in argv[argv.index("-vf") + 1]  # retina downscale
+    vf = argv[argv.index("-vf") + 1]
+    assert "min(1728,iw)" in vf  # retina downscale
+    # Output rate PINNED: a device that refuses the input -framerate must not
+    # leave the encoder on a timebase-derived garbage rate (endless frame
+    # duplication -> no segment ever finalizes; found in the first real mac run).
+    assert vf.endswith(",fps=30")
     assert argv[argv.index("-c:v") + 1] == "libx264"
     assert argv[argv.index("-preset") + 1] == "veryfast"
     assert argv[argv.index("-crf") + 1] == "28"
