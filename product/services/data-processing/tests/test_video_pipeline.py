@@ -308,3 +308,66 @@ def test_vlm_backend_sends_images_and_weaves_ocr(client, monkeypatch):
         assert c2["pipeline_version"] == "vidproc-vlm-v0"
         assert "A colored screen showing an application" in c2["content"]["text"]
         assert "On-screen text: 'DESK laptop and coffee'" in c2["content"]["text"]
+
+
+# ---- Independent-verification fixes (2026-07-19 round) ------------------------
+
+def test_vlm_backend_refuses_placeholder_emission(monkeypatch):
+    """Zero decodable keyframes under the REAL dialect must raise (-> 5xx -> the
+    chunk is redelivered), never persist '[no decodable frame]' placeholders as
+    processed truth under vidproc-vlm-v0. Mock (dev) keeps the synthetic fallback."""
+    monkeypatch.setenv("VIDEO_BACKEND", "vlm")
+    proc = video_proc.VideoProcessor()
+    c1 = json.loads((_FX / "video_scenes.c1.json").read_text())
+    with pytest.raises(RuntimeError, match="no decodable keyframes"):
+        proc.process(c1, b"not-a-video", None, 8.0)
+
+
+def test_head_drop_pins_first_record_to_chunk_start(monkeypatch):
+    """A failed t=0 extraction must not orphan the chunk's head slice: the first
+    emitted record is pinned to the C1 t_start (partition invariant)."""
+    c1 = json.loads((_FX / "video_scenes.c1.json").read_text())
+    span = 8.0
+
+    def fake_extract(blob, codec, span_seconds, vs):
+        # First keyframe (t=0) dropped; survivors start at 3.0.
+        return [
+            Keyframe(index=1, t_offset_s=3.0, t_end_offset_s=6.0, image_jpeg=b"j1"),
+            Keyframe(index=2, t_offset_s=6.0, t_end_offset_s=8.0, image_jpeg=b"j2"),
+        ]
+
+    monkeypatch.setattr(video_proc, "extract_keyframes", fake_extract)
+    units = video_proc.VideoProcessor().process(c1, b"x", None, span)
+    assert units[0].t_start == c1["t_start"]          # head pinned, no gap
+    assert units[-1].t_end == c1["t_end"]             # tail pinned (verbatim C1)
+
+
+def test_short_media_pins_last_record_to_chunk_end(monkeypatch):
+    """Decoded media shorter than the declared C1 span (encoder tail loss) must not
+    leave a tail gap: the last record stretches to the C1 t_end verbatim."""
+    c1 = json.loads((_FX / "video_scenes.c1.json").read_text())
+    span = 8.0
+
+    def fake_extract(blob, codec, span_seconds, vs):
+        # Media decoded only 6.0s of the declared 8.0s span.
+        return [
+            Keyframe(index=0, t_offset_s=0.0, t_end_offset_s=3.0, image_jpeg=b"j0"),
+            Keyframe(index=1, t_offset_s=3.0, t_end_offset_s=6.0, image_jpeg=b"j1"),
+        ]
+
+    monkeypatch.setattr(video_proc, "extract_keyframes", fake_extract)
+    units = video_proc.VideoProcessor().process(c1, b"x", None, span)
+    assert units[0].t_start == c1["t_start"]
+    assert units[-1].t_end == c1["t_end"]             # 6.0s media, 8.0s span: no gap
+    # Interior boundary is still the real keyframe time, not stretched.
+    assert units[0].t_end == units[1].t_start
+
+
+def test_vision_config_lenient_on_malformed_numerics(monkeypatch, caplog):
+    """A numeric typo in the fleet env (e.g. locale comma) must degrade to the
+    default with a warning — not 500 every video ingest until an operator notices."""
+    monkeypatch.setenv("VIDEO_SCENE_THRESHOLD", "0,30")
+    monkeypatch.setenv("VIDEO_MAX_KEYFRAMES", "8k")
+    vs = get_vision_settings()
+    assert vs.scene_threshold == 0.30
+    assert vs.max_keyframes == 8

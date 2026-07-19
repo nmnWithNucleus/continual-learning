@@ -83,6 +83,20 @@ class VideoProcessor(Processor):
         #    when the blob doesn't decode (keeps the loop headless + seam-green).
         keyframes = extract_keyframes(blob, c1["codec"], span_seconds, vs)
         if not keyframes:
+            # The REAL dialect must never persist placeholder captions as processed
+            # truth: zero decodable keyframes under vlm (ffmpeg missing/timed out, or
+            # genuinely undecodable bytes) raises instead of emitting — DP returns
+            # 5xx, at-least-once redelivery retries (environmental trouble heals;
+            # truly corrupt bytes surface as a visible failed segment upstream in
+            # recording's gap report). Only the mock dev backend keeps the synthetic
+            # fallback: its captions are placeholders by definition.
+            if vs.backend == "vlm":
+                raise RuntimeError(
+                    f"video chunk {c1['chunk_id']}: no decodable keyframes "
+                    "(ffmpeg absent/timed out or undecodable bytes) — refusing to "
+                    "emit placeholder captions under the vlm dialect; the chunk "
+                    "will be redelivered"
+                )
             keyframes = [
                 Keyframe(index=i, t_offset_s=None, t_end_offset_s=None, image_jpeg=None)
                 for i in range(SYNTHETIC_KEYFRAMES)
@@ -95,11 +109,14 @@ class VideoProcessor(Processor):
         # 3) Assemble one (or two, with OCR records) ProcessedUnit per keyframe.
         base = parse_rfc3339(c1["t_start"])
         units: list[ProcessedUnit] = []
-        for kf in keyframes:
+        for pos, kf in enumerate(keyframes):
             cap: KeyframeCaption = by_index.get(
                 kf.index, KeyframeCaption(index=kf.index, caption="", ocr_text=None)
             )
-            t_start, t_end = self._sub_span(kf, base, span_seconds, c1)
+            t_start, t_end = self._sub_span(
+                kf, base, span_seconds, c1,
+                is_first=(pos == 0), is_last=(pos == len(keyframes) - 1),
+            )
 
             units.append(
                 ProcessedUnit(
@@ -130,21 +147,34 @@ class VideoProcessor(Processor):
 
     @staticmethod
     def _sub_span(
-        kf: Keyframe, base, span_seconds: float, c1: dict[str, Any]
+        kf: Keyframe,
+        base,
+        span_seconds: float,
+        c1: dict[str, Any],
+        *,
+        is_first: bool = False,
+        is_last: bool = False,
     ) -> tuple[Optional[str], Optional[str]]:
         """Map a keyframe's chunk-relative offsets to an absolute RFC3339 sub-span,
         clamped into the chunk span. Returns (None, None) for a synthetic keyframe
         -> the record carries the chunk's C1 span verbatim (byte-identical).
 
-        The outer boundaries reuse the C1 span strings verbatim (opening keyframe
-        starts at the chunk start; a keyframe running to the chunk end ends at the
-        chunk end), so the union of keyframe sub-spans exactly equals the declared
-        chunk span with no timezone-format or float drift at the edges."""
+        PARTITION INVARIANT (the time-spine guarantee): the union of a chunk's
+        keyframe sub-spans equals the declared C1 span exactly. The FIRST keyframe's
+        record is pinned to the chunk start (covers a dropped/undecodable opening
+        frame — the head slice must not vanish from the time spine) and the LAST is
+        pinned to the chunk end (covers media whose decoded duration runs short of
+        the declared span — the final frame persists through the tail). The outer
+        boundaries reuse the C1 span strings verbatim, so there is no
+        timezone-format or float drift at the edges."""
         if kf.t_offset_s is None:
             return None, None
-        start = min(max(kf.t_offset_s, 0.0), span_seconds)
-        end = kf.t_end_offset_s if kf.t_end_offset_s is not None else span_seconds
-        end = min(max(end, start), span_seconds)
+        start = 0.0 if is_first else min(max(kf.t_offset_s, 0.0), span_seconds)
+        if is_last:
+            end = span_seconds
+        else:
+            end = kf.t_end_offset_s if kf.t_end_offset_s is not None else span_seconds
+            end = min(max(end, start), span_seconds)
         t_start = c1["t_start"] if start <= 1e-9 else abs_time(base, start)
         t_end = c1["t_end"] if end >= span_seconds - 1e-9 else abs_time(base, end)
         return t_start, t_end

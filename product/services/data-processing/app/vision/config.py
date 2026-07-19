@@ -12,12 +12,37 @@ but no extra ``ocr`` records unless explicitly asked for.
 """
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
+
+logger = logging.getLogger("data-processing.vision.config")
 
 
 def _as_bool(value: str) -> bool:
     return value.strip().lower() not in ("0", "false", "no", "off", "")
+
+
+def _float(name: str, default: str) -> float:
+    """Env float with a lenient-misconfig posture (matches ``app/audio/config``):
+    a malformed value logs a warning and falls back to the default, instead of a
+    bare ValueError 500-ing EVERY video ingest until the operator notices (config
+    is read per request — a typo would otherwise be a permanent outage)."""
+    raw = os.getenv(name, default)
+    try:
+        return float(raw)
+    except ValueError:
+        logger.warning("%s=%r is not a number — using default %s", name, raw, default)
+        return float(default)
+
+
+def _int(name: str, default: str) -> int:
+    raw = os.getenv(name, default)
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning("%s=%r is not an integer — using default %s", name, raw, default)
+        return int(default)
 
 
 @dataclass(frozen=True)
@@ -55,16 +80,16 @@ def _backend() -> str:
 def get_vision_settings() -> VisionSettings:
     return VisionSettings(
         backend=_backend(),
-        scene_threshold=float(os.getenv("VIDEO_SCENE_THRESHOLD", "0.30")),
-        keyframe_interval_s=float(os.getenv("VIDEO_KEYFRAME_INTERVAL_S", "3.0")),
-        max_keyframes=int(os.getenv("VIDEO_MAX_KEYFRAMES", "8")),
-        min_keyframes=int(os.getenv("VIDEO_MIN_KEYFRAMES", "1")),
-        sample_fps=float(os.getenv("VIDEO_SAMPLE_FPS", "2.0")),
-        frame_max_width=int(os.getenv("VIDEO_FRAME_MAX_WIDTH", "768")),
+        scene_threshold=_float("VIDEO_SCENE_THRESHOLD", "0.30"),
+        keyframe_interval_s=_float("VIDEO_KEYFRAME_INTERVAL_S", "3.0"),
+        max_keyframes=_int("VIDEO_MAX_KEYFRAMES", "8"),
+        min_keyframes=_int("VIDEO_MIN_KEYFRAMES", "1"),
+        sample_fps=_float("VIDEO_SAMPLE_FPS", "2.0"),
+        frame_max_width=_int("VIDEO_FRAME_MAX_WIDTH", "768"),
         vlm_url=os.getenv("VIDEO_VLM_URL", "http://127.0.0.1:8000").rstrip("/"),
         vlm_model=os.getenv("VIDEO_VLM_MODEL", "Qwen/Qwen3-VL-32B-Instruct"),
         vlm_api_key=os.getenv("VIDEO_VLM_API_KEY", ""),
-        vlm_timeout=float(os.getenv("VIDEO_VLM_TIMEOUT", "120")),
-        vlm_max_tokens=int(os.getenv("VIDEO_VLM_MAX_TOKENS", "256")),
+        vlm_timeout=_float("VIDEO_VLM_TIMEOUT", "120"),
+        vlm_max_tokens=_int("VIDEO_VLM_MAX_TOKENS", "256"),
         ocr_records=_as_bool(os.getenv("VIDEO_OCR_RECORDS", "0")),
     )
