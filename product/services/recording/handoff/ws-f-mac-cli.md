@@ -138,6 +138,11 @@ Wire conformance against the real ingest app lives in `tests/test_wire_conforman
   later, so segment 0 holds more audio than video and its A/V alignment is fuzzy by the
   warm-up delay. First-segment-only; the time axis stays continuous. Possible later
   refinement: anchor the timeline at first-video-frame instead of file birthtime.
+- 2026-07-19 — **CLI ALPHA PASSED** (runbook worklog has the full record): pixels
+  verified real in VLC; spoken-run transcripts landed in `/context`. Quality datapoint
+  for charter OQ3 (codec/bitrate ladder, joint with DP): screen video at the default
+  `--max-width 1728` / CRF 28 is readable but soft — `--max-width 2560+` is the current
+  user lever; per-modality fidelity targets stay an OQ3 decision, not a CLI flag.
 
 - 2026-07-18 — spec written (decisions D-F1…D-F4); handed to the build fan-out.
 - 2026-07-18 — built as specced: single-file `nucleus_capture.py` (~660 lines, stdlib only,
