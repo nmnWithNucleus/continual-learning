@@ -15,7 +15,7 @@
 | Service | Status | Lead session | Canvas |
 |---|---|---|---|
 | Recording | **capture M1 + computer surfaces — ALPHA COMPLETE** (checked gap-detection + VAD-cut chunking + 3 capture clients: phone web / Chrome-MV3 extension / mac CLI, all verified `clean` on real hardware — 2026-07-19; 110 tests) | recording M1 → computer-capture | [canvas](services/recording/HANDOFF.md) |
-| Data Processing | **capture M1 pair landed** (continuity detector on `/ingest` + `/continuity`; **faster-whisper standing** w/ VAD gate; audio-pipeline stubs; real transcripts through the alpha — 2026-07-19; 38 tests) | recording M1 | [canvas](services/data-processing/HANDOFF.md) |
+| Data Processing | **real audio + video pipelines landed** (parallel modality fan-out 2026-07-19: diarize/translate/acoustic stages behind off-by-default switches; real ffmpeg keyframes + per-keyframe timing + OCR weave behind `VIDEO_BACKEND`, genuine Qwen3-VL-8B run; independently verified + 4 fixes; **72 tests**) | audio + video leads → integrator | [canvas](services/data-processing/HANDOFF.md) |
 | Storage | **v0.0 + capture M0 built + integrated E2E** (serve loop + `/raw`/`/context` mock capture loop 2026-07-09) | serve + learn | [canvas](services/storage/HANDOFF.md) |
 | Input | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-A | [canvas](services/input/HANDOFF.md) |
 | Inference | **v0.0 live on real Qwen3-VL-32B** (vLLM TP=8 on node-7, verified E2E 2026-07-09) | serve-loop WS-B | [canvas](services/inference/HANDOFF.md) |

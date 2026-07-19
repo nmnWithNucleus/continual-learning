@@ -143,3 +143,15 @@ are unrun by design (documented seams).
   fix came from that review. 57 tests green; default path proven byte-identical + heavy-dep-free
   on import; a headless all-stages-on E2E through `create_app()`/`/ingest` emitted 3 schema-valid
   C2s (diarized primary + translation + acoustic).
+- 2026-07-19 — **independent verification round** (recording/DP integrator session): the
+  headline claims HELD under adversarial checking — default-off path proven byte-identical
+  by sha256 against a 0bb66e6 worktree; single-resolver invariant confirmed (no second
+  decision site; unknown backend → off in both tag and stage); assign_speakers boundary
+  probes clean; real-backend API shapes check out by inspection (pyannote 3.1.1 pin,
+  faster-whisper kwargs, AST ffmpeg decode path — real runs remain the node-7 smoke test,
+  as this file already states). Two documented caveats, accepted not fixed: sidecar
+  (translation/acoustic) record_ids do not encode backend/target config — reprocessing
+  under a CHANGED config upserts over the prior sidecar (same posture as ASR_LANGUAGE:
+  config knobs are fleet-stable, not per-record dialects); and with the beta
+  `ASR_LANGUAGE=en` pin, whisper translation's detected==target skip makes it a no-op on
+  English-pinned fleets (translation presumes language auto-detect — enable them together).

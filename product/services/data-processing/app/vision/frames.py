@@ -88,7 +88,12 @@ def _scene_change_times(path: str, vs: VisionSettings) -> list[float]:
             [ffmpeg, "-v", "error", "-i", path, "-vf", vf, "-an", "-f", "null", "-"],
             capture_output=True, text=True, timeout=_FFMPEG_TIMEOUT_S,
         )
-    except (subprocess.SubprocessError, OSError):
+    except (subprocess.SubprocessError, OSError) as exc:
+        # Transient/environmental (timeout, spawn failure) — not undecodable bytes.
+        # Logged loudly so a degraded box is diagnosable; the vlm path refuses to
+        # emit under this condition (processor-level), mock proceeds synthetic.
+        logger.warning("scene detection failed (%s: %s) — treating as no cuts",
+                       type(exc).__name__, exc)
         return []
     times: list[float] = []
     for m in _PTS_RE.finditer(out.stdout):
@@ -146,7 +151,9 @@ def _extract_jpeg(path: str, t: float, vs: VisionSettings) -> bytes | None:
              "-vcodec", "mjpeg", "pipe:1"],
             capture_output=True, timeout=_FFMPEG_TIMEOUT_S,
         )
-    except (subprocess.SubprocessError, OSError):
+    except (subprocess.SubprocessError, OSError) as exc:
+        logger.warning("keyframe extraction at t=%.3fs failed (%s: %s)",
+                       t, type(exc).__name__, exc)
         return None
     data = out.stdout
     return data if data else None
@@ -167,8 +174,11 @@ def _keyframes_from_times(times: list[float], duration: float, extract) -> list[
     returns the JPEG bytes for time ``t`` (or None to drop it).
 
     Each kept keyframe's sub-span runs to the NEXT KEPT keyframe's start (the last
-    to ``duration``), so a dropped extraction just folds its slice into the previous
-    keyframe — the kept keyframes always partition [0, duration) with no gap.
+    to ``duration``), so an interior dropped extraction folds its slice into the
+    previous keyframe. A dropped HEAD frame leaves the first kept keyframe starting
+    past 0 at THIS level — the processor's span mapping pins the first record to the
+    chunk start (and the last to the chunk end), so the emitted records always
+    partition the declared C1 span with no gap.
 
     ``Keyframe.index`` is the keyframe's position in the DETERMINISTIC ``times``
     list (its stable identity), NOT the post-drop survivor position. The
@@ -199,9 +209,12 @@ def extract_keyframes(
 ) -> list[Keyframe]:
     """Select + extract timestamped keyframes from a raw video blob via ffmpeg.
 
-    Returns ``[]`` (Processor falls back to synthetic keyframes) if ffmpeg is not on
-    PATH, the bytes don't decode, or nothing came out — the SAME consistent result on
-    every worker (one canonical decoder, no diverging in-process fallback). Each
+    Returns ``[]`` if ffmpeg is not on PATH, the bytes don't decode, or nothing came
+    out — the SAME consistent result on every worker (one canonical decoder, no
+    diverging in-process fallback). What ``[]`` MEANS is the caller's call: the mock
+    backend falls back to synthetic keyframes (dev/headless), the vlm backend
+    REFUSES to emit placeholders under its real dialect and lets at-least-once
+    redelivery retry the chunk. Each
     returned keyframe's ``[t_offset_s, t_end_offset_s)`` sub-span is clamped into
     ``[0, span_seconds]`` (the chunk's declared C1 wall-clock window, the axis
     storage indexes on).

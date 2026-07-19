@@ -149,3 +149,19 @@ adversarial review surfaced 3 real idempotency/robustness issues, all fixed + re
   single canonical decoder, no-ffmpeg → synthetic (same everywhere). (3) **[low]** a 200 VLM
   response lacking `choices` raised an opaque KeyError; fixed to a clear `ValueError` (chunk
   retried, no degraded caption persisted). Suite → **49 passed**.
+- 2026-07-19 — **independent verification round** (recording/DP integrator session: 3-lens
+  claims audit + 2-skeptic confirmation, 27 agents). Claims that HELD empirically:
+  record_id stability under frame drops, sub-span contiguity/clamping, webm(vp8)+mp4+
+  pipe-written-webm all decode to identical grids, additive hook byte-identity. 4 confirmed
+  defects, all fixed + regression-tested (+4 tests → DP 72): (1) zero-decodable-keyframes
+  under `vlm` emitted '[no decodable frame]' placeholders as processed truth under the real
+  dialect (transient ffmpeg timeouts conflated with corrupt bytes, never retried) — the vlm
+  path now RAISES so at-least-once redelivery retries, mock keeps the synthetic dev
+  fallback; (2)+(3) partition-invariant holes — decoded-media-shorter-than-span left a tail
+  gap and a dropped head frame orphaned the chunk's opening slice — first/last records are
+  now pinned to the C1 span edges verbatim; (4) vision config numerics parsed strictly (a
+  locale-comma typo = permanent 500 on every video ingest) — now lenient-with-warning,
+  matching the audio config posture. Also: transient subprocess failures now log loudly.
+  Known deferred (finding, not fixed here): inline processing under a fully-loaded config
+  can exceed recording's client timeout — fleet mitigated (`RECORDING_HTTP_TIMEOUT=120` in
+  learn.env); the real fix is DP's async /ingest slice (canvas §Next).

@@ -9,7 +9,7 @@
 mock headless + real pyannote/whisper/AST seams) + **real VIDEO pipeline landed (M3, WS-V):
 keyframe extraction + captioning behind `VIDEO_BACKEND=mock|vlm` + per-keyframe timing hook + OCR
 weave, verified with a genuine Qwen3-VL-8B run** — capture alpha still green (3 real clients) —
-**68 tests** (38 + 19 audio + 11 video) · **Last updated:** 2026-07-19 (video-pipeline lead)
+**72 tests** (38 + 19 audio + 11 video + 4 verification regressions) · **Last updated:** 2026-07-19 (integrator: independent verification round)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
@@ -91,6 +91,13 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
     which demuxes to the same C1 the phone already used). Suite unregressed at 38.
 
 ## Next
+- **Async `/ingest` (ACK 202 + worker queue) — now the top architectural item.** DP processes
+  chunks INLINE today; the 2026-07-19 verification round confirmed a fully-loaded chunk
+  (real ASR + diarization + VLM captions) can lawfully exceed the producer's delivery
+  timeout, making recording retry into DP's in-flight lock. Fleet-mitigated for now
+  (`RECORDING_HTTP_TIMEOUT=120` in deploy/learn.env); the real fix — ack fast, process on a
+  worker, rely on `chunk_id` dedup + `record_id` determinism for retry safety — was already
+  sketched in the founders' M1 agenda and is ready to be its own slice.
 - **Real audio pipeline stages — BUILT** (WS A, [handoff/ws-audio-pipeline.md](handoff/ws-audio-pipeline.md)):
   diarization / translation / acoustic-event captioning now fill their stubs behind
   off-by-default `DIARIZE_BACKEND` / `TRANSLATE_BACKEND`+`TRANSLATE_TARGET` / `ACOUSTIC_BACKEND`
@@ -109,6 +116,13 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
   honored in `build_c2`, no C2 schema change); OCR woven into the caption (D8). Mock stays the
   headless default; the `vlm` backend (httpx → OpenAI-compatible VL endpoint) was exercised
   genuinely against a locally-served Qwen3-VL-8B. See [handoff/ws-video-pipeline.md](handoff/ws-video-pipeline.md).
+  **Independent verification round (2026-07-19, integrator session):** the headline claims of
+  BOTH slices held under adversarial checking (audio default proven byte-identical by hash vs
+  the pre-slice tree; video record_id stability, sub-span math, webm/mp4 decode all confirmed
+  empirically); 4 confirmed video-side defects fixed + regression-tested (**DP suite 72**):
+  vlm placeholder-emission on undecodable chunks now raises for redelivery, partition-invariant
+  head/tail pinning, lenient vision-config numerics. Detail + accepted caveats in both ws
+  worklogs; live E2E re-verified on the restarted fleet.
 - Real **image** processor is still a mock stub (image build owns it, incl. the OQ14b bbox
   `content.regions[]` C2-additive field the video OCR pass will also want).
 - text/image real pipelines per CHARTER M-order (video landed).
