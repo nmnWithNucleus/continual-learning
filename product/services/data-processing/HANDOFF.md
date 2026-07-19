@@ -4,10 +4,11 @@
 > Read [CHARTER.md](CHARTER.md) first (mission/scope/interfaces), then this file — the
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
-**Status:** M0 + Processor seam + **capture-M1 pair landed** (continuity detector on `/ingest`,
-faster-whisper standing w/ VAD gate, pipeline-shape stubs) — **exercised end-to-end through the
-capture alpha (3 real clients, real transcripts)** — **38 tests** · **Last updated:**
-2026-07-19 (recording computer-capture lead)
+**Status:** M0 + Processor seam + capture-M1 pair + **real audio pipeline beyond ASR landed**
+(diarization · translation · acoustic-event captioning filled behind off-by-default backend
+switches; mock backends headless + real pyannote/whisper/AST seams) — capture alpha still
+green (3 real clients) — **57 tests** (38 + 19 audio) · **Last updated:**
+2026-07-19 (audio-pipeline lead)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
@@ -15,6 +16,7 @@ capture alpha (3 real clients, real transcripts)** — **38 tests** · **Last up
 | B | M0 capture skeleton: C1 → ASR → C2 (`:8085`) | built, mock tests green | this dir (`app/`, `tests/`) | learn-loop M0 |
 | B+ | Modality-agnostic **Processor seam** + image/video/text **stubs** | built, 24 tests green | `app/processing/`, `tests/test_processor_seam.py` | seam session |
 | M1 | **Continuity detector** (`/continuity`) + **real ASR + VAD gate** + audio pipeline stubs | built + verified live 2026-07-18 | [handoff/ws-m1-continuity-asr.md](handoff/ws-m1-continuity-asr.md) | recording M1 lead |
+| A | **Real audio pipeline beyond ASR**: diarization · translation · acoustic events (off-by-default `*_BACKEND` switches; mock headless + real pyannote/whisper/AST seams) | built, 57 tests green (38+19); real backends unrun seams | [handoff/ws-audio-pipeline.md](handoff/ws-audio-pipeline.md) | audio-pipeline lead |
 
 ## Processor seam — how to add a modality (READ THIS before owning image/video/text)
 The core (`app/main.py` `POST /ingest` + `app/pipeline.py` `build_c2`) is **modality-agnostic**:
@@ -87,10 +89,16 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
     which demuxes to the same C1 the phone already used). Suite unregressed at 38.
 
 ## Next
-- **Real audio pipeline stages**: diarization, translation, acoustic-event captioning replace
-  their stubs one at a time (each is a stage-body swap, no seam change). VAD-cut chunk
-  boundaries (recording's D-M1-2) mean chunks arrive pause-aligned — revisit cross-chunk
-  stitching need after real-data experience.
+- **Real audio pipeline stages — BUILT** (WS A, [handoff/ws-audio-pipeline.md](handoff/ws-audio-pipeline.md)):
+  diarization / translation / acoustic-event captioning now fill their stubs behind
+  off-by-default `DIARIZE_BACKEND` / `TRANSLATE_BACKEND`+`TRANSLATE_TARGET` / `ACOUSTIC_BACKEND`
+  switches (`app/audio/`). Default output byte-identical (mock dialect untouched, 38-baseline
+  green). Diarization forks the audio `pipeline_version` (`+diar-*`); translation + acoustic are
+  additive `discriminator`-tagged sidecar records. Mock backends exercised headless; the real
+  pyannote/whisper/AST backends are **correct-by-inspection seams, unrun here** — **remaining:
+  smoke-test each on node-7** (GPU + HF-gated pyannote) before trusting a real run. VAD-cut
+  chunk boundaries mean chunks arrive pause-aligned — revisit cross-chunk stitching after
+  real-data experience.
 - Continuity tracker durability (survives restart) + `sequence_conflicts` surfacing beyond the
   warning log, when multi-replica/serious-scale arrives.
 - Real video/image processors (current ones are mock stubs — phone video chunks currently get
