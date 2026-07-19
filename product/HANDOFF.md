@@ -14,8 +14,8 @@
 
 | Service | Status | Lead session | Canvas |
 |---|---|---|---|
-| Recording | **capture M1 + computer surfaces — ALPHA COMPLETE** (checked gap-detection + VAD-cut chunking + 3 capture clients: phone web / Chrome-MV3 extension / mac CLI, all verified `clean` on real hardware — 2026-07-19; 110 tests) | computer-capture → **M6 emission rides the DP deep session** | [canvas](services/recording/HANDOFF.md) |
-| Data Processing | **real audio + video pipelines landed** (parallel modality fan-out 2026-07-19: diarize/translate/acoustic stages behind off-by-default switches; real ffmpeg keyframes + per-keyframe timing + OCR weave behind `VIDEO_BACKEND`, genuine Qwen3-VL-8B run; independently verified + 4 fixes; **72 tests**) | **deep session IN FLIGHT** (`svc/dp-async-observability`: async `/ingest` M7-early · D9 emission M8 · real-backend smokes · OQ3) | [canvas](services/data-processing/HANDOFF.md) |
+| Recording | **capture M1 + computer surfaces — ALPHA COMPLETE** (checked gap-detection + VAD-cut chunking + 3 capture clients: phone web / Chrome-MV3 extension / mac CLI, all verified `clean` on real hardware — 2026-07-19; 110 tests) **+ async seam (D16: `dp_state` ledger + `/redrive`) + D9 `/metrics`+dashboard (M6 emission) — 120 tests** | computer-capture → **M6 emission DONE (merged 2026-07-19)** | [canvas](services/recording/HANDOFF.md) |
+| Data Processing | **real audio + video pipelines + async `/ingest` (M7-early, D16 wire, off-by-default) + D9 `/metrics`+dashboard (M8)**; all 3 real audio backends **smoke-tested GREEN on node-7** (merged 2026-07-19; adversarially reviewed; suites re-verified by founders; **98 tests**) | async-observability session → **merged** | [canvas](services/data-processing/HANDOFF.md) |
 | Storage | **v0.0 + capture M0 built + integrated E2E** (serve loop + `/raw`/`/context` mock capture loop 2026-07-09) | serve + learn | [canvas](services/storage/HANDOFF.md) |
 | Input | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-A | [canvas](services/input/HANDOFF.md) |
 | Inference | **v0.0 live on real Qwen3-VL-32B** (vLLM TP=8 on node-7, verified E2E 2026-07-09) | serve-loop WS-B | [canvas](services/inference/HANDOFF.md) |
@@ -27,7 +27,7 @@
 
 | Aspect | File | State |
 |---|---|---|
-| Engineering | [handoff/engineering.md](handoff/engineering.md) | active — serve-loop v0.0 **closed on real Qwen3-VL-32B**; capture M0 + modality seams done; **recording-led capture M1 + computer capture surfaces DONE (alpha complete 2026-07-19)**; **DP deep session IN FLIGHT** (async `/ingest` + D9 emission + smokes + OQ3); after: **continuum kickoff + C10 freeze (D15)** |
+| Engineering | [handoff/engineering.md](handoff/engineering.md) | active — serve-loop v0.0 **closed on real Qwen3-VL-32B**; capture M0 + modality seams done; **recording-led capture M1 + computer capture surfaces DONE (alpha complete 2026-07-19)**; **deep session DONE + MERGED** (D16 wire; 98/120/26 re-verified); now: **D15 — continuum kickoff (C10 freeze gate) + platform D9 backbone** |
 | Research | [handoff/research.md](handoff/research.md) | seeded — first agenda: POC→continuum bridge, research agenda v1 |
 | Design / UX | [handoff/design.md](handoff/design.md) | seeded |
 | Hiring / Ops | [handoff/hiring-ops.md](handoff/hiring-ops.md) | seeded |
@@ -176,20 +176,30 @@ was proposed + ratified in-session 2026-07-19 → **D16**.)*
   (five-reviewer verified; code claims spot-checked) and was **RATIFIED → D16** — the memo
   strengthened the bar's headline clause into the non-negotiable `dp_acked`-invariant fix;
   one condition (re-drive drill) + one accepted caveat (202-path provenance) recorded.
+  *Later still:* **the slice landed + merged (`0ce4941`; `dev` fast-forwarded with it).**
+  Founders' merge review re-ran all three suites independently (**98/120/26 green**) and
+  verified the D16 condition + OQ3/OQ13 records in the diff. D15 is now the active sequence.
 
 ## Next
 
 - ~~Recording-led capture M1~~ **DONE + ALPHA COMPLETE 2026-07-19** (see Current state above /
   the recording canvas). Gap-detection enforced, ASR pipeline standing, three capture surfaces
   verified `clean` on real hardware. Consent gate stayed back-burner per D13.
-- **IN FLIGHT: the DP-led deep session** (branch `svc/dp-async-observability`, worktree
-  `~/nmn/cl-dp-async`) — async `/ingest` (ACK 202 + worker; DP M7-early) · **D9 metrics
-  emission** (DP M8 + recording M6: `/metrics` + dashboard JSONs — the richest new signal:
-  ingest/segment/chunk rates, per-leg gap/continuity counters, demux + per-stage latency,
-  VAD-empty rate, queue depth) · node-7 real-audio-backend smokes · OQ3 codec ladder (joint).
-  The `/ingest` reply shape was proposed + **RATIFIED in-session (D16** — one condition: the
-  accepted-unconfirmed re-drive drill**)**; merge to `main` after founders' review.
-- **After it lands (D15):** (1) **continuum kickoff** — the next founders-led slice; first act:
+- ~~DP-led deep session~~ **DONE + MERGED 2026-07-19 (`0ce4941`, founders' review passed):**
+  async `/ingest` behind `INGEST_ASYNC` (off = inline byte-identical; **D16 wire implemented
+  verbatim incl. the re-drive condition** — `/capture/sessions/{id}/redrive` + emitter re-push
+  + 2 drill tests) · D9 emission on BOTH services (`/metrics` + dashboard JSONs, zero new
+  deps) · all 3 real audio backends smoke-tested GREEN on node-7 (+2 real pyannote fixes) ·
+  OQ13 resolved + **OQ3 answered per-modality** (no ladder: 16 kHz mono audio is model-native;
+  video container-copy — resolution-bound not bitrate-bound, ~2560 px only for OCR-heavy
+  screens; cost dial = keyframe cadence). Suites re-verified independently by the founders'
+  session: **DP 98 · recording 120 · storage 26**. Honest residuals (ws file): DP-restart
+  false-`gaps` window fails SAFE (M7 journal closes it); whisper-translate unproven on a
+  genuine non-English source; pyannote pinned 3.1.1, smoked 3.3.2. **Fleet note:** node-7
+  still runs pre-merge code — restart `run_learn.sh` at convenience to start emitting
+  `/metrics` (async stays off by default; flipping `INGEST_ASYNC=1` retires
+  `RECORDING_HTTP_TIMEOUT=120`).
+- **Now (D15):** (1) **continuum kickoff** — the next founders-led slice; first act:
   storage × continuum propose the **C10 v0 freeze** (founders ratify), then a charter-M0 plan +
   workstreams. Kickoff deliberately forces the cluster-split (nightly window) and DP
   reprocess-policy (OQ5) conversations; the parked **D6 OCR spot-check** rides the vLLM
@@ -210,5 +220,5 @@ was proposed + ratified in-session 2026-07-19 → **D16**.)*
   (vLLM + app services) is down** — relaunch `run_all.sh` + `services/inference/serve_vllm.sh`
   when needed. The wider cluster runs Gnandeep's continuum-side experiments — product work keeps
   to **node-7**; allocate more nodes on demand. *Learn loop re-verified up by the 2026-07-19
-  sequencing session; expect the deep session to bounce DP/recording during async-`/ingest` +
-  smoke work.*
+  sequencing session. Post-merge: the running fleet predates `0ce4941` — restart to start
+  emitting `/metrics` (behavior otherwise unchanged; `INGEST_ASYNC` off by default).*

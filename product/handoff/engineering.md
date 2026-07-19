@@ -466,6 +466,24 @@ caveat, noted:** `record_ids=[]` ledger provenance for 202-confirmed chunks (ids
 derivable — deterministic on `(chunk_id, pipeline_version[, discriminator])`; inline/mock
 fleet unaffected).
 
+**Slice result — same day, merged (`0ce4941`; `dev` fast-forwarded with it).** The deep
+session landed the full charge: the **D16 wire verbatim including the re-drive condition**
+(`POST /capture/sessions/{id}/redrive` + `emitter.redrive_accepted_chunks` + 2 drill tests;
+a re-drive that hits a done-claim also **backfills `record_ids`**, softening the accepted
+caveat), D9 emission on both services (zero new deps, pure-ASGI middleware,
+cardinality-bounded; both dashboard JSONs shipped), node-7 smokes of all three real audio
+backends GREEN (+2 real pyannote torch-2.x fixes found by the smoke), **DP OQ13 resolved +
+recording OQ3 answered per-modality** (no ladder: 16 kHz mono audio is model-native — the
+existing demux target was already exactly right; video is resolution-bound not bitrate-bound
+→ container-copy, ~2560 px only for OCR-heavy screens, cost dial = keyframe cadence). Their
+18-agent adversarial round confirmed 9 findings — 5 fixed pre-merge, 1 deferred **fails
+SAFE** (a DP-restart false-`gaps` over-report window; never hides loss, so
+never-falsely-`clean` holds; the M7 durable journal closes it — land before async is trusted
+for final archived verdicts). **Founders' merge review executed here:** all three suites
+re-run independently — **DP 98 · recording 120 · storage 26, green** — and the condition +
+OQ records verified in the diff. Detail:
+[ws-async-observability](../services/data-processing/handoff/ws-async-observability.md).
+
 **D15 — what comes after (decided this session).**
 
 1. **Continuum kickoff is the next founders-led slice.** It is the last unstarted pillar and
@@ -621,3 +639,9 @@ Considered and passed, on the record so we don't re-litigate:
   (accepted-unconfirmed **re-drive drill** in-slice) + one accepted caveat (202-path
   `record_ids=[]` provenance) recorded in the ratification block above; reply left in the
   deep session's scratch dir.
+- 2026-07-19 (later) — **deep session LANDED + MERGED (`0ce4941`).** Founders' merge review:
+  all three suites re-run independently (DP **98** / recording **120** / storage **26**
+  green); D16 condition verified in code + drill tests; OQ3/OQ13 records confirmed in the
+  charters. `dev` fast-forwarded with `main`. Board synced — **D15 is now the active
+  sequence**: continuum kickoff (C10 freeze gate) + platform D9 backbone; fleet restart
+  pending to begin emitting `/metrics`.
