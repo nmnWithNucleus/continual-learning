@@ -4,7 +4,7 @@
 > Cross-service build sequencing, integration plans, infra calls. Service-internal
 > engineering lives in each service's canvas, not here.
 
-**Status:** active · **Last updated:** 2026-07-18
+**Status:** active · **Last updated:** 2026-07-19
 
 ---
 
@@ -381,6 +381,94 @@ needs a version bump now** (recorded as DP charter OQs; the frozen C2 was NOT to
 
 ---
 
+## Post-capture-alpha sequencing — the DP deep session + what follows (2026-07-19)
+
+**In flight — a DP-led deep-work session** (branch `svc/dp-async-observability`, worktree
+`~/nmn/cl-dp-async`), launched in parallel with this founders' session. Its charge is work the
+canvases already pin, bundled because it shares one service pair (DP + recording) and one node:
+
+1. **Async `/ingest`** — DP charter **M7 territory arriving early** (the charter allows M4–M7
+   to interleave after M3; video/M3 landed 2026-07-19). ACK `202` fast + process on a worker so
+   capture cadence decouples from pipeline latency; retry safety rides the existing `chunk_id`
+   dedup + deterministic `record_id`. Motivated by the verification-round finding that a fully
+   loaded chunk (real ASR + diarization + VLM captions) can lawfully outlive recording's
+   delivery timeout (fleet-mitigated today via `RECORDING_HTTP_TIMEOUT=120`). Resolves DP OQ13.
+   **Scope discipline: this is the ACK+queue half of M7** — backpressure policy, dead-letter +
+   backfill stay M7-proper; the queue lands observable by construction (queue depth is a
+   chartered M8 metric in the same slice).
+2. **D9 metrics emission** (DP **M8** + recording **M6**): `/metrics` Prometheus text + each
+   service's Grafana dashboard JSON. **Emission half only** — Platform's shared
+   Prometheus/Grafana backbone is the follow-on small slice (D15 below), so recording M6's
+   "scraped by the shared Prometheus" exit criterion closes only when that backbone lands.
+3. **node-7 smokes of the real audio backends** (pyannote diarization / whisper translation /
+   AST acoustic events — built 2026-07-19 as correct-by-inspection seams, explicitly unrun):
+   run each genuinely (GPU + HF-gated pyannote) before anyone trusts a switch-flip.
+4. **The OQs the work naturally answers** — headline **recording OQ3, the codec/bitrate ladder
+   (joint recording × DP)**: real pipelines + smokes say what fidelity each modality actually
+   needs (alpha datapoint: CRF-28 mac screen video is readable but soft on fine text). Also
+   informed: DP OQ3 (GPU placement for pipeline models vs continuum's future nightly window).
+
+**Founders' ratification posture — the async `/ingest` reply shape.** It is an **inter-service
+wire change, not a C-number**: C1 governs the envelope, not the reply, so the accepted shape
+gets pinned as prose in the DP canvas exactly as the `/raw` blob leg rides D11. The deep
+session proposes; this standing founders' session ratifies. The bar the proposal must clear:
+
+- **At-least-once safety intact end-to-end.** Re-pushing a queued/in-flight `chunk_id` must be
+  a cheap idempotent ACK, not a second enqueue. And the new loss window is named honestly:
+  today, inline processing means a mid-processing DP crash fails recording's push → un-acked →
+  recording retries → covered. **A `202` ACK closes that coverage** — once acked, recording
+  never re-pushes, and DP's continuity detector notes "seen" at accept time, so a crash between
+  ACK and processing would today be **silent** record-level loss. The proposal must either make
+  the queue survive restart (durable spool, DP re-drains — the recording-side spool precedent)
+  or make the loss *detected* (an accepted-vs-processed split visible to the gap report) with a
+  re-drive path. "Accepted-risk + named mitigation" is not enough here — this is the zero-
+  silent-loss guarantee itself.
+- **Recording's consumer side moves in the same slice.** The capturer reads `/ingest` replies
+  (`record_ids` today) and the gap report cross-checks DP `/continuity`; "accepted" and
+  "processed" split under async, and the report must not read async lag as loss **nor claim
+  `clean` while chunks are still pending** — verdict semantics need an explicit pending/drain
+  signal, as `segment_states` already provides on the client leg.
+- **Terminal outcomes stay discoverable.** `record_ids` reachable for whatever needs them
+  (status poll, `/continuity`, or equivalent); worker failures land somewhere visible, not in a
+  dropped task.
+- **Mock-default + all three suites stay green; C1/C2 schemas untouched.**
+
+**D15 — what comes after (decided this session).**
+
+1. **Continuum kickoff is the next founders-led slice.** It is the last unstarted pillar and
+   the thesis itself: every upstream leg now stands (serve loop proven on real Qwen3-VL-32B;
+   capture alpha-complete on three real surfaces; DP real for both live modalities; `/context`
+   filling with pipeline-versioned records) — captured days are inert exactly until continuum
+   runs. **Gate: a C10 v0 interface freeze first** (storage × continuum jointly propose,
+   founders ratify — the pattern that made C1/C2 interoperate first try), frozen against the
+   beta-proven range read (`GET /context/records?user_id=&from=&to=`, half-open `[from,to)` —
+   deliberately C10's shape since D12). Kickoff is also the deliberate forcing function for two
+   parked conversations: the **cluster split** (agenda item 2 — nightly training window vs
+   Gnandeep's wider-cluster occupancy vs serving) and **DP OQ5 reprocess policy** (mixed
+   `pipeline_version` dialects inside a training window). The long-parked **D6 OCR spot-check**
+   rides the vLLM relaunch that continuum-era eval needs anyway.
+2. **Platform D9 backbone as the small parallel slice:** the ONE shared Prometheus + Grafana on
+   node-7, scraping what the deep session emits, provisioning both dashboard JSONs + the
+   standard node/dcgm exporters. No file/service contention with kickoff; closes D9 end-to-end
+   so both founders open one Grafana URL.
+3. **DP image/text pipelines (charter M2) explicitly deferred until a producing surface
+   exists.** Nothing on the fleet emits an `image` or `text` C1 stream today (phone camera →
+   video; extension/mac → video+audio), and the image pipeline's chartered payload — on-screen
+   text — already flows through the video keyframe OCR weave (D8). The OQ14b bbox additive C2
+   field waits with it, by design. Revisit trigger: a screenshot-still / document / clipboard
+   capture surface, or continuum finding keyframe-caption density insufficient for training.
+
+Considered and passed, on the record so we don't re-litigate:
+- **Mobile app + C8 sync API now** — mobile's v0 roles (chat surface + speech-output sink) get
+  their differentiated value from a personalized model, and C8's one-dialect duty binds when
+  interactive requests carry media. Their moment is when the personalization era opens (first
+  adapter serving), not before.
+- **Standalone C10 freeze without kickoff** — freezing a contract without its consumer at the
+  table breaks the freeze-with-both-sides pattern that made C1/C2 land clean; meanwhile the
+  beta is not blocked (it uses the range read as-is).
+
+---
+
 ## Open agenda
 0. ~~**NEXT SLICE — Data-collection (learn) loop MVP**~~ **SLICED + C1/C2 FROZEN + M0 BUILT +
    CAPTURE M1 + COMPUTER SURFACES — ALPHA COMPLETE (2026-07-19).** The learn loop is fully
@@ -389,7 +477,9 @@ needs a version bump now** (recorded as DP charter OQs; the frozen C2 was NOT to
    chunking, OQ4→D-M1-2) → three real capture clients on the `/capture/*` wire (phone web /
    Chrome-MV3 extension via `tabCapture` D-E7 / mac CLI), **all verified `clean` on real
    hardware**. Client transport pinned segmented-HTTP (**D14**; streaming ingest a deferred
-   additive leg). **Next: metrics emission (D9).** Full state lives in the recording +
+   additive leg). **Next → now IN FLIGHT (2026-07-19): the DP-led deep session** (async
+   `/ingest` M7-early · D9 emission · real-backend smokes · OQ3 — see §Post-capture-alpha
+   sequencing above). Full state lives in the recording +
    data-processing canvases (this founders' thread links, not restates). The forward-looking
    plan that drove the slice is kept below for history.
    Original slice plan (2026-07-09, delivered): Skeleton = computer mic → ASR → `/context` (D10);
@@ -435,9 +525,13 @@ needs a version bump now** (recorded as DP charter OQs; the frozen C2 was NOT to
    **2026-07-18 interim answer:** Gnandeep runs continuum-side model-stabilization experiments
    across the wider cluster (the `engram` SLURM jobs — his workspace, outside this repo);
    product components keep **node-7**; allocate beyond one node on demand. Revisit when
-   continuum's nightly window lands.
+   continuum's nightly window lands. **2026-07-19: continuum kickoff (D15) is the scheduled
+   forcing function — settle the split at kickoff.**
 3. Mobile app (now v0, D5) — one codebase serving both the chat surface (input) and the
    speech-output playback sink (output); sequence it after the computer text slice proves the loop.
+   **2026-07-19: loop proven; considered at the D15 sequencing and passed for now — mobile's value
+   binds to a personalized model (§Post-capture-alpha sequencing); revisit once the first adapter
+   serves.**
 4. **Observability & per-service dashboards** (CTO ask, **RATIFIED 2026-07-09, D9** — see
    [../ARCHITECTURE.md](../ARCHITECTURE.md) §Observability + [../STACK.md](../STACK.md) ports):
    each service **exposes a `/metrics` endpoint** (Prometheus text; instrumentation
@@ -451,7 +545,9 @@ needs a version bump now** (recorded as DP charter OQs; the frozen C2 was NOT to
    [../ARCHITECTURE.md](../ARCHITECTURE.md) and each service's HANDOFF. Note: node/CPU graphs are
    placeholders until the true multi-node microservice split (CTO's own point); app-latency,
    error-rate, and GPU are the metrics that mean something today. Build as a near-term Platform
-   slice (service agents instrument; Platform builds the backbone).
+   slice (service agents instrument; Platform builds the backbone). **2026-07-19: the emission
+   half (recording M6 + DP M8) is in flight via the deep session; the shared backbone is the
+   D15 small parallel slice that follows.**
 
 ## Decisions
 - **D3 Serve-loop first** (2026-07-09) — thin end-to-end backbone before capture/continuum.
@@ -473,3 +569,15 @@ needs a version bump now** (recorded as DP charter OQs; the frozen C2 was NOT to
   model; storage's `/context` range read (`GET /context/records?user_id=&from=&to=`, half-open
   `[from,to)` — deliberately C10's read shape) is his training-window feed until C10 lands.
   **Next slice pinned: recording-led capture M1** (see agenda item 0 sequencing).
+- 2026-07-19 — **post-capture-alpha sequencing (founders).** The capture alpha + DP modality
+  slices being done and verified, a **DP-led deep session launched in parallel** (branch
+  `svc/dp-async-observability`, worktree `~/nmn/cl-dp-async`): async `/ingest` (M7-early) ·
+  D9 metrics emission (DP M8 + recording M6) · node-7 real-audio-backend smokes · OQ3 codec
+  ladder (joint) + the OQs the work answers (DP OQ13 resolved by the slice). This session
+  holds the board: pinned the **ratification bar for the async `/ingest` reply shape**
+  (inter-service wire, not a C-number — §Post-capture-alpha sequencing; the silent-loss window
+  a `202` ACK opens is the load-bearing clause), opened the escalation row, and recorded
+  **D15** — continuum kickoff next (gated on a C10 v0 freeze, storage × continuum), Platform
+  D9 backbone as the small parallel slice, DP image/text deferred until a producing surface
+  exists; mobile+C8 and a standalone C10 freeze considered + passed. Learn fleet re-verified
+  up on node-7 (storage/DP/recording healthy).

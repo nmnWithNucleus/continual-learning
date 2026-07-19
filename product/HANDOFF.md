@@ -14,27 +14,33 @@
 
 | Service | Status | Lead session | Canvas |
 |---|---|---|---|
-| Recording | **capture M1 + computer surfaces — ALPHA COMPLETE** (checked gap-detection + VAD-cut chunking + 3 capture clients: phone web / Chrome-MV3 extension / mac CLI, all verified `clean` on real hardware — 2026-07-19; 110 tests) | recording M1 → computer-capture | [canvas](services/recording/HANDOFF.md) |
-| Data Processing | **real audio + video pipelines landed** (parallel modality fan-out 2026-07-19: diarize/translate/acoustic stages behind off-by-default switches; real ffmpeg keyframes + per-keyframe timing + OCR weave behind `VIDEO_BACKEND`, genuine Qwen3-VL-8B run; independently verified + 4 fixes; **72 tests**) | audio + video leads → integrator | [canvas](services/data-processing/HANDOFF.md) |
+| Recording | **capture M1 + computer surfaces — ALPHA COMPLETE** (checked gap-detection + VAD-cut chunking + 3 capture clients: phone web / Chrome-MV3 extension / mac CLI, all verified `clean` on real hardware — 2026-07-19; 110 tests) | computer-capture → **M6 emission rides the DP deep session** | [canvas](services/recording/HANDOFF.md) |
+| Data Processing | **real audio + video pipelines landed** (parallel modality fan-out 2026-07-19: diarize/translate/acoustic stages behind off-by-default switches; real ffmpeg keyframes + per-keyframe timing + OCR weave behind `VIDEO_BACKEND`, genuine Qwen3-VL-8B run; independently verified + 4 fixes; **72 tests**) | **deep session IN FLIGHT** (`svc/dp-async-observability`: async `/ingest` M7-early · D9 emission M8 · real-backend smokes · OQ3) | [canvas](services/data-processing/HANDOFF.md) |
 | Storage | **v0.0 + capture M0 built + integrated E2E** (serve loop + `/raw`/`/context` mock capture loop 2026-07-09) | serve + learn | [canvas](services/storage/HANDOFF.md) |
 | Input | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-A | [canvas](services/input/HANDOFF.md) |
 | Inference | **v0.0 live on real Qwen3-VL-32B** (vLLM TP=8 on node-7, verified E2E 2026-07-09) | serve-loop WS-B | [canvas](services/inference/HANDOFF.md) |
 | Output | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-C | [canvas](services/output/HANDOFF.md) |
-| Continuum | chartered — awaiting kickoff | — | [canvas](services/continuum/HANDOFF.md) |
+| Continuum | chartered — **kickoff queued NEXT after the deep session (D15 2026-07-19); gate: C10 v0 freeze** | — | [canvas](services/continuum/HANDOFF.md) |
 | Platform | **v0.0 serve bring-up + learn-loop bring-up** (`run_all.sh` + `run_learn.sh`, both run E2E 2026-07-09) | serve + learn | [canvas](services/platform/HANDOFF.md) |
 
 ## Founders' aspect threads
 
 | Aspect | File | State |
 |---|---|---|
-| Engineering | [handoff/engineering.md](handoff/engineering.md) | active — serve-loop v0.0 **closed on real Qwen3-VL-32B**; capture M0 + modality seams done; **recording-led capture M1 + computer capture surfaces DONE (alpha complete 2026-07-19)**; next: **metrics emission (D9)** |
+| Engineering | [handoff/engineering.md](handoff/engineering.md) | active — serve-loop v0.0 **closed on real Qwen3-VL-32B**; capture M0 + modality seams done; **recording-led capture M1 + computer capture surfaces DONE (alpha complete 2026-07-19)**; **DP deep session IN FLIGHT** (async `/ingest` + D9 emission + smokes + OQ3); after: **continuum kickoff + C10 freeze (D15)** |
 | Research | [handoff/research.md](handoff/research.md) | seeded — first agenda: POC→continuum bridge, research agenda v1 |
 | Design / UX | [handoff/design.md](handoff/design.md) | seeded |
 | Hiring / Ops | [handoff/hiring-ops.md](handoff/hiring-ops.md) | seeded |
 
 ## Escalations (open items needing a founders' decision)
 
-*None open.* Resolved items move to the Decisions log below.
+- **Async `/ingest` reply shape** (inter-service wire, not a C-number) — the in-flight DP deep
+  session proposes; the standing 2026-07-19 founders' session ratifies against the bar pinned in
+  [handoff/engineering.md](handoff/engineering.md) §Post-capture-alpha sequencing (headline
+  clause: a `202` ACK must not open a silent record-loss window). On acceptance, pinned as prose
+  in the DP canvas (the D11 `/raw`-leg pattern).
+
+Resolved items move to the Decisions log below.
 
 ## Decisions log (founders)
 
@@ -54,6 +60,7 @@
 | D12 | **Branching + beta model.** Service work happens on branches off `main`, merged once coded + tested at a decent revision. A standing **`dev` branch (forked from `main`) is the beta playground** handed to testers — it may carry beta-only conveniences, never contract changes. First beta hand-off: the two proven loops (serve + learn) to Gnandeep, who drives them against his externally-stabilized fine-tunable model; storage's `GET /context/records?user_id=&from=&to=` range read is his training-window feed until C10 lands | 2026-07-18 | this board; [handoff/engineering.md](handoff/engineering.md) worklog; root `README.md` §Branches |
 | D13 | **Consent gate de-prioritized (back-burner).** Ship-fast posture: the capture surfaces + learn loop mature first; the consent/deletion layer (recording M2 + platform's consent store) lands **before any non-team pilot user**, not before beta (beta testers are consenting teammates). The M2 red-team exit bar is unchanged whenever it lands | 2026-07-18 | this board; recording charter §v0 deliverables |
 | D14 | **Capture transport = segmented HTTP upload for ALL v0 surfaces** (phone / extension / mac CLI). Our capture path is the loss-intolerant, offline-resilient *archive/training* job (the Axon-bodycam pattern), not low-latency live-view (the Ring/Nest pattern — which runs both paths separately). **Continuous streaming ingest (WebSocket/RTSP/SRT → server segmenter) is a deferred ADDITIVE leg** terminating in the existing spool→demux→carve→emit machinery; C1/C2 unchanged (C1 begins after transport). Live-view is out of v0 scope | 2026-07-19 | recording canvas §Pinned decisions (D-M1-5); [ARCHITECTURE.md](ARCHITECTURE.md) capture path |
+| D15 | **Post-deep-session build order: continuum kickoff is the next founders-led slice**, gated on a **C10 v0 interface freeze** (storage × continuum propose, founders ratify; frozen against the beta-proven `/context` range read). **Platform's D9 backbone** (the one shared Prometheus + Grafana) runs as the small parallel slice. **DP image/text pipelines (M2) deferred until a producing surface exists** — no `image`/`text` C1 stream exists on the fleet today; screen text already flows via the video-keyframe OCR weave (D8); the OQ14b bbox additive waits with it. Mobile+C8 and a standalone C10 freeze considered + passed (rationale in the engineering thread) | 2026-07-19 | [handoff/engineering.md](handoff/engineering.md) §Post-capture-alpha sequencing; continuum canvas; this board |
 
 ## Current state (terse)
 
@@ -159,26 +166,43 @@
   recorded. Detail: [services/recording/HANDOFF.md](services/recording/HANDOFF.md) +
   [alpha-runbook](services/recording/handoff/alpha-runbook.md).
 
+- 2026-07-19 (post-alpha sequencing): **DP-led deep session launched in parallel** (branch
+  `svc/dp-async-observability`, worktree `~/nmn/cl-dp-async`) to execute **async `/ingest`**
+  (DP charter M7 arriving early), **D9 metrics emission** (DP M8 + recording M6 — emission
+  half; Platform's backbone follows), **node-7 smokes of the real audio backends**
+  (pyannote/whisper-translate/AST), and the OQs the work answers (headline: recording OQ3
+  codec ladder, joint; DP OQ13 resolved by the slice). The founders' session pinned the
+  **ratification bar for the async `/ingest` reply shape** (inter-service wire, not a
+  C-number; escalation row open above) and recorded **D15**: continuum kickoff next (C10 v0
+  freeze as its gate) + Platform D9 backbone as the small parallel slice; DP image/text
+  deferred until a producing surface exists. Learn fleet re-verified healthy on node-7.
+
 ## Next
 
 - ~~Recording-led capture M1~~ **DONE + ALPHA COMPLETE 2026-07-19** (see Current state above /
   the recording canvas). Gap-detection enforced, ASR pipeline standing, three capture surfaces
   verified `clean` on real hardware. Consent gate stayed back-burner per D13.
-- **Now: metrics emission (D9)** — the founders' sequenced next, unblocked now that the capture
-  surfaces are human-verified solid. Each service exposes `/metrics` (Prometheus text) + ships a
-  Grafana dashboard JSON; **Platform runs the one shared Prometheus/Grafana**. The buildable-now
-  piece is the *emission* side across **recording + data-processing** (the two services with the
-  richest new signal: ingest/segment/chunk rates, per-leg gap/continuity counters, demux + ASR
-  latency, VAD-empty rate); the shared backbone is Platform's slice. A fresh session picks up the
-  emission side from the recording + DP canvases.
+- **IN FLIGHT: the DP-led deep session** (branch `svc/dp-async-observability`, worktree
+  `~/nmn/cl-dp-async`) — async `/ingest` (ACK 202 + worker; DP M7-early) · **D9 metrics
+  emission** (DP M8 + recording M6: `/metrics` + dashboard JSONs — the richest new signal:
+  ingest/segment/chunk rates, per-leg gap/continuity counters, demux + per-stage latency,
+  VAD-empty rate, queue depth) · node-7 real-audio-backend smokes · OQ3 codec ladder (joint).
+  The standing founders' session **ratifies the `/ingest` reply-shape change when proposed**
+  (escalation row above; bar in [handoff/engineering.md](handoff/engineering.md)); merge to
+  `main` after founders' review.
+- **After it lands (D15):** (1) **continuum kickoff** — the next founders-led slice; first act:
+  storage × continuum propose the **C10 v0 freeze** (founders ratify), then a charter-M0 plan +
+  workstreams. Kickoff deliberately forces the cluster-split (nightly window) and DP
+  reprocess-policy (OQ5) conversations; the parked **D6 OCR spot-check** rides the vLLM
+  relaunch continuum-era eval needs anyway. (2) **Platform D9 backbone** as the small parallel
+  slice — the one shared Prometheus + Grafana scraping the new `/metrics`, provisioning both
+  dashboards + node/dcgm exporters, closing D9 end-to-end. Image/text DP pipelines stay
+  **deferred until a producing surface exists** (D15).
 - **Beta hand-off (D12):** standing `dev` branch forked from `main` for Gnandeep — serve loop
   (mock or real backend) + learn loop (real faster-whisper ASR, `ASR_LANGUAGE=en`) both run today;
   storage's `/context` range read is his training-window feed for the black-box fine-tuning tests
   until C10 lands. The three capture clients (`/capture/*` wire, tunnel URL from
   `services/recording/var/tunnel_url.txt`) are the beta's data-collection front door.
-- Alternatives off the skeleton (unchanged): continuum kickoff (nightly LoRA), or screen/OCR
-  capture (data-processing M2). **Still open:** the D6 OCR spot-check on real screen-capture
-  data (needs vLLM relaunched on node-7 first).
 - CTO to read the Platform charter internals when time allows (D1).
 - **Fleet status (2026-07-19):** the **learn loop is UP on node-7** — storage:8083 ·
   data-processing:8085 (`ASR_BACKEND=faster_whisper`, `ASR_LANGUAGE=en`) · recording:8084, plus
@@ -186,4 +210,6 @@
   `services/recording/var/tunnel_url.txt`); `run_learn.sh --status` checks it. The **serve loop
   (vLLM + app services) is down** — relaunch `run_all.sh` + `services/inference/serve_vllm.sh`
   when needed. The wider cluster runs Gnandeep's continuum-side experiments — product work keeps
-  to **node-7**; allocate more nodes on demand.
+  to **node-7**; allocate more nodes on demand. *Learn loop re-verified up by the 2026-07-19
+  sequencing session; expect the deep session to bounce DP/recording during async-`/ingest` +
+  smoke work.*
