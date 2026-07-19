@@ -35,7 +35,8 @@ from fastapi import FastAPI
 from . import capturer, demux, ledger
 from .clients import DataProcessingClient, StorageClient
 from .config import Settings, get_settings
-from .timeutil import rfc3339
+from .metrics import observe_emit_latency
+from .timeutil import parse_wallclock, rfc3339
 
 logger = logging.getLogger("recording.emitter")
 
@@ -133,6 +134,51 @@ async def shutdown(app: FastAPI) -> None:
         await emitter.aclose()
 
 
+async def redrive_accepted_chunks(settings: Settings, session_id: str | None = None) -> dict:
+    """The D16 re-drive path for accepted-unconfirmed chunks.
+
+    A chunk DP ACCEPTED (202) but hasn't confirmed processed reads 'recording' in the gap
+    report (visible in-flight, never a false 'clean'). This re-pushes each such chunk's
+    ORIGINAL C1 envelope to DP — idempotent + safe because DP dedups on chunk_id: if DP
+    already processed it, the done-claim short-circuits to `200 {record_ids}` and we
+    CONFIRM it (→ 'clean'); if it's still queued/in-flight DP re-ACKs 202 and it stays
+    accepted (retry later); if DP lost it (queue drop), DP re-claims + reprocesses. The
+    bytes are already durable in /raw, so no re-upload is needed — just the envelope.
+
+    Call it on recording restart, periodically, or manually (POST
+    /capture/sessions/{id}/redrive). Returns {redriven, confirmed, still_accepted}."""
+    led = ledger.for_settings(settings)
+    rows = led.accepted_unconfirmed_chunks(session_id)
+    if not rows:
+        return {"redriven": 0, "confirmed": 0, "still_accepted": 0}
+
+    dp = DataProcessingClient(
+        settings.dp_url, timeout=settings.http_timeout,
+        attempts=settings.retry_attempts, backoff=settings.retry_backoff,
+    )
+    confirmed = 0
+    try:
+        for r in rows:
+            envelope = capturer._build_envelope(
+                user_id=r["user_id"], device_id=r["device_id"], stream_id=r["stream_id"],
+                sequence=r["sequence"], chunk_id=r["chunk_id"], modality=r["modality"],
+                codec=r["codec"], t_start=r["t_start"], t_end=r["t_end"],
+                blob_ref=r["blob_ref"], sha256=r["sha256"], nbytes=r["bytes"],
+            )
+            ack = await dp.ingest(envelope)
+            # A done-claim short-circuits to 200 + record_ids (no `accepted` flag) — that
+            # means DP durably has the C2, so confirm. A 202 (accepted) means still pending.
+            if not ack.get("accepted") and ack.get("record_ids"):
+                led.confirm_chunk(r["stream_id"], r["sequence"],
+                                  record_ids=ack.get("record_ids"))
+                confirmed += 1
+    finally:
+        await dp.aclose()
+    logger.info("re-drive: %d accepted chunk(s), %d now confirmed", len(rows), confirmed)
+    return {"redriven": len(rows), "confirmed": confirmed,
+            "still_accepted": len(rows) - confirmed}
+
+
 async def process_segment(session_id: str, seq: int) -> None:
     """Demux + emit one spooled segment. Raises after marking the segment 'failed'."""
     settings = get_settings()
@@ -160,6 +206,14 @@ async def process_segment(session_id: str, seq: int) -> None:
         )
         await _emit_tracks(settings, led, session, segment, tracks)
         led.set_segment_state(session_id, seq, "emitted")
+        # Received -> fully-emitted latency (demux + every chunk pushed downstream), D9.
+        try:
+            received = parse_wallclock(segment["received_at"])
+            observe_emit_latency(
+                (datetime.now(timezone.utc) - received).total_seconds()
+            )
+        except Exception:  # noqa: BLE001 — a metric must never fail the emit
+            pass
         if not settings.keep_spool:
             spool.unlink(missing_ok=True)
     except Exception as exc:
@@ -247,12 +301,20 @@ async def _emit_tracks(
                 nbytes=len(data),
             )
             ack = await dp.ingest(envelope)
+            # Two DP reply shapes (the async-ingest wire, decided jointly with
+            # data-processing): a 202 ACCEPT carries `accepted:true` and NO record_ids
+            # (DP will process on a worker) — record it as accepted (dp_acked stays 0
+            # until DP's /continuity confirms the C2). A 200 carries record_ids — the
+            # chunk is already processed. Provenance is optional-at-accept; `or []`
+            # already tolerated an empty list, this just marks WHICH state it is.
+            accepted = bool(ack.get("accepted"))
             led.finalize_chunk(
                 stream["stream_id"],
                 sequence,
                 blob_ref=blob["blob_ref"],
                 record_ids=ack.get("record_ids") or [],
                 emitted_at=rfc3339(datetime.now(timezone.utc)),
+                accepted=accepted,
             )
     finally:
         await storage.aclose()

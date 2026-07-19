@@ -118,6 +118,26 @@ deferred additive leg — recorded on the founders' board as D14).
    (2026-07-19):** mac screen video at the CLI default (`--max-width 1728`, CRF 28) is readable
    but soft on fine text — `--max-width 2560+` is the current user lever; per-modality fidelity
    targets remain this open joint decision, not a per-client flag.
+   **RESOLVED per-modality (2026-07-19, joint recording × data-processing — now with the REAL
+   pipelines: faster-whisper ASR / pyannote diarization / AST acoustic / Qwen3-VL keyframe
+   captioning + OCR, all node-7-verified):**
+   - **Audio → 16 kHz mono is the fidelity ceiling that matters.** ASR (Whisper), diarization
+     (pyannote), and acoustic tagging (AST) are ALL 16 kHz-native — a higher sample rate or
+     bitrate buys the models nothing. Recording already demuxes to `audio/wav` 16 kHz mono
+     s16le (ASR-native), which is exactly right; **no audio bitrate ladder is needed.** Capture
+     can use whatever codec the device prefers (webm/opus, m4a/aac) — the demux normalizes it.
+   - **Video → resolution-bound, not bitrate-bound; DP wants container-copy at capture
+     quality.** Keyframe VLM captioning downscales frames to `VIDEO_FRAME_MAX_WIDTH=768` before
+     the caption, so body-cam/webcam video is caption-bound and 768-px-sufficient — no high
+     bitrate helps. The **exception is OCR-heavy screen capture**: the OCR-strong VL pass reads
+     on-screen text from keyframes, and fine text needs enough *capture* resolution (the alpha's
+     `--max-width 1728` is soft on small text; **`--max-width ~2560` for text-dense screens**).
+     So DP's ask is **no re-encode (container-copy, avoiding generational loss) + high capture
+     resolution for screens**; the per-user-day COST dial is keyframe **cadence**
+     (`VIDEO_KEYFRAME_INTERVAL_S` / `VIDEO_MAX_KEYFRAMES`), not video bitrate.
+   Net: no multi-rung "ladder" — one sensible per-modality target (16 kHz mono audio;
+   container-copy screen at ≥2560-px, body-cam at capture default). Revisit only if a real
+   OCR-quality-vs-cost measurement on pilot screen-hours moves the screen resolution target.
 4. ~~Chunk duration for C1~~ **DECIDED 2026-07-18 (D-M1-2, recording × data-processing —
    [handoff/ws-d-vad-carve.md](handoff/ws-d-vad-carve.md)):** per client/source — continuous
    audio the server owns: **variable-length chunks cut at VAD speech pauses within [5 s, 30 s]**

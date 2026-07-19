@@ -19,7 +19,9 @@ from tests.conftest import make_c1
 def test_health_reports_mock_backend(client):
     resp = client.get("/health")
     assert resp.status_code == 200
-    assert resp.json() == {"ok": True, "asr_backend": "mock"}
+    # /health is a liveness probe (not a frozen contract); it additively reports the
+    # effective ASR backend + the ingest mode (inline by default).
+    assert resp.json() == {"ok": True, "asr_backend": "mock", "ingest_mode": "inline"}
 
 
 # ---- C1 validation on ingest -------------------------------------------------

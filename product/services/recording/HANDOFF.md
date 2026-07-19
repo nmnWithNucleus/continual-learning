@@ -12,8 +12,10 @@ sha256-verified + ffprobe-decoded in storage, and real ASR transcripts in `/cont
 extension **PIVOTED 2026-07-19 (D-E7)** off the desktop-screen-picker (which failed 3× on the
 tester's Comet browser) to direct tab capture; passed on the first real run. Client wire renamed
 **`/ingest/*` → `/capture/*`** (founders; alias removed). All prior data purged 2026-07-19;
-fleet fresh. Runbook: [handoff/alpha-runbook.md](handoff/alpha-runbook.md) · recording suite
-**110 tests** · **Last updated:** 2026-07-19 (recording computer-capture lead)
+fleet fresh. Runbook: [handoff/alpha-runbook.md](handoff/alpha-runbook.md). **+ async-ingest
+seam tolerance (DP's `INGEST_ASYNC`) + D9 `/metrics` + dashboard (M6) landed 2026-07-19.** ·
+recording suite **120 tests** (110 + 7 async-seam/redrive/migration + 3 metrics) · **Last updated:** 2026-07-19
+(async-observability session)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
@@ -25,6 +27,7 @@ fleet fresh. Runbook: [handoff/alpha-runbook.md](handoff/alpha-runbook.md) · re
 | — | DP-side pair (continuity detector + real ASR + VAD gate) | built + verified | [../data-processing/handoff/ws-m1-continuity-asr.md](../data-processing/handoff/ws-m1-continuity-asr.md) | recording M1 lead |
 | E | **Browser extension** (MV3 passive: **direct tab capture**, D-E7) | **REAL-BROWSER VERIFIED** (Comet, verdict `clean`, real transcripts) | [handoff/ws-e-extension.md](handoff/ws-e-extension.md) | computer-capture lead |
 | F | **Mac capture CLI** (ffmpeg avfoundation → segments → wire) | **live-verified** (real avfoundation + `--source test`, verdict `clean`) | [handoff/ws-f-mac-cli.md](handoff/ws-f-mac-cli.md) | computer-capture lead |
+| AO | **Async-ingest seam** (tolerate DP's 202-accept; `dp_state` + confirm-on-processed report reconciliation) + **D9 `/metrics` + dashboard (M6)** | built + tested (120 green) | [../data-processing/handoff/ws-async-observability.md](../data-processing/handoff/ws-async-observability.md) | async-observability lead |
 
 ## Current state
 - **M0 spine unchanged and green** (`:8084`, `/capture/run`, blob-first PUT → C1 push,
@@ -128,6 +131,26 @@ fleet fresh. Runbook: [handoff/alpha-runbook.md](handoff/alpha-runbook.md) · re
   C1/C2 unchanged by design (C1 deliberately begins *after* transport: "chunks exist").
   Build it only when a surface needs sub-segment latency (live-view is out of v0 scope) or
   the bodycam firmware demands it; cheaper latency lever first: shrink `SEGMENT_SECONDS`.
+- **D-M1-6 — async `/ingest` reply shape (inter-service wire, decided JOINTLY with
+  data-processing 2026-07-19; OQ4 precedent — decide once, record in BOTH canvases).** DP can
+  now ACK `202 {ok, accepted:true, chunk_id}` with **NO record_ids** (it processes on a worker
+  pool; `INGEST_ASYNC`, off by default). Recording's implications, all built + tested:
+  **(1) provenance is optional-at-accept** — the emitter already coerced `ack.get("record_ids")
+  or []`, so an empty list never crashes; **(2) an accept is recorded as `dp_state='accepted'`
+  (`dp_acked=0`), NOT confirmed** — the invariant `dp_acked=1 ⇔ C2 durably written` is preserved
+  (a 200 with record_ids stays `dp_acked=1, dp_state='processed'`); **(3) the gap report
+  reconciles against DP's additive `/continuity` `processed` + `dead_lettered` fields** — a
+  chunk DP reports processed is lazily `confirm_chunk`'d (persisted, so a DP restart can't
+  un-confirm it), a dead-lettered chunk → verdict `gaps`, an accepted-but-unconfirmed chunk →
+  verdict `recording`; **`leg["dp"]` keeps its frozen 5-key shape** (dead-letter/accepted are
+  sibling leg fields). Net: the "zero silent loss" verdict never reads `clean` for a chunk DP
+  hasn't confirmed. When the fleet sets `INGEST_ASYNC=1`, **`RECORDING_HTTP_TIMEOUT` reverts to
+  30** (the 120 s mitigation is retired). **Founders RATIFIED this wire 2026-07-19 (D16)** — the
+  one ratification condition (a named + drilled re-drive path for accepted-unconfirmed chunks)
+  is satisfied in-slice: **`POST /capture/sessions/{id}/redrive`** (+ `emitter.redrive_accepted_chunks`,
+  callable on restart / periodically) re-pushes each `dp_state='accepted'` chunk's original C1;
+  DP's dedup makes it idempotent (a done chunk short-circuits to 200+record_ids → `confirm_chunk`
+  → `clean`; still-pending re-ACKs 202). Detail: [../data-processing/handoff/ws-async-observability.md](../data-processing/handoff/ws-async-observability.md).
 - **Glossary** (pinned so docs/sessions stay unambiguous): **segment** = client→server
   upload unit (~10 s self-contained clip; `seq` dense per capture session) · **chunk** =
   server→DP single-modality unit (one `/raw` blob + one C1 envelope; `sequence` dense per
@@ -157,9 +180,12 @@ fleet fresh. Runbook: [handoff/alpha-runbook.md](handoff/alpha-runbook.md) · re
   7/7 — the run that drove the D-E7 pivot), **mac CLI** (real avfoundation screen+mic, 7/7).
   Results in the runbook §Worklog + each ws file. The fleet was purged + restarted fresh before
   the pass so results read from zero; it remains UP on node-7.
-- **THE CAPTURE SURFACES ARE DONE (v0 alpha bar).** Founders' sequenced next: **metrics
-  emission (D9)** across recording + DP (the surfaces are now human-verified solid) — a fresh
-  session picks it up from this canvas.
+- **THE CAPTURE SURFACES ARE DONE (v0 alpha bar).** ~~Founders' sequenced next: metrics
+  emission (D9)~~ **DONE 2026-07-19 (WS-AO, M6):** `/metrics` (Prometheus text, zero new deps)
+  + `dashboards/recording.json` — segments received/emitted/failed, chunks per modality + DP
+  state, sessions, client-leg missing/dup, received→emitted latency, downstream retry counts.
+  Emission side only (platform scrapes/provisions). Same slice landed the async-ingest seam
+  tolerance (D-M1-6 above).
 - **Later capture surfaces, explicitly recorded**: system/desktop audio for the extension
   (out of this slice by scope); multi-tab simultaneous capture (feasible; deferred — ws-E);
   a mac menu-bar/GUI app (ScreenCaptureKit, visible capture indicator, autostart) — capability
@@ -170,4 +196,6 @@ fleet fresh. Runbook: [handoff/alpha-runbook.md](handoff/alpha-runbook.md) · re
   before fleet scale (M5 telemetry work).
 - Consent gate (M2) stays **back-burner (D13)** — the spool+ledger is the designed holdback
   point; nothing here forecloses it.
-- `/metrics` + dashboard JSON (M6/D9) still owed once Platform's shared backbone lands.
+- ~~`/metrics` + dashboard JSON (M6/D9) still owed~~ **DONE 2026-07-19 (WS-AO).** `/metrics` +
+  `dashboards/recording.json` ship now; they light up the moment Platform's shared
+  Prometheus/Grafana scrapes + provisions them (emission side is complete + tested).

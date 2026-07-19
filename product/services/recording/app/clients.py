@@ -22,7 +22,18 @@ import logging
 
 import httpx
 
+from .metrics import record_retry
+
 logger = logging.getLogger("recording.clients")
+
+
+def _service_for(url: str) -> str:
+    """Tag a downstream by its path so the retry counter is per-target (bounded)."""
+    if url.startswith("/raw"):
+        return "storage"
+    if url.startswith("/ingest"):
+        return "data-processing"
+    return "other"
 
 
 def async_client(base_url: str, timeout: float) -> httpx.AsyncClient:
@@ -60,6 +71,7 @@ async def _request_with_retry(
                            method, url, resp.status_code, attempt, attempts)
         if attempt >= attempts:
             break
+        record_retry(_service_for(url))  # about to reissue -> count the retry (D9)
         if backoff:
             await asyncio.sleep(backoff * attempt)
     assert last_exc is not None

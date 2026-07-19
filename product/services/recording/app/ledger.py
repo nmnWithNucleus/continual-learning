@@ -72,13 +72,25 @@ CREATE TABLE IF NOT EXISTS chunks (
   bytes      INTEGER NOT NULL,
   sha256     TEXT NOT NULL,
   blob_ref   TEXT,
-  dp_acked   INTEGER NOT NULL DEFAULT 0,
+  dp_acked   INTEGER NOT NULL DEFAULT 0,            -- 1 ONLY once DP CONFIRMED the C2 exists
+  dp_state   TEXT,                                  -- NULL(unemitted) | accepted | processed
   record_ids TEXT,                                  -- JSON list from the /ingest ack
   emitted_at TEXT,
   PRIMARY KEY (stream_id, sequence),
   UNIQUE (session_id, seq, modality)
 );
 """
+
+# Additive migrations for ledger.db files created before a column existed. SQLite has no
+# ADD COLUMN IF NOT EXISTS, so we probe pragma table_info and add what's missing. Fresh
+# DBs (every test) already have the column via _SCHEMA — this only touches upgrades. The
+# optional backfill runs ONCE, right after the column is added, so pre-slice rows get a
+# correct value instead of NULL (e.g. an inline chunk with dp_acked=1 IS 'processed', not
+# the NULL that would read as 'unemitted' in the rec_chunks_dp_state metric).
+_MIGRATIONS = [
+    ("chunks", "dp_state", "TEXT",
+     "UPDATE chunks SET dp_state = 'processed' WHERE dp_acked = 1 AND dp_state IS NULL"),
+]
 
 # Schema is idempotent (IF NOT EXISTS) but issuing it per request is pointless churn;
 # remember which db files this process already initialized.
@@ -100,7 +112,19 @@ class Ledger:
                     self._path.parent.mkdir(parents=True, exist_ok=True)
                     with closing(self._connect()) as conn:
                         conn.executescript(_SCHEMA)
+                        self._migrate(conn)
                     _initialized.add(key)
+
+    @staticmethod
+    def _migrate(conn: sqlite3.Connection) -> None:
+        """Add any columns missing from a pre-existing ledger.db (additive only), and
+        backfill them once so upgraded rows aren't left NULL."""
+        for table, column, decl, backfill in _MIGRATIONS:
+            cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+            if column not in cols:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+                if backfill:
+                    conn.execute(backfill)
 
     def _connect(self) -> sqlite3.Connection:
         # isolation_level=None == autocommit: single statements commit themselves,
@@ -399,13 +423,69 @@ class Ledger:
         blob_ref: str,
         record_ids: list[str],
         emitted_at: str,
+        accepted: bool = False,
     ) -> None:
+        """Record the /ingest ack for a chunk.
+
+        ``accepted`` distinguishes the two DP reply shapes:
+          * INLINE / processed ack (200, record_ids present, default): DP CONFIRMED the
+            C2 exists → ``dp_acked=1``, ``dp_state='processed'``. Unchanged from M0.
+          * ASYNC accept (202, no record_ids yet): DP merely ACCEPTED the chunk for
+            later processing → ``dp_acked=0``, ``dp_state='accepted'``. The invariant
+            ``dp_acked=1 ⇔ C2 durably written`` is preserved, so the gap report's
+            ``_dp_missing_unacked`` reconciliation stays sound; the chunk is confirmed
+            later via ``confirm_chunk`` when DP's /continuity reports it processed.
+        Provenance (``record_ids``) is OPTIONAL at accept — recording tolerates the
+        empty list (it's the async-ingest wire, decided jointly with data-processing)."""
         with closing(self._connect()) as conn:
             conn.execute(
-                "UPDATE chunks SET blob_ref = ?, dp_acked = 1, record_ids = ?,"
-                " emitted_at = ? WHERE stream_id = ? AND sequence = ?",
-                (blob_ref, json.dumps(record_ids), emitted_at, stream_id, sequence),
+                "UPDATE chunks SET blob_ref = ?, dp_acked = ?, dp_state = ?,"
+                " record_ids = ?, emitted_at = ? WHERE stream_id = ? AND sequence = ?",
+                (blob_ref, 0 if accepted else 1, "accepted" if accepted else "processed",
+                 json.dumps(record_ids), emitted_at, stream_id, sequence),
             )
+
+    def accepted_unconfirmed_chunks(self, session_id: str | None = None) -> list[dict]:
+        """Chunks DP ACCEPTED (202) but hasn't confirmed processed — with everything
+        needed to rebuild + re-push their C1 envelope (the D16 re-drive path). Joins the
+        session (user/device) + the source segment (wall-clock span)."""
+        sql = (
+            "SELECT c.stream_id, c.sequence, c.chunk_id, c.modality, c.codec, c.bytes,"
+            " c.sha256, c.blob_ref, s.user_id, s.device_id, g.t_start, g.t_end"
+            " FROM chunks c"
+            " JOIN sessions s ON s.session_id = c.session_id"
+            " JOIN segments g ON g.session_id = c.session_id AND g.seq = c.seq"
+            " WHERE c.dp_state = 'accepted'"
+        )
+        params: tuple = ()
+        if session_id is not None:
+            sql += " AND c.session_id = ?"
+            params = (session_id,)
+        sql += " ORDER BY c.stream_id, c.sequence"
+        with closing(self._connect()) as conn:
+            return [dict(row) for row in conn.execute(sql, params)]
+
+    def confirm_chunk(
+        self, stream_id: str, sequence: int, *, record_ids: list[str] | None = None
+    ) -> None:
+        """Promote an async-accepted chunk to CONFIRMED once DP's /continuity reports its
+        C2 written (``dp_acked=1``, ``dp_state='processed'``). Persisting the promotion is
+        what keeps the ack receipt across a DP restart (its in-memory processed set is
+        volatile; ours is durable), so a confirmed chunk never reverts to 'in-flight'.
+        Idempotent; only touches rows still 'accepted'."""
+        with closing(self._connect()) as conn:
+            if record_ids is None:
+                conn.execute(
+                    "UPDATE chunks SET dp_acked = 1, dp_state = 'processed'"
+                    " WHERE stream_id = ? AND sequence = ? AND dp_state = 'accepted'",
+                    (stream_id, sequence),
+                )
+            else:
+                conn.execute(
+                    "UPDATE chunks SET dp_acked = 1, dp_state = 'processed', record_ids = ?"
+                    " WHERE stream_id = ? AND sequence = ? AND dp_state = 'accepted'",
+                    (json.dumps(record_ids), stream_id, sequence),
+                )
 
     def streams_for_session(self, session_id: str) -> list[dict]:
         with closing(self._connect()) as conn:
@@ -418,6 +498,63 @@ class Ledger:
                 )
             ]
 
+    def metrics_snapshot(self) -> dict:
+        """Aggregate counts for the /metrics scrape (D9). Bounded — all totals across
+        sessions, never per-session series. Client-leg missing is the per-session gap
+        walk summed (dev/beta scale is tiny)."""
+        with closing(self._connect()) as conn:
+            seg_states: dict[str, int] = {"received": 0, "emitted": 0, "failed": 0}
+            for row in conn.execute(
+                "SELECT state, COUNT(*) AS n FROM segments GROUP BY state"
+            ):
+                seg_states[row["state"]] = row["n"]
+
+            chunks_by_modality: dict[str, int] = {}
+            for row in conn.execute(
+                "SELECT modality, COUNT(*) AS n FROM chunks GROUP BY modality"
+            ):
+                chunks_by_modality[row["modality"]] = row["n"]
+
+            chunks_by_dp_state: dict[str, int] = {"accepted": 0, "processed": 0, "unemitted": 0}
+            for row in conn.execute(
+                "SELECT COALESCE(dp_state, 'unemitted') AS s, COUNT(*) AS n"
+                " FROM chunks GROUP BY s"
+            ):
+                chunks_by_dp_state[row["s"]] = row["n"]
+
+            sess = conn.execute(
+                "SELECT COUNT(*) AS total, COALESCE(SUM(1 - ended), 0) AS active,"
+                " COALESCE(SUM(duplicate_deliveries), 0) AS dups FROM sessions"
+            ).fetchone()
+
+            # Client-leg missing: per session, holes below max-received seq + the tail an
+            # ended session's expected count reveals.
+            missing_total = 0
+            sessions = conn.execute(
+                "SELECT session_id, ended, expected_segments FROM sessions"
+            ).fetchall()
+            for s in sessions:
+                seqs = [r["seq"] for r in conn.execute(
+                    "SELECT seq FROM segments WHERE session_id = ?", (s["session_id"],)
+                )]
+                if not seqs and not (s["ended"] and s["expected_segments"]):
+                    continue
+                top = max(seqs) if seqs else -1
+                count = (top + 1) - len(set(seqs))
+                if s["ended"] and s["expected_segments"] and s["expected_segments"] > top + 1:
+                    count += s["expected_segments"] - (top + 1)
+                missing_total += count
+
+        return {
+            "segments_by_state": seg_states,
+            "chunks_by_modality": chunks_by_modality,
+            "chunks_by_dp_state": chunks_by_dp_state,
+            "sessions_total": sess["total"],
+            "sessions_active": sess["active"],
+            "client_duplicate_deliveries_total": sess["dups"],
+            "client_missing_total": missing_total,
+        }
+
     def stream_chunks(self, stream_id: str) -> list[dict]:
         """Chunk rows + their source segment's state (for per-stream pending/failed)."""
         with closing(self._connect()) as conn:
@@ -425,7 +562,7 @@ class Ledger:
                 dict(row)
                 for row in conn.execute(
                     "SELECT c.sequence, c.seq, c.chunk_id, c.codec, c.dp_acked,"
-                    " c.blob_ref, g.state AS segment_state"
+                    " c.dp_state, c.blob_ref, g.state AS segment_state"
                     " FROM chunks c JOIN segments g"
                     "   ON g.session_id = c.session_id AND g.seq = c.seq"
                     " WHERE c.stream_id = ? ORDER BY c.sequence",

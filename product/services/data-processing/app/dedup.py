@@ -11,9 +11,13 @@ chunk produced, in order.
 
 Two cases, both covered here:
   * already-processed: a fast in-memory map chunk_id -> [record_id, ...].
-  * in-flight (concurrent redelivery of a not-yet-finished chunk): a per-chunk
-    asyncio.Lock serializes them; the second waiter re-checks the map and returns
-    the first's record_ids instead of double-processing.
+  * in-flight (concurrent redelivery of a not-yet-finished chunk):
+      - INLINE mode: a per-chunk asyncio.Lock serializes them; the second waiter
+        re-checks the map and returns the first's record_ids instead of
+        double-processing.
+      - ASYNC mode: an ``_inflight`` set marks chunk_ids that are queued or being
+        processed; ``claim_for_async`` atomically decides done / in-flight / claim,
+        so a concurrent redelivery is ACKed (202 duplicate) without a second enqueue.
 
 M0 is in-memory (single process). Because each record_id is itself deterministic on
 (chunk_id, pipeline_version, discriminator), storage's /context upsert is the
@@ -29,6 +33,7 @@ from typing import Optional
 class DedupStore:
     def __init__(self) -> None:
         self._done: dict[str, list[str]] = {}    # chunk_id -> [record_id, ...]
+        self._inflight: set[str] = set()         # queued/processing (async mode)
         self._locks: dict[str, asyncio.Lock] = {}
         self._guard = asyncio.Lock()
 
@@ -36,13 +41,50 @@ class DedupStore:
         return self._done.get(chunk_id)
 
     def put(self, chunk_id: str, record_ids: list[str]) -> None:
+        """Record a chunk's final record_ids AND release any async in-flight claim —
+        a processed chunk is no longer in flight."""
         self._done[chunk_id] = record_ids
+        self._inflight.discard(chunk_id)
 
     async def lock_for(self, chunk_id: str) -> asyncio.Lock:
-        """Return the per-chunk lock, creating it under a global guard."""
+        """Return the per-chunk lock, creating it under a global guard. (Inline path.)"""
         async with self._guard:
             lock = self._locks.get(chunk_id)
             if lock is None:
                 lock = asyncio.Lock()
                 self._locks[chunk_id] = lock
             return lock
+
+    async def claim_for_async(self, chunk_id: str) -> str:
+        """Atomically classify a chunk for the async accept path:
+
+          * ``'done'``     — already processed; caller returns its record_ids (200).
+          * ``'inflight'`` — already queued/processing; caller ACKs 202 (duplicate),
+                             does NOT enqueue again.
+          * ``'claimed'``  — freshly claimed by THIS caller; caller enqueues it and
+                             MUST later release via ``put`` (success) or
+                             ``release_inflight`` (dead-letter / failure / cancel).
+
+        The claim + the two prior checks happen under one lock, so two concurrent
+        redeliveries of the same chunk can never both come back ``'claimed'``."""
+        async with self._guard:
+            if chunk_id in self._done:
+                return "done"
+            if chunk_id in self._inflight:
+                return "inflight"
+            self._inflight.add(chunk_id)
+            return "claimed"
+
+    def release_inflight(self, chunk_id: str) -> None:
+        """Drop an async in-flight claim WITHOUT recording a result — for a
+        dead-letter, a terminal failure, or a worker cancelled mid-drain. Idempotent.
+        A subsequent redelivery re-claims and reprocesses (self-healing at-least-once);
+        this must run in a ``finally`` so a claim is never orphaned (an orphan would
+        make every future redelivery ACK 202-duplicate and never process)."""
+        self._inflight.discard(chunk_id)
+
+    def reset_inflight(self) -> None:
+        """Clear ALL in-flight claims — belt-and-suspenders for app-object reuse
+        across event loops (TestClient runs one app on a fresh loop per client), so a
+        prior loop's abandoned claims can't poison a later lifespan."""
+        self._inflight.clear()

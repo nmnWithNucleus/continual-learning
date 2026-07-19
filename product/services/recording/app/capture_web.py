@@ -237,6 +237,19 @@ def _missing_info(
     return capped, count
 
 
+def _runs_to_set(raw: list, limit_seq: int | None = None) -> set[int]:
+    """Expand DP's ``[lo, hi]`` run list (or flat ints from older fakes) into a set of
+    sequences, optionally clipped to ``<= limit_seq`` (what the ledger allocated)."""
+    seqs: set[int] = set()
+    for item in raw or []:
+        if isinstance(item, (list, tuple)) and len(item) == 2:
+            hi = int(item[1]) if limit_seq is None else min(int(item[1]), limit_seq)
+            seqs.update(range(max(0, int(item[0])), hi + 1))
+        elif isinstance(item, int) and item >= 0 and (limit_seq is None or item <= limit_seq):
+            seqs.add(item)
+    return seqs
+
+
 def _dp_missing_unacked(raw_missing: list, acked: set[int], limit_seq: int) -> list[int]:
     """DP-reported missing minus what OUR ledger holds a DP ack for.
 
@@ -245,14 +258,7 @@ def _dp_missing_unacked(raw_missing: list, acked: set[int], limit_seq: int) -> l
     sequence is only truly missing if DP reports it AND we never got its `/ingest`
     ack. Accepts both the real tracker's [lo, hi] runs and flat ints (older fakes);
     everything is clipped to sequences the ledger actually allocated."""
-    seqs: set[int] = set()
-    for item in raw_missing or []:
-        if isinstance(item, (list, tuple)) and len(item) == 2:
-            lo, hi = int(item[0]), min(int(item[1]), limit_seq)
-            seqs.update(range(max(0, lo), hi + 1))
-        elif isinstance(item, int) and 0 <= item <= limit_seq:
-            seqs.add(item)
-    return sorted(seqs - acked)
+    return sorted(_runs_to_set(raw_missing, limit_seq) - acked)
 
 
 async def _dp_continuity(settings: Settings, stream_id: str) -> dict:
@@ -272,6 +278,11 @@ async def _dp_continuity(settings: Settings, stream_id: str) -> dict:
         "max_sequence": data.get("max_sequence"),
         "missing": data.get("missing") or [],
         "duplicate_deliveries": data.get("duplicate_deliveries", 0),
+        # Additive DP fields (present once DP runs async /ingest; absent => empty, so an
+        # inline DP or an older build reconciles exactly as before): sequences whose C2
+        # is durably written, and sequences DP dead-lettered (accepted, never processed).
+        "processed": data.get("processed") or [],
+        "dead_lettered": data.get("dead_lettered") or [],
     }
 
 
@@ -292,22 +303,48 @@ async def session_report(session_id: str) -> dict:
 
     emit_leg: list[dict] = []
     dp_reports_missing = False
+    any_accepted_unconfirmed = False
     for stream in led.streams_for_session(session_id):
         rows = led.stream_chunks(stream["stream_id"])
-        emitted = [r for r in rows if r["dp_acked"]]
         dp_side = await _dp_continuity(settings, stream["stream_id"])
+        dead_delivered: list[int] = []
         if dp_side["checked"]:
+            # DP ran async /ingest: a chunk can be ACCEPTED (202) but not yet processed.
+            # Lazy-confirm the ones DP now reports processed — persisting the promotion
+            # so a later DP restart (volatile processed set) can't un-confirm them.
+            processed_set = _runs_to_set(dp_side["processed"])
+            for r in rows:
+                if r["dp_state"] == "accepted" and r["sequence"] in processed_set:
+                    led.confirm_chunk(stream["stream_id"], r["sequence"])
+            rows = led.stream_chunks(stream["stream_id"])  # re-read after confirmations
+
             # Reconcile against OUR ack receipts: DP's in-memory tracker forgets a
             # restart-preceding prefix and would otherwise fabricate a permanent
-            # leading gap for chunks that were delivered and acked. Only sequences
-            # DP misses AND we hold no ack for count as loss.
-            acked = {r["sequence"] for r in emitted}
+            # leading gap for chunks that were delivered and acked. Only sequences DP
+            # misses AND we hold no CONFIRMED ack for (dp_acked=1) count as loss.
+            acked = {r["sequence"] for r in rows if r["dp_acked"]}
             limit = max((r["sequence"] for r in rows), default=-1)
-            dp_side["missing_unacked"] = _dp_missing_unacked(
-                dp_side["missing"], acked, limit
-            )
-            if dp_side["missing_unacked"]:
+            missing_unacked = _dp_missing_unacked(dp_side["missing"], acked, limit)
+            # Dead-lettered chunks WE delivered (accepted/processed state) are real loss.
+            delivered = {r["sequence"] for r in rows
+                         if r["dp_state"] in ("accepted", "processed")}
+            dead_delivered = sorted(_runs_to_set(dp_side["dead_lettered"], limit) & delivered)
+            # Public dp block — EXACT 5-key shape recording's gap-report contract froze
+            # (dead-letter / accepted surface as sibling leg fields, not inside `dp`).
+            dp_side = {
+                "checked": True, "max_sequence": dp_side["max_sequence"],
+                "missing": dp_side["missing"], "missing_unacked": missing_unacked,
+                "duplicate_deliveries": dp_side["duplicate_deliveries"],
+            }
+            if missing_unacked or dead_delivered:
                 dp_reports_missing = True
+
+        emitted = [r for r in rows if r["dp_acked"]]
+        accepted_unconfirmed = sum(
+            1 for r in rows if not r["dp_acked"] and r["dp_state"] == "accepted"
+        )
+        if accepted_unconfirmed:
+            any_accepted_unconfirmed = True
         emit_leg.append(
             {
                 "modality": stream["modality"],
@@ -321,18 +358,25 @@ async def session_report(session_id: str) -> dict:
                 "failed": sum(
                     1 for r in rows if not r["dp_acked"] and r["segment_state"] == "failed"
                 ),
+                # Async-ingest visibility (additive; 0 when DP is inline): chunks DP
+                # ACCEPTED but hasn't confirmed processed, and ones DP dead-lettered.
+                "accepted_unconfirmed": accepted_unconfirmed,
+                "dead_lettered": dead_delivered,
                 "dp": dp_side,
             }
         )
 
     # The "zero silent loss" verdict, checked end-to-end across both legs: clean =
-    # ended AND no client-leg hole AND every received segment emitted AND no
-    # DP-checked stream missing anything. Work still in flight (not ended, or ended
-    # with segments mid-emit) is "recording"; anything else is "gaps".
+    # ended AND no client-leg hole AND every received segment emitted AND every
+    # DP-checked stream has CONFIRMED the C2 for each chunk (nothing missing,
+    # dead-lettered, or still merely accepted-in-flight). Work still in flight (not
+    # ended, segments mid-emit, or chunks accepted-but-unconfirmed by an async DP) is
+    # "recording"; anything DP lost (missing / dead-lettered) is "gaps".
     any_failed = any(state == "failed" for _seq, state in seq_states)
     any_pending = any(state == "received" for _seq, state in seq_states)
     problems = missing_count > 0 or any_failed or dp_reports_missing
-    if not ended or (not problems and any_pending):
+    any_inflight = any_pending or any_accepted_unconfirmed
+    if not ended or (not problems and any_inflight):
         verdict = "recording"
     elif problems:
         verdict = "gaps"
@@ -367,6 +411,19 @@ async def session_report(session_id: str) -> dict:
 
 
 # ------------------------------------------------------------------------ retry
+
+@router.post("/sessions/{session_id}/redrive")
+async def redrive_accepted(session_id: str) -> dict:
+    """Re-push this session's accepted-but-unconfirmed chunks to DP (the D16 re-drive
+    path). Idempotent: DP's chunk_id dedup makes a done chunk short-circuit to
+    200+record_ids (→ we confirm it), an in-flight one re-ACK 202, a lost one reprocess.
+    Turns a post-queue-loss 'recording' verdict back to 'clean' without waiting for M7."""
+    settings = get_settings()
+    if ledger.for_settings(settings).get_session(session_id) is None:
+        raise HTTPException(404, f"unknown session {session_id}")
+    result = await emitter.redrive_accepted_chunks(settings, session_id)
+    return {"ok": True, "session_id": session_id, **result}
+
 
 @router.post("/sessions/{session_id}/retry")
 async def retry_failed(session_id: str, request: Request) -> dict:

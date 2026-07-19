@@ -6,10 +6,12 @@
 
 **Status:** M0 + Processor seam + capture-M1 pair + **real audio pipeline beyond ASR**
 (diarization · translation · acoustic-event captioning behind off-by-default backend switches;
-mock headless + real pyannote/whisper/AST seams) + **real VIDEO pipeline landed (M3, WS-V):
-keyframe extraction + captioning behind `VIDEO_BACKEND=mock|vlm` + per-keyframe timing hook + OCR
-weave, verified with a genuine Qwen3-VL-8B run** — capture alpha still green (3 real clients) —
-**72 tests** (38 + 19 audio + 11 video + 4 verification regressions) · **Last updated:** 2026-07-19 (integrator: independent verification round)
+now **all three SMOKE-TESTED GREEN on node-7**, +2 pyannote torch-2.x fixes) + **real VIDEO
+pipeline (M3, WS-V):** keyframe extraction + captioning behind `VIDEO_BACKEND=mock|vlm` +
+per-keyframe timing hook + OCR weave (genuine Qwen3-VL-8B run) + **ASYNC `/ingest` (M7-early)
+behind `INGEST_ASYNC`, off by default = byte-identical inline** + **D9 `/metrics` + Grafana
+dashboard (M8)** — capture alpha still green (3 real clients) —
+**98 tests** (72 baseline + 11 metrics + 10 async + 5 dedup) · **Last updated:** 2026-07-19 (async-observability session)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
@@ -19,6 +21,7 @@ weave, verified with a genuine Qwen3-VL-8B run** — capture alpha still green (
 | M1 | **Continuity detector** (`/continuity`) + **real ASR + VAD gate** + audio pipeline stubs | built + verified live 2026-07-18 | [handoff/ws-m1-continuity-asr.md](handoff/ws-m1-continuity-asr.md) | recording M1 lead |
 | A | **Real audio pipeline beyond ASR**: diarization · translation · acoustic events (off-by-default `*_BACKEND` switches; mock headless + real pyannote/whisper/AST seams) | built, 57 tests green (38+19); real backends unrun seams | [handoff/ws-audio-pipeline.md](handoff/ws-audio-pipeline.md) | audio-pipeline lead |
 | V | **Real VIDEO pipeline** (M3): ffmpeg keyframes → caption (`VIDEO_BACKEND=mock\|vlm`) + **per-keyframe timing hook** (OQ14a) + OCR weave (D8) | built + verified + reviewed; real **Qwen3-VL-8B** E2E; suite **68 green** (+11 video) | [handoff/ws-video-pipeline.md](handoff/ws-video-pipeline.md) | video-pipeline lead |
+| AO | **Async `/ingest`** (M7-early, `INGEST_ASYNC` off by default) + **D9 `/metrics` + dashboard** (M8) + **node-7 smoke** of the 3 real audio backends | built + tested + reviewed; DP **98 green**; recording seam updated (120 green); +2 pyannote fixes | [handoff/ws-async-observability.md](handoff/ws-async-observability.md) | async-observability lead |
 
 ## Processor seam — how to add a modality (READ THIS before owning image/video/text)
 The core (`app/main.py` `POST /ingest` + `app/pipeline.py` `build_c2`) is **modality-agnostic**:
@@ -91,23 +94,36 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
     which demuxes to the same C1 the phone already used). Suite unregressed at 38.
 
 ## Next
-- **Async `/ingest` (ACK 202 + worker queue) — now the top architectural item** (charter
-  **M7** "production hardening: backpressure…" territory, arriving early — the charter allows
-  M4–M7 to interleave after M3, and video/M3 just landed). DP processes
-  chunks INLINE today; the 2026-07-19 verification round confirmed a fully-loaded chunk
-  (real ASR + diarization + VLM captions) can lawfully exceed the producer's delivery
-  timeout, making recording retry into DP's in-flight lock. Fleet-mitigated for now
-  (`RECORDING_HTTP_TIMEOUT=120` in deploy/learn.env); the real fix — ack fast, process on a
-  worker, rely on `chunk_id` dedup + `record_id` determinism for retry safety — was already
-  sketched in the founders' M1 agenda and is ready to be its own slice.
+- ~~Async `/ingest` (ACK 202 + worker queue)~~ **DONE (2026-07-19, WS-AO, M7-early) —
+  [handoff/ws-async-observability.md](handoff/ws-async-observability.md).** Behind
+  `INGEST_ASYNC` (default off = inline, byte-identical). Async = ACK `202
+  {ok,accepted,chunk_id}` + a bounded worker pool (`ingest_queue.py`), one shared
+  `process_chunk` core (`ingest_core.py`) for inline + worker, `DedupStore.claim_for_async`
+  (finally-released, no orphan), graceful drain on shutdown, transient-retry-then-dead-letter.
+  **Reply shape decided JOINTLY with recording (inter-service wire, OQ4 precedent — recorded
+  in BOTH canvases):** provenance is optional-at-accept; DP `/continuity` additively reports
+  `processed` + `dead_lettered` so recording keeps `dp_acked=1 ⇔ C2 written` and never reads a
+  silent `clean` for a lost chunk. Flipping `INGEST_ASYNC=1` **retires the
+  `RECORDING_HTTP_TIMEOUT=120` mitigation.** Remaining for **full M7**: durable pending-journal
+  (auto-recovery past a kill / drain-timeout) + reprocess-by-version + backfill — this slice
+  guarantees *never falsely `clean`* (all loss visible), not auto-recovery.
+- ~~D9 `/metrics` + dashboard~~ **DONE (2026-07-19, WS-AO, M8).** `/metrics` (Prometheus text,
+  zero new deps) + `dashboards/data-processing.json`: ingest rate, async queue depth, per-stage
+  + per-modality latency, dedup hits, VAD-empty rate, continuity missing/dup/dead-letter. C8
+  sync latency lands in the same `dp_stage_seconds`/HTTP families. Follow-up: finer
+  intra-pipeline per-stage latency (asr/diarize/…) — the `stage` label already supports it;
+  owned by each modality plugin (additive).
 - **Real audio pipeline stages — BUILT** (WS A, [handoff/ws-audio-pipeline.md](handoff/ws-audio-pipeline.md)):
   diarization / translation / acoustic-event captioning now fill their stubs behind
   off-by-default `DIARIZE_BACKEND` / `TRANSLATE_BACKEND`+`TRANSLATE_TARGET` / `ACOUSTIC_BACKEND`
   switches (`app/audio/`). Default output byte-identical (mock dialect untouched, 38-baseline
   green). Diarization forks the audio `pipeline_version` (`+diar-*`); translation + acoustic are
-  additive `discriminator`-tagged sidecar records. Mock backends exercised headless; the real
-  pyannote/whisper/AST backends are **correct-by-inspection seams, unrun here** — **remaining:
-  smoke-test each on node-7** (GPU + HF-gated pyannote) before trusting a real run. VAD-cut
+  additive `discriminator`-tagged sidecar records. **Node-7 smoke DONE (2026-07-19, WS-AO): all
+  three real backends ran GREEN end-to-end on a real webm/opus speech chunk (pyannote diarize,
+  whisper-translate, AST acoustic); the smoke found + fixed two real pyannote torch-2.x compat
+  bugs (`weights_only` default; webm decode via ffmpeg pre-decode).** See
+  [handoff/ws-audio-pipeline.md](handoff/ws-audio-pipeline.md). Residual: whisper-translate on a
+  genuine non-English source still unproven; pyannote pin is 3.1.1, the smoke ran 3.3.2. VAD-cut
   chunk boundaries mean chunks arrive pause-aligned — revisit cross-chunk stitching after
   real-data experience.
 - Continuity tracker durability (survives restart) + `sequence_conflicts` surfacing beyond the
@@ -128,4 +144,4 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
 - Real **image** processor is still a mock stub (image build owns it, incl. the OQ14b bbox
   `content.regions[]` C2-additive field the video OCR pass will also want).
 - text/image real pipelines per CHARTER M-order (video landed).
-- **D9 (2026-07-09) ratified — centralized observability:** this service now owes a `/metrics` endpoint + Grafana dashboard JSON (throughput/queue depth, per-stage + C8 latency, enrichment counts). On the backlog — see CHARTER.md § Scope (Observability) + deliverable **M8**.
+- ~~**D9 (2026-07-09) ratified — centralized observability**~~ **DONE (2026-07-19, WS-AO, M8):** `/metrics` (Prometheus text, zero new deps) + `dashboards/data-processing.json` — request rate/latency/errors + ingest rate + async queue depth + per-stage/modality latency + dedup/VAD-empty/continuity counts. Emission side only (platform scrapes/provisions). Finer intra-pipeline per-stage latency is the one documented follow-up (additive, per modality plugin).

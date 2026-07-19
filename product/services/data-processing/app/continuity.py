@@ -65,6 +65,16 @@ class _StreamState:
     sequence_conflicts: int = 0
     # Disjoint, sorted, NON-ADJACENT [lo, hi] runs of sequences seen.
     intervals: list[list[int]] = field(default_factory=list)
+    # Sequences whose C2 record is DURABLY WRITTEN to /context ("processed"), and
+    # sequences that exhausted retries / hit a terminal error and were DEAD-LETTERED
+    # (never processed). Async /ingest ACKs at ACCEPT (a chunk is "seen" the moment it
+    # arrives), so "seen" no longer implies "processed" — recording's gap report checks
+    # THESE sets to tell a still-in-flight chunk (verdict 'recording') from a lost one
+    # (verdict 'gaps'), instead of trusting the accept-ack. In INLINE mode processing is
+    # synchronous, so processed == seen and dead_lettered is empty — the report is
+    # unchanged. Dev-scale sets (same posture as first_chunk); runs computed at report.
+    processed_seqs: set[int] = field(default_factory=set)
+    dead_seqs: set[int] = field(default_factory=set)
     # sequence -> FIRST chunk_id seen there. Doubles as the O(1) seen-set (its
     # keys are exactly the covered sequences) and as the duplicate-vs-conflict
     # discriminator. Unbounded at dev scale — see the module docstring.
@@ -101,6 +111,18 @@ def _gaps(intervals: list[list[int]]) -> list[list[int]]:
             gaps.append([prev_hi + 1, lo - 1])
         prev_hi = hi
     return gaps
+
+
+def _runs(seqs: set[int]) -> list[list[int]]:
+    """Collapse a set of sequences into sorted, non-adjacent ``[lo, hi]`` runs — the
+    same compact shape ``missing`` uses, so recording reconciles them uniformly."""
+    runs: list[list[int]] = []
+    for s in sorted(seqs):
+        if runs and s == runs[-1][1] + 1:
+            runs[-1][1] = s
+        else:
+            runs.append([s, s])
+    return runs
 
 
 class ContinuityTracker:
@@ -164,6 +186,28 @@ class ContinuityTracker:
                     chunk_id,
                 )
 
+    def note_processed(self, stream_id: str, sequence: int) -> None:
+        """Mark a sequence's C2 as DURABLY WRITTEN to /context. Called (both modes)
+        once processing succeeds — the signal recording's report uses to confirm a
+        chunk landed. Clears any prior dead-letter mark (a redelivery reprocessed it)."""
+        with self._lock:
+            state = self._streams.get(stream_id)
+            if state is None:  # note() always precedes; defensive no-op otherwise
+                return
+            state.processed_seqs.add(sequence)
+            state.dead_seqs.discard(sequence)
+
+    def note_dead_letter(self, stream_id: str, sequence: int) -> None:
+        """Mark a sequence as DEAD-LETTERED — retries exhausted or a terminal error,
+        so no C2 was written. Surfaced to recording so an accepted-then-lost chunk
+        reads 'gaps' (visible loss), never a silent 'clean'."""
+        with self._lock:
+            state = self._streams.get(stream_id)
+            if state is None:
+                return
+            if sequence not in state.processed_seqs:  # processed wins over dead
+                state.dead_seqs.add(sequence)
+
     def report(self) -> dict[str, Any]:
         """The ``GET /continuity`` payload: every observed stream's entry, in
         first-observation order."""
@@ -199,6 +243,10 @@ class ContinuityTracker:
             "max_sequence": state.max_sequence,
             "received": state.received,
             "missing": _gaps(state.intervals),
+            # Additive (C2 stays frozen): sequences whose C2 is durably written, and
+            # sequences dead-lettered. Empty in the inline default (processed == seen).
+            "processed": _runs(state.processed_seqs),
+            "dead_lettered": _runs(state.dead_seqs),
             "duplicate_deliveries": state.duplicate_deliveries,
             "sequence_conflicts": state.sequence_conflicts,
             "first_seen": state.first_seen,
