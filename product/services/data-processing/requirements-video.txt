@@ -1,0 +1,38 @@
+# data-processing — VIDEO modality, HEAVY / OPTIONAL deps.
+#
+# The base service (requirements.txt) and the DEFAULT video path stay light: the
+# mock captioner (VIDEO_BACKEND=mock) needs nothing here, and the real captioner
+# (VIDEO_BACKEND=vlm) is pure httpx (already a base dep) against an OpenAI-compatible
+# VL endpoint — the GPU lives behind that HTTP endpoint, not in this process. So
+# NONE of the below is needed to run the loop headless; install it only for the
+# noted real-video paths.
+#
+# ---------------------------------------------------------------------------
+# SYSTEM prerequisite (not pip): ffmpeg + ffprobe on PATH.
+#   ffmpeg is the SINGLE canonical decoder for real keyframe extraction
+#   (app/vision/frames.py): scene-change selection + JPEG extraction shell out to
+#   it. There is deliberately NO in-process decoder fallback — a second decoder
+#   would select different keyframes for identical bytes under the same
+#   pipeline_version, silently breaking /context idempotency across a heterogeneous
+#   fleet. Without ffmpeg the pipeline still runs headless, emitting timing-less
+#   synthetic keyframes (mock-equivalent, the SAME result on every worker) — it just
+#   can't see/time frames.
+#   Debian/Ubuntu: apt-get install ffmpeg     conda: conda install -c conda-forge ffmpeg
+#
+# So there are NO extra pip deps for the video pipeline itself (mock is stdlib +
+# base httpx; the vlm backend is base httpx to an HTTP endpoint). This file exists
+# to pin the ffmpeg system prereq + document the real-endpoint recipe below.
+# ---------------------------------------------------------------------------
+# The real VL endpoint (VIDEO_BACKEND=vlm) is reached over HTTP, so nothing is
+# installed here for it. To STAND ONE UP, serve a VL model with vLLM (OpenAI-
+# compatible) and point VIDEO_VLM_URL at it — reuse services/inference/serve_vllm.sh
+# (Qwen3-VL-32B on the GPU node) or serve a lighter cached VL model on one GPU:
+#
+#   vllm serve Qwen/Qwen3-VL-2B-Instruct --port 8100 \
+#        --allowed-local-media-path / --served-model-name Qwen/Qwen3-VL-2B-Instruct
+#   VIDEO_BACKEND=vlm VIDEO_VLM_URL=http://127.0.0.1:8100 \
+#        VIDEO_VLM_MODEL=Qwen/Qwen3-VL-2B-Instruct  (see handoff/ws-video-pipeline.md)
+#
+# vLLM + its CUDA/torch stack are pinned per-env in product/STACK.md (conda
+# vllm-cu13 / vllm-vlm); do NOT pip-install them into the DP service venv.
+# ---------------------------------------------------------------------------

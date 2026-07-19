@@ -6,8 +6,10 @@
 
 **Status:** M0 + Processor seam + **capture-M1 pair landed** (continuity detector on `/ingest`,
 faster-whisper standing w/ VAD gate, pipeline-shape stubs) — **exercised end-to-end through the
-capture alpha (3 real clients, real transcripts)** — **38 tests** · **Last updated:**
-2026-07-19 (recording computer-capture lead)
+capture alpha (3 real clients, real transcripts)**; **real VIDEO pipeline landed (M3, WS-V): real
+keyframe extraction + captioning behind `VIDEO_BACKEND=mock|vlm` + per-keyframe timing hook + OCR
+weave, verified with a genuine Qwen3-VL-8B run** — **49 tests** · **Last updated:**
+2026-07-19 (video-pipeline lead)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
@@ -15,6 +17,7 @@ capture alpha (3 real clients, real transcripts)** — **38 tests** · **Last up
 | B | M0 capture skeleton: C1 → ASR → C2 (`:8085`) | built, mock tests green | this dir (`app/`, `tests/`) | learn-loop M0 |
 | B+ | Modality-agnostic **Processor seam** + image/video/text **stubs** | built, 24 tests green | `app/processing/`, `tests/test_processor_seam.py` | seam session |
 | M1 | **Continuity detector** (`/continuity`) + **real ASR + VAD gate** + audio pipeline stubs | built + verified live 2026-07-18 | [handoff/ws-m1-continuity-asr.md](handoff/ws-m1-continuity-asr.md) | recording M1 lead |
+| V | **Real VIDEO pipeline** (M3): ffmpeg keyframes → caption (`VIDEO_BACKEND=mock\|vlm`) + **per-keyframe timing hook** (OQ14a) + OCR weave (D8) | built + verified + reviewed; real **Qwen3-VL-8B** E2E; **49 tests** | [handoff/ws-video-pipeline.md](handoff/ws-video-pipeline.md) | video-pipeline lead |
 
 ## Processor seam — how to add a modality (READ THIS before owning image/video/text)
 The core (`app/main.py` `POST /ingest` + `app/pipeline.py` `build_c2`) is **modality-agnostic**:
@@ -93,7 +96,13 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
   stitching need after real-data experience.
 - Continuity tracker durability (survives restart) + `sequence_conflicts` surfacing beyond the
   warning log, when multi-replica/serious-scale arrives.
-- Real video/image processors (current ones are mock stubs — phone video chunks currently get
-  mock keyframe captions in `/context`; fine for beta, flagged for the modality sessions).
-- text/image/video real pipelines per CHARTER M-order.
+- ~~Real video processor~~ **DONE (2026-07-19, WS-V)** — `processors/video.py` now runs a real
+  keyframe pipeline (ffmpeg scene-change selection) behind `VIDEO_BACKEND=mock|vlm`; each
+  keyframe gets its own C2 sub-span via the additive `ProcessedUnit.t_start/t_end` hook (OQ14a,
+  honored in `build_c2`, no C2 schema change); OCR woven into the caption (D8). Mock stays the
+  headless default; the `vlm` backend (httpx → OpenAI-compatible VL endpoint) was exercised
+  genuinely against a locally-served Qwen3-VL-8B. See [handoff/ws-video-pipeline.md](handoff/ws-video-pipeline.md).
+- Real **image** processor is still a mock stub (image build owns it, incl. the OQ14b bbox
+  `content.regions[]` C2-additive field the video OCR pass will also want).
+- text/image real pipelines per CHARTER M-order (video landed).
 - **D9 (2026-07-09) ratified — centralized observability:** this service now owes a `/metrics` endpoint + Grafana dashboard JSON (throughput/queue depth, per-stage + C8 latency, enrichment counts). On the backlog — see CHARTER.md § Scope (Observability) + deliverable **M8**.

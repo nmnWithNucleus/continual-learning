@@ -62,13 +62,22 @@ def build_c2(
     """Assemble a C2 record from the C1 envelope and one ProcessedUnit.
 
     - source provenance (device/stream/chunk/blob/modality) carried from C1;
-    - t_start/t_end carried VERBATIM from C1 (the time-spine axis storage indexes);
+    - t_start/t_end: the unit's optional per-unit sub-span when it set one, else
+      carried VERBATIM from C1 (the time-spine axis storage indexes on). Defaulting
+      to the C1 span keeps every 1:1 modality byte-identical; a video keyframe that
+      knows its own timing supplies a sub-span so a chunk's many records no longer
+      collide on the shared chunk span (CHARTER OQ14a). No C2 schema change — C2
+      already carries per-record timestamps;
     - content is the unit's content, exactly as the Processor emitted it (segments,
       when present, already carry absolute RFC3339 times);
     - enrichments carried from the unit (present-but-empty in v0);
     - record_id folds in the unit's within-chunk discriminator.
     """
     record_id = compute_record_id(c1["chunk_id"], pipeline_version, unit.discriminator)
+
+    # Per-unit sub-span when the Processor set one; otherwise the chunk's C1 span.
+    t_start = unit.t_start if unit.t_start is not None else c1["t_start"]
+    t_end = unit.t_end if unit.t_end is not None else c1["t_end"]
 
     content: dict[str, Any] = {"kind": unit.content.kind, "text": unit.content.text}
     if unit.content.language:
@@ -88,8 +97,8 @@ def build_c2(
             "blob_ref": c1["blob_ref"],
             "modality": c1["modality"],
         },
-        "t_start": c1["t_start"],
-        "t_end": c1["t_end"],
+        "t_start": t_start,
+        "t_end": t_end,
         "content": content,
         "enrichments": unit.enrichments,
         "pipeline_version": pipeline_version,

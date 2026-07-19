@@ -1,0 +1,16 @@
+{
+  "contract": "C1",
+  "version": "0",
+  "user_id": "pilot-user",
+  "device_id": "bodycam-1",
+  "stream_id": "stream-video-scenes-DDDD",
+  "sequence": 0,
+  "chunk_id": "chunk-video-scenes-0001",
+  "modality": "video",
+  "codec": "video/mp4",
+  "t_start": "2026-07-19T10:00:00Z",
+  "t_end": "2026-07-19T10:00:08Z",
+  "blob_ref": "raw/pilot-user/chunk-video-scenes-0001.mp4",
+  "blob_sha256": "fdb1ca37cb285d78e44d836feaf12406e4f33611519613b9d33c436131e37745",
+  "blob_bytes": 16110
+}
