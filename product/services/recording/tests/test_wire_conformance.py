@@ -6,18 +6,20 @@ server changes. This suite proves that claim against the REAL ingest app (TestCl
 sync mode, the existing MockTransport fakes), one test matrix over the segment shapes
 the fleet now uploads:
 
-  * extension-screen     video-only WebM/vp8   (D-E2 screen share, no system audio)
-  * extension-tab-audio  audio-only WebM/opus  (D-E2 tab capture)
+  * extension-tab        muxed WebM/vp8+opus   (D-E7 tab capture: video + audio)
+  * extension-tab-audio  audio-only WebM/opus  (D-E7 tab capture, video toggle off)
   * mac-cli              muxed MP4 h264+aac    (D-F1, ffmpeg avfoundation shape)
 
-(The phone shape — muxed MP4 mpeg4+aac — is covered by test_capture_web; not repeated.)
+(The phone shape — muxed MP4 mpeg4+aac — is covered by test_capture_web; not repeated.
+The pre-D-E7 extension screen-share shape — video-only WebM — is kept in the matrix too,
+since the wire still accepts it and the mac CLI could produce it.)
 
 Per shape it checks the whole promise, not just the ack: demux picks exactly the
 modalities the container carries (probe decides, never the mime), C1 streams are dense
 with the segment's wall-clock span carried through, audio lands as 16 kHz mono s16le
 WAV and video is container-copied (magic-checked bytes in storage), and the two-leg
-gap report reaches `clean`. Plus the two D-E3 invariants: one recording = two
-sessions (same device_id, independent ledgers, distinct C1 streams), and the ledger's
+gap report reaches `clean`. Plus two wire invariants: N independent sessions under one
+device_id stay isolated (distinct C1 streams, independent ledgers), and the ledger's
 gap discipline applies to a brand-new client shape exactly as it did to the phone.
 
 Wiring/helpers are imported from tests.test_capture_web (same fakes, same span math)
@@ -83,11 +85,23 @@ def screen_webm_bytes(tmp_path_factory) -> bytes:
 
 @pytest.fixture(scope="session")
 def tab_audio_webm_bytes(tmp_path_factory) -> bytes:
-    """~2s audio-only WebM (opus) — the extension's tab-audio segment shape."""
+    """~2s audio-only WebM (opus) — the extension's audio-only tab shape (video off)."""
     _require_encoders("libopus")
     path = tmp_path_factory.mktemp("media") / "tab.webm"
     _ffmpeg(["-f", "lavfi", "-i", "sine=frequency=440:sample_rate=16000",
              "-t", "2", "-vn", "-c:a", "libopus", "-f", "webm", str(path)])
+    return path.read_bytes()
+
+
+@pytest.fixture(scope="session")
+def tab_muxed_webm_bytes(tmp_path_factory) -> bytes:
+    """~2s muxed WebM (vp8 video + opus audio) — the extension's DEFAULT segment
+    shape (D-E7: one tabCapture stream, video + audio, one MediaRecorder)."""
+    _require_encoders("libvpx", "libopus")
+    path = tmp_path_factory.mktemp("media") / "tabmux.webm"
+    _ffmpeg(["-f", "lavfi", "-i", "testsrc2=size=192x108:rate=10",
+             "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=16000",
+             "-t", "2", "-c:v", "libvpx", "-c:a", "libopus", "-f", "webm", str(path)])
     return path.read_bytes()
 
 
@@ -118,13 +132,17 @@ def wire(monkeypatch, tmp_path) -> IngestWiring:
 # name -> (media fixture, upload mime, device_id, expected emit_leg as
 # (modality, codec) pairs in the server's stable audio-first order).
 SHAPES: dict[str, dict] = {
-    "extension-screen": dict(
-        media="screen_webm_bytes", mime="video/webm", device_id="ext-chrome-test",
-        legs=[("video", "video/webm")],
+    "extension-tab": dict(  # D-E7 default: muxed tab video + audio, one session
+        media="tab_muxed_webm_bytes", mime="video/webm", device_id="ext-chrome-test",
+        legs=[("audio", "audio/wav"), ("video", "video/webm")],
     ),
-    "extension-tab-audio": dict(
+    "extension-tab-audio": dict(  # D-E7 with the video toggle off
         media="tab_audio_webm_bytes", mime="audio/webm", device_id="ext-chrome-test",
         legs=[("audio", "audio/wav")],
+    ),
+    "extension-screen": dict(  # pre-D-E7 video-only shape; wire still accepts it
+        media="screen_webm_bytes", mime="video/webm", device_id="ext-chrome-test",
+        legs=[("video", "video/webm")],
     ),
     "mac-cli": dict(
         media="mac_mp4_bytes", mime="video/mp4", device_id="mac-cli-test",
@@ -198,16 +216,17 @@ def test_shape_session_clean_end_to_end(wire, request, shape_name):
             _assert_chunk_bytes(env["codec"], wire.storage.contents[env["chunk_id"]])
 
 
-# ------------------------------------------------------- D-E3 two-session recording
+# ---------------------------------------- wire property: N sessions, one device
 
 @needs_ffmpeg
-def test_two_session_recording_same_device(wire, screen_webm_bytes, tab_audio_webm_bytes):
-    """One extension recording = screen session + tab-audio session (D-E3): same
-    device_id, independent seq domains/ledgers, distinct C1 streams, zero cross-talk
-    — ending one source ('Stop sharing') must not touch the other's verdict."""
+def test_two_sessions_same_device_stay_isolated(wire, screen_webm_bytes, tab_audio_webm_bytes):
+    """The ledger keeps independent sessions under one device_id fully isolated:
+    distinct seq domains/ledgers, distinct C1 streams, zero cross-talk — ending one
+    must not touch the other's verdict. (A general wire guarantee; two single-modality
+    shapes stand in for any two concurrent sessions from the same device.)"""
     device = "ext-chrome-test"
     screen_sid, tab_sid = new_ulid(), new_ulid()
-    for seq in range(2):  # interleaved, like the two independent segment loops
+    for seq in range(2):  # interleaved
         assert wire.post_segment(
             screen_sid, seq, screen_webm_bytes, mime="video/webm", device_id=device
         ).status_code == 200
@@ -215,7 +234,7 @@ def test_two_session_recording_same_device(wire, screen_webm_bytes, tab_audio_we
             tab_sid, seq, tab_audio_webm_bytes, mime="audio/webm", device_id=device
         ).status_code == 200
 
-    # Screen source ends; tab audio keeps recording. Each client leg independent.
+    # One session ends; the other keeps recording. Each client leg independent.
     wire.end(screen_sid, last_seq=1)
     screen_report = wire.report(screen_sid)
     tab_report = wire.report(tab_sid)

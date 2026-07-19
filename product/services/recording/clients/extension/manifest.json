@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Nucleus Capture",
-  "version": "0.1.0",
-  "description": "Passive capture surface for the Nucleus recording server: screen video and tab audio, uploaded as self-contained segments. No content scripts, no page access.",
+  "version": "0.2.0",
+  "description": "Passive capture surface for the Nucleus recording server: records the active browser tab (video + audio) as self-contained segments. No content scripts, no page access.",
   "minimum_chrome_version": "116",
-  "permissions": ["tabCapture", "desktopCapture", "offscreen", "storage"],
+  "permissions": ["tabCapture", "offscreen", "storage"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],
   "action": {
     "default_title": "Nucleus Capture",

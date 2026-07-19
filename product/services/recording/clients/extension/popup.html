@@ -32,9 +32,9 @@
                spellcheck="false" placeholder="beta-user">
       </label>
       <div class="field toggles">
-        <span class="k">sources</span>
-        <label class="toggle"><input id="src-screen" type="checkbox" checked> screen</label>
-        <label class="toggle"><input id="src-tab-audio" type="checkbox" checked> tab audio</label>
+        <span class="k">capture</span>
+        <label class="toggle"><input id="cap-video" type="checkbox" checked> video</label>
+        <span class="cap-hint">the active tab's audio is always captured</span>
       </div>
       <div class="actions">
         <button id="save-btn" type="button">Save</button>
@@ -49,7 +49,6 @@
               title="Stop retrying and drop unsent segments — the server keeps whatever already arrived">
         Discard unsent</button>
     </section>
-    <div id="start-outcome" class="note" hidden></div>
 
     <section id="status" class="card" aria-live="polite">
       <div class="row"><span class="k">device</span><span class="v mono" id="device-id">—</span></div>

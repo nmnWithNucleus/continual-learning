@@ -41,32 +41,30 @@ upload with HTTP 404 in the status area — that symptom = stale page, refresh a
 | Airplane mode 20 s mid-recording, back on, stop | queued climbs while offline, drains after; "retrying in Ns" appears then clears; verdict `clean`, **no missing seqs** |
 | Background the browser mid-recording, reopen | the hidden page beacons an end marker (ledger `ended` at that moment), but if iOS did NOT kill the tab the page still shows `recording` on return — that's expected: capture state survives backgrounding. If segments keep flowing, the server REOPENS the session (stale-marker protection, by design). Tap **Stop** for the real end marker → report typically `clean`. Only if the OS killed the tab do you come back to an idle page — then the old session's report is `clean` for what it received (a lost in-memory queue tail shows as client-leg missing — the design being honest; note it if seen) |
 
-## Surface 2 — Chrome extension (on the mac)
+## Surface 2 — Chrome extension (on the mac) — records the ACTIVE TAB
 
-**Install (once):** Chrome → `chrome://extensions` → toggle **Developer mode** → **Load
+> **D-E7 (2026-07-19):** the extension now records the active browser TAB (video + audio in
+> one stream) via `tabCapture` — **no screen picker**. It captures a tab, not the whole
+> screen; full-screen / other-app capture is the **mac CLI's** job (Surface 3). The old
+> desktop-picker path was removed after it proved unreliable in Comet.
+
+**Install (once):** Chrome/Comet → `chrome://extensions` → toggle **Developer mode** → **Load
 unpacked** → pick `<repo>/product/services/recording/clients/extension/`. Pin "Nucleus
-Capture" to the toolbar.
+Capture". **After any `git pull` that touches the extension, hit its reload icon here.**
 
 **Configure (once):** click the icon → server URL = `$TUNNEL` → user id `nmn` → **Save**
-→ Chrome prompts for access to that origin → **Allow**. Then **close and reopen the
-popup and confirm the fields still show YOUR values** — a Save that reverts to
-`localhost:8084`/`beta-user` is the fixed alpha bug regressing; report it. (If you skip
-Save, Record re-prompts. If the tunnel URL ever rotates, repeat this step with the new
-URL. A recording accidentally started against a wrong/unreachable server retries
-forever and locks the settings — use the **Discard unsent** button that appears in the
-draining state to bail out, then fix the URL.)
+→ allow the origin prompt. Then **close and reopen the popup and confirm the fields still
+show YOUR values** — a Save that reverts to `localhost:8084`/`beta-user` is a fixed bug
+regressing; report it. (A recording against a wrong/unreachable server retries forever and
+locks the settings — use **Discard unsent** in the draining state to bail out.)
 
 | Step | Expect |
 |---|---|
-| Open the popup ON a tab that is playing audio (e.g. YouTube); both sources ✓; **Record** | a small "Nucleus Capture — choose what to share" window opens WITH the browser's native share dialog over it (its own window because an MV3 worker can't host the picker — expected, not broken; the action popup may close, that's fine). **For the video source choose "Entire Screen" or a "Window" — NOT the same tab you're capturing audio from** (Chromium allows only one capture per tab; picking the audio tab makes video fail). The little window closes itself once you pick |
-| Reopen the popup | state `recording`; TWO source blocks (screen / tab audio), separate session ids, counters ticking ~10 s |
+| Open the popup **on an ordinary web page** playing audio (e.g. a YouTube tab); leave "video" ✓ (or uncheck for audio-only); **Record** | **NO picker** — capture starts immediately on THAT tab. State → `recording`, one session block, counters ticking ~10 s. (On a chrome:// or extension page you get an honest "could not start tab capture…open an ordinary web page tab" error — that's correct.) |
 | Listen | the captured tab is still audible (passthrough) |
-| Wait ~40 s → **Stop** | both blocks drain; you may glimpse the first source's `clean` badge, then the popup resets to the idle hint within seconds — that is the capture document closing after full drain, NOT a failure (a popup that persists both final verdicts is a noted follow-up). **The verdict check for this surface is server-side**: `/capture/sessions` → both sessions `clean`; screen session's report = `video` stream only, tab session's = `audio` only; same `ext-chrome-*` device on both |
-| Drill: take >15 s choosing in the picker before confirming | both sources must STILL start (stream-id expiry was a fixed defect — if tab audio shows a "did not start" error row instead, that is a bug, report it) |
-| Drill: Chrome's "Stop sharing" bar mid-recording | screen session ends `clean` on its own; tab audio KEEPS recording until you Stop |
-| Drill: cancel the screen picker (with "screen" checked) | the WHOLE recording aborts (D-E6) — NO audio session either; the reopened popup is idle with "screen — did not start: recording cancelled — no screen was shared…". To record audio only, UNCHECK "screen" first, then Record (no picker appears) |
-| Drill: pick the SAME tab you're hearing as the screen source | video aborts the start with "…Chrome can't capture one tab twice — choose Entire Screen or a Window"; expected (Chromium one-capture-per-tab), not a bug |
-| Drill: close the captured tab mid-recording | tab-audio session ends `clean`; screen continues |
+| Wait ~40 s → **Stop** | the queue drains, then the popup resets to the idle hint within seconds — that is the capture document closing after full drain, NOT a failure. **Verdict is server-side**: `/capture/sessions` → the `ext-chrome-*` session `clean`; its report shows an `audio` + `video` stream (or just `audio` if video was off), dense sequences; transcripts land in `/context` |
+| Drill: audio-only — uncheck "video", Record, Stop | one session, report shows only an `audio` stream, verdict `clean` |
+| Drill: close/navigate the captured tab mid-record | the session ends `clean` on its own (track ended → clean stop) |
 | Drill: escape hatch — set a bogus server URL, Save, record a few seconds, Stop | state sticks at `draining` with "network error … retrying" (by design); **Discard unsent** appears → click it → popup returns to idle and settings unlock; fix the URL and re-record |
 
 ## Surface 3 — mac CLI
