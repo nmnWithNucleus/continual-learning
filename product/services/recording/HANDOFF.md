@@ -4,23 +4,22 @@
 > Read [CHARTER.md](CHARTER.md) first (mission/scope/interfaces), then this file — the
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
-**Status:** **COMPUTER CAPTURE SURFACES slice — ALPHA: mac CLI ✓ + extension ✓ REAL-BROWSER
-VERIFIED, phone re-verify pending.** browser extension (Chrome MV3, passive) + mac capture CLI
-(ffmpeg avfoundation), both built, adversarially reviewed, wire-conformance-tested. **Extension
-PIVOTED 2026-07-19 (D-E7):** the desktop-screen-picker path failed on the tester's real browser
-(Comet) across 3 attempts → replaced by **direct tab capture** (active tab, video+audio, one
-muxed stream → server-demux); it then ran **clean end-to-end on the first real Comet run**
-(session `01KXWCPB…`, real ASR transcripts of the tab's audio in `/context`). Mac CLI
-**live-verified** (real avfoundation, verdict `clean`, pixels + transcripts confirmed). Client
-wire renamed **`/ingest/*` → `/capture/*`** (founders; alias removed 2026-07-19). All prior data
-purged 2026-07-19; fleet fresh. Runbook: [handoff/alpha-runbook.md](handoff/alpha-runbook.md) ·
-recording suite **110 tests** · **Last updated:** 2026-07-19 (recording computer-capture lead)
+**Status:** **COMPUTER CAPTURE SURFACES slice — ALPHA COMPLETE: all three surfaces verified
+clean end-to-end on real devices** (2026-07-19). **Phone web** (mic+camera → mp4/wav),
+**mac CLI** (avfoundation screen+mic), **browser extension** (Chrome MV3 → **direct tab
+capture**, video+audio) — each ran a real capture that landed verdict `clean`, blobs
+sha256-verified + ffprobe-decoded in storage, and real ASR transcripts in `/context`. The
+extension **PIVOTED 2026-07-19 (D-E7)** off the desktop-screen-picker (which failed 3× on the
+tester's Comet browser) to direct tab capture; passed on the first real run. Client wire renamed
+**`/ingest/*` → `/capture/*`** (founders; alias removed). All prior data purged 2026-07-19;
+fleet fresh. Runbook: [handoff/alpha-runbook.md](handoff/alpha-runbook.md) · recording suite
+**110 tests** · **Last updated:** 2026-07-19 (recording computer-capture lead)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
 |---|---|---|---|---|
 | A | M0 ingest spine (capturer + `/capture/run` + CLI) | done — integrated E2E 2026-07-09 | `app/`, `tests/` | learn-loop M0 fan-out |
-| B | **Phone web client** (camera+mic → segments → upload) | built + verified server-side; **real-phone tap = tester's step** | [handoff/ws-b-phone-web-client.md](handoff/ws-b-phone-web-client.md) | recording M1 lead |
+| B | **Phone web client** (camera+mic → segments → upload) | **real-phone verified** (M1 + again 2026-07-19 on the `/capture/*` wire, verdict `clean`) | [handoff/ws-b-phone-web-client.md](handoff/ws-b-phone-web-client.md) | recording M1 lead |
 | C | **Ingest server**: segment upload, A/V demux, continuity ledger, gap report | built + verified live (loss/dup drills) | [handoff/ws-c-ingest-demux-ledger.md](handoff/ws-c-ingest-demux-ledger.md) | recording M1 lead |
 | D | **VAD-cut chunking** (charter OQ4 → D-M1-2) | built + verified on real speech | [handoff/ws-d-vad-carve.md](handoff/ws-d-vad-carve.md) | recording M1 lead |
 | — | DP-side pair (continuity detector + real ASR + VAD gate) | built + verified | [../data-processing/handoff/ws-m1-continuity-asr.md](../data-processing/handoff/ws-m1-continuity-asr.md) | recording M1 lead |

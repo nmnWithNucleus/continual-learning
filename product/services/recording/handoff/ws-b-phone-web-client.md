@@ -108,3 +108,8 @@ must be hard-refreshed or every upload 404s.**
   calls `/capture/*`; a one-day transitional `/ingest/*` alias covered loaded pages.
 - 2026-07-19 — **alias removed** (CTO: single tester, refresh beats route versioning).
   Loaded phone pages must hard-refresh once; a stale page shows 404 upload errors.
+- 2026-07-19 — **RE-VERIFIED on the `/capture/*` wire** (CTO, real iPhone via tunnel, post
+  hard-refresh): session `01KXWE2DQY…` (device `phone-web-44W7BV2R`, user `nmn`), verdict
+  `clean`, 4/4 segments; all 8 blobs sha256-verified + ffprobe-decoded in storage (video
+  H.264 640×480 mp4 + audio 16 kHz mono wav, ~10 s each), real ASR transcripts of the mic in
+  `/context`. The phone client works unchanged on the renamed wire.
