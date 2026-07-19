@@ -7,9 +7,12 @@
 > §Scope (audio pipeline) + OQ11/OQ12 and [HANDOFF.md](../HANDOFF.md) (Processor seam +
 > Current state) first; this is the volatile record for the beyond-ASR audio work.
 
-**Status:** built + tested headless (57 DP tests: 38 baseline + 19 new); real backends are
-correct-by-inspection SEAMS, unrun here (GPU / HF-gated / deps absent) ·
-**Owner session:** audio-pipeline lead · **Last updated:** 2026-07-19
+**Status:** built + tested headless; **all three real backends now SMOKE-TESTED GREEN on
+node-7 (2026-07-19)** — pyannote diarization + whisper-translate + AST acoustic each ran
+end-to-end on a real webm/opus speech chunk; the smoke found + fixed **two real pyannote
+torch-2.x compat bugs** (see the 2026-07-19 async-observability entry below) ·
+**Owner session:** audio-pipeline lead → node-7 smoke by async-observability session ·
+**Last updated:** 2026-07-19
 
 ---
 
@@ -155,3 +158,39 @@ are unrun by design (documented seams).
   config knobs are fleet-stable, not per-record dialects); and with the beta
   `ASR_LANGUAGE=en` pin, whisper translation's detected==target skip makes it a no-op on
   English-pinned fleets (translation presumes language auto-detect — enable them together).
+- 2026-07-19 — **NODE-7 SMOKE TEST of the three real backends (async-observability session).**
+  Env: node-7 (8× H100, all idle), conda `moe` (torch **2.8.0+cu128**, torchaudio 2.8.0,
+  faster-whisper 1.1.0, transformers 4.57.6, **pyannote.audio 3.3.2** — newer than the
+  `==3.1.1` pin in requirements-audio.txt; the `speaker-diarization-3.1` pipeline still loads),
+  ffmpeg on PATH, `HF_TOKEN` set (gated repos accepted). Input: real **JFK speech** chunk
+  (`sample_jfk.webm`, 11 s, **opus/webm** — the extension's capture codec, so the real ffmpeg
+  demux path is exercised). Harness: `scripts/smoke_audio_backends.py` drives the ACTUAL
+  `app/audio` backend code (not a reimplementation). **Results — ALL FOUR GREEN in one run:**
+  - **ASR** (faster_whisper): PASS 10.8 s — correct transcript, lang=en, 2 segments.
+  - **Diarization** (pyannote/speaker-diarization-3.1): PASS 24.0 s — 5 turns, 1 speaker
+    (`spk_0`, correct for a single-speaker clip); `assign_speakers` filled `enrichments.speakers`.
+  - **Translation** (whisper `task=translate`): PASS 1.0 s — English output (JFK is already
+    English, so X→En translate is ~identity; this proves the SEAM runs: decode → model →
+    segment lift, not translation quality on a non-English source).
+  - **Acoustic** (MIT/ast-finetuned-audioset): PASS 2.9 s — caption `"Ambient background
+    noise."` (AST filters the speech-class tags → fallback caption; the pipeline decodes real
+    webm/opus via `ffmpeg_read` and produces a caption end-to-end).
+  - **Two real pyannote bugs found + FIXED** (`app/audio/diarize/pyannote.py`), each of a class
+    inspection could not catch (a torch-version default change; a torchaudio backend gap):
+    (1) **`weights_only` UnpicklingError** — torch ≥ 2.6 flipped `torch.load`'s default to
+    `weights_only=True`, which rejects pyannote's Lightning-checkpoint globals
+    (`torch.torch_version.TorchVersion`) → `Pipeline.from_pretrained` raised. Fixed with a
+    scoped `torch.load` shim (`weights_only=False` for the trusted gated load only, restored in
+    `finally` — never a global monkeypatch).
+    (2) **webm/opus `Format not recognised`** — torchaudio's default soundfile/libsndfile
+    backend can't demux compressed capture containers, so pyannote choked on the raw chunk.
+    Fixed by pre-decoding to 16 kHz mono WAV via ffmpeg (the exact decoder the ASR/AST paths
+    use) before handing it to pyannote. Both fixes only touch the real `pyannote` path (the
+    mock/off default never imports it), so the headless suite is unaffected.
+  - **Caveats / still-open:** (a) whisper-translate on a genuine **non-English** source is
+    still unproven (no non-English clip on the box — the English-identity run only proves the
+    plumbing); pair it with an X-language chunk when one exists. (b) The env runs pyannote
+    **3.3.2**, not the pinned **3.1.1** — both fixes are torch-version issues (not pyannote
+    version), so they apply to 3.1.1 too, but pin-exact verification is a follow-up. (c) The
+    `requirements-audio.txt` `torch>=2.1,<3` range now spans the 2.6 `weights_only` change —
+    the shim makes the seam torch-version-robust across that range.

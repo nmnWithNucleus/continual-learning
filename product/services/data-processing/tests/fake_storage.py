@@ -22,15 +22,26 @@ class FakeStorage:
         self.records: dict[str, dict[str, Any]] = {}  # record_id -> C2 (upsert)
         self.blob_gets: list[str] = []             # every ref fetched, in order
         self.record_posts: list[dict[str, Any]] = []  # every C2 posted, in order
+        # Transient-failure injection: ref -> how many more GETs return 503 before the
+        # bytes are served. Lets a test exercise the async worker's transient retry.
+        self.blob_fail_times: dict[str, int] = {}
 
     def add_blob(self, blob_ref: str, data: bytes) -> None:
         self.blobs[blob_ref] = data
+
+    def fail_blob_next(self, blob_ref: str, times: int) -> None:
+        """Make the next ``times`` GETs of ``blob_ref`` return a transient 503."""
+        self.blob_fail_times[blob_ref] = times
 
     def _handle(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
         if request.method == "GET" and path == "/raw/blobs":
             ref = request.url.params.get("ref")
             self.blob_gets.append(ref)
+            remaining = self.blob_fail_times.get(ref, 0)
+            if remaining > 0:
+                self.blob_fail_times[ref] = remaining - 1
+                return httpx.Response(503, json={"error": "transient", "ref": ref})
             data = self.blobs.get(ref)
             if data is None:
                 return httpx.Response(404, json={"error": "no such ref", "ref": ref})
