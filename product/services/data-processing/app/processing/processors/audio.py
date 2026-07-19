@@ -8,31 +8,73 @@ offset to an absolute RFC3339 time clamped into the chunk span.
 ``pipeline_version`` delegates to the selected backend, so the mock/faster_whisper
 distinction (and its record_id fork) is preserved exactly.
 
-Stages 2-4 are documented NO-OP STUBS pinning their future contracts (CHARTER
-OQ12), so landing each is a fill-in on the stage body, not a reshape:
+Stages 2-4 are the REAL audio pipeline beyond ASR (CHARTER OQ11/OQ12), each behind a
+backend switch that DEFAULTS OFF (``app/audio/config.py``) — so with no new env set the
+output is byte-identical to the pre-fill processor and the M0/seam test baseline stays
+green:
 
-  * diarize          — fills ``segments[].speaker`` (required-null today) and
-                       ``enrichments.speakers``;
-  * translate        — appends a ``discriminator="translation"`` unit;
-  * acoustic_events  — appends a ``discriminator="acoustic"`` caption unit for
-                       non-speech audio (captioned, not dropped).
+  * diarize          — ``DIARIZE_BACKEND=off|mock|pyannote``. When active, fills
+                       ``segments[].speaker`` (max-overlap with the diarizer's turns) and
+                       ``enrichments.speakers``. It MUTATES the primary record, so it
+                       version-forks it: ``pipeline_version`` gains ``+diar-<backend>-v1``
+                       (``diarize.version_tag``). Off → no-op, no fork.
+  * translate        — ``TRANSLATE_BACKEND=off|mock|whisper`` + ``TRANSLATE_TARGET``. When
+                       the target differs from the detected language, APPENDS a
+                       ``discriminator="translation"`` unit (a separate record beside the
+                       original, never a mutation). whisper = ``task="translate"`` (→English).
+  * acoustic_events  — ``ACOUSTIC_BACKEND=off|mock|ast``. APPENDS a
+                       ``discriminator="acoustic"`` ``caption`` unit for the chunk's
+                       non-speech audio — captioned, not dropped.
 
-The stages hand an ``AudioPipelineState`` carrier down the line; final assembly
-emits the transcript unit first, then whatever extra units later stages appended
-(none today). With today's backends the output is byte-identical to the
-pre-pipeline processor — the existing mock-loop tests are the proof.
+Translation + acoustic are ADDITIVE sidecar records: they don't touch the primary and
+don't tag ``pipeline_version`` (they're identified by their discriminator). All three
+sidecars share the chunk's single ``pipeline_version``, so when diarization is also active
+its tag forks the whole chunk's records together — intended (one run, one dialect).
+
+The stages hand an ``AudioPipelineState`` carrier down the line; final assembly emits the
+transcript unit first, then whatever extra units later stages appended. Real backends
+(pyannote / whisper / ast) are LAZY-IMPORTED only when selected, so the mock/off path (and
+the registry's import-on-``/ingest``) never pulls torch/pyannote/transformers.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Optional
 
 from ...asr import select as select_asr
-from ...asr.result import AsrResult
+from ...asr.result import AsrResult, AsrSegment
+from ...audio import acoustic, diarize, translate
+from ...audio.config import get_audio_config
+from ...audio.diarize.assign import assign_speakers
 from ...config import Settings
 from ...timeutil import abs_time, parse_rfc3339
 from ..base import ProcessedContent, ProcessedUnit, Processor, empty_enrichments
 from ..registry import register
+
+
+def _absolute_segments(
+    base: datetime, span_seconds: float, segments: list[AsrSegment]
+) -> list[dict[str, Any]]:
+    """Lift chunk-relative ASR/translation segments to absolute-time C2 segment dicts.
+
+    Each offset is clamped into ``[0, span_seconds]`` and mapped to ``base + offset``.
+    ``speaker`` is ``None`` here (the diarize stage fills the transcript's in place; a
+    translation's segments stay null). Shared by the asr + translate stages so both speak
+    exactly the 4-key C2 segment shape ``{t_start, t_end, text, speaker}``."""
+    out: list[dict[str, Any]] = []
+    for seg in segments:
+        start = min(max(seg.start_s, 0.0), span_seconds)
+        end = min(max(seg.end_s, start), span_seconds)
+        out.append(
+            {
+                "t_start": abs_time(base, start),
+                "t_end": abs_time(base, end),
+                "text": seg.text,
+                "speaker": None,
+            }
+        )
+    return out
 
 
 @dataclass
@@ -40,7 +82,7 @@ class AudioPipelineState:
     """State carried through the audio stages for ONE chunk.
 
     ``segments`` are already-absolute C2 segment dicts (the asr stage owns the
-    offset->absolute mapping, and later stages annotate them in place);
+    offset->absolute mapping, and the diarize stage annotates them in place);
     ``extra_units`` collects whole additional records appended by later stages
     (translation, acoustic captions), each distinguished by its discriminator.
     """
@@ -61,7 +103,13 @@ class AudioProcessor(Processor):
     content_kind = "transcript"
 
     def pipeline_version(self, settings: Settings) -> str:
-        return select_asr(settings).PIPELINE_VERSION
+        # Base ASR dialect + the diarization tag (empty unless diarization is active).
+        # Diarization mutates the primary record, so activating it version-forks it; the
+        # tag and the _diarize stage's behavior both derive from ``diarize._resolve``, so
+        # they can never disagree (a disagreement would collide record_ids). Translation
+        # / acoustic are additive sidecars → no version tag.
+        base = select_asr(settings).PIPELINE_VERSION
+        return base + diarize.version_tag(get_audio_config())
 
     def process(
         self,
@@ -102,38 +150,91 @@ class AudioProcessor(Processor):
             state.c1["chunk_id"],
         )
         base = parse_rfc3339(state.c1["t_start"])
-        for seg in state.asr.segments:
-            start = min(max(seg.start_s, 0.0), state.span_seconds)
-            end = min(max(seg.end_s, start), state.span_seconds)
-            state.segments.append(
-                {
-                    "t_start": abs_time(base, start),
-                    "t_end": abs_time(base, end),
-                    "text": seg.text,
-                    "speaker": None,  # required-nullable; the diarize stage's target
-                }
-            )
+        state.segments = _absolute_segments(base, state.span_seconds, state.asr.segments)
 
-    # ---- Stage 2: diarization (stub) ------------------------------------------
+    # ---- Stage 2: diarization -------------------------------------------------
 
     def _diarize(self, state: AudioPipelineState) -> None:
-        """STUB — future contract: identify who spoke when; fill
-        ``segments[].speaker`` (required-null until then) and
-        ``enrichments.speakers``. Landing it changes the output dialect, so it
-        arrives with an audio pipeline_version bump (forked records). No-op today."""
+        """Identify who spoke when and fill ``segments[].speaker`` + ``enrichments.speakers``.
 
-    # ---- Stage 3: translation (stub) ------------------------------------------
+        Off (default) → no-op: speakers stay ``None`` and enrichments stay empty, so the
+        output is byte-identical to the pre-diarization dialect. When a backend is
+        selected, each ASR segment gets its max-overlap turn's speaker and
+        ``enrichments.speakers`` is aggregated — and ``pipeline_version`` carries the
+        matching ``+diar-*`` fork (see ``pipeline_version``)."""
+        cfg = get_audio_config()
+        backend = diarize.select(cfg)
+        if backend is None:
+            return
+        result = backend.diarize(
+            state.blob, state.c1["codec"], state.span_seconds, cfg
+        )
+        state.enrichments["speakers"] = assign_speakers(
+            state.asr.segments, state.segments, result
+        )
+
+    # ---- Stage 3: translation -------------------------------------------------
 
     def _translate(self, state: AudioPipelineState) -> None:
-        """STUB — future contract: when the transcript's language is not the
-        user's, append a ``discriminator="translation"`` ProcessedUnit to
-        ``extra_units`` carrying the translated transcript — a stable, distinct
-        record beside the original, never a mutation of it. No-op today."""
+        """When a target language differs from the detected one, append a
+        ``discriminator="translation"`` unit carrying the translated transcript — a stable,
+        distinct record beside the original, never a mutation of it.
 
-    # ---- Stage 4: acoustic events (stub) ---------------------------------------
+        Off (default) or nothing to translate (empty transcript / already in the target)
+        → no-op."""
+        cfg = get_audio_config()
+        backend = translate.select(cfg)  # None when off (incl. whisper + non-'en' degrade)
+        if backend is None:
+            return
+        if not state.asr.text.strip():  # silence / all-ambient → nothing to translate
+            return
+        target = cfg.translate_target
+        detected = (state.asr.language or "").strip().lower()
+        if detected and detected == target:  # already in the target language
+            return
+        result = backend.translate(
+            state.settings, state.blob, state.span_seconds, state.asr, target
+        )
+        if not result.text.strip():
+            return
+        base = parse_rfc3339(state.c1["t_start"])
+        segments = _absolute_segments(base, state.span_seconds, result.segments)
+        content = ProcessedContent(
+            kind="transcript",
+            text=result.text,
+            language=result.language or None,
+            segments=segments or None,
+        )
+        state.extra_units.append(
+            ProcessedUnit(
+                content=content,
+                enrichments=empty_enrichments(),  # own empty block; NOT the diarized one
+                discriminator="translation",
+            )
+        )
+
+    # ---- Stage 4: acoustic events ---------------------------------------------
 
     def _acoustic_events(self, state: AudioPipelineState) -> None:
-        """STUB — future contract: caption salient non-speech audio (doors,
-        sirens, music) as a ``discriminator="acoustic"`` caption unit in
-        ``extra_units`` — captioned, not dropped, so an all-ambient chunk still
-        yields a searchable record beside its (empty) transcript. No-op today."""
+        """Caption salient non-speech audio (doors, sirens, music) as a
+        ``discriminator="acoustic"`` caption unit — captioned, not dropped, so an
+        all-ambient chunk still yields a searchable record beside its (empty) transcript.
+
+        Off (default) → no-op."""
+        cfg = get_audio_config()
+        backend = acoustic.select(cfg)
+        if backend is None:
+            return
+        result = backend.caption(
+            state.blob, state.c1["codec"], state.span_seconds, cfg, state.c1["chunk_id"]
+        )
+        if result is None or not result.text.strip():
+            return
+        content = ProcessedContent(kind="caption", text=result.text)
+        state.extra_units.append(
+            ProcessedUnit(
+                content=content,
+                enrichments=empty_enrichments(),  # own empty block; NOT the diarized one
+                discriminator="acoustic",
+            )
+        )

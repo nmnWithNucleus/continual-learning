@@ -1,0 +1,35 @@
+# Optional HEAVY deps for the REAL audio-pipeline backends beyond ASR (diarization,
+# translation, acoustic-event captioning). NOT installed by the default learn loop:
+# every capability defaults OFF and the `mock` backends need none of this. Install on a
+# GPU node (node-7) only when flipping a backend to its real path.
+#
+# Kept SEPARATE from requirements.txt (which is frozen for this workstream) exactly like
+# the POC kept requirements-asr.txt separate — so the mock/off default (and the CI unit
+# suite) never pulls torch/pyannote/transformers. Every real backend is lazy-imported, so
+# selecting one is the only thing that requires these.
+#
+# System dep (not pip-installable): ffmpeg on PATH — torchaudio/av decode compressed
+# chunk codecs (webm/opus, m4a/aac) for pyannote + AST.
+
+# --- diarization: DIARIZE_BACKEND=pyannote --------------------------------------------
+# HF-GATED model: accept the user conditions for BOTH pyannote/speaker-diarization-3.1
+# AND pyannote/segmentation-3.0, and set HF_TOKEN (or HUGGINGFACE_TOKEN).
+pyannote.audio==3.1.1
+
+# --- translation: TRANSLATE_BACKEND=whisper -------------------------------------------
+# Reuses faster-whisper (already STANDING in requirements.txt) with task="translate";
+# no extra dep — English-target only (Whisper's translate task is X->English).
+
+# --- acoustic events: ACOUSTIC_BACKEND=ast --------------------------------------------
+# AST AudioSet tagger via the transformers audio-classification pipeline (16 kHz native).
+# The pipeline is handed the RAW chunk bytes; its ffmpeg_read path decodes + resamples any
+# captured container (webm/opus, m4a/aac, wav) — so ffmpeg on PATH is the only extra dep
+# (no soundfile/librosa, which can't demux webm/mp4).
+transformers>=4.35,<5
+
+# --- shared: torch (diarization + acoustic) -------------------------------------------
+# Install the CUDA build matching the box for GPU (e.g. --index-url
+# https://download.pytorch.org/whl/cu121); the plain PyPI wheels are CPU-only (still work,
+# just slower). torchaudio is pyannote's audio loader.
+torch>=2.1,<3
+torchaudio>=2.1,<3

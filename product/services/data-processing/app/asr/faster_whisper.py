@@ -47,6 +47,13 @@ def _get_model(settings: Settings):
     return model
 
 
+def load_model(settings: Settings):
+    """Public accessor for the cached ``WhisperModel``. The translation backend
+    (``app/audio/translate/whisper.py``) reuses THIS model for ``task="translate"`` — one
+    model serves both ASR and translation, so no second model is ever loaded."""
+    return _get_model(settings)
+
+
 def transcribe(
     settings: Settings,
     audio_bytes: bytes,
