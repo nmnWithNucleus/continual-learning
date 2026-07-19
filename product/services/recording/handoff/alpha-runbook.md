@@ -48,12 +48,17 @@ unpacked** → pick `<repo>/product/services/recording/clients/extension/`. Pin 
 Capture" to the toolbar.
 
 **Configure (once):** click the icon → server URL = `$TUNNEL` → user id `nmn` → **Save**
-→ Chrome prompts for access to that origin → **Allow**. (If you skip Save, Record
-re-prompts. If the tunnel URL ever rotates, repeat this step with the new URL.)
+→ Chrome prompts for access to that origin → **Allow**. Then **close and reopen the
+popup and confirm the fields still show YOUR values** — a Save that reverts to
+`localhost:8084`/`beta-user` is the fixed alpha bug regressing; report it. (If you skip
+Save, Record re-prompts. If the tunnel URL ever rotates, repeat this step with the new
+URL. A recording accidentally started against a wrong/unreachable server retries
+forever and locks the settings — use the **Discard unsent** button that appears in the
+draining state to bail out, then fix the URL.)
 
 | Step | Expect |
 |---|---|
-| Open the popup ON a tab that is playing audio (e.g. YouTube); both sources ✓; **Record** | Chrome's screen picker appears (the popup may close — that's fine, capture is worker-driven); pick a screen/window |
+| Open the popup ON a tab that is playing audio (e.g. YouTube); both sources ✓; **Record** | a tiny "Nucleus Capture — choose what to share" window opens WITH Chrome's share dialog (the popup may close — that's fine, capture is worker-driven); pick a screen/window and the tiny window closes itself |
 | Reopen the popup | state `recording`; TWO source blocks (screen / tab audio), separate session ids, counters ticking ~10 s |
 | Listen | the captured tab is still audible (passthrough) |
 | Wait ~40 s → **Stop** | both blocks drain; you may glimpse the first source's `clean` badge, then the popup resets to the idle hint within seconds — that is the capture document closing after full drain, NOT a failure (a popup that persists both final verdicts is a noted follow-up). **The verdict check for this surface is server-side**: `/capture/sessions` → both sessions `clean`; screen session's report = `video` stream only, tab session's = `audio` only; same `ext-chrome-*` device on both |
@@ -61,6 +66,7 @@ re-prompts. If the tunnel URL ever rotates, repeat this step with the new URL.)
 | Drill: Chrome's "Stop sharing" bar mid-recording | screen session ends `clean` on its own; tab audio KEEPS recording until you Stop |
 | Drill: cancel the screen picker | tab-audio-only recording proceeds; the reopened popup shows a LONE tab-audio block — the screen source is simply absent (its "cancelled" reply died with the popup the picker closed; known cosmetic limit, not a failure) |
 | Drill: close the captured tab mid-recording | tab-audio session ends `clean`; screen continues |
+| Drill: escape hatch — set a bogus server URL, Save, record a few seconds, Stop | state sticks at `draining` with "network error … retrying" (by design); **Discard unsent** appears → click it → popup returns to idle and settings unlock; fix the URL and re-record |
 
 ## Surface 3 — mac CLI
 

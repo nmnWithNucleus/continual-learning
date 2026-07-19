@@ -43,6 +43,7 @@
     saveNote: $("save-note"),
     recordBtn: $("record-btn"),
     stopBtn: $("stop-btn"),
+    discardBtn: $("discard-btn"),
     startOutcome: $("start-outcome"),
     deviceId: $("device-id"),
     sources: $("sources"),
@@ -103,18 +104,23 @@
     const { settings, origin, error } = readForm();
     if (error) return note(error);
     fillForm(settings); // reflect normalization (origin) back into the input
+    // PERSIST FIRST. The permission prompt can steal focus and CLOSE this
+    // popup, killing everything after that await — with the write second,
+    // Save appeared to do nothing (found in alpha: settings reverted to
+    // defaults while the grant went through). The grant itself survives the
+    // popup's death once the user clicks Allow.
+    try {
+      await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
+    } catch (err) {
+      return note("could not save settings: " + errText(err));
+    }
+    note("saved — requesting access to " + origin + "…");
     // This click IS the user gesture chrome.permissions.request needs.
     let granted = false;
     try {
       granted = await chrome.permissions.request({ origins: [origin + "/*"] });
     } catch (err) {
-      note("permission request failed: " + errText(err));
-      granted = false;
-    }
-    try {
-      await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
-    } catch (err) {
-      return note("could not save settings: " + errText(err));
+      return note("saved, but the permission request failed: " + errText(err));
     }
     if (granted) note("saved — " + origin + " access granted");
     else note("saved — but " + origin + " access DENIED (uploads will fail)");
@@ -153,6 +159,18 @@
       }
     }
     el.recordBtn.disabled = true;
+    // Pin the tab-audio target NOW: this popup is anchored over exactly the
+    // tab the user means. Resolving "active tab" later in the worker raced
+    // the picker window (which becomes the active window) — skeptic round.
+    // tab IDs are readable without the "tabs" permission (only url/title are
+    // gated), so the passive posture is unchanged.
+    let tabId = null;
+    try {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      tabId = tabs && tabs[0] && tabs[0].id != null ? tabs[0].id : null;
+    } catch {
+      tabId = null; // background falls back to active-tab semantics
+    }
     let reply;
     try {
       reply = await chrome.runtime.sendMessage({
@@ -161,6 +179,7 @@
         config: {
           baseUrl: settings.baseUrl,
           userId: settings.userId,
+          tabId,
           sources: { screen: settings.screen, tabAudio: settings.tabAudio },
         },
       });
@@ -181,6 +200,22 @@
       showBanner("stop failed: " + errText(err));
     }
     el.stopBtn.disabled = false;
+    tick();
+  }
+
+  // Escape hatch for a drain that can never finish (e.g. the server URL is
+  // wrong — the uploader retries forever BY DESIGN, and settings are locked
+  // while draining; found in alpha as a soft deadlock). Discard kills the
+  // capture document: unsent segments are lost (stated on the button), the
+  // ledger keeps whatever already arrived, and the settings unlock.
+  async function discard() {
+    el.discardBtn.disabled = true;
+    try {
+      await chrome.runtime.sendMessage({ target: "background", type: "abandon" });
+    } catch {
+      /* no receiver = already gone */
+    }
+    el.discardBtn.disabled = false;
     tick();
   }
 
@@ -279,6 +314,7 @@
     el.statePill.textContent = state;
     el.recordBtn.hidden = active || draining;
     el.stopBtn.hidden = !active;
+    el.discardBtn.hidden = state !== "draining";
     const locked = active || draining;
     el.serverUrl.disabled = locked;
     el.userId.disabled = locked;
@@ -338,6 +374,7 @@
     el.saveBtn.addEventListener("click", saveSettings);
     el.recordBtn.addEventListener("click", record);
     el.stopBtn.addEventListener("click", stop);
+    el.discardBtn.addEventListener("click", discard);
     setInterval(tick, STATUS_POLL_MS);
     tick();
   }
