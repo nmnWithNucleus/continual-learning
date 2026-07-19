@@ -6,7 +6,7 @@
 > [ARCHITECTURE.md](ARCHITECTURE.md) · [ORG.md](ORG.md) · [PROMPTS.md](PROMPTS.md).
 > Service-level state lives in each service's own HANDOFF.md — this board links, not restates.
 
-**Last updated:** 2026-07-18 · maintained across founders' sessions.
+**Last updated:** 2026-07-19 · maintained across founders' sessions.
 
 ---
 
@@ -14,8 +14,8 @@
 
 | Service | Status | Lead session | Canvas |
 |---|---|---|---|
-| Recording | **v0 M0 + `ChunkSource` seam** (mock capture loop live; carver → `/raw` → C1 push; modality sources plug in — 2026-07-10) | learn-loop | [canvas](services/recording/HANDOFF.md) |
-| Data Processing | **v0 M0 + modality-agnostic `Processor` seam** (audio real-mock + image/video/text stubs; all 4 `content.kind`s E2E to `/context` — 2026-07-10) | learn-loop | [canvas](services/data-processing/HANDOFF.md) |
+| Recording | **capture M1 + computer surfaces — ALPHA COMPLETE** (checked gap-detection + VAD-cut chunking + 3 capture clients: phone web / Chrome-MV3 extension / mac CLI, all verified `clean` on real hardware — 2026-07-19; 110 tests) | recording M1 → computer-capture | [canvas](services/recording/HANDOFF.md) |
+| Data Processing | **capture M1 pair landed** (continuity detector on `/ingest` + `/continuity`; **faster-whisper standing** w/ VAD gate; audio-pipeline stubs; real transcripts through the alpha — 2026-07-19; 38 tests) | recording M1 | [canvas](services/data-processing/HANDOFF.md) |
 | Storage | **v0.0 + capture M0 built + integrated E2E** (serve loop + `/raw`/`/context` mock capture loop 2026-07-09) | serve + learn | [canvas](services/storage/HANDOFF.md) |
 | Input | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-A | [canvas](services/input/HANDOFF.md) |
 | Inference | **v0.0 live on real Qwen3-VL-32B** (vLLM TP=8 on node-7, verified E2E 2026-07-09) | serve-loop WS-B | [canvas](services/inference/HANDOFF.md) |
@@ -27,7 +27,7 @@
 
 | Aspect | File | State |
 |---|---|---|
-| Engineering | [handoff/engineering.md](handoff/engineering.md) | active — serve-loop v0.0 **closed on real Qwen3-VL-32B**; capture M0 + modality seams **done** (2026-07-10); next: **recording-led capture M1** (gap-detection + ASR pipeline) |
+| Engineering | [handoff/engineering.md](handoff/engineering.md) | active — serve-loop v0.0 **closed on real Qwen3-VL-32B**; capture M0 + modality seams done; **recording-led capture M1 + computer capture surfaces DONE (alpha complete 2026-07-19)**; next: **metrics emission (D9)** |
 | Research | [handoff/research.md](handoff/research.md) | seeded — first agenda: POC→continuum bridge, research agenda v1 |
 | Design / UX | [handoff/design.md](handoff/design.md) | seeded |
 | Hiring / Ops | [handoff/hiring-ops.md](handoff/hiring-ops.md) | seeded |
@@ -53,6 +53,7 @@
 | D11 | **C1 is two legs + push delivery.** Blob leg: recording `PUT`s raw bytes to storage `/raw` **first**, storage mints an opaque `blob_ref` (idempotent on `chunk_id`); pinned as prose, not a new C-number. Envelope leg: recording **pushes** the C1 envelope to data-processing, **at-least-once, dedup on `chunk_id`**, ordering + gap-detection via dense zero-based `(stream_id, sequence)`, blob-first write invariant. Resolves data-processing OQ1 + recording's ingest OQ | 2026-07-09 | [ARCHITECTURE.md](ARCHITECTURE.md) §Contracts; [contracts/c1_raw_stream_envelope.v0.json](contracts/c1_raw_stream_envelope.v0.json); recording + data-processing charters |
 | D12 | **Branching + beta model.** Service work happens on branches off `main`, merged once coded + tested at a decent revision. A standing **`dev` branch (forked from `main`) is the beta playground** handed to testers — it may carry beta-only conveniences, never contract changes. First beta hand-off: the two proven loops (serve + learn) to Gnandeep, who drives them against his externally-stabilized fine-tunable model; storage's `GET /context/records?user_id=&from=&to=` range read is his training-window feed until C10 lands | 2026-07-18 | this board; [handoff/engineering.md](handoff/engineering.md) worklog; root `README.md` §Branches |
 | D13 | **Consent gate de-prioritized (back-burner).** Ship-fast posture: the capture surfaces + learn loop mature first; the consent/deletion layer (recording M2 + platform's consent store) lands **before any non-team pilot user**, not before beta (beta testers are consenting teammates). The M2 red-team exit bar is unchanged whenever it lands | 2026-07-18 | this board; recording charter §v0 deliverables |
+| D14 | **Capture transport = segmented HTTP upload for ALL v0 surfaces** (phone / extension / mac CLI). Our capture path is the loss-intolerant, offline-resilient *archive/training* job (the Axon-bodycam pattern), not low-latency live-view (the Ring/Nest pattern — which runs both paths separately). **Continuous streaming ingest (WebSocket/RTSP/SRT → server segmenter) is a deferred ADDITIVE leg** terminating in the existing spool→demux→carve→emit machinery; C1/C2 unchanged (C1 begins after transport). Live-view is out of v0 scope | 2026-07-19 | recording canvas §Pinned decisions (D-M1-5); [ARCHITECTURE.md](ARCHITECTURE.md) capture path |
 
 ## Current state (terse)
 
@@ -140,29 +141,49 @@
   down. **D12** (branching + beta model) recorded; next slice pinned: **recording-led capture
   M1** (gap-detection + ASR pipeline priority).
 
+- 2026-07-18→19 (recording-led capture M1 + computer surfaces): **the recording service is
+  wrapped to the alpha bar.** M1 built the checked "zero silent loss" guarantee (SQLite
+  continuity ledger + a DP-side break/dup detector on `/ingest` + a two-leg gap report with a
+  `clean|gaps|recording` verdict), the **fuller ASR pipeline** (faster-whisper standing with a
+  VAD gate that turns silence into an honest empty transcript; diarize/translate/acoustic-event
+  stubs behind the Processor seam), and **VAD-cut variable chunking** (OQ4 → D-M1-2). Then
+  **three real capture clients** landed behind the same `/capture/*` wire (client wire renamed
+  from `/ingest/*` so `/ingest` is uniquely DP's C1 receiver): **phone web** (mic+camera),
+  **Chrome-MV3 extension** (passive active-tab capture — pivoted to `tabCapture` per D-E7 after
+  the desktop picker proved fragile on real browsers), **mac CLI** (ffmpeg avfoundation). Each
+  demuxes to per-modality C1 streams; **zero server changes for the two new clients** (the wire
+  is client-agnostic, by design). **ALPHA COMPLETE 2026-07-19** — all three verified `clean`
+  end-to-end on real hardware (blobs sha256+ffprobe-checked in storage, real ASR transcripts in
+  `/context`). Multiple adversarial review rounds + a fresh-eyes runbook-accuracy pass hardened
+  it (110 recording tests). **D14** (segmented-HTTP transport; streaming ingest deferred additive)
+  recorded. Detail: [services/recording/HANDOFF.md](services/recording/HANDOFF.md) +
+  [alpha-runbook](services/recording/handoff/alpha-runbook.md).
+
 ## Next
 
-- **Now: recording-led capture M1** (founders' pick 2026-07-18) — wrap the **recording service**
-  as the next big gain (it's user-facing; gives the beta tester a touch-and-feel surface).
-  Priority items inside the slice: **(a) enforce gap-detection** on `(stream_id, sequence)`
-  (recording's "zero silent loss" is currently emit-side only; detector on DP `/ingest` feeding
-  recording's continuity report) and **(b) the fuller ASR pipeline** (VAD → diarize → ASR →
-  translate → acoustic-event captioning; real faster-whisper as standing backend). Capture
-  surfaces behind the `ChunkSource` seam, in order: **(1) phone web client** (camera + mic over
-  HTTPS/tunnel — the bodycam stand-in **and** the structured beta handover: a press-record URL);
-  **(2) computer** — screen video via app + browser-extension screen share, **tab audio** via the
-  extension (no system audio for now; mic continues from M0; screen video / tab audio / mic are
-  *separate C1 streams*). Consent gate: **back-burner per D13**. Chunk length (OQ4, pin with DP
-  in-session): lean = **variable-length chunks cut at VAD pauses within ~5–30 s bounds**. Full
-  M1 sequencing: [handoff/engineering.md](handoff/engineering.md) §Open agenda item 0.
+- ~~Recording-led capture M1~~ **DONE + ALPHA COMPLETE 2026-07-19** (see Current state above /
+  the recording canvas). Gap-detection enforced, ASR pipeline standing, three capture surfaces
+  verified `clean` on real hardware. Consent gate stayed back-burner per D13.
+- **Now: metrics emission (D9)** — the founders' sequenced next, unblocked now that the capture
+  surfaces are human-verified solid. Each service exposes `/metrics` (Prometheus text) + ships a
+  Grafana dashboard JSON; **Platform runs the one shared Prometheus/Grafana**. The buildable-now
+  piece is the *emission* side across **recording + data-processing** (the two services with the
+  richest new signal: ingest/segment/chunk rates, per-leg gap/continuity counters, demux + ASR
+  latency, VAD-empty rate); the shared backbone is Platform's slice. A fresh session picks up the
+  emission side from the recording + DP canvases.
 - **Beta hand-off (D12):** standing `dev` branch forked from `main` for Gnandeep — serve loop
-  (mock or real backend) + learn loop (mock ASR) both run today; storage's `/context` range read
-  is his training-window feed for the black-box fine-tuning tests until C10 lands.
+  (mock or real backend) + learn loop (real faster-whisper ASR, `ASR_LANGUAGE=en`) both run today;
+  storage's `/context` range read is his training-window feed for the black-box fine-tuning tests
+  until C10 lands. The three capture clients (`/capture/*` wire, tunnel URL from
+  `services/recording/var/tunnel_url.txt`) are the beta's data-collection front door.
 - Alternatives off the skeleton (unchanged): continuum kickoff (nightly LoRA), or screen/OCR
   capture (data-processing M2). **Still open:** the D6 OCR spot-check on real screen-capture
   data (needs vLLM relaunched on node-7 first).
 - CTO to read the Platform charter internals when time allows (D1).
-- **Fleet status (verified 2026-07-17):** nothing is live — vLLM/app services on node-7 are
-  down; no teardown needed. Relaunch: `run_all.sh` (serve) / `run_learn.sh` (learn); real model
-  via `services/inference/serve_vllm.sh`. The wider cluster is running Gnandeep's continuum-side
-  experiments — product work keeps to **node-7**; allocate more nodes on demand.
+- **Fleet status (2026-07-19):** the **learn loop is UP on node-7** — storage:8083 ·
+  data-processing:8085 (`ASR_BACKEND=faster_whisper`, `ASR_LANGUAGE=en`) · recording:8084, plus
+  the cloudflared tunnel for the capture clients (URL rotates per restart →
+  `services/recording/var/tunnel_url.txt`); `run_learn.sh --status` checks it. The **serve loop
+  (vLLM + app services) is down** — relaunch `run_all.sh` + `services/inference/serve_vllm.sh`
+  when needed. The wider cluster runs Gnandeep's continuum-side experiments — product work keeps
+  to **node-7**; allocate more nodes on demand.

@@ -382,9 +382,18 @@ needs a version bump now** (recorded as DP charter OQs; the frozen C2 was NOT to
 ---
 
 ## Open agenda
-0. ~~**NEXT SLICE — Data-collection (learn) loop MVP**~~ **SLICED + C1/C2 FROZEN + M0 BUILT,
-   INTEGRATED & VERIFIED (2026-07-09)** — see "Learn-loop MVP slice" + "Learn-loop capture M0 —
-   build result" above. Skeleton = computer mic → ASR → `/context` (D10); C1/C2 frozen (D11),
+0. ~~**NEXT SLICE — Data-collection (learn) loop MVP**~~ **SLICED + C1/C2 FROZEN + M0 BUILT +
+   CAPTURE M1 + COMPUTER SURFACES — ALPHA COMPLETE (2026-07-19).** The learn loop is fully
+   wrapped to the alpha bar: M0 skeleton → capture M1 (enforced gap-detection via the continuity
+   ledger + DP break/dup detector; faster-whisper standing with a VAD gate; VAD-cut variable
+   chunking, OQ4→D-M1-2) → three real capture clients on the `/capture/*` wire (phone web /
+   Chrome-MV3 extension via `tabCapture` D-E7 / mac CLI), **all verified `clean` on real
+   hardware**. Client transport pinned segmented-HTTP (**D14**; streaming ingest a deferred
+   additive leg). **Next: metrics emission (D9).** Full state lives in the recording +
+   data-processing canvases (this founders' thread links, not restates). The forward-looking
+   plan that drove the slice is kept below for history.
+   Original slice plan (2026-07-09, delivered): Skeleton = computer mic → ASR → `/context` (D10);
+   C1/C2 frozen (D11),
    adversarially reviewed pre-freeze; M0 fan-out built (storage/data-processing/recording/platform),
    **the mock capture loop runs E2E on live ports + real-ASR leg ran once** (62 tests, idempotency
    proven, independently verified). **Next (capture M1, audio stream — staying on this component):**
