@@ -151,4 +151,12 @@ while faster-whisper (CPU) catches up; empty transcripts for silent/toneless aud
   Fonsi interview → real faster-whisper text) + 21 mock video captions (video captioning is
   the fleet's mock backend; the video itself is really captured + stored). The desktop-picker
   path took 3 failed real-browser attempts; direct tab capture worked on the first.
-- Surface 1 (phone web): pending (re-verify after the `/capture/*` rename — hard-refresh first).
+- 2026-07-19 — **Surface 1 (phone web): PASSED** (CTO, real iPhone through the tunnel, on the
+  renamed `/capture/*` wire). Session `01KXWE2DQY…` (device `phone-web-44W7BV2R`, user `nmn`),
+  verdict **`clean`**, 4/4 segments. All 8 blobs in storage sha256-verified + ffprobe-decoded:
+  4× video H.264 640×480 mp4 (~10 s) + 4× audio 16 kHz mono wav; 16 C2 records — 4 real ASR
+  transcripts of the phone MIC (a room tour, first segment empty by VAD) + 12 mock captions.
+  Confirms the phone client on the `/capture/*` wire (post-rename) end to end.
+- **ALPHA COMPLETE — all three surfaces verified clean end-to-end on real devices** (phone:
+  mic+camera; mac CLI: screen+mic; extension: tab video+audio). Next per the founders'
+  sequencing: metrics emission (D9). Consent gate stays back-burner (D13).
