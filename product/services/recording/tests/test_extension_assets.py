@@ -55,17 +55,18 @@ def test_manifest_parses_and_pins_passive_posture():
     assert manifest["manifest_version"] == 3
     assert manifest["minimum_chrome_version"] == "116"
 
-    # D-E1: exactly these permissions — nothing else. No page access of any kind.
+    # D-E1 + D-E7 (direct tab capture, no desktop picker): exactly these
+    # permissions — nothing else. No page access of any kind.
     assert set(manifest["permissions"]) == {
         "tabCapture",
-        "desktopCapture",
         "offscreen",
         "storage",
     }
+    assert "desktopCapture" not in manifest.get("permissions", [])  # picker path removed
     assert "content_scripts" not in manifest
     assert "host_permissions" not in manifest
     assert "activeTab" not in manifest.get("permissions", [])
-    assert "tabs" not in manifest.get("permissions", [])
+    assert "tabs" not in manifest.get("permissions", [])  # tab ids don't need it
     # Server origin is user-configured: runtime grant via optional hosts only.
     assert manifest["optional_host_permissions"] == ["http://*/*", "https://*/*"]
 
@@ -73,6 +74,16 @@ def test_manifest_parses_and_pins_passive_posture():
     assert manifest["background"]["service_worker"] == "background.js"
     # background.js is deliberately self-contained (no imports): no module type.
     assert manifest["background"].get("type") is None
+
+
+def test_no_desktop_picker_machinery_remains():
+    # D-E7 removed the fragile screen-picker path entirely.
+    assert not (EXT_DIR / "picker.html").exists()
+    assert not (EXT_DIR / "picker.js").exists()
+    for name in ("background.js", "offscreen.js", "popup.js"):
+        text = (EXT_DIR / name).read_text()
+        assert "chooseDesktopMedia(" not in text, name          # the API call
+        assert "chromeMediaSource: \"desktop\"" not in text, name  # desktop source
 
 
 def test_every_js_file_passes_deno_check():

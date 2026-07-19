@@ -2,21 +2,20 @@
 /* global chrome */
 /*
  * WS-E — Nucleus Capture popup: UI ONLY (D-E5). Record/stop, settings, and a
- * ~1s status pull from the offscreen capture engine — mirrors the phone
- * client's status panel (clients/web/): per-source captured/uploaded/queued
- * counters, verdict badge, report lines, last error.
+ * ~1s status pull from the offscreen capture engine — the single active-tab
+ * session's counters, verdict badge, and report lines.
  *
- * - Settings (server URL, user id, source toggles) live in chrome.storage
- *   .local. Save is the USER GESTURE that runs chrome.permissions.request for
- *   exactly the configured origin (D-E1 — runtime grant, no static hosts);
- *   Record re-requests if the grant is missing (still a gesture).
+ * - Settings (server URL, user id, video toggle) live in chrome.storage.local.
+ *   Save is the USER GESTURE that runs chrome.permissions.request for exactly
+ *   the configured origin (D-E1 — runtime grant, no static hosts); Save PERSISTS
+ *   FIRST because the permission prompt can close the popup mid-call. Record
+ *   re-requests the grant if missing (still a gesture).
+ * - D-E7: the extension records the ACTIVE TAB (video + audio in one stream) via
+ *   tabCapture — no screen picker. The popup pins the active tab's id at Record.
  * - The popup owns NO capture state: it sends {target:"background"} start/stop
- *   and pulls {target:"offscreen", type:"status"} snapshots. A no-receiver
- *   reply (undefined/rejection) simply means the offscreen document doesn't
- *   exist -> render idle. The popup dying (e.g. when Chrome's screen picker
- *   takes focus) loses nothing — reopen it and the status pull resumes.
- * - device_id is minted and stored by background (single home); the popup only
- *   displays it.
+ *   and pulls {target:"offscreen", type:"status"} snapshots. A no-receiver reply
+ *   means the offscreen document doesn't exist -> render idle.
+ * - device_id is minted and stored by background (single home); popup displays it.
  */
 (() => {
   "use strict";
@@ -26,10 +25,8 @@
   const DEFAULTS = {
     baseUrl: "http://localhost:8084",
     userId: "beta-user",
-    screen: true,
-    tabAudio: true,
+    video: true, // capture tab video + audio; unchecked -> audio only
   };
-  const SOURCE_LABELS = { screen: "screen", tabAudio: "tab audio" };
 
   const $ = (id) => document.getElementById(id);
   const el = {
@@ -37,14 +34,12 @@
     statePill: $("state-pill"),
     serverUrl: $("server-url"),
     userId: $("user-id"),
-    srcScreen: $("src-screen"),
-    srcTabAudio: $("src-tab-audio"),
+    capVideo: $("cap-video"),
     saveBtn: $("save-btn"),
     saveNote: $("save-note"),
     recordBtn: $("record-btn"),
     stopBtn: $("stop-btn"),
     discardBtn: $("discard-btn"),
-    startOutcome: $("start-outcome"),
     deviceId: $("device-id"),
     sources: $("sources"),
   };
@@ -73,21 +68,23 @@
       return { error: "server URL must be http(s)" };
     }
     // Normalized to the ORIGIN — the server mounts at the root, and the host
-    // permission grant is per-origin.
+    // permission grant is per-origin. The host-permission MATCH PATTERN drops
+    // the port (Chrome match patterns ignore ports; "http://localhost:8084/*"
+    // is invalid) — a host grant covers every port on that host, which is what
+    // we want anyway.
+    const hostPattern = url.protocol + "//" + url.hostname + "/*";
     const settings = {
       baseUrl: url.origin,
       userId: el.userId.value.trim() || DEFAULTS.userId,
-      screen: el.srcScreen.checked,
-      tabAudio: el.srcTabAudio.checked,
+      video: el.capVideo.checked,
     };
-    return { settings, origin: url.origin };
+    return { settings, origin: url.origin, hostPattern };
   }
 
   function fillForm(settings) {
     el.serverUrl.value = settings.baseUrl;
     el.userId.value = settings.userId;
-    el.srcScreen.checked = !!settings.screen;
-    el.srcTabAudio.checked = !!settings.tabAudio;
+    el.capVideo.checked = settings.video !== false;
   }
 
   async function loadSettings() {
@@ -101,14 +98,12 @@
 
   async function saveSettings() {
     showBanner("");
-    const { settings, origin, error } = readForm();
+    const { settings, origin, hostPattern, error } = readForm();
     if (error) return note(error);
     fillForm(settings); // reflect normalization (origin) back into the input
-    // PERSIST FIRST. The permission prompt can steal focus and CLOSE this
-    // popup, killing everything after that await — with the write second,
-    // Save appeared to do nothing (found in alpha: settings reverted to
-    // defaults while the grant went through). The grant itself survives the
-    // popup's death once the user clicks Allow.
+    // PERSIST FIRST. The permission prompt can steal focus and CLOSE this popup,
+    // killing everything after that await — with the write second, Save appeared
+    // to do nothing (alpha finding). The grant survives the popup's death.
     try {
       await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
     } catch (err) {
@@ -118,7 +113,7 @@
     // This click IS the user gesture chrome.permissions.request needs.
     let granted = false;
     try {
-      granted = await chrome.permissions.request({ origins: [origin + "/*"] });
+      granted = await chrome.permissions.request({ origins: [hostPattern] });
     } catch (err) {
       return note("saved, but the permission request failed: " + errText(err));
     }
@@ -129,12 +124,11 @@
   // ------------------------------------------------------------ record/stop
   async function record() {
     showBanner("");
-    el.startOutcome.hidden = true;
-    const { settings, origin, error } = readForm();
+    const { settings, origin, hostPattern, error } = readForm();
     if (error) return showBanner(error);
-    if (!settings.screen && !settings.tabAudio) {
-      return showBanner("pick at least one source (screen / tab audio)");
-    }
+    // Disable Record immediately — BEFORE any await — so a double-click during
+    // the permission prompt can't fire two concurrent starts (skeptic round).
+    el.recordBtn.disabled = true;
     try {
       await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
     } catch {
@@ -144,26 +138,24 @@
     // still a gesture, so a missing grant can be requested right here.
     let has = false;
     try {
-      has = await chrome.permissions.contains({ origins: [origin + "/*"] });
+      has = await chrome.permissions.contains({ origins: [hostPattern] });
     } catch {
       has = false;
     }
     if (!has) {
       try {
-        has = await chrome.permissions.request({ origins: [origin + "/*"] });
+        has = await chrome.permissions.request({ origins: [hostPattern] });
       } catch {
         has = false;
       }
       if (!has) {
+        el.recordBtn.disabled = false;
         return showBanner("no permission for " + origin + " — uploads would fail; Save grants it");
       }
     }
-    el.recordBtn.disabled = true;
-    // Pin the tab-audio target NOW: this popup is anchored over exactly the
-    // tab the user means. Resolving "active tab" later in the worker raced
-    // the picker window (which becomes the active window) — skeptic round.
-    // tab IDs are readable without the "tabs" permission (only url/title are
-    // gated), so the passive posture is unchanged.
+    // Pin the active tab NOW: this popup is anchored over exactly the tab the
+    // user means. tab IDs are readable without the "tabs" permission (only
+    // url/title/favIconUrl are gated), so the passive posture is unchanged.
     let tabId = null;
     try {
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -180,14 +172,14 @@
           baseUrl: settings.baseUrl,
           userId: settings.userId,
           tabId,
-          sources: { screen: settings.screen, tabAudio: settings.tabAudio },
+          video: settings.video,
         },
       });
     } catch (err) {
       reply = { ok: false, error: errText(err) };
     }
     el.recordBtn.disabled = false;
-    renderStartOutcome(reply);
+    if (!reply || !reply.ok) showBanner((reply && reply.error) || "start failed");
     tick();
   }
 
@@ -203,11 +195,11 @@
     tick();
   }
 
-  // Escape hatch for a drain that can never finish (e.g. the server URL is
-  // wrong — the uploader retries forever BY DESIGN, and settings are locked
-  // while draining; found in alpha as a soft deadlock). Discard kills the
-  // capture document: unsent segments are lost (stated on the button), the
-  // ledger keeps whatever already arrived, and the settings unlock.
+  // Escape hatch for a drain that can never finish (e.g. the server URL is wrong
+  // — the uploader retries forever BY DESIGN, and settings are locked while
+  // draining). Discard kills the capture document: unsent segments are lost
+  // (stated on the button), the ledger keeps what already arrived, settings
+  // unlock.
   async function discard() {
     el.discardBtn.disabled = true;
     try {
@@ -217,22 +209,6 @@
     }
     el.discardBtn.disabled = false;
     tick();
-  }
-
-  function renderStartOutcome(reply) {
-    const parts = [];
-    const srcs = (reply && reply.sources) || {};
-    for (const kind of ["screen", "tabAudio"]) {
-      if (srcs[kind]) parts.push(SOURCE_LABELS[kind] + ": " + srcs[kind]);
-    }
-    if (!reply || !reply.ok) {
-      showBanner(
-        ((reply && reply.error) || "start failed") + (parts.length ? " — " + parts.join(" · ") : ""),
-      );
-      return;
-    }
-    el.startOutcome.textContent = parts.join(" · ");
-    el.startOutcome.hidden = parts.length === 0;
   }
 
   // ---------------------------------------------------------------- status
@@ -253,14 +229,14 @@
     return s;
   }
 
-  function sourceBlock(kind, snap) {
+  function sessionBlock(snap) {
     const wrap = document.createElement("div");
     wrap.className = "source";
 
     const verdictText = snap.verdict || (snap.active ? "recording" : "waiting for report…");
     const known = ["clean", "gaps", "recording"].includes(snap.verdict);
     const head = row(
-      SOURCE_LABELS[kind],
+      snap.audioOnly ? "this tab (audio)" : "this tab (video + audio)",
       span("v " + (known ? snap.verdict : "none"), verdictText),
     );
     head.querySelector(".k").className = "k source-name";
@@ -298,17 +274,13 @@
 
   function render(status) {
     const live = status && status.ok ? status : null;
-    const snaps = live ? live.sources : { screen: null, tabAudio: null };
-    // A source that FAILED to start has no snapshot but must not vanish: the
-    // start reply is lost whenever the screen picker killed the popup, so this
-    // is the only surface that can tell the user (e.g.) tab audio never began.
-    const startErrs = (live && live.startErrors) || {};
-    const any = !!(snaps.screen || snaps.tabAudio || startErrs.screen || startErrs.tabAudio);
+    const snap = live ? live.session : null;
+    // A start that failed (getUserMedia refusal) has no session but must not
+    // vanish: the start reply may have been lost, so this is the surface that
+    // tells the user why capture never began.
+    const startErr = live && live.startError;
     const active = !!(live && live.active);
-    const draining = !!(
-      live && !active &&
-      ["screen", "tabAudio"].some((k) => snaps[k] && !snaps[k].ended)
-    );
+    const draining = !!(live && !active && snap && !snap.ended);
     const state = active ? "recording" : draining ? "draining" : "idle";
     document.body.dataset.state = state;
     el.statePill.textContent = state;
@@ -318,32 +290,24 @@
     const locked = active || draining;
     el.serverUrl.disabled = locked;
     el.userId.disabled = locked;
-    el.srcScreen.disabled = locked;
-    el.srcTabAudio.disabled = locked;
+    el.capVideo.disabled = locked;
     el.saveBtn.disabled = locked;
 
     el.sources.textContent = "";
-    if (!any) {
+    if (snap) {
+      el.sources.appendChild(sessionBlock(snap));
+    } else if (startErr) {
+      const wrap = document.createElement("div");
+      wrap.className = "source";
+      const head = row("this tab", span("v err", "did not start: " + startErr));
+      head.querySelector(".k").className = "k source-name";
+      wrap.appendChild(head);
+      el.sources.appendChild(wrap);
+    } else {
       const hint = document.createElement("div");
       hint.className = "idle-hint";
-      hint.textContent = "no active capture — press Record to start";
+      hint.textContent = "no active capture — press Record to capture this tab";
       el.sources.appendChild(hint);
-      return;
-    }
-    for (const kind of ["screen", "tabAudio"]) {
-      if (snaps[kind]) {
-        el.sources.appendChild(sourceBlock(kind, snaps[kind]));
-      } else if (startErrs[kind]) {
-        const wrap = document.createElement("div");
-        wrap.className = "source";
-        const head = row(
-          SOURCE_LABELS[kind],
-          span("v err", "did not start: " + startErrs[kind]),
-        );
-        head.querySelector(".k").className = "k source-name";
-        wrap.appendChild(head);
-        el.sources.appendChild(wrap);
-      }
     }
   }
 

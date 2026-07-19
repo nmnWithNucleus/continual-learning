@@ -189,6 +189,7 @@ button:focus-visible, input:focus-visible {
   padding-top: 6px;
 }
 .source-name { font-weight: 600; }
+.cap-hint { color: var(--dim); font-size: 0.72rem; }
 
 .idle-hint { color: var(--dim); padding: 4px 0 1px; }
 
