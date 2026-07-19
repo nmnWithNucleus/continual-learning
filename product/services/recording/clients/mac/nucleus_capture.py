@@ -210,7 +210,13 @@ def build_ffmpeg_argv(cfg: CaptureConfig) -> list:
         argv += ["-t", str(cfg.duration)]
     if cfg.source == "avfoundation":
         # Quotes are filtergraph-level (protect the comma in min()), not shell.
-        argv += ["-vf", "scale='min(%d,iw)':-2" % cfg.max_width]
+        # fps= pins the OUTPUT rate: when the screen device refuses the input
+        # -framerate request ("Configuration of video device failed, falling
+        # back to default") ffmpeg otherwise derives a garbage rate from the
+        # device timebase, duplicates frames endlessly, and the segment muxer
+        # (which cuts on MEDIA time) never finalizes a file — zero uploads.
+        # Found live in the first real mac run (alpha 2026-07-19).
+        argv += ["-vf", "scale='min(%d,iw)':-2,fps=%d" % (cfg.max_width, cfg.framerate)]
     if cfg.video_encoder == "libx264":
         argv += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "28"]
     else:

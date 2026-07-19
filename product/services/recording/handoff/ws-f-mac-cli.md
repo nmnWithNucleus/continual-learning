@@ -117,6 +117,20 @@ Wire conformance against the real ingest app lives in `tests/test_wire_conforman
 
 ## Worklog
 
+- 2026-07-19 — **ALPHA FINDING (first real mac run, CTO): zero segments ever finalized.**
+  The screen device refused `-framerate 15` ("Configuration of video device failed,
+  falling back to default"), ffmpeg derived a garbage output rate from avfoundation's
+  microsecond timebase, duplicated frames endlessly ("More than 10000 frames
+  duplicated"), and the segment muxer — which cuts on MEDIA time — never reached 10
+  media-seconds, so nothing uploaded (server: unknown session; the watcher correctly
+  held the unfinished file). **Fix:** the avfoundation `-vf` chain now ends with
+  `fps=<framerate>`, pinning the OUTPUT rate regardless of what the device negotiates.
+  Verified by suite (argv test asserts the pin) + a local simulation (1000 fps lavfi
+  input through the exact filter/segment recipe → clean 10 s segments). The mac retry
+  is the CTO's step. Bluetooth-headset audio note: capturing a BT mic drops it to
+  call-quality rates (the harmless `aac … clamping` warning); built-in mic = disconnect
+  the headset and re-run list-devices.
+
 - 2026-07-18 — spec written (decisions D-F1…D-F4); handed to the build fan-out.
 - 2026-07-18 — built as specced: single-file `nucleus_capture.py` (~660 lines, stdlib only,
   executable), 27 tests in `tests/test_mac_client.py` incl. a real-ffmpeg CLI subprocess
