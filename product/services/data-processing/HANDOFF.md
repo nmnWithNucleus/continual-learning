@@ -91,7 +91,9 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
     which demuxes to the same C1 the phone already used). Suite unregressed at 38.
 
 ## Next
-- **Async `/ingest` (ACK 202 + worker queue) — now the top architectural item.** DP processes
+- **Async `/ingest` (ACK 202 + worker queue) — now the top architectural item** (charter
+  **M7** "production hardening: backpressure…" territory, arriving early — the charter allows
+  M4–M7 to interleave after M3, and video/M3 just landed). DP processes
   chunks INLINE today; the 2026-07-19 verification round confirmed a fully-loaded chunk
   (real ASR + diarization + VLM captions) can lawfully exceed the producer's delivery
   timeout, making recording retry into DP's in-flight lock. Fleet-mitigated for now
