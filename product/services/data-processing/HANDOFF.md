@@ -5,8 +5,9 @@
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
 **Status:** M0 + Processor seam + **capture-M1 pair landed** (continuity detector on `/ingest`,
-faster-whisper standing w/ VAD gate, pipeline-shape stubs) — **38 tests** · **Last updated:**
-2026-07-18 (recording M1 lead session)
+faster-whisper standing w/ VAD gate, pipeline-shape stubs) — **exercised end-to-end through the
+capture alpha (3 real clients, real transcripts)** — **38 tests** · **Last updated:**
+2026-07-19 (recording computer-capture lead)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
@@ -78,6 +79,12 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
   - Verified live by the lead session: real transcripts (`asr-fw-v1`) from phone-path segments
     in `/context`; empty transcript on silence; continuity reports consistent through
     clean/loss/dup drills. Tests: **38 passed** (24 + 14 new).
+  - **Exercised end-to-end through the capture alpha (2026-07-19):** all three real capture
+    clients (phone / Chrome extension / mac CLI) drove real media through `/ingest` — e.g. the
+    extension run produced 7 real ASR transcripts of a captured tab's audio, the phone run 4 of
+    room-mic audio — with `/continuity` cross-checked clean by recording's gap report each time.
+    DP itself needed **no change** for the two new clients (they speak recording's client wire,
+    which demuxes to the same C1 the phone already used). Suite unregressed at 38.
 
 ## Next
 - **Real audio pipeline stages**: diarization, translation, acoustic-event captioning replace

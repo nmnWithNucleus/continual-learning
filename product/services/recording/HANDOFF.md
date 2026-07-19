@@ -75,13 +75,18 @@ fleet fresh. Runbook: [handoff/alpha-runbook.md](handoff/alpha-runbook.md) · re
   client Pause→Resume double-recorder race. Live E2E re-verified after the fixes.
 - **Browser extension** (`clients/extension/`, Chrome MV3 — ws-E): a PASSIVE capture
   surface (no content scripts, no page/DOM access, no static host permissions — runtime
-  origin grant instead of server CORS). Screen video (`desktopCapture` picker) + tab audio
-  (`tabCapture`, AudioContext passthrough keeps the tab audible) as **one ingest session
-  per source** → separate C1 streams, same `device_id` (`ext-chrome-<suffix>`). D-M1-1
-  segmented recorder + the phone client's serialized uploader as DI'd ES modules
-  (deno-tested); popup mirrors the phone status panel with per-source verdict badges.
-  Server URL is a popup setting (tunnel or localhost). **Not run in a real Chrome here
-  (headless box) — load-unpacked runbook in ws-E §Human test steps.**
+  origin grant instead of server CORS). **Records the ACTIVE TAB — video + audio in ONE
+  muxed stream via `chrome.tabCapture` (D-E7, pivoted 2026-07-19 off the fragile
+  desktopCapture screen-picker after it failed 3× on the tester's Comet browser).** One
+  tab = ONE session = one muxed-webm (vp8+opus) segment loop; the **server demuxes each
+  segment into audio + video C1 streams** — the same muxed-A/V path the phone/mac clients
+  use, zero server changes. AudioContext passthrough keeps the tab audible; `device_id` =
+  `ext-chrome-<suffix>`. D-M1-1 segmented recorder + the phone client's serialized uploader
+  as DI'd ES modules (17 deno tests); popup mirrors the phone status panel. Server URL is a
+  popup setting (tunnel or localhost); a **Discard-unsent** escape hatch unlocks a drain
+  stuck on a bad URL. **REAL-BROWSER VERIFIED 2026-07-19** (CTO on Comet, verdict `clean`,
+  7 real ASR transcripts of the captured tab's audio). Trade-off: the extension captures a
+  browser *tab*, not the whole desktop — full-screen capture is the mac CLI's job.
 - **Mac capture CLI** (`clients/mac/nucleus_capture.py` — ws-F): single-file stdlib-only
   python3 + ffmpeg; avfoundation screen+mic muxed → ~10 s self-contained mp4 segments
   (forced keyframes) → serialized uploader on the same wire; duration-chained wall-clock
@@ -95,17 +100,18 @@ fleet fresh. Runbook: [handoff/alpha-runbook.md](handoff/alpha-runbook.md) · re
   h264+aac (mac CLI) — each demuxes to exactly the right C1 streams with spans preserved;
   the D-E3 two-session-same-device pattern and client-agnostic gap detection proven
   against the real app.
-- **Adversarial review round #2** (computer-capture slice: 5-lens find → 2-skeptic verify,
-  19 findings → 10 confirmed) — all fixed + regression-tested; detail in ws-E/ws-F
-  worklogs. Headliners: extension tab-capture stream-id expiry behind the human-paced
-  screen picker (acquisition reordered + failed sources surfaced), offscreen
-  drained-vs-restart races, mac CLI Ctrl-C stamp corruption (idempotent duration slotting),
-  stale-spool reuse refusal, HTTPException escaping the retry pump.
-- **Tests:** recording **109** (72 M1 + 37 new: 27 mac CLI + 3 extension assets + 5
-  wire conformance + 2 deprecated-alias) · data-processing 38 · storage 26 (both re-run,
-  unregressed) · extension deno suite 17.
-  Live E2E this slice: mac CLI test-source → verdict `clean` + 12 C2 records with exact
-  spans; deprecated-alias drill clean.
+- **Adversarial review + real-browser alpha reshaped the extension** (detail in ws-E/ws-F
+  worklogs): the pre-alpha review round (5-lens → 2-skeptic, 19 → 10 confirmed) hardened the
+  then-current screen-picker path; then two real-Chrome runs on Comet exposed the
+  desktopCapture picker as fundamentally fragile (worker-context refusal, same-tab capture
+  collision), so **D-E7 pivoted to direct tab capture** — deleting the picker, the
+  `desktopCapture` permission, and the two-session bookkeeping. mac CLI review headliners
+  stand: Ctrl-C stamp corruption (idempotent duration slotting), stale-spool reuse refusal,
+  HTTPException escaping the retry pump.
+- **Tests:** recording **110** (72 M1 + 38 new across the computer-capture slice: mac CLI,
+  extension assets, wire-conformance incl. the muxed-webm vp8+opus shape, deprecated-alias
+  absence) · data-processing 38 · storage 26 (both re-run, unregressed) · extension deno
+  suite 17. All three suites re-verified green after the slice merged.
 - E2E driver (synthetic phone, clean/gap/dup modes) lives in the session scratchpad —
   rewrite-on-demand; the unit suite covers the same paths hermetically.
 
@@ -142,21 +148,22 @@ fleet fresh. Runbook: [handoff/alpha-runbook.md](handoff/alpha-runbook.md) · re
   `/health` + `/client/` + alias re-verified through it). The URL rotates per tunnel
   restart, so ALWAYS read it from `var/tunnel_url.txt`; `run_learn.sh --status` checks
   the fleet.*
-- ~~Computer capture surfaces~~ **BUILT + REVIEWED + (test-mode) LIVE-VERIFIED
-  2026-07-18** (this slice — ws-E extension, ws-F mac CLI; server needed nothing new, as
-  designed).
-- **ALPHA TEST (in progress 2026-07-19)** — the CTO drives all three surfaces (phone web,
-  extension, mac CLI) per **[handoff/alpha-runbook.md](handoff/alpha-runbook.md)**
-  (launch steps, per-step expected signals, nuance drills, server-side cross-checks,
-  pass bar). All previously captured data was **purged** (recording ledger+spool,
-  storage `dev.db`+`raw_store`; DP state is in-memory) and the fleet restarted fresh so
-  alpha results read from zero. This box is headless Linux — the Chrome and avfoundation
-  legs can only be claimed from the CTO's machines, never from here.
+- ~~Computer capture surfaces~~ **BUILT + REVIEWED + LIVE-VERIFIED 2026-07-18** (this slice —
+  ws-E extension, ws-F mac CLI; server needed nothing new, as designed).
+- ~~ALPHA TEST~~ **ALPHA COMPLETE 2026-07-19** — the CTO drove all three surfaces per
+  [handoff/alpha-runbook.md](handoff/alpha-runbook.md), each landing verdict `clean` on real
+  hardware with blobs sha256-verified + ffprobe-decoded in storage and real ASR transcripts in
+  `/context`: **phone** (iPhone Safari, mic+camera, 4/4), **extension** (Comet, tab video+audio,
+  7/7 — the run that drove the D-E7 pivot), **mac CLI** (real avfoundation screen+mic, 7/7).
+  Results in the runbook §Worklog + each ws file. The fleet was purged + restarted fresh before
+  the pass so results read from zero; it remains UP on node-7.
+- **THE CAPTURE SURFACES ARE DONE (v0 alpha bar).** Founders' sequenced next: **metrics
+  emission (D9)** across recording + DP (the surfaces are now human-verified solid) — a fresh
+  session picks it up from this canvas.
 - **Later capture surfaces, explicitly recorded**: system/desktop audio for the extension
-  (kept OUT of this slice by scope); a mac menu-bar/GUI app (ScreenCaptureKit, visible
-  capture indicator, autostart) — capability exists today via the CLI, UX later.
-- **Metrics emission (D9)** across recording + DP is the founders' sequenced NEXT once the
-  capture surfaces are human-verified solid.
+  (out of this slice by scope); multi-tab simultaneous capture (feasible; deferred — ws-E);
+  a mac menu-bar/GUI app (ScreenCaptureKit, visible capture indicator, autostart) — capability
+  exists today via the CLI, UX later; continuous streaming ingest (D-M1-5 additive leg).
 - Retry ergonomics: `/capture/sessions/{id}/retry` is manual; consider an automatic periodic
   re-drive of `failed` segments once real-world failure modes are seen.
 - Continuity ledger growth: rows are permanent (fine at beta scale); add retention/compaction
