@@ -109,6 +109,30 @@ purged 2026-07-19, fleet restarted fresh; the CTO drives all three surfaces per
 - E2E driver (synthetic phone, clean/gap/dup modes) lives in the session scratchpad —
   rewrite-on-demand; the unit suite covers the same paths hermetically.
 
+## Pinned decisions & glossary (capture path)
+
+- **D-M1-5 — client transport (founders × recording lead, 2026-07-19): segmented HTTP
+  upload for ALL v0 surfaces** (phone / extension / mac CLI). Rationale: our capture path
+  is the *archive/training* job, not live viewing — loss-intolerant, offline-resilient,
+  latency-tolerant — which maps onto segmented upload (the Axon-bodycam/dashcam pattern),
+  not persistent-socket streaming (the Ring/Nest *live-view* pattern; note those products
+  run BOTH paths separately). **Continuous streaming ingest is a deferred ADDITIVE leg**:
+  a socket receiver (WebSocket/RTSP/SRT per device) → per-stream continuity buffer →
+  server-side segmenter, terminating in the EXISTING spool→demux→carve→emit machinery —
+  C1/C2 unchanged by design (C1 deliberately begins *after* transport: "chunks exist").
+  Build it only when a surface needs sub-segment latency (live-view is out of v0 scope) or
+  the bodycam firmware demands it; cheaper latency lever first: shrink `SEGMENT_SECONDS`.
+- **Glossary** (pinned so docs/sessions stay unambiguous): **segment** = client→server
+  upload unit (~10 s self-contained clip; `seq` dense per capture session) · **chunk** =
+  server→DP single-modality unit (one `/raw` blob + one C1 envelope; `sequence` dense per
+  stream) · **stream** = one continuous single-modality flow from one device session
+  (`stream_id` — the identity that crosses service boundaries) · **capture session** = one
+  start→stop on a device (press-record→stop / CLI run→Ctrl-C / extension click→click);
+  first-class in the ledger, **never travels past C1** (C1 carries `stream_id`, not
+  `session_id`) · **record** = one `/context` row conforming to the C2 contract.
+  Disambiguation: a **capture session** (recording) is NOT the serve-loop **chat session**
+  (`session_id` in C3/C4, storage `/sessions`) — qualify the word when both are in frame.
+
 ## Next
 - ~~Real-phone verification~~ **DONE 2026-07-18** — CTO's iPhone (Safari, tunnel): two
   sessions 7/7 + 9/9 clean; UI leaks + an ASR auto-language hallucination found and fixed
