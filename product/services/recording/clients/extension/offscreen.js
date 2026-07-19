@@ -341,17 +341,32 @@ async function handleStart(msg) {
   const outcome = {};
   // Screen id FIRST: it is the OLDER of the two (minted at the user's pick;
   // the tab id is minted after) and unused stream ids expire in ~10 s —
-  // consume the nearer-expiry one first. Sub-second either way.
+  // consume the nearer-expiry one first. Screen-first ALSO serves D-E6 here:
+  // if a screen id was handed over but getUserMedia fails to open it, that is
+  // "screen requested but did not start" at THIS layer (the same-tab collision
+  // throws 'Error starting tab capture' right here, not at acquisition), so
+  // tab audio is skipped — no silent audio-only recording.
+  let screenFailedAtStart = false;
   if (msg.screenStreamId) {
     try {
       await startSource("screen", msg.screenStreamId);
       outcome.screen = "capturing";
     } catch (err) {
-      outcome.screen = "error: " + errText(err);
-      startErrors.screen = errText(err);
+      const raw = errText(err);
+      screenFailedAtStart = true;
+      outcome.screen = "error: " + raw;
+      // The overwhelmingly common cause: the user picked, as their screen
+      // source, the SAME tab we capture audio from — Chrome forbids capturing
+      // one tab twice. Steer them to a collision-free source.
+      const hint =
+        msg.tabStreamId && /tab capture/i.test(raw)
+          ? " — you likely picked the tab you're also capturing audio from; " +
+            "Chrome can't capture one tab twice. Choose Entire Screen or a Window."
+          : " — recording aborted.";
+      startErrors.screen = raw + hint;
     }
   }
-  if (msg.tabStreamId) {
+  if (msg.tabStreamId && !screenFailedAtStart) {
     try {
       await startSource("tabAudio", msg.tabStreamId);
       outcome.tabAudio = "capturing";
@@ -359,6 +374,11 @@ async function handleStart(msg) {
       outcome.tabAudio = "error: " + errText(err);
       startErrors.tabAudio = errText(err);
     }
+  } else if (msg.tabStreamId && screenFailedAtStart) {
+    // D-E6 at the getUserMedia layer: screen was requested and failed to open,
+    // so the whole recording aborts — do not start tab audio either.
+    outcome.tabAudio = "skipped";
+    startErrors.tabAudio = "the screen source was required for this recording";
   }
   const ok = liveSources().length > 0;
   if (!ok) {

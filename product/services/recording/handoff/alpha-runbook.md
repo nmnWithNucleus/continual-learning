@@ -58,13 +58,14 @@ draining state to bail out, then fix the URL.)
 
 | Step | Expect |
 |---|---|
-| Open the popup ON a tab that is playing audio (e.g. YouTube); both sources ✓; **Record** | a tiny "Nucleus Capture — choose what to share" window opens WITH Chrome's share dialog (the popup may close — that's fine, capture is worker-driven); pick a screen/window and the tiny window closes itself |
+| Open the popup ON a tab that is playing audio (e.g. YouTube); both sources ✓; **Record** | a small "Nucleus Capture — choose what to share" window opens WITH the browser's native share dialog over it (its own window because an MV3 worker can't host the picker — expected, not broken; the action popup may close, that's fine). **For the video source choose "Entire Screen" or a "Window" — NOT the same tab you're capturing audio from** (Chromium allows only one capture per tab; picking the audio tab makes video fail). The little window closes itself once you pick |
 | Reopen the popup | state `recording`; TWO source blocks (screen / tab audio), separate session ids, counters ticking ~10 s |
 | Listen | the captured tab is still audible (passthrough) |
 | Wait ~40 s → **Stop** | both blocks drain; you may glimpse the first source's `clean` badge, then the popup resets to the idle hint within seconds — that is the capture document closing after full drain, NOT a failure (a popup that persists both final verdicts is a noted follow-up). **The verdict check for this surface is server-side**: `/capture/sessions` → both sessions `clean`; screen session's report = `video` stream only, tab session's = `audio` only; same `ext-chrome-*` device on both |
 | Drill: take >15 s choosing in the picker before confirming | both sources must STILL start (stream-id expiry was a fixed defect — if tab audio shows a "did not start" error row instead, that is a bug, report it) |
 | Drill: Chrome's "Stop sharing" bar mid-recording | screen session ends `clean` on its own; tab audio KEEPS recording until you Stop |
-| Drill: cancel the screen picker | tab-audio-only recording proceeds; the reopened popup shows a LONE tab-audio block — the screen source is simply absent (its "cancelled" reply died with the popup the picker closed; known cosmetic limit, not a failure) |
+| Drill: cancel the screen picker (with "screen" checked) | the WHOLE recording aborts (D-E6) — NO audio session either; the reopened popup is idle with "screen — did not start: recording cancelled — no screen was shared…". To record audio only, UNCHECK "screen" first, then Record (no picker appears) |
+| Drill: pick the SAME tab you're hearing as the screen source | video aborts the start with "…Chrome can't capture one tab twice — choose Entire Screen or a Window"; expected (Chromium one-capture-per-tab), not a bug |
 | Drill: close the captured tab mid-recording | tab-audio session ends `clean`; screen continues |
 | Drill: escape hatch — set a bogus server URL, Save, record a few seconds, Stop | state sticks at `draining` with "network error … retrying" (by design); **Discard unsent** appears → click it → popup returns to idle and settings unlock; fix the URL and re-record |
 
