@@ -113,7 +113,11 @@ the configured setting (tunnel URL or `http://localhost:8084`).
    choose a screen/window. Tab audio captures the tab the popup was opened on — open the
    popup on a tab that is playing audio (the tab stays audible while captured).
 4. Watch the popup counters climb (~1 segment per 10 s per source) and the per-source
-   verdict badges; **Stop** → queues drain → both badges should land **clean**.
+   verdict badges; **Stop** → queues drain. You may glimpse the first source's `clean`
+   badge, then the popup resets to idle within seconds (the capture document auto-closes
+   after full drain — the popup pulls live state and has nowhere to pull from). NOT a
+   failure; the verdicts are confirmed in step 5. *Follow-up noted: persist final
+   per-source verdicts (chrome.storage) so the popup can show them after close.*
 5. Cross-check server-side: `GET /capture/sessions` shows both sessions (same `device_id`);
    each report shows its C1 stream (screen → `video`, tab → `audio`) with dense sequences;
    audio transcripts land in `/context` via DP.
@@ -148,3 +152,11 @@ the configured setting (tunnel URL or `http://localhost:8084`).
   pragma test was removed.
 - 2026-07-18 — **wire rename adopted** (founders): all client URLs moved to `/capture/*`;
   ws-b §Wire carries the rename note. No extension behaviour change.
+- 2026-07-19 — fresh-eyes verification round (recording M1 lead, during the CTO's alpha
+  pass): 2 confirmed tester-facing gaps, both documentation-level. (1) "both badges land
+  clean" is unobservable — the offscreen capture document auto-closes on full drain and
+  the popup resets to idle before the second badge renders; runbook + §Human-test-steps
+  rewired to the server-side verdict check, and persisting final per-source verdicts via
+  chrome.storage recorded as a follow-up. (2) cancel-picker's `screen: cancelled` row
+  dies with the picker-closed popup — documented as cosmetic (lone tab-audio block is
+  the real signal). No extension code changed mid-alpha (the CTO has it loaded unpacked).

@@ -91,15 +91,18 @@ recording computer-capture lead
 
 ```bash
 cd product/services/recording/clients/mac
-python3 nucleus_capture.py list-devices                  # find screen/audio indices
+python3 nucleus_capture.py list-devices    # find screen/audio indices
+# --server is the tunnel URL (read it from the server box: recording/var/tunnel_url.txt);
+# the fleet runs on node-7, so plain localhost does NOT exist on this mac.
 python3 nucleus_capture.py record \
-  --server https://<tunnel-from-var/tunnel_url.txt>      # or http://localhost:8084
+  --server "https://<tunnel>.trycloudflare.com" \
   --user <you> --screen-index 1 --audio-index 0
 # ... work for a bit ... Ctrl-C once → drain → report summary; expect verdict: clean
 ```
-Smoke test without any permissions: `python3 nucleus_capture.py record --source test
---duration 25 --server http://localhost:8084`. Server-side cross-check is the session
-report (two streams, `video` + `audio`, dense sequences; transcripts in `/context`).
+Smoke test without screen/mic permissions: `python3 nucleus_capture.py record --source
+test --duration 25 --server "https://<tunnel>.trycloudflare.com"` (same tunnel URL — on
+the mac there is no local fleet). Server-side cross-check is the session report (two
+streams, `video` + `audio`, dense sequences; transcripts in `/context`).
 
 ## Tests
 
@@ -141,3 +144,10 @@ Wire conformance against the real ingest app lives in `tests/test_wire_conforman
   deprecated `/ingest` alias was also drilled live (old-prefix upload+end, new-prefix
   report → clean). **avfoundation leg untested here (headless Linux) — §Runbook is the
   human mac leg.**
+- 2026-07-19 — fresh-eyes verification round (recording M1 lead, during the CTO's alpha
+  pass) confirmed 2 doc defects in §Runbook, both fixed: a broken shell line-continuation
+  (a mid-command trailing comment ate the `\`, so `--user/--screen-index/--audio-index`
+  ran as a separate command and the capture would have been attributed to the default
+  `beta-user` — breaking the runbook's `user_id=<you>` cross-check), and the smoke-test
+  command targeting `http://localhost:8084`, which does not exist on the tester's mac
+  (fleet lives on node-7; both commands now use the tunnel URL).
