@@ -126,3 +126,15 @@ while faster-whisper (CPU) catches up; empty transcripts for silent/toneless aud
 - 2026-07-19 — runbook written; data purged, fleet restarted fresh, `/ingest` alias
   removed (single-tester decision — refresh beats route versioning). Alpha pass is the
   tester's step.
+- 2026-07-19 — **Surface 3 (mac CLI): PASSED** (CTO, real avfoundation runs over the
+  tunnel). Results: smoke test clean; first real run surfaced the output-frame-rate
+  defect (zero segments finalized — fixed same hour, fps pin, ws-F worklog); retry
+  7/7 segments both streams, verdict `clean`, graceful Ctrl-C with tail segment.
+  Content checks: VLC on a kept segment shows the REAL screen (permission/black-frame
+  question closed); a spoken run produced audible audio in the spool AND real ASR
+  transcripts in `/context` for the window. Known items recorded: seg-0 warm-up span
+  (18.4 s, first segment only — ws-F); video quality soft at the default
+  `--max-width 1728` + pinned CRF — acceptable for alpha, raise `--max-width` for
+  crisper text; the real fidelity bar is charter OQ3 (codec/bitrate ladder, joint
+  with DP).
+- Surface 1 (phone web) and Surface 2 (extension): pending.
