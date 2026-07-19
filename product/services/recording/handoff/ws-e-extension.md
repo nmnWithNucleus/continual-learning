@@ -105,6 +105,20 @@ computer-capture lead
 - **Source-ended semantics:** closing/navigating the captured tab (or a stop-sharing
   affordance) fires `track.onended` → the session **stops cleanly** (final segment, drain, end
   marker). One session now, so this ends the recording.
+- **Clarification — one tab gives BOTH modalities.** The Chromium limit is "one *capturer*
+  per tab", NOT "one modality per tab": a single `tabCapture` stream carries the tab's video
+  AND audio tracks together (D-E7 requests both from one stream id), and the server demuxes
+  them into audio + video C1 streams. The old collision was two SEPARATE capturers
+  (desktopCapture video + tabCapture audio) fighting over one tab — gone with the picker path.
+- **Future surface — multi-tab simultaneous capture.** Capturing several tabs at once is
+  feasible: different tabs are different capturers (no collision), and the wire already
+  supports N independent sessions under one `device_id` (proved in
+  `tests/test_wire_conformance.py`). Two things keep it OUT of this slice: (1) the tabCapture
+  invocation gate is per-tab — each captured tab must have been invoked (popup opened / action
+  clicked on it), so it needs a real multi-tab selection UX, not one click; (2) it reintroduces
+  the multi-session bookkeeping D-E7 deliberately removed (offscreen would hold a MAP of
+  sessions, not one). A bounded enhancement if it becomes a real need; the active-tab MVP
+  covers the common case (the tab the user is actually on).
 - **Shutdown reality (stated, not hidden):** if Chrome itself quits mid-recording, there is
   no reliable last-gasp hook in MV3; the offscreen doc registers `pagehide` →
   `fetch(…, {keepalive: true})` end markers as best-effort. A hard kill leaves the sessions
