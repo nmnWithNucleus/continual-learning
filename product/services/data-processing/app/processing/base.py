@@ -52,11 +52,23 @@ class ProcessedContent:
 @dataclass
 class ProcessedUnit:
     """One processed record-to-be. ``discriminator`` distinguishes multiple units
-    from one chunk (e.g. a video keyframe index); ``''`` marks the 1:1 case."""
+    from one chunk (e.g. a video keyframe index); ``''`` marks the 1:1 case.
+
+    ``t_start`` / ``t_end`` are an OPTIONAL per-unit sub-span (absolute RFC3339,
+    same axis as C1/C2 ``t_start/t_end``). They default to ``None``, in which case
+    ``build_c2`` carries the chunk's C1 span verbatim — so every existing modality
+    (audio/image/text, and the mock video fallback) is byte-identical to the
+    pre-hook behaviour. A Processor that knows *when within the chunk* a unit
+    occurs (e.g. video keyframe timing, per CHARTER OQ14a) sets them so each of a
+    chunk's many records gets its own time-spine sub-span instead of colliding on
+    the shared chunk span. No C2 schema change: C2 already carries per-record
+    timestamps; this only lets a Processor choose them per unit."""
 
     content: ProcessedContent
     enrichments: dict[str, list] = field(default_factory=empty_enrichments)
     discriminator: str = ""
+    t_start: Optional[str] = None  # per-unit sub-span start; None -> carry C1's
+    t_end: Optional[str] = None    # per-unit sub-span end;   None -> carry C1's
 
 
 class Processor:
