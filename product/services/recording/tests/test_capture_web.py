@@ -1,7 +1,7 @@
 """Capture-wire server behaviour (WS-C): segment upload -> demux -> ledger -> gap
-report. Canonical prefix /capture/* (renamed from /ingest/* 2026-07-18 so /ingest
-stays uniquely data-processing's C1 receiver); /ingest/* lives on as a hidden
-deprecated alias, covered at the bottom of this module.
+report. Prefix /capture/* (renamed from /ingest/* 2026-07-18 so /ingest stays
+uniquely data-processing's C1 receiver; no alias — the absence is asserted at
+the bottom of this module).
 
 Same fake pattern as test_capture.py (httpx MockTransport via the clients.async_client
 seam) plus the DP M1 continuity surface (FakeDataProcessingM1). ffmpeg-dependent tests
@@ -638,37 +638,14 @@ def test_partial_emit_failure_keeps_sequence_order(ingest, av_segment_bytes):
             assert [r["seq"] for r in rows] == [0, 1, 2]
 
 
-# ------------------------------------------------- /ingest deprecated alias
+# --------------------------------------------- /ingest is NOT ours (invariant)
 
-def test_deprecated_ingest_alias_serves_the_same_wire(ingest, av_segment_bytes):
-    """A phone page loaded before the /capture rename keeps uploading through
-    /ingest/* until its next refresh — same handlers, same ledger."""
-    sid = new_ulid()
-    t_start, t_end = span(0)
-    resp = ingest.client.post(
-        "/ingest/segments",
-        params={
-            "session_id": sid, "seq": 0, "user_id": "beta-user",
-            "device_id": "phone-web-prerename", "t_start": t_start,
-            "t_end": t_end, "mime": "video/mp4",
-            "sha256": hashlib.sha256(av_segment_bytes).hexdigest(),
-        },
-        content=av_segment_bytes,
-        headers={"content-type": "application/octet-stream"},
-    )
-    assert resp.status_code == 200 and resp.json()["status"] == "received"
-    assert ingest.client.post(
-        f"/ingest/sessions/{sid}/end", json={"last_seq": 0}
-    ).status_code == 200
-    # Old and new prefixes read the SAME session state.
-    old = ingest.client.get(f"/ingest/sessions/{sid}/report").json()
-    new = ingest.client.get(f"/capture/sessions/{sid}/report").json()
-    assert old["verdict"] == new["verdict"] == "clean"
-    assert old["received_segments"] == new["received_segments"] == 1
-
-
-def test_openapi_shows_capture_and_hides_the_ingest_alias(ingest):
+def test_no_ingest_routes_exist_on_recording(ingest):
+    """/ingest is uniquely data-processing's C1 receiver: recording must serve
+    NOTHING under it (a one-day transitional alias was removed 2026-07-19)."""
     paths = ingest.client.get("/openapi.json").json()["paths"]
     assert "/capture/segments" in paths
     assert "/capture/sessions/{session_id}/report" in paths
-    assert not any(p.startswith("/ingest/") for p in paths)
+    assert not any(p.startswith("/ingest") for p in paths)
+    assert ingest.client.post("/ingest/segments").status_code == 404
+    assert ingest.client.get("/ingest/sessions").status_code == 404

@@ -3,8 +3,9 @@
 
 Renamed /ingest/* -> /capture/* (founders + recording M1 lead, 2026-07-18) so
 /ingest remains uniquely data-processing's C1 receiver. Routes are defined
-relative here; app/main.py mounts them at /capture (canonical) AND at /ingest
-(hidden deprecated alias, kept until already-loaded phone pages refresh).
+relative here; app/main.py mounts them at /capture. (A transitional /ingest
+alias existed for one day and was removed 2026-07-19 — single-tester beta, a
+page refresh is cheaper than versioned routes.)
 
 POST /capture/segments                 — one self-contained A/V segment (raw bytes body).
                                          Idempotent on (session_id, seq): same sha again
@@ -42,8 +43,7 @@ from .config import Settings, get_settings
 
 logger = logging.getLogger("recording.ingest")
 
-# No prefix here: main.py mounts this router at /capture (canonical) and at
-# /ingest (hidden deprecated alias) — one code path, two mounts.
+# No prefix here: main.py owns the mount point (/capture).
 router = APIRouter()
 
 # DP /continuity probe: short and best-effort — the report must not hang on DP.
