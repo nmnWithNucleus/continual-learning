@@ -39,7 +39,7 @@ upload with HTTP 404 in the status area — that symptom = stale page, refresh a
 | Pause 10 s mid-recording, resume, stop | no new segments while paused; final verdict `clean`; total segments ≈ recorded time / 10 s |
 | Camera toggle OFF, record 15 s, stop | mic-only: report shows an `audio` stream ONLY; verdict `clean` |
 | Airplane mode 20 s mid-recording, back on, stop | queued climbs while offline, drains after; "retrying in Ns" appears then clears; verdict `clean`, **no missing seqs** |
-| Background the browser mid-recording, reopen | session was end-beaconed (ledger `ended`); page is idle again — start a NEW session; the old one's report should be `clean` for what it received (a lost in-memory queue tail would show as client-leg missing — that is the design being honest, note it if seen) |
+| Background the browser mid-recording, reopen | the hidden page beacons an end marker (ledger `ended` at that moment), but if iOS did NOT kill the tab the page still shows `recording` on return — that's expected: capture state survives backgrounding. If segments keep flowing, the server REOPENS the session (stale-marker protection, by design). Tap **Stop** for the real end marker → report typically `clean`. Only if the OS killed the tab do you come back to an idle page — then the old session's report is `clean` for what it received (a lost in-memory queue tail shows as client-leg missing — the design being honest; note it if seen) |
 
 ## Surface 2 — Chrome extension (on the mac)
 
@@ -56,10 +56,10 @@ re-prompts. If the tunnel URL ever rotates, repeat this step with the new URL.)
 | Open the popup ON a tab that is playing audio (e.g. YouTube); both sources ✓; **Record** | Chrome's screen picker appears (the popup may close — that's fine, capture is worker-driven); pick a screen/window |
 | Reopen the popup | state `recording`; TWO source blocks (screen / tab audio), separate session ids, counters ticking ~10 s |
 | Listen | the captured tab is still audible (passthrough) |
-| Wait ~40 s → **Stop** | both blocks drain → both verdict badges **`clean`**; screen session's report = `video` stream only, tab session's = `audio` only; same `ext-chrome-*` device on both (check `/capture/sessions`) |
+| Wait ~40 s → **Stop** | both blocks drain; you may glimpse the first source's `clean` badge, then the popup resets to the idle hint within seconds — that is the capture document closing after full drain, NOT a failure (a popup that persists both final verdicts is a noted follow-up). **The verdict check for this surface is server-side**: `/capture/sessions` → both sessions `clean`; screen session's report = `video` stream only, tab session's = `audio` only; same `ext-chrome-*` device on both |
 | Drill: take >15 s choosing in the picker before confirming | both sources must STILL start (stream-id expiry was a fixed defect — if tab audio shows a "did not start" error row instead, that is a bug, report it) |
 | Drill: Chrome's "Stop sharing" bar mid-recording | screen session ends `clean` on its own; tab audio KEEPS recording until you Stop |
-| Drill: cancel the screen picker | popup shows `screen: cancelled`; tab-audio-only recording proceeds |
+| Drill: cancel the screen picker | tab-audio-only recording proceeds; the reopened popup shows a LONE tab-audio block — the screen source is simply absent (its "cancelled" reply died with the popup the picker closed; known cosmetic limit, not a failure) |
 | Drill: close the captured tab mid-recording | tab-audio session ends `clean`; screen continues |
 
 ## Surface 3 — mac CLI
@@ -77,6 +77,12 @@ python3 nucleus_capture.py record --source test --duration 25 --server $TUNNEL -
 
 # 1) find your device indices (they shift with attached cameras/mics):
 python3 nucleus_capture.py list-devices
+#    NOTE: the trailing "Error opening input: Input/output error" is NORMAL —
+#    ffmpeg always "fails" the fake empty input after printing the table.
+#    Read the table: pick the "Capture screen N" video index (a webcam index
+#    instead records the camera); avoid virtual audio devices (e.g. "Microsoft
+#    Teams Audio"); a Bluetooth headset mic may drop the headset into
+#    call-quality mode while capturing.
 
 # 2) the real thing — screen + mic:
 python3 nucleus_capture.py record --server $TUNNEL --user nmn \
