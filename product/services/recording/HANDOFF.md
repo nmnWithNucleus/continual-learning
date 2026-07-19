@@ -4,16 +4,17 @@
 > Read [CHARTER.md](CHARTER.md) first (mission/scope/interfaces), then this file — the
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
-**Status:** **COMPUTER CAPTURE SURFACES slice DONE code-side** (2026-07-18, after the
-real-phone-verified M1): browser extension (Chrome MV3, passive: screen + tab audio →
-separate C1 streams) + mac capture CLI (ffmpeg avfoundation → same wire), both built,
-adversarially reviewed (10 confirmed defects fixed), wire-conformance-tested, and the CLI
-**live-E2E-verified on this box in `--source test` mode** (verdict `clean`, C2s in
-`/context`). Client wire renamed **`/ingest/*` → `/capture/*`** (founders; the one-day
-transitional alias removed 2026-07-19). **ALPHA TEST IN PROGRESS: all captured data
-purged 2026-07-19, fleet restarted fresh; the CTO drives all three surfaces per
-[handoff/alpha-runbook.md](handoff/alpha-runbook.md)** · recording suite **108 tests** ·
-**Last updated:** 2026-07-19 (recording computer-capture lead session)
+**Status:** **COMPUTER CAPTURE SURFACES slice — ALPHA: mac CLI ✓ + extension ✓ REAL-BROWSER
+VERIFIED, phone re-verify pending.** browser extension (Chrome MV3, passive) + mac capture CLI
+(ffmpeg avfoundation), both built, adversarially reviewed, wire-conformance-tested. **Extension
+PIVOTED 2026-07-19 (D-E7):** the desktop-screen-picker path failed on the tester's real browser
+(Comet) across 3 attempts → replaced by **direct tab capture** (active tab, video+audio, one
+muxed stream → server-demux); it then ran **clean end-to-end on the first real Comet run**
+(session `01KXWCPB…`, real ASR transcripts of the tab's audio in `/context`). Mac CLI
+**live-verified** (real avfoundation, verdict `clean`, pixels + transcripts confirmed). Client
+wire renamed **`/ingest/*` → `/capture/*`** (founders; alias removed 2026-07-19). All prior data
+purged 2026-07-19; fleet fresh. Runbook: [handoff/alpha-runbook.md](handoff/alpha-runbook.md) ·
+recording suite **110 tests** · **Last updated:** 2026-07-19 (recording computer-capture lead)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
@@ -23,8 +24,8 @@ purged 2026-07-19, fleet restarted fresh; the CTO drives all three surfaces per
 | C | **Ingest server**: segment upload, A/V demux, continuity ledger, gap report | built + verified live (loss/dup drills) | [handoff/ws-c-ingest-demux-ledger.md](handoff/ws-c-ingest-demux-ledger.md) | recording M1 lead |
 | D | **VAD-cut chunking** (charter OQ4 → D-M1-2) | built + verified on real speech | [handoff/ws-d-vad-carve.md](handoff/ws-d-vad-carve.md) | recording M1 lead |
 | — | DP-side pair (continuity detector + real ASR + VAD gate) | built + verified | [../data-processing/handoff/ws-m1-continuity-asr.md](../data-processing/handoff/ws-m1-continuity-asr.md) | recording M1 lead |
-| E | **Browser extension** (MV3 passive: screen + tab audio) | built + reviewed + asset/deno-tested; **human Chrome leg = tester's step** | [handoff/ws-e-extension.md](handoff/ws-e-extension.md) | computer-capture lead |
-| F | **Mac capture CLI** (ffmpeg avfoundation → segments → wire) | built + reviewed + live-E2E (test source); **human mac leg = tester's step** | [handoff/ws-f-mac-cli.md](handoff/ws-f-mac-cli.md) | computer-capture lead |
+| E | **Browser extension** (MV3 passive: **direct tab capture**, D-E7) | **REAL-BROWSER VERIFIED** (Comet, verdict `clean`, real transcripts) | [handoff/ws-e-extension.md](handoff/ws-e-extension.md) | computer-capture lead |
+| F | **Mac capture CLI** (ffmpeg avfoundation → segments → wire) | **live-verified** (real avfoundation + `--source test`, verdict `clean`) | [handoff/ws-f-mac-cli.md](handoff/ws-f-mac-cli.md) | computer-capture lead |
 
 ## Current state
 - **M0 spine unchanged and green** (`:8084`, `/capture/run`, blob-first PUT → C1 push,

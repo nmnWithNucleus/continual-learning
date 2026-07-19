@@ -142,4 +142,13 @@ while faster-whisper (CPU) catches up; empty transcripts for silent/toneless aud
   `--max-width 1728` + pinned CRF — acceptable for alpha, raise `--max-width` for
   crisper text; the real fidelity bar is charter OQ3 (codec/bitrate ladder, joint
   with DP).
-- Surface 1 (phone web) and Surface 2 (extension): pending.
+- 2026-07-19 — **Surface 2 (Chrome extension): PASSED** (CTO, real run in **Comet** — the
+  browser the picker path had failed in). After the D-E7 pivot to direct tab capture, the
+  first real run landed clean end-to-end: session `01KXWCPB…` (device `ext-chrome-NTP5GZW2`,
+  user `nmn`), verdict **`clean`**, 7/7 segments, 0 failed/missing/dup; the muxed tab stream
+  demuxed into an `audio` (7× audio/wav) + `video` (7× video/webm) C1 pair, both DP-checked.
+  28 C2 records in `/context`: **7 real ASR transcripts of the captured tab's audio** (a Luis
+  Fonsi interview → real faster-whisper text) + 21 mock video captions (video captioning is
+  the fleet's mock backend; the video itself is really captured + stored). The desktop-picker
+  path took 3 failed real-browser attempts; direct tab capture worked on the first.
+- Surface 1 (phone web): pending (re-verify after the `/capture/*` rename — hard-refresh first).

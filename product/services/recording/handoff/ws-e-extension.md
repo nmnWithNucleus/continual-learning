@@ -12,9 +12,10 @@ picker → offscreen handoff) proved fragile on real browsers during alpha (see 
 replaced by **direct tab capture** — see D-E7. Decisions D-E2/D-E3/D-E6 below describe the
 retired picker path and are kept for history, marked SUPERSEDED.
 
-**Status:** built + unit/conformance-tested + adversarially reviewed; **needs a human Chrome
-leg** (this box is headless Linux — see §Human test steps) · **Owner session:** recording
-computer-capture lead
+**Status:** built + unit/conformance-tested + adversarially reviewed + **REAL-BROWSER
+VERIFIED** (2026-07-19, CTO on Comet: session `01KXWCPB…` → verdict `clean`, muxed tab →
+audio+video C1, 7 real ASR transcripts of the tab's audio in `/context`) · **Owner session:**
+recording computer-capture lead
 
 ---
 
