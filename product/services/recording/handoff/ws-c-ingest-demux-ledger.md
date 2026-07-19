@@ -20,9 +20,10 @@
 - **D-M1-4 — upload wire** as pinned in WS-B (internal to recording, not a C-contract).
   **Route rename 2026-07-18 (founders):** client-facing prefix `/ingest/*` → `/capture/*`
   (file `app/ingest_web.py` → `app/capture_web.py`) so `/ingest` is uniquely
-  data-processing's C1 receiver. `/ingest/*` stays mounted as a hidden
-  (`include_in_schema=False`) deprecated alias of the same router — one code path, two
-  mounts — until already-loaded phone pages refresh. Shapes and semantics unchanged.
+  data-processing's C1 receiver. Shapes and semantics unchanged. A transitional hidden
+  `/ingest/*` alias lived exactly one day — **removed 2026-07-19** (CTO: single tester,
+  refresh beats versioned routes); a test now asserts recording serves NOTHING under
+  `/ingest`.
 - **Demux is recording's job** (charter OQ8 pattern: the muxed device link is split HERE,
   before emission): phone segments arrive A/V-muxed; ffmpeg demuxes per segment into
   audio → `audio/wav` 16 kHz mono s16le (ASR-native) and video → container copy
@@ -140,9 +141,9 @@ ack-then-poll; report merges a fake DP `/continuity` response.
 - 2026-07-18 (computer-capture lead) — **route rename executed** (see D-M1-4 note):
   `app/ingest_web.py` → `app/capture_web.py`, prefix moved to the include site
   (`main.py` mounts `/capture` + hidden `/ingest` alias). Handlers, shapes, ledger,
-  emitter untouched. Test module renamed `test_capture_web.py` (+2 alias tests: same wire
-  through `/ingest`, OpenAPI hides the alias); suite green; alias + canonical drilled
-  live on the fleet. Two NEW client surfaces now speak this wire unchanged —
+  emitter untouched. Test module renamed `test_capture_web.py`; suite green; canonical
+  (and the then-alias) drilled live on the fleet. Two NEW client surfaces now speak this
+  wire unchanged —
   [ws-e](ws-e-extension.md) (extension) and [ws-f](ws-f-mac-cli.md) (mac CLI) — plus
   `tests/test_wire_conformance.py` proving the client-shape matrix (video-only webm/vp8,
   audio-only webm/opus, muxed mp4 h264+aac) demuxes to the right C1 streams.

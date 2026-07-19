@@ -64,8 +64,9 @@ same-origin fetch, no dependencies, phone-first layout (large record button).
 
 Pinned jointly with WS-C; WS-C owns the server side. **Renamed `/ingest/*` →
 `/capture/*` 2026-07-18 (founders + recording lead) so `/ingest` stays uniquely
-data-processing's C1 receiver; `/ingest/*` remains mounted as a hidden deprecated
-alias (same handlers) until already-loaded phone pages refresh.**
+data-processing's C1 receiver. No alias (removed 2026-07-19, CTO call — single
+tester, a page refresh beats versioned routes): a page loaded before the rename
+must be hard-refreshed or every upload 404s.**
 
 - `POST /capture/segments?session_id=&seq=&user_id=&device_id=&t_start=&t_end=&mime=&sha256=`
   — body = raw segment bytes (`application/octet-stream`). `t_*` RFC3339 UTC (ms precision),
@@ -104,5 +105,6 @@ alias (same handlers) until already-loaded phone pages refresh.**
   Hindi/Korean-script text on faint room audio → DP gained `ASR_LANGUAGE` (beta fleet
   pins `en`; see DP ws file).
 - 2026-07-18 (computer-capture lead) — **wire rename adopted** (founders): `app.js` now
-  calls `/capture/*`; a page loaded before the rename keeps working through the hidden
-  `/ingest/*` alias until refresh (alias covered by tests + drilled live on the fleet).
+  calls `/capture/*`; a one-day transitional `/ingest/*` alias covered loaded pages.
+- 2026-07-19 — **alias removed** (CTO: single tester, refresh beats route versioning).
+  Loaded phone pages must hard-refresh once; a stale page shows 404 upload errors.

@@ -9,10 +9,11 @@ real-phone-verified M1): browser extension (Chrome MV3, passive: screen + tab au
 separate C1 streams) + mac capture CLI (ffmpeg avfoundation → same wire), both built,
 adversarially reviewed (10 confirmed defects fixed), wire-conformance-tested, and the CLI
 **live-E2E-verified on this box in `--source test` mode** (verdict `clean`, C2s in
-`/context`). Client wire renamed **`/ingest/*` → `/capture/*`** (founders; hidden
-deprecated alias kept). **Two human legs pending: Chrome load-unpacked + mac
-avfoundation run** (ws-E/ws-F runbooks) · recording suite **109 tests** ·
-**Last updated:** 2026-07-18 (recording computer-capture lead session)
+`/context`). Client wire renamed **`/ingest/*` → `/capture/*`** (founders; the one-day
+transitional alias removed 2026-07-19). **ALPHA TEST IN PROGRESS: all captured data
+purged 2026-07-19, fleet restarted fresh; the CTO drives all three surfaces per
+[handoff/alpha-runbook.md](handoff/alpha-runbook.md)** · recording suite **108 tests** ·
+**Last updated:** 2026-07-19 (recording computer-capture lead session)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
@@ -35,9 +36,9 @@ avfoundation run** (ws-E/ws-F runbooks) · recording suite **109 tests** ·
   (+ `sendBeacon` on pagehide), wake lock, live gap-report poll with verdict badge.
 - **Capture-wire server** (`app/capture_web.py` + `ledger.py` + `demux.py` + `emitter.py`):
   **client wire renamed `/ingest/*` → `/capture/*` 2026-07-18 (founders)** so `/ingest` is
-  uniquely data-processing's C1 receiver; `/ingest/*` stays mounted as a hidden
-  (`include_in_schema=False`) deprecated alias of the same router until already-loaded
-  phone pages refresh — tested + drilled live (ws-C worklog).
+  uniquely data-processing's C1 receiver; the transitional alias was **removed 2026-07-19**
+  (CTO: single tester — refresh loaded pages instead of versioning routes; a test asserts
+  recording serves nothing under `/ingest`).
   `POST /capture/segments` (idempotent on `(session_id, seq)`, sha-verified, spool→ledger ack),
   per-session FIFO emit worker: ffmpeg **demux into per-modality chunks** (audio → `audio/wav`
   16 kHz mono; video → container copy mp4/webm) → per modality get-or-create stream
@@ -119,12 +120,14 @@ avfoundation run** (ws-E/ws-F runbooks) · recording suite **109 tests** ·
   the fleet.*
 - ~~Computer capture surfaces~~ **BUILT + REVIEWED + (test-mode) LIVE-VERIFIED
   2026-07-18** (this slice — ws-E extension, ws-F mac CLI; server needed nothing new, as
-  designed). **Two HUMAN legs owed** (this box is headless Linux — cannot run Chrome or
-  avfoundation; never claim them from here):
-  1. **Chrome leg** — ws-E §Human test steps: load-unpacked, Save the server URL (grant),
-     Record → both verdict badges `clean`; try the Stop-sharing drill.
-  2. **Mac leg** — ws-F §Runbook: one-time Screen Recording grant, `list-devices`,
-     `record` against the tunnel URL → Ctrl-C → verdict `clean`.
+  designed).
+- **ALPHA TEST (in progress 2026-07-19)** — the CTO drives all three surfaces (phone web,
+  extension, mac CLI) per **[handoff/alpha-runbook.md](handoff/alpha-runbook.md)**
+  (launch steps, per-step expected signals, nuance drills, server-side cross-checks,
+  pass bar). All previously captured data was **purged** (recording ledger+spool,
+  storage `dev.db`+`raw_store`; DP state is in-memory) and the fleet restarted fresh so
+  alpha results read from zero. This box is headless Linux — the Chrome and avfoundation
+  legs can only be claimed from the CTO's machines, never from here.
 - **Later capture surfaces, explicitly recorded**: system/desktop audio for the extension
   (kept OUT of this slice by scope); a mac menu-bar/GUI app (ScreenCaptureKit, visible
   capture indicator, autostart) — capability exists today via the CLI, UX later.
