@@ -130,6 +130,14 @@ Wire conformance against the real ingest app lives in `tests/test_wire_conforman
   is the CTO's step. Bluetooth-headset audio note: capturing a BT mic drops it to
   call-quality rates (the harmless `aac … clamping` warning); built-in mic = disconnect
   the headset and re-run list-devices.
+- 2026-07-19 — **fps-pin fix CONFIRMED ON REAL HARDWARE** (CTO retry, `--framerate 30
+  --keep-segments`): 7/7 segments, both streams emitted, DP-checked, verdict `clean`,
+  graceful stop with a 1.3 s tail; no MB-rate warning, no frame duplication. **Known v0
+  approximation observed:** seg 0 spanned 18.4 s (all others exactly 10.0 s) — device
+  warm-up: audio flows from device-open while the screen's first frames arrive seconds
+  later, so segment 0 holds more audio than video and its A/V alignment is fuzzy by the
+  warm-up delay. First-segment-only; the time axis stays continuous. Possible later
+  refinement: anchor the timeline at first-video-frame instead of file birthtime.
 
 - 2026-07-18 — spec written (decisions D-F1…D-F4); handed to the build fan-out.
 - 2026-07-18 — built as specced: single-file `nucleus_capture.py` (~660 lines, stdlib only,
