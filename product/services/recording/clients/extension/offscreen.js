@@ -81,6 +81,11 @@ let drainedSent = false;
 // server-side). Give it this many post-end polls, then stop honestly.
 const DEAD_POLL_LIMIT = 6; // x 5s interval = ~30s of grace
 
+// A start where NO source began (all acquisition failed/cancelled) keeps this
+// document alive only long enough to explain itself, then asks to be closed.
+const ZERO_SOURCE_LINGER_MS = 60_000;
+let startGeneration = 0; // bumps per start; stale linger timers self-disarm
+
 const liveSources = () => [sources.screen, sources.tabAudio].filter(Boolean);
 const isActive = () => liveSources().some((s) => s.active);
 
@@ -324,22 +329,19 @@ async function handleStart(msg) {
   config = msg.config;
   sources.screen = null;
   sources.tabAudio = null;
-  startErrors.screen = null;
-  startErrors.tabAudio = null;
+  // Seed with ACQUISITION-stage failures (picker cancelled/errored, tab id
+  // refused) carried in by background: the popup usually died with the picker,
+  // so this snapshot is the only surface that can still report them. A source
+  // that then fails in startSource below overwrites its own entry.
+  const acq = msg.acquireErrors || {};
+  startErrors.screen = acq.screen || null;
+  startErrors.tabAudio = acq.tabAudio || null;
   drainedSent = false;
 
   const outcome = {};
-  // Tab id FIRST: it was minted last (younger), and stream ids expire unused
-  // in ~10 s — consume the more perishable one before the screen id.
-  if (msg.tabStreamId) {
-    try {
-      await startSource("tabAudio", msg.tabStreamId);
-      outcome.tabAudio = "capturing";
-    } catch (err) {
-      outcome.tabAudio = "error: " + errText(err);
-      startErrors.tabAudio = errText(err);
-    }
-  }
+  // Screen id FIRST: it is the OLDER of the two (minted at the user's pick;
+  // the tab id is minted after) and unused stream ids expire in ~10 s —
+  // consume the nearer-expiry one first. Sub-second either way.
   if (msg.screenStreamId) {
     try {
       await startSource("screen", msg.screenStreamId);
@@ -349,7 +351,34 @@ async function handleStart(msg) {
       startErrors.screen = errText(err);
     }
   }
+  if (msg.tabStreamId) {
+    try {
+      await startSource("tabAudio", msg.tabStreamId);
+      outcome.tabAudio = "capturing";
+    } catch (err) {
+      outcome.tabAudio = "error: " + errText(err);
+      startErrors.tabAudio = errText(err);
+    }
+  }
   const ok = liveSources().length > 0;
+  if (!ok) {
+    // Nothing started (e.g. picker cancelled on a screen-only config). The
+    // startErrors just seeded must stay visible long enough for a reopened
+    // popup to explain WHY — but this document must not leak forever with an
+    // undismissable error row (round-2 skeptic pass): after a grace window,
+    // ask background to close us, unless a newer start took the document over.
+    const gen = ++startGeneration;
+    setTimeout(() => {
+      if (gen !== startGeneration || liveSources().length > 0) return;
+      try {
+        chrome.runtime.sendMessage({ target: "background", type: "drained" }).catch(() => {});
+      } catch {
+        /* background gone */
+      }
+    }, ZERO_SOURCE_LINGER_MS);
+  } else {
+    startGeneration += 1; // invalidate any zero-source linger timer
+  }
   return ok
     ? { ok: true, sources: outcome }
     : { ok: false, sources: outcome, error: "no source could start" };

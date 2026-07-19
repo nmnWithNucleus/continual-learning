@@ -24,13 +24,18 @@ headless Linux — see §Human test steps) · **Owner session:** recording compu
   no-server-changes constraint holds.
 - **D-E2 — stream acquisition = stream-ID handoff, not getDisplayMedia.** MV3 reality: the
   popup dies on focus loss, the service worker has no DOM, and `getDisplayMedia` inside an
-  offscreen document has transient-activation problems. The documented-reliable pattern:
-  - **Screen video:** service worker calls `chrome.desktopCapture.chooseDesktopMedia(
-    ["screen", "window", "tab"], cb)` (no `targetTab` ⇒ the stream is consumable by
-    extension-origin contexts, i.e. our offscreen document) → Chrome's native picker → the
-    offscreen document opens it with `getUserMedia({video: {mandatory:
-    {chromeMediaSource: "desktop", chromeMediaSourceId}}, audio: false})`. Video only —
-    **no system audio in this slice** (recorded; a later surface).
+  offscreen document has transient-activation problems. The pattern:
+  - **Screen video (amended 2026-07-19, alpha):** real Chrome refuses
+    `chooseDesktopMedia` from a service worker with no `targetTab` ("A target tab is
+    required when called from a service worker context"), and passing a `targetTab` binds
+    the stream to that tab's origin — unusable by our offscreen document. So the worker
+    opens **`picker.html` in a tiny popup window**; that extension PAGE runs
+    `chrome.desktopCapture.chooseDesktopMedia(["screen","window","tab"], cb)` (no
+    `targetTab` ⇒ extension-consumable id), posts the result back, and closes itself.
+    Closing the picker window without choosing = cancelled. The offscreen document then
+    opens the id with `getUserMedia({video: {mandatory: {chromeMediaSource: "desktop",
+    chromeMediaSourceId}}, audio: false})`. Video only — **no system audio in this
+    slice** (recorded; a later surface).
   - **Tab audio:** service worker calls `chrome.tabCapture.getMediaStreamId({targetTabId})`
     for the tab the popup was opened on (opening the popup = the required extension
     invocation on that tab) → offscreen document `getUserMedia({audio: {mandatory:
@@ -78,6 +83,9 @@ clients/extension/
   manifest.json      MV3; minimum_chrome_version 116 (offscreen + getMediaStreamId consumption)
   background.js      service worker: start/stop orchestration, stream-ID acquisition,
                      offscreen document lifecycle (guarded createDocument)
+  picker.html/.js    screen-share picker host (D-E2 amendment): a tiny popup window the
+                     worker opens so chooseDesktopMedia runs in an extension PAGE
+                     (worker calls are refused by real Chrome); posts the id back, closes
   offscreen.html/.js capture engine: getUserMedia from stream IDs, AudioContext passthrough,
                      per-source segment loop + uploader + report poll, status snapshots
   uploader.js        shared ES module: createUploader(...) — serialized queue, backoff,
@@ -152,6 +160,43 @@ the configured setting (tunnel URL or `http://localhost:8084`).
   pragma test was removed.
 - 2026-07-18 — **wire rename adopted** (founders): all client URLs moved to `/capture/*`;
   ws-b §Wire carries the rename note. No extension behaviour change.
+- 2026-07-19 — **first real-Chrome run (CTO alpha) found 3 defects, all fixed same hour:**
+  (1) *Save lost the settings* — `chrome.permissions.request` can close the popup, killing
+  everything after its await; the `chrome.storage.local.set` ran AFTER it, so the grant
+  went through while the URL/user reverted to defaults. Persist-before-prompt now.
+  (2) *No screen picker* — the D-E2 amendment above: real Chrome refuses worker-context
+  `chooseDesktopMedia`; screen acquisition moved to `picker.html`/`picker.js` (the popup's
+  error row surfaced the exact failure string — the review-round surfacing fix earning
+  its keep). (3) *Draining soft-deadlock* — with an unreachable server URL the uploader
+  retries forever (by design), the drain never finishes, and settings are LOCKED while
+  draining: no way out. New **Discard unsent** button (draining state only) → background
+  closes the capture document; unsent segments drop (stated on the button), the ledger
+  keeps what arrived, settings unlock. Verified here: deno check + 17 deno tests +
+  asset tests + 3-skeptic adversarial pass over the patch; the Chrome retry is the
+  CTO's step.
+- 2026-07-19 — **two skeptic rounds over the picker fix reshaped it into a persisted
+  continuation** (all found-before-the-tester): round 1 — (a) the tab-audio id, minted
+  right after the picker resolved, targeted the PICKER window as "active tab"; (b) MV3
+  kills an idle worker in ~30 s, so worker-memory pending state silently dropped any
+  pick the user deliberated over; (c) acquisition-stage errors died with the popup.
+  Rework: the popup pins the target `tabId` at Record (tab ids need no permission);
+  the pending start persists in `chrome.storage.session`; `picker-result` — which
+  WAKES a fresh worker — resumes it (`finishStart`), minting the tab id with explicit
+  `targetTabId` and carrying `acquireErrors` into the offscreen status surface (even
+  for a zero-source start). Round 2 over the rework — (d) the supersede path removed
+  the stale picker window BEFORE clearing pending, letting its onRemoved take run a
+  phantom cancel-continuation under stale config; (e) the drained-close guard didn't
+  cover the continuation; (f) a superseded picker's late result could consume the new
+  pending; (g) a zero-source start leaked the document forever. Fixes: every
+  pending-state transition serialized through one promise-chain lock; supersede clears
+  pending before removing the window; drained-close is now AUTHORITATIVE (skips if a
+  pending exists, then asks the offscreen doc's status and only closes when no source
+  is active or draining); picker results carry their window id and mismatches are
+  dropped; zero-source starts linger 60 s (generation-guarded) then self-request
+  close; the dead round-1 `acquireTabStreamId` duplicate deleted. **Stated residual:**
+  a worker death in the sub-second continuation window itself (post-take, pre-handoff)
+  still loses that start silently — rare, recoverable by pressing Record again;
+  accepted for v0.
 - 2026-07-19 — fresh-eyes verification round (recording M1 lead, during the CTO's alpha
   pass): 2 confirmed tester-facing gaps, both documentation-level. (1) "both badges land
   clean" is unobservable — the offscreen capture document auto-closes on full drain and

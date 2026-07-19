@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<!--
+  WS-E — screen-share picker host page. Opened by the service worker as a tiny
+  popup window; picker.js immediately runs chrome.desktopCapture's native share
+  dialog, posts the chosen stream id back to the worker, and closes this window.
+  See picker.js for why this page exists at all (real-Chrome alpha finding).
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Nucleus Capture — choose what to share</title>
+  <style>
+    body {
+      margin: 0; padding: 18px 20px;
+      background: #16181d; color: #b9bec8;
+      font: 0.85rem/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+  </style>
+</head>
+<body>
+  Chrome's share dialog should be open — choose a screen, window, or tab.
+  This little window closes itself afterwards.
+  <script src="picker.js"></script>
+</body>
+</html>
