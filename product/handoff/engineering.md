@@ -433,6 +433,39 @@ session proposes; this standing founders' session ratifies. The bar the proposal
   dropped task.
 - **Mock-default + all three suites stay green; C1/C2 schemas untouched.**
 
+**RATIFIED — 2026-07-19, same session (→ D16).** The deep session's FINAL design memo
+(worktree `scratch/design_memo.md`, five-reviewer verified; its two load-bearing code claims
+spot-checked here against `ledger.py:405` / `capturer.py:172` / `capture_web.py:297`) **clears
+the bar and strengthens it**: it located the exact mechanism of the silent-loss clause —
+recording's `_dp_missing_unacked` reconciliation trusts `dp_acked=1` to mean "C2 exists"; a
+202-at-accept would redefine that to "merely accepted," so any accepted-then-lost chunk reads
+`clean` — and made the fix **non-negotiable: preserve the invariant `dp_acked` == "C2 durably
+written"**, dropping the original "zero recording change" claim as unsound (recording moves
+in-slice, as the bar required). Ratified wire, pinned as prose in the DP canvas at merge:
+- `INGEST_ASYNC=0` default, inline path byte-unchanged. Async: **202**
+  `{ok, accepted, chunk_id}` on accept (+`duplicate:true` on a queued/in-flight dedup hit);
+  **200 + record_ids** on a done-dedup-hit; deterministic rejections (400/422/501) resolve
+  **synchronously pre-claim**, never deferred into a dead-letter; **503** = honest
+  backpressure on a bounded queue (finite `INGEST_QUEUE_MAX` default — unbounded+volatile
+  would OOM-lose-all and read `clean`).
+- `/continuity/{stream_id}` gains **additive** `processed` (C2-durably-written runs) +
+  `dead_lettered`; "covered ≠ processed". C1/C2 schemas untouched.
+- Recording in-slice: `finalize_chunk(accepted=)` + additive `dp_state='accepted'` column;
+  report reconciliation — accepted-unconfirmed → verdict **`recording`** (never `clean`),
+  dead-lettered → **`gaps`**; `clean` now means "DP confirmed C2 for every chunk."
+- **Honest loss boundary accepted:** this slice guarantees *never falsely `clean`* — all loss
+  visible, none auto-recovered; auto-recovery (a durable DP pending journal) is explicitly
+  M7-proper, and an in-memory DLQ-with-recovery illusion is explicitly rejected.
+
+**One ratification condition:** the **re-drive path for accepted-unconfirmed chunks must be
+named + drilled once in-slice** — emitter re-push keyed on `dp_state='accepted'` (on restart
+or periodic), or a documented manual re-POST; either satisfies (DP idempotency makes re-push
+safe: done-claim short-circuits to 200+record_ids). Without it, a `recording` verdict after
+queue loss is visible but has no documented way back to confirmed until M7. **Accepted
+caveat, noted:** `record_ids=[]` ledger provenance for 202-confirmed chunks (ids stay
+derivable — deterministic on `(chunk_id, pipeline_version[, discriminator])`; inline/mock
+fleet unaffected).
+
 **D15 — what comes after (decided this session).**
 
 1. **Continuum kickoff is the next founders-led slice.** It is the last unstarted pillar and
@@ -580,4 +613,11 @@ Considered and passed, on the record so we don't re-litigate:
   **D15** — continuum kickoff next (gated on a C10 v0 freeze, storage × continuum), Platform
   D9 backbone as the small parallel slice, DP image/text deferred until a producing surface
   exists; mobile+C8 and a standalone C10 freeze considered + passed. Learn fleet re-verified
-  up on node-7 (storage/DP/recording healthy).
+  up on node-7 (storage/DP/recording healthy). **Later same session — ratification executed
+  (→ D16):** the deep session's FINAL async-`/ingest` design memo arrived (five-reviewer
+  verified; code claims spot-checked here) and was ratified — it strengthened the bar's
+  headline clause into the non-negotiable **`dp_acked` == "C2 durably written"** invariant
+  fix (recording moves in-slice; "zero recording change" dropped as unsound). One condition
+  (accepted-unconfirmed **re-drive drill** in-slice) + one accepted caveat (202-path
+  `record_ids=[]` provenance) recorded in the ratification block above; reply left in the
+  deep session's scratch dir.
