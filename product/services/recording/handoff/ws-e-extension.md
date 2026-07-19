@@ -67,6 +67,23 @@ headless Linux — see §Human test steps) · **Owner session:** recording compu
   with active capture stays alive. All `chrome.runtime` messages carry a `target` field
   (`"offscreen"` | "background"`) — every listener ignores non-matching messages (multiple
   contexts share the message bus). Popup pulls status (~1 s) straight from the offscreen doc.
+- **D-E6 — cancel/failure at START aborts the whole recording; a source ending
+  MID-recording does not** (added 2026-07-19, alpha — the user's instinct, and the right
+  one). When "screen" is checked and the picker is cancelled OR the screen source fails to
+  start, the entire start aborts: tab audio is NOT started either, and the popup's status
+  surface explains why. Rationale: the two checkboxes state intent ("I want both"); nothing
+  has been captured yet, so silently degrading to audio-only is a surprise, and cancelling
+  the picker reads as "abort", not "record audio instead". To record audio only, the user
+  unchecks "screen" (then there is no picker at all). This is the deliberate MIRROR of the
+  source-ended rule below: at start, all-or-the-chosen-set; mid-recording, keep whatever is
+  already producing footage.
+- **Known limitation — one capture per tab (Chromium).** A tab can be captured by exactly
+  one capturer at a time. If the user picks, as their screen-video source, the SAME tab we
+  are capturing audio from, the desktop-tab video fails ("Error starting tab capture"). Under
+  D-E6 this now aborts the start with a message naming the collision and steering to Entire
+  Screen / a Window. A first-class "record THIS tab (video+audio from one `tabCapture` stream,
+  no desktop picker)" mode would sidestep it entirely — recorded as a **future surface**, not
+  built in this slice.
 - **Source-ended semantics:** Chrome's native "Stop sharing" bar (or closing the captured
   tab) fires `track.onended` → that **source's session stops cleanly** (drain + end marker);
   the other source keeps recording until the user stops it. Honest partial capture, honest
@@ -197,6 +214,22 @@ the configured setting (tunnel URL or `http://localhost:8084`).
   a worker death in the sub-second continuation window itself (post-take, pre-handoff)
   still loses that start silently — rare, recoverable by pressing Record again;
   accepted for v0.
+- 2026-07-19 — **second real-Chrome run (CTO): Save now sticks ✓, picker window opens ✓,
+  tab audio records ✓.** Two findings: (1) picking the SAME tab for screen-video that we
+  capture audio from → video fails "Error starting tab capture" (Chromium one-capture-per-tab
+  — see Known limitation). (2) the user (rightly) found audio-recording-anyway-when-screen-
+  cancelled counterintuitive. Fix = **D-E6, enforced at BOTH layers** — a bounded skeptic
+  pass caught the first draft placing the abort only at acquisition (`finishStart`), but the
+  same-tab failure surfaces LATER, at the offscreen `getUserMedia` stage (the picker returns
+  a stream id fine; the desktop-tab video only fails when opened). So the abort lives in both
+  `finishStart` (picker cancel/error) AND offscreen `handleStart` (getUserMedia refusal →
+  skip tab audio, seed the same-tab hint). This is what actually closes the user's bug (pick
+  the audio tab for video → previously a silent audio-only recording; now aborts with "…
+  Chrome can't capture one tab twice. Choose Entire Screen or a Window"). Runbook drills
+  updated. The picker appears in its own small window (D-E2 workaround) with the browser's
+  native share dialog over it — inherent to the MV3-worker constraint; noted in the runbook
+  so it doesn't read as broken. deno check + 17 deno tests + asset tests + a bounded
+  adversarial pass (which found exactly the layering miss above). Re-test is the CTO's step.
 - 2026-07-19 — fresh-eyes verification round (recording M1 lead, during the CTO's alpha
   pass): 2 confirmed tester-facing gaps, both documentation-level. (1) "both badges land
   clean" is unobservable — the offscreen capture document auto-closes on full drain and

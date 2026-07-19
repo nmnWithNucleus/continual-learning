@@ -298,20 +298,43 @@ async function finishStart(pending, screenResult) {
   const outcome = {};
   const acquireErrors = {};
   let screenStreamId = null;
-  if (screenResult && screenResult.streamId) {
-    screenStreamId = screenResult.streamId;
-  } else if (screenResult && screenResult.cancelled) {
-    outcome.screen = "cancelled";
-    acquireErrors.screen = "cancelled in the picker";
-  } else if (screenResult && screenResult.error) {
-    outcome.screen = "error: " + screenResult.error;
-    acquireErrors.screen = screenResult.error;
-  }
-  // screenResult.skipped: source not requested — no outcome entry.
 
-  // Tab id minted LAST (it expires fast and the picker was unbounded).
+  // D-E6 — a screen that was REQUESTED but did not start aborts the WHOLE
+  // start (both sources), at start time only. The user checked "screen"; a
+  // silent audio-only recording is not what they asked for, and cancelling the
+  // picker reads as "abort", not "record audio instead". (Mid-recording is the
+  // opposite: one source ending leaves the other running, because footage
+  // already exists — that asymmetry is deliberate.)
+  let screenAborted = false;
+  if (screenResult && screenResult.streamId) {
+    screenStreamId = screenResult.streamId; // shared — proceed with both
+  } else if (screenResult && screenResult.skipped) {
+    // Screen not requested: tab-audio-only is a deliberate choice — proceed.
+  } else if (screenResult && screenResult.cancelled) {
+    screenAborted = true;
+    outcome.screen = "cancelled";
+    acquireErrors.screen =
+      "recording cancelled — no screen was shared. To record tab audio only, " +
+      "uncheck 'screen' and press Record again.";
+  } else {
+    // A picker/API error (chooseDesktopMedia lastError) — NOT the same-tab
+    // collision, which returns a stream id fine and only fails LATER at the
+    // offscreen getUserMedia stage (handled in offscreen handleStart, where the
+    // "Error starting tab capture" actually surfaces).
+    screenAborted = true;
+    const raw = (screenResult && screenResult.error) || "screen capture failed";
+    outcome.screen = "error: " + raw;
+    acquireErrors.screen = raw + " — recording aborted.";
+  }
+
+  // Tab id minted LAST (it expires fast and the picker was unbounded) — and
+  // ONLY when the screen leg didn't abort the start.
   let tabStreamId = null;
-  if (pending.wantTabAudio) {
+  if (screenAborted) {
+    if (pending.wantTabAudio) {
+      acquireErrors.tabAudio = "the screen source was required for this recording";
+    }
+  } else if (pending.wantTabAudio) {
     const r = await acquireTabStreamId(pending.tabId);
     if (r.streamId) tabStreamId = r.streamId;
     else {
