@@ -7,9 +7,10 @@
 > **Zero server changes.** A menu-bar/GUI app (ScreenCaptureKit, visible capture
 > indicator, autostart) is an explicitly **LATER surface** — capability today, UX later.
 
-**Status:** built + unit-tested + **live-E2E-verified on this box in `--source test` mode**
-(the avfoundation capture leg itself needs a human mac — §Runbook) · **Owner session:**
-recording computer-capture lead
+**Status:** built + unit-tested + **REAL-AVFOUNDATION VERIFIED** (2026-07-19, CTO's mac:
+screen+mic, 7/7 segments, verdict `clean`, pixels confirmed real in VLC + spoken-run
+transcripts in `/context`; the fps-pin fix that made it work is in the worklog) · **Owner
+session:** recording computer-capture lead
 
 ---
 

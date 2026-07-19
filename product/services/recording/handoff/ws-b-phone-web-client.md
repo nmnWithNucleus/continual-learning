@@ -5,7 +5,8 @@
 > step**, served by the recording server and talking to it same-origin. Reference (not lift,
 > D7): `poc/live_video_chat` — iOS capture/MediaRecorder/tunnel lessons.
 
-**Status:** built + **REAL-PHONE VERIFIED** (2026-07-18, CTO's iPhone Safari over the tunnel)
+**Status:** built + **REAL-PHONE VERIFIED** (M1 2026-07-18; **re-verified 2026-07-19 on the
+renamed `/capture/*` wire** — CTO's iPhone Safari, 4/4 `clean`, blobs sha256+ffprobe-checked)
 · **Owner session:** recording M1 lead
 
 ---

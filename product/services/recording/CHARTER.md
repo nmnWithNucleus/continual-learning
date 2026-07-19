@@ -5,7 +5,8 @@
 > lives in [HANDOFF.md](HANDOFF.md); system-wide architecture + contracts in
 > [../../ARCHITECTURE.md](../../ARCHITECTURE.md).
 
-**Status:** chartered · **Last updated:** 2026-07-08
+**Status:** chartered; **capture M1 + computer surfaces alpha-complete** (see §v0 deliverables
+milestone-progress note) · **Last updated:** 2026-07-19
 
 ---
 
@@ -81,6 +82,24 @@ teammates). The M2 red-team exit bar is unchanged whenever it lands. Milestone n
 their names (M-numbers are identifiers, not a fixed order — sequencing is owned by the
 founders' board + this note).
 
+**Milestone progress — capture M1 + computer surfaces (ALPHA COMPLETE 2026-07-19):** the
+recording service was wrapped to the alpha bar (detail: [HANDOFF.md](HANDOFF.md)). Delivered:
+the M0 ingest spine hardened into a **checked "zero silent loss" guarantee** (continuity
+ledger + DP break/dup detector + two-leg gap report), the **fuller ASR pipeline** (faster-whisper
+standing + VAD gate), **VAD-cut chunking** (OQ4 → D-M1-2), and **three capture clients** on one
+`/capture/*` wire, each alpha-verified `clean` on real hardware:
+- **Phone web** (`clients/web/`) — mic + camera over HTTPS/tunnel; the bodycam stand-in + the
+  beta press-record surface. (Not an M-milestone itself; M3 wearable hardware swaps in later.)
+- **Browser extension** (`clients/extension/`) — **M4 essentially met** (consent path deferred,
+  D13): passive active-tab capture (video+audio via `tabCapture`, D-E7), flows through the same
+  chunk/retry path, C1 carries the browser `device_id`/modality.
+- **Mac CLI** (`clients/mac/`) — **partial M1**: screen + mic capture (ffmpeg avfoundation) with
+  the offline queue, real-avfoundation verified. **Still open for full M1:** webcam, the pairing
+  flow, and a full-workday soak (alpha was minutes, not a workday); a mac menu-bar/GUI app
+  (ScreenCaptureKit, visible capture indicator) is a later surface — capability exists via the CLI.
+Client transport pinned **segmented-HTTP for all v0 surfaces** (D-M1-5; streaming ingest a
+deferred additive leg — recorded on the founders' board as D14).
+
 ---
 
 ## Open questions
@@ -95,7 +114,10 @@ founders' board + this note).
    If holdback latency is unacceptable for data-processing, server-side deletes fall through
    to storage's `/raw` purge primitives (platform orchestrates) — raise with CTO/ARCHITECTURE.md.
 3. Codec/bitrate ladder: what fidelity does data-processing actually need per modality? Sets
-   battery, disk, and upload budgets. Joint decision with data-processing.
+   battery, disk, and upload budgets. Joint decision with data-processing. **Alpha datapoint
+   (2026-07-19):** mac screen video at the CLI default (`--max-width 1728`, CRF 28) is readable
+   but soft on fine text — `--max-width 2560+` is the current user lever; per-modality fidelity
+   targets remain this open joint decision, not a per-client flag.
 4. ~~Chunk duration for C1~~ **DECIDED 2026-07-18 (D-M1-2, recording × data-processing —
    [handoff/ws-d-vad-carve.md](handoff/ws-d-vad-carve.md)):** per client/source — continuous
    audio the server owns: **variable-length chunks cut at VAD speech pauses within [5 s, 30 s]**
@@ -105,7 +127,9 @@ founders' board + this note).
    self-contained); video/screen streams: **fixed windows**. C1 untouched (frozen shape already
    supports variable length). DP's side of the pair: a VAD gate before ASR.
 5. Pilot desktop OS: which OS(es) do the actual pilot users run? Pin the fleet; don't build
-   three clients for a handful of users.
+   three clients for a handful of users. **Alpha (2026-07-19) ran on macOS** (mac CLI) +
+   **Chromium/Comet** (extension) + **iOS Safari** (phone) — the current tester's stack; not
+   yet pinned as THE pilot fleet (a Windows desktop client, if pilots need it, is unbuilt).
 6. Device identity/auth: platform-owned identity with device-scoped tokens, or self-issued
    until platform exists? Needs platform charter alignment.
 7. Bystander audio/video: policy is platform's call (§Ownership splits — platform decides,
@@ -121,6 +145,14 @@ founders' board + this note).
    Also: the wearable sends **combined A/V** on the device→backend link; **we demux** into
    per-modality C1 streams (each its own `stream_id`, same `device_id`, wall-clock-aligned) — C1's
    `modality` is per-envelope, so the split happens **here**, before emission.
+   **STATUS (2026-07-19):** the **demux half is BUILT + proven** (`app/demux.py`, ffmpeg;
+   exercised by all three alpha clients — muxed mp4/webm → separate audio + video C1 streams).
+   The **transport is decided (D-M1-5 / founders' D14): segmented HTTP upload** for all v0
+   surfaces (each client posts self-contained ~10 s segments to `/capture/segments`; the server
+   spools → demuxes → emits). **Still open:** the **direct-to-GCS signed-URL** upload path (M0 +
+   all three clients still proxy bytes through storage's `PUT /raw/blobs`); the
+   mint→upload→confirm handshake with storage + platform is the remaining OQ8 work, needed before
+   tens-of-GB/day/user scale.
 
 **Research**
 9. Capture-everything vs. activity-gated capture (VAD/motion gating): gating saves battery and
