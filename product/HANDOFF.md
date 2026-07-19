@@ -34,13 +34,8 @@
 
 ## Escalations (open items needing a founders' decision)
 
-- **Async `/ingest` reply shape** (inter-service wire, not a C-number) — the in-flight DP deep
-  session proposes; the standing 2026-07-19 founders' session ratifies against the bar pinned in
-  [handoff/engineering.md](handoff/engineering.md) §Post-capture-alpha sequencing (headline
-  clause: a `202` ACK must not open a silent record-loss window). On acceptance, pinned as prose
-  in the DP canvas (the D11 `/raw`-leg pattern).
-
-Resolved items move to the Decisions log below.
+*None open.* Resolved items move to the Decisions log below. *(The async `/ingest` reply shape
+was proposed + ratified in-session 2026-07-19 → **D16**.)*
 
 ## Decisions log (founders)
 
@@ -61,6 +56,7 @@ Resolved items move to the Decisions log below.
 | D13 | **Consent gate de-prioritized (back-burner).** Ship-fast posture: the capture surfaces + learn loop mature first; the consent/deletion layer (recording M2 + platform's consent store) lands **before any non-team pilot user**, not before beta (beta testers are consenting teammates). The M2 red-team exit bar is unchanged whenever it lands | 2026-07-18 | this board; recording charter §v0 deliverables |
 | D14 | **Capture transport = segmented HTTP upload for ALL v0 surfaces** (phone / extension / mac CLI). Our capture path is the loss-intolerant, offline-resilient *archive/training* job (the Axon-bodycam pattern), not low-latency live-view (the Ring/Nest pattern — which runs both paths separately). **Continuous streaming ingest (WebSocket/RTSP/SRT → server segmenter) is a deferred ADDITIVE leg** terminating in the existing spool→demux→carve→emit machinery; C1/C2 unchanged (C1 begins after transport). Live-view is out of v0 scope | 2026-07-19 | recording canvas §Pinned decisions (D-M1-5); [ARCHITECTURE.md](ARCHITECTURE.md) capture path |
 | D15 | **Post-deep-session build order: continuum kickoff is the next founders-led slice**, gated on a **C10 v0 interface freeze** (storage × continuum propose, founders ratify; frozen against the beta-proven `/context` range read). **Platform's D9 backbone** (the one shared Prometheus + Grafana) runs as the small parallel slice. **DP image/text pipelines (M2) deferred until a producing surface exists** — no `image`/`text` C1 stream exists on the fleet today; screen text already flows via the video-keyframe OCR weave (D8); the OQ14b bbox additive waits with it. Mobile+C8 and a standalone C10 freeze considered + passed (rationale in the engineering thread) | 2026-07-19 | [handoff/engineering.md](handoff/engineering.md) §Post-capture-alpha sequencing; continuum canvas; this board |
+| D16 | **Async `/ingest` reply shape RATIFIED** (inter-service wire, prose-pinned in the DP canvas at merge — not a C-number; C1/C2 untouched). `INGEST_ASYNC` off-by-default, inline byte-unchanged. Async: **202** `{ok,accepted,chunk_id}` (+`duplicate:true` on in-flight dedup hit) · **200+record_ids** on done-dedup-hit · 400/422/501 resolve synchronously pre-claim · **503** bounded-queue backpressure. `/continuity` gains additive `processed`+`dead_lettered`. **Invariant preserved: `dp_acked` == "C2 durably written"** — recording moves in-slice (`dp_state='accepted'` + gap-report reconciliation; `clean` = every chunk confirmed; accepted-unconfirmed → `recording`, dead-lettered → `gaps`). Guarantee: **never falsely `clean`**; auto-recovery = M7 durable journal. **Condition:** accepted-unconfirmed re-drive path named + drilled in-slice. **Accepted caveat:** `record_ids=[]` ledger provenance on 202-path chunks (ids derivable) | 2026-07-19 | [handoff/engineering.md](handoff/engineering.md) ratification block; DP canvas (pinned prose at merge); recording canvas (verdict semantics) |
 
 ## Current state (terse)
 
@@ -176,6 +172,10 @@ Resolved items move to the Decisions log below.
   C-number; escalation row open above) and recorded **D15**: continuum kickoff next (C10 v0
   freeze as its gate) + Platform D9 backbone as the small parallel slice; DP image/text
   deferred until a producing surface exists. Learn fleet re-verified healthy on node-7.
+  *Later same session:* the deep session's FINAL async-`/ingest` design memo arrived
+  (five-reviewer verified; code claims spot-checked) and was **RATIFIED → D16** — the memo
+  strengthened the bar's headline clause into the non-negotiable `dp_acked`-invariant fix;
+  one condition (re-drive drill) + one accepted caveat (202-path provenance) recorded.
 
 ## Next
 
@@ -187,9 +187,8 @@ Resolved items move to the Decisions log below.
   emission** (DP M8 + recording M6: `/metrics` + dashboard JSONs — the richest new signal:
   ingest/segment/chunk rates, per-leg gap/continuity counters, demux + per-stage latency,
   VAD-empty rate, queue depth) · node-7 real-audio-backend smokes · OQ3 codec ladder (joint).
-  The standing founders' session **ratifies the `/ingest` reply-shape change when proposed**
-  (escalation row above; bar in [handoff/engineering.md](handoff/engineering.md)); merge to
-  `main` after founders' review.
+  The `/ingest` reply shape was proposed + **RATIFIED in-session (D16** — one condition: the
+  accepted-unconfirmed re-drive drill**)**; merge to `main` after founders' review.
 - **After it lands (D15):** (1) **continuum kickoff** — the next founders-led slice; first act:
   storage × continuum propose the **C10 v0 freeze** (founders ratify), then a charter-M0 plan +
   workstreams. Kickoff deliberately forces the cluster-split (nightly window) and DP
