@@ -27,18 +27,29 @@ upsert, not a dup.
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
+from typing import Callable, Optional
 
 
 class DedupStore:
-    def __init__(self) -> None:
+    def __init__(
+        self, done_fallback: Optional[Callable[[str], Optional[list[str]]]] = None
+    ) -> None:
         self._done: dict[str, list[str]] = {}    # chunk_id -> [record_id, ...]
         self._inflight: set[str] = set()         # queued/processing (async mode)
         self._locks: dict[str, asyncio.Lock] = {}
         self._guard = asyncio.Lock()
+        # Durable backstop (the journal's processed table): consulted on a miss so a
+        # redelivery AFTER a restart is answered with the prior record_ids instead of a
+        # reprocess. Hits are cached back into the in-memory map.
+        self._done_fallback = done_fallback
 
     def get(self, chunk_id: str) -> Optional[list[str]]:
-        return self._done.get(chunk_id)
+        ids = self._done.get(chunk_id)
+        if ids is None and self._done_fallback is not None:
+            ids = self._done_fallback(chunk_id)
+            if ids is not None:
+                self._done[chunk_id] = ids
+        return ids
 
     def put(self, chunk_id: str, record_ids: list[str]) -> None:
         """Record a chunk's final record_ids AND release any async in-flight claim —
@@ -66,7 +77,13 @@ class DedupStore:
                              ``release_inflight`` (dead-letter / failure / cancel).
 
         The claim + the two prior checks happen under one lock, so two concurrent
-        redeliveries of the same chunk can never both come back ``'claimed'``."""
+        redeliveries of the same chunk can never both come back ``'claimed'``. The
+        durable-journal backstop is consulted BEFORE the lock (a blocking sqlite read
+        must never sit inside the global guard, or one busy-timeout stall would freeze
+        every ingest); the read is idempotent, and ``get`` caches a hit into ``_done``
+        so the in-guard re-check sees it."""
+        if self._done_fallback is not None:
+            self.get(chunk_id)  # outside the guard: caches a durable hit into _done
         async with self._guard:
             if chunk_id in self._done:
                 return "done"

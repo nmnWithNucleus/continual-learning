@@ -142,3 +142,14 @@ def test_float_formatting():
     assert "g 2.5" in m.render()
     m.set("g", math.inf)
     assert "g +Inf" in m.render()
+
+
+def test_graph_stage_latency_is_emitted_per_stage(client):
+    """M8 win: the stage graph emits per-STAGE latency (asr/…) not just the coarse
+    'process' stage — the intra-pipeline granularity the charter asks for."""
+    from tests.conftest import make_c1
+    client.post("/ingest", json=make_c1(client.fake_storage, chunk_id="gs-1"))
+    text = client.get("/metrics").text
+    assert 'dp_graph_stage_seconds_count{modality="audio",stage="asr"}' in text
+    # The coarse whole-processor stage is still emitted (metric contract unchanged).
+    assert 'dp_stage_seconds_count{modality="audio",stage="process"}' in text

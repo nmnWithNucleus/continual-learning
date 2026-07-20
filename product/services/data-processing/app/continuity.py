@@ -186,6 +186,56 @@ class ContinuityTracker:
                     chunk_id,
                 )
 
+    def rehydrate(self, streams: dict[str, dict[str, Any]]) -> None:
+        """Rebuild per-stream state from the durable journal at boot (both modes).
+
+        Input is ``Journal.rehydration()``: per stream, its identity + THREE sequence
+        classes — ``processed`` (C2 durably written), ``dead`` (durably dead-lettered),
+        and ``accepted`` (still pending re-drive). EVERY rehydrated sequence counts as
+        SEEN (intervals + ``first_chunk``) — it WAS delivered — so a post-restart report
+        never re-reads history as a leading gap; the accepted class is the keystone: a
+        chunk merely waiting to be re-driven must read as in-flight coverage, never be
+        fabricated into a gap. ``processed``/``dead_lettered`` survive the restart
+        (recording's confirm loop keeps working; the false-``gaps`` window is closed).
+
+        What's honestly lost across a restart: duplicate/conflict counters and the true
+        ``received`` total — rehydrated ``received`` = unique sequences (a floor),
+        counters restart at 0 (rate-style observability, not loss accounting). Live
+        streams already observed in this process are never overwritten, which also makes
+        a double startup (TestClient runs the lifespan per client) a no-op — counters
+        can never inflate from re-rehydration."""
+        with self._lock:
+            for stream_id, info in streams.items():
+                if stream_id in self._streams:  # live/prior state wins — idempotent boot
+                    continue
+                classes = (info["processed"], info["dead"], info.get("accepted", []))
+                stamps = [at for cls in classes for _s, _c, at in cls]
+                seqs = [s for cls in classes for s, _c, _at in cls]
+                if not seqs:
+                    continue
+                state = _StreamState(
+                    user_id=info["user_id"],
+                    device_id=info["device_id"],
+                    modality=info["modality"],
+                    first_seen=min(stamps),
+                    last_seen=max(stamps),
+                    max_sequence=max(seqs),
+                )
+                for cls_name, cls in (("processed", info["processed"]),
+                                      ("dead", info["dead"]),
+                                      ("accepted", info.get("accepted", []))):
+                    for seq, chunk_id, _at in cls:
+                        if seq not in state.first_chunk:
+                            state.first_chunk[seq] = chunk_id
+                            _insert(state.intervals, seq)
+                        if cls_name == "processed":
+                            state.processed_seqs.add(seq)
+                        elif cls_name == "dead" and seq not in state.processed_seqs:
+                            state.dead_seqs.add(seq)
+                        # 'accepted': SEEN only — neither processed nor dead.
+                state.received = len(state.first_chunk)
+                self._streams[stream_id] = state
+
     def note_processed(self, stream_id: str, sequence: int) -> None:
         """Mark a sequence's C2 as DURABLY WRITTEN to /context. Called (both modes)
         once processing succeeds — the signal recording's report uses to confirm a

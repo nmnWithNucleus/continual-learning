@@ -32,12 +32,15 @@ cancel can't wedge ``queue.join()`` forever.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from typing import Any
 
 from fastapi import FastAPI
+from starlette.concurrency import run_in_threadpool
 
 from .ingest_core import ProcessingError, process_chunk
+from .timeutil import now_iso
 
 logger = logging.getLogger("data-processing.ingest_queue")
 
@@ -53,7 +56,7 @@ class IngestQueue:
     """A bounded asyncio queue + N worker tasks, pinned to the running loop."""
 
     def __init__(self, app: FastAPI, *, workers: int, maxsize: int,
-                 max_retries: int, backoff: float) -> None:
+                 max_retries: int, backoff: float, modality_limits: str = "") -> None:
         self._app = app
         self._n_workers = max(1, workers)
         self._max_retries = max(0, max_retries)
@@ -63,6 +66,32 @@ class IngestQueue:
         self._processing = 0
         self.dead_letters: list[dict[str, Any]] = []
         self.loop = asyncio.get_running_loop()
+        # Per-modality fairness: a max-in-flight semaphore per modality so a burst of one
+        # (e.g. video) can't occupy every worker and starve another's (audio) latency.
+        # Created on THIS loop (loop-affinity). Empty config -> flat pool (today's path,
+        # byte-identical). ⚠️ EXPERIMENTAL / off by default: the permit is acquired AFTER
+        # the shared-FIFO dequeue, so under load a blocked worker HOL-blocks the pool
+        # (review finding #3). Do NOT enable in production until per-modality queue
+        # partitioning lands — see handoff/ws-dp-stage-graph.md §Review follow-ups.
+        self._modality_sems: dict[str, asyncio.Semaphore] = {}
+        for part in modality_limits.split(","):
+            part = part.strip()
+            if not part or "=" not in part:
+                continue
+            name, _, raw = part.partition("=")
+            try:
+                limit = int(raw)
+            except ValueError:
+                continue
+            if name.strip() and limit > 0:
+                self._modality_sems[name.strip()] = asyncio.Semaphore(limit)
+        if self._modality_sems:
+            logger.warning(
+                "INGEST_MODALITY_LIMITS=%r is EXPERIMENTAL: the permit is acquired after "
+                "the shared-FIFO dequeue, so it can head-of-line-block the pool. Not for "
+                "production until per-modality queue partitioning lands (ws-dp-stage-graph).",
+                modality_limits,
+            )
 
     # ------------------------------------------------------------------ lifecycle
     def start(self) -> None:
@@ -112,6 +141,13 @@ class IngestQueue:
         except asyncio.QueueFull as exc:
             raise QueueFull() from exc
 
+    async def submit_wait(self, job: dict[str, Any]) -> None:
+        """Enqueue, WAITING for capacity — the startup re-drive path. Unlike the HTTP
+        accept (which must answer now: full -> 503), the re-driver is a background task
+        that can simply wait for workers to drain a slot, so a pending backlog larger
+        than the queue bound is re-driven completely instead of stranded."""
+        await self._queue.put(job)
+
     # ---------------------------------------------------------------------- worker
     async def _worker(self, idx: int) -> None:
         while True:
@@ -135,21 +171,38 @@ class IngestQueue:
                 self._processing -= 1
                 self._queue.task_done()  # exactly one per get() — join() stays correct
 
+    def _sem_for(self, modality: str):
+        """Per-modality fairness gate for ONE processing attempt (nullcontext when no
+        limit is configured). Held only around process_chunk — NOT across the retry
+        backoff sleep, so a chunk waiting to retry never occupies a modality slot."""
+        sem = self._modality_sems.get(modality)
+        return sem if sem is not None else contextlib.nullcontext()
+
     async def _run_job(self, job: dict[str, Any]) -> None:
         c1 = job["c1"]
         deps = self._deps()
+        # Crash-loop attribution: charge a re-drive processing attempt to THIS chunk once,
+        # before touching it — so a chunk whose processing hard-crashes the service accrues
+        # toward the DP_REDRIVE_MAX_ATTEMPTS cap while a chunk merely queued behind it does
+        # not (per-chunk, not per-restart). Live (non-re-drive) chunks never pay this write.
+        if job.get("redrive"):
+            await run_in_threadpool(deps.journal.note_redrive_attempt, c1["chunk_id"], now_iso())
         attempt = 0
         while True:
             try:
-                await process_chunk(
-                    c1=c1,
-                    settings=job["settings"],
-                    processor=job["processor"],
-                    pipeline_version=job["pipeline_version"],
-                    storage=self._app.state.storage,  # read per call (test seam)
-                    dedup=deps.dedup,
-                    metrics=deps.metrics,
-                )
+                async with self._sem_for(c1["modality"]):
+                    await process_chunk(
+                        c1=c1,
+                        settings=job["settings"],
+                        processor=job["processor"],
+                        pipeline_version=job["pipeline_version"],
+                        storage=self._app.state.storage,  # read per call (test seam)
+                        dedup=deps.dedup,
+                        metrics=deps.metrics,
+                        journal=deps.journal,          # durable receipt inside the core,
+                        epoch=job.get("epoch", 0),     # epoch-guarded against stale workers
+                        app_state=self._app.state,
+                    )
             except asyncio.CancelledError:
                 raise
             except ProcessingError as exc:
@@ -164,6 +217,8 @@ class IngestQueue:
                 # inside process_chunk and handled above.
                 transient, detail = True, {"error": f"{type(exc).__name__}: {exc}"}
             else:
+                # The durable receipt already landed inside process_chunk (journal-
+                # before-dedup); here only the in-memory note + metrics remain.
                 deps.continuity.note_processed(c1["stream_id"], c1["sequence"])
                 self._inc("dp_ingest_total",
                           {"modality": c1["modality"], "result": "processed"})
@@ -176,7 +231,7 @@ class IngestQueue:
                                c1["chunk_id"], attempt, self._max_retries, detail)
                 await asyncio.sleep(self._backoff * attempt)
                 continue
-            self._dead_letter(c1, detail, transient=transient)
+            await self._dead_letter(c1, detail, transient=transient, epoch=job.get("epoch", 0))
             return
 
     # ------------------------------------------------------------------- internals
@@ -188,10 +243,20 @@ class IngestQueue:
         if metrics is not None:
             metrics.inc(name, labels)
 
-    def _dead_letter(self, c1: dict, detail: dict, *, transient: bool) -> None:
+    async def _dead_letter(self, c1: dict, detail: dict, *, transient: bool, epoch: int = 0) -> None:
         deps = self._deps()
-        deps.dedup.release_inflight(c1["chunk_id"])
+        # ORDER MATTERS: the durable dead-letter mark + continuity note land BEFORE the
+        # claim is released. Release-first would open a window where a redelivery gets
+        # 202-accepted (fresh journal 'accepted' row) and THIS losing worker then
+        # clobbers that row to 'dead_letter' — a chunk recording believes is in flight
+        # would read as terminally lost. Release-last, the redelivery can only re-claim
+        # after the mark is in place, and its accept() resets the row cleanly.
+        await run_in_threadpool(
+            deps.journal.mark_dead_letter,
+            c1["chunk_id"], str(detail.get("error", detail)), now_iso(), epoch,
+        )
         deps.continuity.note_dead_letter(c1["stream_id"], c1["sequence"])
+        deps.dedup.release_inflight(c1["chunk_id"])
         self._inc("dp_dead_letter_total", {"modality": c1["modality"]})
         if len(self.dead_letters) < _MAX_DEADLETTER_SAMPLES:
             self.dead_letters.append({

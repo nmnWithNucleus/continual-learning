@@ -35,8 +35,10 @@ INGEST_ASYNC defaults off (inline), METRICS_ENABLED is dependency-free.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncIterator
 
 from fastapi import FastAPI, HTTPException, Request
@@ -48,6 +50,7 @@ from .continuity import ContinuityTracker
 from .dedup import DedupStore
 from .ingest_core import ProcessingError, process_chunk
 from .ingest_queue import IngestQueue, QueueFull
+from .journal import Journal
 from .metrics import MetricsASGIMiddleware, Metrics
 from .models import C1Envelope
 from .processing.registry import get_processor
@@ -88,6 +91,16 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
     metrics.declare_histogram(
         "dp_stage_seconds", "Per-stage processing latency (seconds).", ["modality", "stage"],
     )
+    # Stage-graph: per-STAGE latency (asr/diarize/translate/acoustic, keyframes/captions,
+    # and every future drop-in stage) + per-stage failures/skips — the intra-pipeline
+    # granularity the coarse dp_stage_seconds{stage=process} couldn't show.
+    metrics.declare_histogram(
+        "dp_graph_stage_seconds", "Per-graph-stage latency (seconds).", ["modality", "stage"],
+    )
+    metrics.declare_counter(
+        "dp_graph_stage_failures_total", "Graph stage failures/skips.",
+        ["modality", "stage", "reason"],
+    )
 
     # ---- Pull-time gauges: live state owned by the queue + continuity tracker ------
     def _queue_depth():
@@ -102,6 +115,16 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
                              "Chunks waiting in the async ingest queue.", _queue_depth)
     metrics.add_gauge_source("dp_ingest_processing",
                              "Chunks currently being processed by a worker.", _queue_processing)
+
+    def _journal_counts():
+        return app.state.journal.counts()
+
+    metrics.add_gauge_source("dp_journal_pending",
+                             "Accepted-but-unprocessed chunks in the durable journal.",
+                             lambda: _journal_counts()["pending"])
+    metrics.add_gauge_source("dp_journal_dead_letter",
+                             "Durably dead-lettered chunks awaiting redelivery/triage.",
+                             lambda: _journal_counts()["dead_letter"])
 
     def _continuity_agg():
         """Aggregate continuity counts across streams (bounded cardinality — totals,
@@ -145,11 +168,70 @@ def create_app() -> FastAPI:
     ASR_BACKEND before construction and inject a mock storage transport after."""
     settings = get_settings()
 
+    async def _redrive_pending(app: FastAPI, queue: IngestQueue, rows: list) -> None:
+        """Startup auto-recovery (M7): a PURE enqueue loop over the journal's re-drive
+        set. Continuity visibility already happened (rehydration marked every pending
+        row as SEEN before this runs) and the durable attempt accounting + crash-loop
+        cap happened inside ``pending_for_redrive`` — this loop only claims + enqueues.
+        Runs as a BACKGROUND task with the WAITING submit, so a backlog larger than the
+        queue bound drains completely as workers free slots and serving starts
+        immediately. Re-driven jobs use CURRENT config (same posture as a redelivery);
+        recording never has to notice."""
+        from starlette.concurrency import run_in_threadpool as _tp
+        redriven = skipped = 0
+        for row in rows:
+            c1, epoch = row["c1"], row["epoch"]
+            chunk_id = c1["chunk_id"]
+            try:
+                processor = get_processor(c1["modality"])
+            except KeyError:
+                # Plugin gone across a restart / mode-switch. Leaving the row 'accepted'
+                # would read as PERPETUAL 'recording' (never re-driven, never converges);
+                # dead-letter it so recording sees honest 'gaps' + a redelivery re-arms it.
+                logger.error("re-drive: no processor for %r (chunk %s) — dead-lettering",
+                             c1["modality"], chunk_id)
+                await _tp(app.state.journal.mark_dead_letter, chunk_id,
+                          f"no processor for modality {c1['modality']!r}", now_iso(), epoch)
+                app.state.continuity.note_dead_letter(c1["stream_id"], c1["sequence"])
+                skipped += 1
+                continue
+            claim = await app.state.dedup.claim_for_async(chunk_id)
+            if claim != "claimed":  # already done (journal backstop) or in flight
+                continue
+            try:
+                await queue.submit_wait({
+                    "c1": c1, "settings": settings, "processor": processor,
+                    "pipeline_version": processor.pipeline_version(settings),
+                    "epoch": epoch,
+                    "redrive": True,  # worker charges a per-chunk re-drive attempt
+                })
+            except asyncio.CancelledError:
+                app.state.dedup.release_inflight(chunk_id)  # shutdown mid-re-drive
+                raise
+            redriven += 1
+        if redriven or skipped:
+            logger.info("journal re-drive: %d re-enqueued, %d skipped", redriven, skipped)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        # Async mode only: spin up the worker pool on the RUNNING loop (loop-affinity,
-        # like recording's emitter). Inline mode touches nothing here — an early return
-        # so `with TestClient(app)` startup+shutdown are pure no-ops (all M0 tests).
+        from starlette.concurrency import run_in_threadpool as _tp
+        journal: Journal = app.state.journal
+        # ORDER MATTERS at startup:
+        #   1. async mode: pending_for_redrive — durably counts this re-drive attempt and
+        #      flips crash-loop suspects (> DP_REDRIVE_MAX_ATTEMPTS) to dead_letter;
+        #   2. BOTH modes: rehydrate continuity from the journal — processed + dead +
+        #      STILL-PENDING rows all count as SEEN coverage (the keystone: a restart can
+        #      never fabricate a gap out of a chunk that is merely waiting to be
+        #      re-driven), with the cap-flips from step 1 already visible as dead;
+        #   3. async mode: start workers, then re-drive as a background task (pure
+        #      enqueue; waits for queue capacity instead of stranding a large backlog).
+        redrive_rows: list = []
+        if app.state.ingest_async:
+            redrive_rows = await _tp(
+                journal.pending_for_redrive, settings.redrive_max_attempts, now_iso()
+            )
+        app.state.continuity.rehydrate(await _tp(journal.rehydration))
+        redrive_task: asyncio.Task | None = None
         if app.state.ingest_async:
             app.state.dedup.reset_inflight()  # clear any claim from a prior loop reuse
             queue = IngestQueue(
@@ -158,11 +240,19 @@ def create_app() -> FastAPI:
                 maxsize=settings.ingest_queue_max,
                 max_retries=settings.ingest_max_retries,
                 backoff=settings.ingest_retry_backoff,
+                modality_limits=settings.ingest_modality_limits,
             )
             queue.start()
             app.state.ingest_queue = queue
+            if redrive_rows:
+                redrive_task = asyncio.get_running_loop().create_task(
+                    _redrive_pending(app, queue, redrive_rows)
+                )
         yield
         if app.state.ingest_async:
+            if redrive_task is not None and not redrive_task.done():
+                redrive_task.cancel()
+                await asyncio.gather(redrive_task, return_exceptions=True)
             queue = getattr(app.state, "ingest_queue", None)
             if queue is not None:
                 await queue.drain_and_close(settings.ingest_drain_timeout)
@@ -178,7 +268,21 @@ def create_app() -> FastAPI:
     # transport AFTER create_app() but BEFORE the TestClient `with` block, and
     # process_chunk reads app.state.storage per call — so the fake transport is honored.
     app.state.storage = StorageClient(settings.storage_url, timeout=settings.http_timeout)
-    app.state.dedup = DedupStore()
+    # Journal is LAZY (no filesystem touch until first use) — safe at module import.
+    app.state.journal = Journal(Path(settings.dp_var_dir) / "dp.db")
+    # The journal's processed table backs dedup misses: a redelivery after a restart is
+    # answered with the prior record_ids (200) — UNLESS the pipeline dialect for that
+    # modality has since changed, in which case the receipt is stale and the honest
+    # answer is a reprocess under the new version (version-forward; old records stay).
+    def _current_pv(modality: str):
+        try:
+            return get_processor(modality).pipeline_version(get_settings())
+        except Exception:  # unknown modality / plugin gone — can't judge, serve the receipt
+            return None
+
+    app.state.dedup = DedupStore(
+        done_fallback=lambda cid: app.state.journal.processed_record_ids(cid, _current_pv)
+    )
     app.state.continuity = ContinuityTracker()
     app.state.ingest_async = settings.ingest_async   # FROZEN at startup (no per-request read)
     app.state.ingest_queue = None
@@ -286,6 +390,8 @@ def create_app() -> FastAPI:
                     c1=c1, settings=settings, processor=processor,
                     pipeline_version=pipeline_version, storage=request.app.state.storage,
                     dedup=dedup, metrics=metrics,
+                    journal=request.app.state.journal,  # durable receipt (both modes)
+                    app_state=request.app.state,
                 )
             except ProcessingError as exc:
                 # Map the taxonomy back to the exact M0 HTTP status at the boundary.
@@ -314,23 +420,48 @@ def create_app() -> FastAPI:
                 content={"ok": True, "accepted": True, "chunk_id": chunk_id, "duplicate": True},
             )
 
-        # claimed by us -> enqueue for a worker.
+        # claimed by us -> journal (durable accept receipt) THEN enqueue for a worker.
         queue: IngestQueue | None = getattr(request.app.state, "ingest_queue", None)
         if queue is None:  # async configured but pool not up (no lifespan) — honest 503
             dedup.release_inflight(chunk_id)
             return JSONResponse(status_code=503,
                                 content={"ok": False, "error": "ingest queue not ready"})
+        # Durable BEFORE the 202: a crash after the journal commits auto-recovers at
+        # startup (re-drive) — the ACK never lies. accept() bumps the row's EPOCH (guards
+        # terminal writes against stale workers) and resets a prior dead_letter row on
+        # redelivery; the returned prior-row snapshot is the QueueFull restore point.
+        # Off the loop: WAL fsyncs never stall it.
+        #
+        # The claim is released on EVERY exit that isn't a successful enqueue — including
+        # a failed durable write (disk-full / lock-contention in accept OR unaccept).
+        # Otherwise a raised accept() would strand chunk_id in dedup._inflight with NO
+        # pending row and nothing enqueued → every retry ACKs 202-duplicate forever
+        # (silent loss + a lying ACK). ``enqueued`` gates the finally: only a chunk truly
+        # handed to a worker keeps its claim (the worker owns the release then).
+        from starlette.concurrency import run_in_threadpool as _tp
+        journal: Journal = request.app.state.journal
+        enqueued = False
         try:
-            queue.submit({
-                "c1": c1, "settings": settings,
-                "processor": processor, "pipeline_version": pipeline_version,
-            })
-        except QueueFull:
-            dedup.release_inflight(chunk_id)  # never orphan the claim
-            _metrics_inc("dp_ingest_total", {"modality": c1["modality"], "result": "rejected"})
-            logger.warning("ingest queue full — 503 backpressure on chunk %s", chunk_id)
-            return JSONResponse(status_code=503,
-                                content={"ok": False, "error": "ingest queue full"})
+            epoch, prior = await _tp(journal.accept, c1, now_iso())
+            try:
+                queue.submit({
+                    "c1": c1, "settings": settings,
+                    "processor": processor, "pipeline_version": pipeline_version,
+                    "epoch": epoch,
+                })
+                enqueued = True
+            except QueueFull:
+                # 503 = "NOT accepted"; the journal must not contradict it. Restore the
+                # prior row (a replaced dead_letter keeps its history) or delete a fresh
+                # one. If unaccept itself raises, the outer finally still frees the claim.
+                await _tp(journal.unaccept, chunk_id, prior)
+                _metrics_inc("dp_ingest_total", {"modality": c1["modality"], "result": "rejected"})
+                logger.warning("ingest queue full — 503 backpressure on chunk %s", chunk_id)
+                return JSONResponse(status_code=503,
+                                    content={"ok": False, "error": "ingest queue full"})
+        finally:
+            if not enqueued:
+                dedup.release_inflight(chunk_id)
 
         _metrics_inc("dp_ingest_total", {"modality": c1["modality"], "result": "accepted"})
         return JSONResponse(status_code=202,

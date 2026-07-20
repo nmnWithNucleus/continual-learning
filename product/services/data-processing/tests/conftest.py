@@ -22,11 +22,14 @@ def fake_storage() -> FakeStorage:
 
 
 @pytest.fixture()
-def client(monkeypatch, fake_storage) -> TestClient:
+def client(monkeypatch, fake_storage, tmp_path) -> TestClient:
     """A fresh data-processing app on the mock backend, with its storage client
-    bound to the MockTransport fake (env read at create_app() time)."""
+    bound to the MockTransport fake (env read at create_app() time). DP_VAR_DIR is
+    isolated per test so the durable journal (var/dp.db) never leaks state between
+    tests or into the repo tree."""
     monkeypatch.setenv("ASR_BACKEND", "mock")
     monkeypatch.setenv("STORAGE_URL", "http://storage.test")
+    monkeypatch.setenv("DP_VAR_DIR", str(tmp_path / "var"))
     from app.main import create_app
 
     app = create_app()
