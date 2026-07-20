@@ -15,7 +15,7 @@
 | Service | Status | Lead session | Canvas |
 |---|---|---|---|
 | Recording | **capture M1 + computer surfaces — ALPHA COMPLETE** (checked gap-detection + VAD-cut chunking + 3 capture clients: phone web / Chrome-MV3 extension / mac CLI, all verified `clean` on real hardware — 2026-07-19; 110 tests) **+ async seam (D16: `dp_state` ledger + `/redrive`) + D9 `/metrics`+dashboard (M6 emission) — 120 tests** | computer-capture → **M6 emission DONE (merged 2026-07-19)** | [canvas](services/recording/HANDOFF.md) |
-| Data Processing | **real audio + video pipelines + async `/ingest` (M7-early, D16 wire, off-by-default) + D9 `/metrics`+dashboard (M8)**; all 3 real audio backends **smoke-tested GREEN on node-7** (merged 2026-07-19; adversarially reviewed; suites re-verified by founders; **98 tests**) | async-observability session → **merged** | [canvas](services/data-processing/HANDOFF.md) |
+| Data Processing | **v1: DURABLE ingest journal (kill-recovery; restart-amnesia/false-`gaps` CLOSED) + STAGE-GRAPH pipeline (every step a drop-in file; audio/video ported byte-identically; real backends re-validated through the graph on node-7)** — on top of async `/ingest` (D16 wire, off-by-default) + D9 `/metrics` (merged+pushed `86acb95` 2026-07-20; suites re-verified by founders; **128 tests**) | async-observability lead (v1) → **CTO caveat drill pending** | [canvas](services/data-processing/HANDOFF.md) |
 | Storage | **v0.0 + capture M0 built + integrated E2E** (serve loop + `/raw`/`/context` mock capture loop 2026-07-09) | serve + learn | [canvas](services/storage/HANDOFF.md) |
 | Input | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-A | [canvas](services/input/HANDOFF.md) |
 | Inference | **v0.0 live on real Qwen3-VL-32B** (vLLM TP=8 on node-7, verified E2E 2026-07-09) | serve-loop WS-B | [canvas](services/inference/HANDOFF.md) |
@@ -27,7 +27,7 @@
 
 | Aspect | File | State |
 |---|---|---|
-| Engineering | [handoff/engineering.md](handoff/engineering.md) | active — serve-loop v0.0 **closed on real Qwen3-VL-32B**; capture M0 + modality seams done; **recording-led capture M1 + computer capture surfaces DONE (alpha complete 2026-07-19)**; **deep session DONE + MERGED** (D16 wire; 98/120/26 re-verified); now: **D15 — continuum kickoff (C10 freeze gate) + platform D9 backbone** |
+| Engineering | [handoff/engineering.md](handoff/engineering.md) | active — serve-loop v0.0 **closed on real Qwen3-VL-32B**; capture M0 + modality seams done; **recording-led capture M1 + computer capture surfaces DONE (alpha complete 2026-07-19)**; **deep session DONE + MERGED; DP v1 (journal + stage graph) shipped + verified 2026-07-20** (128/120/26); **CTO caveat drill pending**; now: **D15 — continuum kickoff (C10 freeze gate) + platform D9 backbone** |
 | Research | [handoff/research.md](handoff/research.md) | seeded — first agenda: POC→continuum bridge, research agenda v1 |
 | Design / UX | [handoff/design.md](handoff/design.md) | seeded |
 | Hiring / Ops | [handoff/hiring-ops.md](handoff/hiring-ops.md) | seeded |
@@ -180,6 +180,25 @@ was proposed + ratified in-session 2026-07-19 → **D16**.)*
   Founders' merge review re-ran all three suites independently (**98/120/26 green**) and
   verified the D16 condition + OQ3/OQ13 records in the diff. D15 is now the active sequence.
 
+- 2026-07-20 (DP v1): **the DP team shipped v1 — durable ingest journal + stage-graph
+  pipeline** (`86acb95`, single clean commit, pushed; `main`=`dev`=origin verified). Layer A
+  journals async accepts BEFORE the 202 (kill -9 auto-recovers at startup; continuity
+  rehydrates from the journal → **the D16-era deferred false-`gaps` caveat is CLOSED**;
+  durable dedup backstop with a `pipeline_version` staleness check — receipts written in
+  BOTH modes, so inline gains restart-safe dedup too; epochs guard stale workers; bounded
+  per-attempt re-drive breaks crash-loops visibly). Layer B turns every processing step into
+  a **drop-in stage file** (readiness DAG runs independent stages concurrently; composed
+  `pipeline_version` where a mutate stage's enabledness IS its version fragment — the
+  silent-overwrite class dies by construction); audio+video ported byte-identically, real
+  backends re-validated through the graph on node-7. Two adversarial rounds (9 confirmed →
+  2 fix-before-merge fixed). Founders re-verified: **DP 128 · recording 120 · storage 26
+  green**, refs + attribution-free commit + off-by-default knobs + the fairness-knob startup
+  warning all checked in code. **3 tracked follow-ups + the experimental
+  `INGEST_MODALITY_LIMITS` knob feed the pending CTO caveat drill** (headline: it HOL-blocks
+  until per-modality queue partitioning lands — do not enable); the async-trust rider
+  (durable journal before final archived verdicts) is now satisfiable — the `INGEST_ASYNC`
+  flip is a live decision for the drill.
+
 ## Next
 
 - ~~Recording-led capture M1~~ **DONE + ALPHA COMPLETE 2026-07-19** (see Current state above /
@@ -220,5 +239,6 @@ was proposed + ratified in-session 2026-07-19 → **D16**.)*
   (vLLM + app services) is down** — relaunch `run_all.sh` + `services/inference/serve_vllm.sh`
   when needed. The wider cluster runs Gnandeep's continuum-side experiments — product work keeps
   to **node-7**; allocate more nodes on demand. *Learn loop re-verified up by the 2026-07-19
-  sequencing session. Post-merge: the running fleet predates `0ce4941` — restart to start
-  emitting `/metrics` (behavior otherwise unchanged; `INGEST_ASYNC` off by default).*
+  sequencing session. Post-merge: the running fleet now predates BOTH merges (`0ce4941`,
+  `86acb95` DP v1) — restart to start emitting `/metrics` + gain the durable journal
+  (behavior otherwise unchanged; `INGEST_ASYNC` off by default).*

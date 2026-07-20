@@ -4,7 +4,7 @@
 > Cross-service build sequencing, integration plans, infra calls. Service-internal
 > engineering lives in each service's canvas, not here.
 
-**Status:** active · **Last updated:** 2026-07-19
+**Status:** active · **Last updated:** 2026-07-20
 
 ---
 
@@ -645,3 +645,18 @@ Considered and passed, on the record so we don't re-litigate:
   charters. `dev` fast-forwarded with `main`. Board synced — **D15 is now the active
   sequence**: continuum kickoff (C10 freeze gate) + platform D9 backbone; fleet restart
   pending to begin emitting `/metrics`.
+- 2026-07-20 — **DP v1 consumed + verified (founders).** The DP team shipped the durable
+  ingest journal + stage-graph pipeline (`86acb95`, pushed; commit attribution-free).
+  Founders' verification: suites re-run independently (**DP 128 / recording 120 / storage
+  26** green), refs `main`=`dev`=origin confirmed, `INGEST_ASYNC` still 0-default, the
+  fairness-knob startup warning present in code (`ingest_queue.py:88`). **The D16-era
+  deferred false-`gaps` caveat is closed** (journal rehydration), so the async-trust rider
+  is now satisfiable — the `INGEST_ASYNC` fleet flip is a live decision. **CTO caveat drill
+  pending**; founders' inventory prepared: (1) `INGEST_MODALITY_LIMITS` HOL-block —
+  partition vs peek/skip vs remove-the-knob; (2) a mutate-ordering rule in `resolve` is a
+  hard prerequisite for any SECOND mutate stage (the ws drop-in table's own speaker-ID
+  example would trip finding #7); (3) fingerprint-guard order-dependence (LOW — the static
+  rule is the real guard); plus: Architecture-Atlas custody vs the D2 single-doc protocol
+  (the atlas isn't in the repo); the journal's `pipeline_version`-staleness reprocess
+  mechanics as the first real OQ5 code (continuum-kickoff input); `processed` retention;
+  fleet two merges behind (restart pending). Board synced.
