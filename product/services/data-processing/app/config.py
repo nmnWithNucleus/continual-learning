@@ -8,10 +8,16 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 
 def _as_bool(value: str) -> bool:
     return value.strip().lower() not in ("0", "false", "no", "off", "")
+
+
+def _default_var_dir() -> str:
+    """<service>/var — the durable ingest journal (dp.db) lives here."""
+    return str(Path(__file__).resolve().parents[1] / "var")
 
 
 @dataclass(frozen=True)
@@ -41,6 +47,11 @@ class Settings:
     ingest_max_retries: int   # transient-failure retries per chunk in the worker
     ingest_retry_backoff: float  # base backoff seconds between worker retries
     ingest_drain_timeout: float  # seconds to drain the queue on graceful shutdown
+    # --- Durable ingest journal (M7) ------------------------------------------------
+    dp_var_dir: str           # dp.db (pending/processed journal) lives here
+    redrive_max_attempts: int  # startup re-drives before a chunk dead-letters (crash-loop cap)
+    # --- Fairness ------------------------------------------------------------------
+    ingest_modality_limits: str  # per-modality max-in-flight, e.g. "video=2,audio=4"
     # --- D9 observability ----------------------------------------------------------
     metrics_enabled: bool     # expose /metrics + record request/pipeline metrics
 
@@ -66,5 +77,8 @@ def get_settings() -> Settings:
         ingest_max_retries=max(0, int(os.getenv("INGEST_MAX_RETRIES", "3"))),
         ingest_retry_backoff=float(os.getenv("INGEST_RETRY_BACKOFF", "0.5")),
         ingest_drain_timeout=float(os.getenv("INGEST_DRAIN_TIMEOUT", "30")),
+        dp_var_dir=os.getenv("DP_VAR_DIR", _default_var_dir()),
+        redrive_max_attempts=max(1, int(os.getenv("DP_REDRIVE_MAX_ATTEMPTS", "5"))),
+        ingest_modality_limits=os.getenv("INGEST_MODALITY_LIMITS", "").strip(),
         metrics_enabled=_as_bool(os.getenv("METRICS_ENABLED", "1")),
     )

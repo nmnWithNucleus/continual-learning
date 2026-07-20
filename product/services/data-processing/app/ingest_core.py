@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import hashlib
 from time import perf_counter
+from types import SimpleNamespace
 from typing import Any, Optional
 
 import httpx
@@ -65,9 +66,15 @@ async def process_chunk(
     storage: StorageClient,
     dedup: DedupStore,
     metrics=None,
+    journal=None,
+    epoch: int = 0,
+    app_state: Any = None,
 ) -> list[str]:
     """Process one accepted chunk end-to-end and return its record_ids. Raises
-    ``ProcessingError`` on failure; on success the chunk is marked done in ``dedup``."""
+    ``ProcessingError`` on failure; on success the durable journal receipt lands FIRST
+    (epoch-guarded pending delete + processed upsert, off the loop), then the chunk is
+    marked done in ``dedup`` — journal-before-dedup, so a crash between them re-drives
+    an already-written chunk (idempotent upsert) rather than ever forgetting one."""
     chunk_id = c1["chunk_id"]
     modality = c1["modality"]
 
@@ -106,10 +113,24 @@ async def process_chunk(
                 transient=False,
             )
 
-    # ---- Run the modality Processor (off the event loop; may be heavy) ------------
+    # ---- Run the modality Processor -----------------------------------------------
+    # A GraphProcessor exposes ``process_async``: awaited on the loop, it runs its stage
+    # graph with real intra-chunk concurrency (each stage self-offloads — run_sync →
+    # threadpool, run_async → native IO). A legacy sync ``process`` runs in the
+    # threadpool as before. Either way, the whole run is one ``dp_stage_seconds
+    # {stage="process"}`` observation, so the metric contract is unchanged.
     span_seconds = chunk_span_seconds(c1)
     t0 = perf_counter()
-    units = await run_in_threadpool(processor.process, c1, blob_bytes, settings, span_seconds)
+    process_async = getattr(processor, "process_async", None)
+    if process_async is not None:
+        resources = SimpleNamespace(
+            metrics=metrics, vlm_pool=getattr(app_state, "vlm_pool", None) if app_state else None,
+        )
+        units = await process_async(c1, blob_bytes, settings, span_seconds, resources)
+    else:
+        units = await run_in_threadpool(
+            processor.process, c1, blob_bytes, settings, span_seconds
+        )
     _observe(metrics, "dp_stage_seconds", perf_counter() - t0,
              {"modality": modality, "stage": "process"})
     if not units:  # a Processor must return >= 1 unit — terminal (a plugin bug)
@@ -152,5 +173,9 @@ async def process_chunk(
                  {"modality": modality, "stage": "context_write"})
         record_ids.append((resp or {}).get("record_id") or c2["record_id"])
 
+    if journal is not None:
+        await run_in_threadpool(
+            journal.mark_processed, c1, record_ids, pipeline_version, processed_at, epoch
+        )
     dedup.put(chunk_id, record_ids)
     return record_ids

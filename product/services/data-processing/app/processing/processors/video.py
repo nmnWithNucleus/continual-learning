@@ -1,180 +1,39 @@
-"""Video plugin: VidProc keyframe pipeline behind a VIDEO_BACKEND switch.
+"""Video processor — now a thin GraphProcessor over the video STAGE GRAPH.
 
-One C1 video chunk fans out to MANY C2 keyframe records — the seam's headline
-1-chunk-many-records case. The real pipeline (replacing the former mock stub):
+The keyframe pipeline that used to live here (extract → caption → weave OCR → per-keyframe
+sub-spans) is now two drop-in stage files under ``app/stages/video/`` — ``keyframes``
+(extraction + fallbacks, provides the slot) and ``captions`` (the primary: mock/vlm
+captioning, now CONCURRENT under vlm, + the assembly of every unit). This module is the
+compat shim that keeps the public seam byte-stable:
 
-    extract keyframes (ffmpeg scene-change) -> caption each (mock | vlm) ->
-    weave OCR into the caption (D8) -> one ProcessedUnit per keyframe, each with
-    its OWN time-spine sub-span (CHARTER OQ14a)
+  * class ``VideoProcessor`` registered via ``@register`` (registry + HTTP core unchanged);
+  * ``modality='video'``, ``content_kind='caption'``;
+  * ``pipeline_version`` composes to ``vidproc-mock-v0`` / ``vidproc-vlm-v0`` exactly as
+    before (see ``stagegraph.executor.resolve``);
+  * the module-level names the seam + video tests pin — ``extract_keyframes``,
+    ``PIPELINE_VERSION``, ``SYNTHETIC_KEYFRAMES`` — remain HERE. The keyframes stage calls
+    ``video_proc.extract_keyframes`` as a late-bound attribute, so tests that monkeypatch
+    it keep intercepting.
 
-* ``VIDEO_BACKEND=mock`` (DEFAULT, no GPU / no network): canned captions, so the
-  whole learn loop runs headless on any box. ``vlm`` late-binds a real captioner
-  (``app.vision.vlm``, httpx to an OpenAI-compatible VL endpoint — the Qwen3-VL on
-  the GPU node, or a lighter local captioner). The switch + all knobs are read via
-  ``app.vision.config`` (``os.getenv``), so the shared-core config file is untouched.
-* Keyframe **timing** comes from real frame extraction, independent of the caption
-  backend: when the blob decodes (ffmpeg present + real video), each keyframe gets
-  a distinct ``[t_start, t_end)`` sub-span so a chunk's records no longer collide
-  on storage's ``(user_id, t_start)`` index. When the blob does NOT decode (the
-  seam's tiny non-video fixture, or a box without ffmpeg), we fall back to
-  ``SYNTHETIC_KEYFRAMES`` timing-less keyframes carrying the chunk span verbatim —
-  byte-identical to the pre-real-pipeline stub, so the existing seam tests stay
-  green with or without ffmpeg installed.
-* **OCR (D8):** the captioner returns on-screen text separately; we weave it into
-  the caption written to /context (so the user model learns text from the
-  description target, not by reading pixels at inference). Optionally
-  (``VIDEO_OCR_RECORDS=1``) we ALSO emit a distinct ``content.kind='ocr'`` record
-  per keyframe. Structured bbox geometry is a later additive-C2 field, out of
-  frozen scope (owned by the image build per CHARTER OQ14b).
-
-Real VLM / keyframe-selection models evolve by editing ONLY this file + the
-``app/vision/`` namespace; the seam and shared core stay put.
+Add a stage (a standalone OCR pass, multi-level summaries, bbox enrichment) by dropping a
+file in ``app/stages/video/`` — you never touch this shim.
 """
 from __future__ import annotations
 
-from typing import Any, Optional
-
-from ...config import Settings
-from ...timeutil import abs_time, parse_rfc3339
-from ...vision import select as select_captioner
-from ...vision.config import get_vision_settings
-from ...vision.frames import extract_keyframes
-from ...vision.result import Keyframe, KeyframeCaption
-from ..base import ProcessedContent, ProcessedUnit, Processor, empty_enrichments
+# Re-exported so the keyframes stage's late-bound `video_proc.extract_keyframes` lookup +
+# the tests that monkeypatch it resolve HERE (a module attribute, never a snapshot import).
+from ...vision.frames import extract_keyframes  # noqa: F401
+# The mock dialect string the seam tests handle (== default pipeline_version base term).
+from ...vision.mock import PIPELINE_VERSION  # noqa: F401
+from ...stagegraph import GraphProcessor
 from ..registry import register
 
-# Timing-less keyframes emitted when the blob can't be decoded (non-video bytes /
-# no ffmpeg). Matches the pre-real-pipeline stub's fan-out so the seam contract
-# (one video chunk -> a few distinct keyframe records) holds even with no decoder.
+# Timing-less keyframes emitted when the blob can't be decoded under the mock backend —
+# matches the pre-real-pipeline stub's fan-out (one chunk -> a few keyframe records).
 SYNTHETIC_KEYFRAMES = 3
-
-# Re-exported so callers/tests that reference the mock video dialect keep a stable
-# handle (mirrors how the seam tests import the audio backend's PIPELINE_VERSION).
-from ...vision.mock import PIPELINE_VERSION  # noqa: E402  (mock dialect = default)
-
-
-def _weave_ocr(caption: str, ocr_text: Optional[str]) -> str:
-    """D8: fold the OCR-transcribed on-screen text into the caption target."""
-    caption = caption.rstrip()
-    if not ocr_text:
-        return caption
-    sep = "" if caption.endswith(".") or not caption else "."
-    return f"{caption}{sep} On-screen text: '{ocr_text}'."
 
 
 @register
-class VideoProcessor(Processor):
+class VideoProcessor(GraphProcessor):
     modality = "video"
     content_kind = "caption"
-
-    def pipeline_version(self, settings: Settings) -> str:
-        return select_captioner(get_vision_settings()).PIPELINE_VERSION
-
-    def process(
-        self,
-        c1: dict[str, Any],
-        blob: bytes,
-        settings: Settings,
-        span_seconds: float,
-    ) -> list[ProcessedUnit]:
-        vs = get_vision_settings()
-
-        # 1) Extract timestamped keyframes; fall back to timing-less synthetic ones
-        #    when the blob doesn't decode (keeps the loop headless + seam-green).
-        keyframes = extract_keyframes(blob, c1["codec"], span_seconds, vs)
-        if not keyframes:
-            # The REAL dialect must never persist placeholder captions as processed
-            # truth: zero decodable keyframes under vlm (ffmpeg missing/timed out, or
-            # genuinely undecodable bytes) raises instead of emitting — DP returns
-            # 5xx, at-least-once redelivery retries (environmental trouble heals;
-            # truly corrupt bytes surface as a visible failed segment upstream in
-            # recording's gap report). Only the mock dev backend keeps the synthetic
-            # fallback: its captions are placeholders by definition.
-            if vs.backend == "vlm":
-                raise RuntimeError(
-                    f"video chunk {c1['chunk_id']}: no decodable keyframes "
-                    "(ffmpeg absent/timed out or undecodable bytes) — refusing to "
-                    "emit placeholder captions under the vlm dialect; the chunk "
-                    "will be redelivered"
-                )
-            keyframes = [
-                Keyframe(index=i, t_offset_s=None, t_end_offset_s=None, image_jpeg=None)
-                for i in range(SYNTHETIC_KEYFRAMES)
-            ]
-
-        # 2) Caption each keyframe via the selected backend (mock default / vlm).
-        captions = select_captioner(vs).caption(vs, keyframes, c1)
-        by_index = {c.index: c for c in captions}
-
-        # 3) Assemble one (or two, with OCR records) ProcessedUnit per keyframe.
-        base = parse_rfc3339(c1["t_start"])
-        units: list[ProcessedUnit] = []
-        for pos, kf in enumerate(keyframes):
-            cap: KeyframeCaption = by_index.get(
-                kf.index, KeyframeCaption(index=kf.index, caption="", ocr_text=None)
-            )
-            t_start, t_end = self._sub_span(
-                kf, base, span_seconds, c1,
-                is_first=(pos == 0), is_last=(pos == len(keyframes) - 1),
-            )
-
-            units.append(
-                ProcessedUnit(
-                    content=ProcessedContent(
-                        kind="caption",
-                        text=_weave_ocr(cap.caption, cap.ocr_text),
-                    ),
-                    enrichments=empty_enrichments(),
-                    discriminator=str(kf.index),  # keyframe index -> distinct record_id
-                    t_start=t_start,
-                    t_end=t_end,
-                )
-            )
-
-            # D8 (optional): also emit the OCR text as its own kind='ocr' record.
-            if vs.ocr_records and cap.ocr_text:
-                units.append(
-                    ProcessedUnit(
-                        content=ProcessedContent(kind="ocr", text=cap.ocr_text),
-                        enrichments=empty_enrichments(),
-                        discriminator=f"{kf.index}:ocr",
-                        t_start=t_start,
-                        t_end=t_end,
-                    )
-                )
-
-        return units
-
-    @staticmethod
-    def _sub_span(
-        kf: Keyframe,
-        base,
-        span_seconds: float,
-        c1: dict[str, Any],
-        *,
-        is_first: bool = False,
-        is_last: bool = False,
-    ) -> tuple[Optional[str], Optional[str]]:
-        """Map a keyframe's chunk-relative offsets to an absolute RFC3339 sub-span,
-        clamped into the chunk span. Returns (None, None) for a synthetic keyframe
-        -> the record carries the chunk's C1 span verbatim (byte-identical).
-
-        PARTITION INVARIANT (the time-spine guarantee): the union of a chunk's
-        keyframe sub-spans equals the declared C1 span exactly. The FIRST keyframe's
-        record is pinned to the chunk start (covers a dropped/undecodable opening
-        frame — the head slice must not vanish from the time spine) and the LAST is
-        pinned to the chunk end (covers media whose decoded duration runs short of
-        the declared span — the final frame persists through the tail). The outer
-        boundaries reuse the C1 span strings verbatim, so there is no
-        timezone-format or float drift at the edges."""
-        if kf.t_offset_s is None:
-            return None, None
-        start = 0.0 if is_first else min(max(kf.t_offset_s, 0.0), span_seconds)
-        if is_last:
-            end = span_seconds
-        else:
-            end = kf.t_end_offset_s if kf.t_end_offset_s is not None else span_seconds
-            end = min(max(end, start), span_seconds)
-        t_start = c1["t_start"] if start <= 1e-9 else abs_time(base, start)
-        t_end = c1["t_end"] if end >= span_seconds - 1e-9 else abs_time(base, end)
-        return t_start, t_end

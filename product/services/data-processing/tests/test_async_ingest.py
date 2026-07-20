@@ -31,9 +31,10 @@ def _wait(pred, timeout: float = 5.0, interval: float = 0.01) -> bool:
 
 
 @pytest.fixture()
-def async_client(monkeypatch, fake_storage):
+def async_client(monkeypatch, fake_storage, tmp_path):
     """A data-processing app in ASYNC ingest mode, storage bound to the fake."""
     monkeypatch.setenv("ASR_BACKEND", "mock")
+    monkeypatch.setenv("DP_VAR_DIR", str(tmp_path / "var"))
     monkeypatch.setenv("STORAGE_URL", "http://storage.test")
     monkeypatch.setenv("INGEST_ASYNC", "1")
     monkeypatch.setenv("INGEST_WORKERS", "3")
@@ -74,7 +75,13 @@ def test_accept_202_then_processed_then_dedup_returns_ids(async_client):
     assert r.status_code == 202
     assert r.json() == {"ok": True, "accepted": True, "chunk_id": "a-async-1"}
 
-    assert _wait(lambda: len(fs.record_posts) == 1), "worker never wrote the C2"
+    # Wait for FULLY done — continuity 'processed' is set after dedup.put + the journal
+    # receipt (the true completion marker); record_posts alone fires a hair earlier, in
+    # the transient post-write / pre-dedup.put window where a redelivery still reads
+    # in-flight (202). That window is by-design (journal-before-dedup) + eventually
+    # consistent; the test just needs the real done-signal.
+    assert _wait(lambda: async_client.get(
+        "/continuity/stream-ULID-AAAA").json()["processed"] == [[0, 0]]), "never completed"
     c2 = fs.record_posts[0]
     from app import schemas
     assert schemas.validate_c2(c2) == []
@@ -98,9 +105,10 @@ def test_continuity_processed_populated_after_processing(async_client):
     assert async_client.get("/continuity/stream-CONT").json()["dead_lettered"] == []
 
 
-def test_graceful_drain_processes_everything(monkeypatch, fake_storage):
+def test_graceful_drain_processes_everything(monkeypatch, fake_storage, tmp_path):
     """Posting N chunks then closing the app drains every one (shutdown join)."""
     monkeypatch.setenv("ASR_BACKEND", "mock")
+    monkeypatch.setenv("DP_VAR_DIR", str(tmp_path / "var"))
     monkeypatch.setenv("STORAGE_URL", "http://storage.test")
     monkeypatch.setenv("INGEST_ASYNC", "1")
     from app.main import create_app
@@ -158,12 +166,13 @@ class _FlakyProcessor(Processor):
         return [ProcessedUnit(content=ProcessedContent(kind="transcript", text="ok"))]
 
 
-def test_unexpected_processor_error_is_retried_not_dead_lettered(monkeypatch, fake_storage):
+def test_unexpected_processor_error_is_retried_not_dead_lettered(monkeypatch, fake_storage, tmp_path):
     """Fix (review #2): an infra error out of the processor is TRANSIENT — inline mode 500s
     → recording retries, so the async worker retries too rather than dead-lettering the
     first blip. Only after INGEST_MAX_RETRIES does it dead-letter."""
     monkeypatch.setenv("ASR_BACKEND", "mock")
     monkeypatch.setenv("STORAGE_URL", "http://storage.test")
+    monkeypatch.setenv("DP_VAR_DIR", str(tmp_path / "var"))
     monkeypatch.setenv("INGEST_ASYNC", "1")
     monkeypatch.setenv("INGEST_RETRY_BACKOFF", "0")
     monkeypatch.setenv("INGEST_MAX_RETRIES", "3")
@@ -223,8 +232,9 @@ class _GatedProcessor(Processor):
                                                        text=f"gated {c1['chunk_id']}"))]
 
 
-def _gated_app(monkeypatch, fake_storage, *, workers: int, queue_max: int):
+def _gated_app(monkeypatch, fake_storage, tmp_path, *, workers: int, queue_max: int):
     monkeypatch.setenv("ASR_BACKEND", "mock")
+    monkeypatch.setenv("DP_VAR_DIR", str(tmp_path / "var"))
     monkeypatch.setenv("STORAGE_URL", "http://storage.test")
     monkeypatch.setenv("INGEST_ASYNC", "1")
     monkeypatch.setenv("INGEST_WORKERS", str(workers))
@@ -237,8 +247,8 @@ def _gated_app(monkeypatch, fake_storage, *, workers: int, queue_max: int):
     return app, gated
 
 
-def test_inflight_redelivery_acks_202_duplicate_no_double_process(monkeypatch, fake_storage):
-    app, gated = _gated_app(monkeypatch, fake_storage, workers=2, queue_max=16)
+def test_inflight_redelivery_acks_202_duplicate_no_double_process(monkeypatch, fake_storage, tmp_path):
+    app, gated = _gated_app(monkeypatch, fake_storage, tmp_path, workers=2, queue_max=16)
     with TestClient(app) as c:
         c1 = make_c1(fake_storage, chunk_id="inflight-1")
         r1 = c.post("/ingest", json=c1)
@@ -253,9 +263,9 @@ def test_inflight_redelivery_acks_202_duplicate_no_double_process(monkeypatch, f
     assert gated.started == 1
 
 
-def test_queue_full_returns_503_backpressure(monkeypatch, fake_storage):
+def test_queue_full_returns_503_backpressure(monkeypatch, fake_storage, tmp_path):
     # 1 worker, queue capacity 1: worker holds one, queue holds one, the 3rd is 503.
-    app, gated = _gated_app(monkeypatch, fake_storage, workers=1, queue_max=1)
+    app, gated = _gated_app(monkeypatch, fake_storage, tmp_path, workers=1, queue_max=1)
     with TestClient(app) as c:
         a = c.post("/ingest", json=make_c1(fake_storage, chunk_id="qf-a", sequence=0))
         assert a.status_code == 202
@@ -268,3 +278,39 @@ def test_queue_full_returns_503_backpressure(monkeypatch, fake_storage):
         assert cc.json() == {"ok": False, "error": "ingest queue full"}
         gated.gate.set()  # drain
     assert len(fake_storage.record_posts) == 2  # a + b (c was rejected)
+
+
+def test_failed_journal_accept_releases_claim(monkeypatch, fake_storage, tmp_path):
+    """Review fix #1: if the durable accept write raises (disk-full / lock-contention),
+    the in-flight claim MUST be released — otherwise every retry ACKs 202-duplicate
+    forever (silent loss + a lying ACK). After the transient failure clears, a
+    redelivery re-claims cleanly and processes."""
+    monkeypatch.setenv("ASR_BACKEND", "mock")
+    monkeypatch.setenv("STORAGE_URL", "http://storage.test")
+    monkeypatch.setenv("DP_VAR_DIR", str(tmp_path / "var"))
+    monkeypatch.setenv("INGEST_ASYNC", "1")
+    from app.main import create_app
+
+    app = create_app()
+    app.state.storage._transport = fake_storage.transport()
+    boom = {"armed": True}
+    real_accept = app.state.journal.accept
+
+    def flaky_accept(c1, now):
+        if boom["armed"]:
+            boom["armed"] = False
+            raise RuntimeError("disk full")   # the durable write fails once
+        return real_accept(c1, now)
+
+    monkeypatch.setattr(app.state.journal, "accept", flaky_accept)
+
+    c1 = make_c1(fake_storage, chunk_id="orphan-1", stream_id="s-orph")
+    with TestClient(app, raise_server_exceptions=False) as c:
+        r1 = c.post("/ingest", json=c1)
+        assert r1.status_code == 500                       # the accept write blew up
+        assert fake_storage.record_posts == []             # nothing processed
+        # The claim was released, so the redelivery is a FRESH accept (202, not
+        # 202-duplicate) and actually processes — no silent loss.
+        r2 = c.post("/ingest", json=c1)
+        assert r2.status_code == 202 and r2.json().get("duplicate") is None
+        assert _wait(lambda: len(fake_storage.record_posts) == 1), "redelivery never processed"

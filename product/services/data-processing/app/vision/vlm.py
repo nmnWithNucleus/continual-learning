@@ -47,6 +47,14 @@ _USER = (
 )
 
 
+def make_client(vs: VisionSettings) -> httpx.Client:
+    """Construct the VL HTTP client. A single, patchable factory (tests inject a
+    MockTransport here) — and the one place a shared/pooled client would later live.
+    httpx.Client is thread-safe for concurrent requests, so ONE client fans out across
+    the keyframe threadpool tasks (connection reuse) in the stage-graph captions stage."""
+    return httpx.Client(timeout=vs.vlm_timeout)
+
+
 def _data_url(jpeg: bytes) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(jpeg).decode("ascii")
 
@@ -67,6 +75,12 @@ def _parse(reply: str) -> tuple[str, str | None]:
     if not caption:
         caption = reply.strip()  # model didn't follow the format; keep it all
     return caption, ocr
+
+
+def caption_one(client: httpx.Client, vs: VisionSettings, kf: Keyframe) -> KeyframeCaption:
+    """Caption ONE keyframe over an existing (thread-safe) client — the unit the
+    stage-graph captions stage fans out concurrently across the threadpool."""
+    return _caption_one(client, vs, kf)
 
 
 def _caption_one(client: httpx.Client, vs: VisionSettings, kf: Keyframe) -> KeyframeCaption:
@@ -117,7 +131,7 @@ def caption(
     off the event loop in the core's threadpool). A request error propagates so the
     chunk is NOT marked done and an at-least-once retry can reprocess it."""
     out: list[KeyframeCaption] = []
-    with httpx.Client(timeout=vs.vlm_timeout) as client:
+    with make_client(vs) as client:
         for kf in keyframes:
             out.append(_caption_one(client, vs, kf))
     logger.info(

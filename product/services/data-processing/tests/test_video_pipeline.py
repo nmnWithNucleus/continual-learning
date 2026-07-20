@@ -260,9 +260,8 @@ def test_vlm_malformed_response_raises_clear_error(monkeypatch):
     def handle(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"id": "x", "choices": []})  # malformed
 
-    orig_client = httpx.Client
-    monkeypatch.setattr(vlm.httpx, "Client", lambda *a, **k: orig_client(
-        *a, **{**k, "transport": httpx.MockTransport(handle)}))
+    monkeypatch.setattr(vlm, "make_client",
+                        lambda vs: httpx.Client(transport=httpx.MockTransport(handle)))
 
     kf = Keyframe(index=0, t_offset_s=0.0, t_end_offset_s=1.0, image_jpeg=b"\xff\xd8\xff\xd9")
     with pytest.raises(ValueError):
@@ -277,13 +276,11 @@ def test_vlm_backend_sends_images_and_weaves_ocr(client, monkeypatch):
 
     seen: list[dict] = []
     from app.vision import vlm
-    orig_client = httpx.Client
 
-    def fake_client(*args, **kwargs):
-        kwargs["transport"] = httpx.MockTransport(_fake_vl_server(seen))
-        return orig_client(*args, **kwargs)
-
-    monkeypatch.setattr(vlm.httpx, "Client", fake_client)
+    monkeypatch.setattr(
+        vlm, "make_client",
+        lambda vs: httpx.Client(transport=httpx.MockTransport(_fake_vl_server(seen))),
+    )
 
     # pipeline_version switches to the vlm dialect (forks records vs mock).
     assert video_proc.VideoProcessor().pipeline_version(None) == "vidproc-vlm-v0"

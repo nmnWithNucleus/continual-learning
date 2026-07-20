@@ -10,8 +10,11 @@ now **all three SMOKE-TESTED GREEN on node-7**, +2 pyannote torch-2.x fixes) + *
 pipeline (M3, WS-V):** keyframe extraction + captioning behind `VIDEO_BACKEND=mock|vlm` +
 per-keyframe timing hook + OCR weave (genuine Qwen3-VL-8B run) + **ASYNC `/ingest` (M7-early)
 behind `INGEST_ASYNC`, off by default = byte-identical inline** + **D9 `/metrics` + Grafana
-dashboard (M8)** — capture alpha still green (3 real clients) —
-**98 tests** (72 baseline + 11 metrics + 10 async + 5 dedup) · **Last updated:** 2026-07-19 (async-observability session)
+dashboard (M8)** + **DP v1: DURABLE ingest journal (kill-recovery + restart-amnesia closed)
++ STAGE-GRAPH pipeline (every processing step a drop-in file; audio/video ported
+byte-identically, real backends re-validated through the graph on node-7)** — capture alpha
+still green (3 real clients) —
+**127 tests** · **Last updated:** 2026-07-20 (async-observability session, v1)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
@@ -22,6 +25,7 @@ dashboard (M8)** — capture alpha still green (3 real clients) —
 | A | **Real audio pipeline beyond ASR**: diarization · translation · acoustic events (off-by-default `*_BACKEND` switches; mock headless + real pyannote/whisper/AST seams) | built, 57 tests green (38+19); real backends unrun seams | [handoff/ws-audio-pipeline.md](handoff/ws-audio-pipeline.md) | audio-pipeline lead |
 | V | **Real VIDEO pipeline** (M3): ffmpeg keyframes → caption (`VIDEO_BACKEND=mock\|vlm`) + **per-keyframe timing hook** (OQ14a) + OCR weave (D8) | built + verified + reviewed; real **Qwen3-VL-8B** E2E; suite **68 green** (+11 video) | [handoff/ws-video-pipeline.md](handoff/ws-video-pipeline.md) | video-pipeline lead |
 | AO | **Async `/ingest`** (M7-early, `INGEST_ASYNC` off by default) + **D9 `/metrics` + dashboard** (M8) + **node-7 smoke** of the 3 real audio backends | built + tested + reviewed; DP **98 green**; recording seam updated (120 green); +2 pyannote fixes | [handoff/ws-async-observability.md](handoff/ws-async-observability.md) | async-observability lead |
+| SG | **DP v1**: **durable ingest journal** (`app/journal.py` — kill-recovery + restart-amnesia closed, epochs, bounded re-drive) + **stage-graph pipeline** (`app/stagegraph/` + `app/stages/` — drop-in stage files; audio+video ported byte-identical; per-modality fairness) | built + tested + reviewed; DP **127 green**; real backends re-validated through the graph on node-7 | [handoff/ws-dp-stage-graph.md](handoff/ws-dp-stage-graph.md) | async-observability lead (v1) |
 
 ## Processor seam — how to add a modality (READ THIS before owning image/video/text)
 The core (`app/main.py` `POST /ingest` + `app/pipeline.py` `build_c2`) is **modality-agnostic**:
@@ -104,9 +108,23 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
   in BOTH canvases):** provenance is optional-at-accept; DP `/continuity` additively reports
   `processed` + `dead_lettered` so recording keeps `dp_acked=1 ⇔ C2 written` and never reads a
   silent `clean` for a lost chunk. Flipping `INGEST_ASYNC=1` **retires the
-  `RECORDING_HTTP_TIMEOUT=120` mitigation.** Remaining for **full M7**: durable pending-journal
-  (auto-recovery past a kill / drain-timeout) + reprocess-by-version + backfill — this slice
-  guarantees *never falsely `clean`* (all loss visible), not auto-recovery.
+  `RECORDING_HTTP_TIMEOUT=120` mitigation.**
+- ~~Remaining for full M7: durable pending-journal (auto-recovery past a kill / drain-timeout)~~
+  **DONE (2026-07-20, WS-SG) — [handoff/ws-dp-stage-graph.md](handoff/ws-dp-stage-graph.md).**
+  `app/journal.py` (SQLite pending/processed, WAL): async accept is journaled before the 202,
+  startup re-drives every `accepted` row (**kill -9 auto-recovers**), continuity **rehydrates**
+  from the journal (**restart-amnesia / false-`gaps` caveat closed**), and the dedup done-map
+  has a durable backstop. Epochs guard stale-worker writes; bounded re-drive caps a crash-loop.
+  Still M7-proper: dead-letter *backfill* tooling + reprocess-by-version at scale + `processed`
+  retention.
+- **Stage-graph pipeline (2026-07-20, WS-SG):** the modality Processor seam evolved — a
+  modality is now a thin `GraphProcessor` shim over drop-in **stage files** under
+  `app/stages/<modality>/` (`app/stagegraph/` executor: readiness DAG, per-stage metrics,
+  composed `pipeline_version`, best_effort policy, mutate=version_fragment safety). Audio +
+  video ported byte-identically. **Adding OCR / speaker-identity / multi-level captions / bbox
+  enrichment = one new stage file, zero core edits** (see the ws file's drop-in table). The
+  "Processor seam" section below still describes the monolithic `process()` — that remains the
+  public seam (image/text stubs still use it); GraphProcessor is the richer path behind it.
 - ~~D9 `/metrics` + dashboard~~ **DONE (2026-07-19, WS-AO, M8).** `/metrics` (Prometheus text,
   zero new deps) + `dashboards/data-processing.json`: ingest rate, async queue depth, per-stage
   + per-modality latency, dedup hits, VAD-empty rate, continuity missing/dup/dead-letter. C8
