@@ -20,6 +20,8 @@ file. No core edits, no processor-file surgery.
 """
 from .stage import (  # noqa: F401
     SKIPPED,
+    SlotAccessError,
+    SlotView,
     Stage,
     StageContext,
     StageRegistrationError,
