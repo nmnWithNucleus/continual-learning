@@ -109,6 +109,14 @@ class IngestQueue:
             if name.strip() and limit > 0:
                 self._limits[name.strip()] = limit
         self._permits: dict[str, int] = dict(self._limits)
+        # Parked permit RE-ACQUIRERS (retriers coming back from a backoff sleep) hold a
+        # RESERVATION: the dispatch scan may only take a permit beyond the reserved
+        # count, so a finishing worker's same-tick rescan can never barge a freed permit
+        # away from the oldest waiting retry (which would starve it unboundedly under a
+        # sustained backlog — review-confirmed). Reservations are counters, not permit
+        # transfers: a cancelled waiter just decrements in its finally, so nothing is
+        # ever stranded.
+        self._reacquiring: dict[str, int] = {}
         if self._limits:
             logger.info(
                 "per-modality in-flight limits active: %r — permits are taken at "
@@ -196,11 +204,13 @@ class IngestQueue:
                 waiters.remove(fut)  # cancelled (or raced) — never leave a dead future
 
     def _take_permit(self, modality: str) -> bool:
-        """Atomically (single loop tick) claim a modality slot; True if unlimited."""
+        """Atomically (single loop tick) claim a modality slot FOR DISPATCH; True if
+        unlimited. Permits reserved for parked re-acquirers are not up for grabs —
+        dispatch may only take the surplus."""
         avail = self._permits.get(modality)
         if avail is None:
             return True
-        if avail <= 0:
+        if avail - self._reacquiring.get(modality, 0) <= 0:
             return False
         self._permits[modality] = avail - 1
         return True
@@ -213,9 +223,22 @@ class IngestQueue:
             self._wake_all(self._getters)
 
     async def _acquire_permit(self, modality: str) -> None:
-        """Blocking permit re-acquire (the retry path, after a backoff sleep)."""
-        while not self._take_permit(modality):
-            await self._wait_on(self._getters)
+        """Blocking permit re-acquire (the retry path, after a backoff sleep). Holds a
+        reservation while parked so the dispatch scan cannot barge every freed permit
+        to newer queued jobs of the same modality (retriers are the OLDEST work)."""
+        self._reacquiring[modality] = self._reacquiring.get(modality, 0) + 1
+        try:
+            while True:
+                if self._permits[modality] > 0:
+                    self._permits[modality] -= 1
+                    return
+                await self._wait_on(self._getters)
+        finally:
+            n = self._reacquiring.get(modality, 0) - 1
+            if n > 0:
+                self._reacquiring[modality] = n
+            else:
+                self._reacquiring.pop(modality, None)
 
     async def _get_dispatchable(self) -> dict[str, Any]:
         """Remove and return the FIRST job whose modality permit is available, taking

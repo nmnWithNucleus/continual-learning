@@ -6,18 +6,35 @@ without re-importing the app. Mirrors the serve-loop inference service.
 """
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
+
+logger = logging.getLogger("data-processing.config")
+
+# Enum knobs that saw an unrecognized value (warn ONCE per value — settings are
+# re-read per request; a typo must be visible, not a per-request log storm).
+_warned_choices: set[tuple[str, str]] = set()
 
 
 def _as_bool(value: str) -> bool:
     return value.strip().lower() not in ("0", "false", "no", "off", "")
 
 
-def _choice(value: str, allowed: tuple[str, ...], default: str) -> str:
-    value = value.strip().lower()
-    return value if value in allowed else default
+def _choice(name: str, raw: str, allowed: tuple[str, ...], default: str) -> str:
+    """Enum env knob: unrecognized values FALL BACK to the default, LOUDLY. Silent
+    fallback would be fail-open for safety knobs — e.g. `INGEST_ISOLATION=1` (the
+    natural mistake; every boolean knob here accepts 1/true) silently disabling the
+    poison-chunk containment the operator asked for."""
+    value = raw.strip().lower()
+    if value in allowed:
+        return value
+    if value and (name, value) not in _warned_choices:
+        _warned_choices.add((name, value))
+        logger.warning("%s=%r is not one of %s — falling back to %r",
+                       name, raw, list(allowed), default)
+    return default
 
 
 def _default_var_dir() -> str:
@@ -63,7 +80,7 @@ class Settings:
     # SIGKILLs the child instead of leaking an unkillable ghost thread. Default off:
     # in-process, byte-identical.
     ingest_isolation: str        # "off" | "subprocess"
-    ingest_subproc_start: str    # multiprocessing start method: spawn | fork | forkserver
+    ingest_subproc_start: str    # multiprocessing start method: spawn | fork
     # --- D9 observability ----------------------------------------------------------
     metrics_enabled: bool     # expose /metrics + record request/pipeline metrics
 
@@ -92,9 +109,14 @@ def get_settings() -> Settings:
         dp_var_dir=os.getenv("DP_VAR_DIR", _default_var_dir()),
         redrive_max_attempts=max(1, int(os.getenv("DP_REDRIVE_MAX_ATTEMPTS", "5"))),
         ingest_modality_limits=os.getenv("INGEST_MODALITY_LIMITS", "").strip(),
-        ingest_isolation=_choice(os.getenv("INGEST_ISOLATION", "off"),
+        # forkserver is deliberately not offered: it freezes os.environ at server
+        # launch, breaking the child-inherits-parent-env premise the isolation
+        # boundary rests on (see isolation.py module docstring).
+        ingest_isolation=_choice("INGEST_ISOLATION",
+                                 os.getenv("INGEST_ISOLATION", "off"),
                                  ("off", "subprocess"), "off"),
-        ingest_subproc_start=_choice(os.getenv("INGEST_SUBPROC_START", "spawn"),
-                                     ("spawn", "fork", "forkserver"), "spawn"),
+        ingest_subproc_start=_choice("INGEST_SUBPROC_START",
+                                     os.getenv("INGEST_SUBPROC_START", "spawn"),
+                                     ("spawn", "fork"), "spawn"),
         metrics_enabled=_as_bool(os.getenv("METRICS_ENABLED", "1")),
     )

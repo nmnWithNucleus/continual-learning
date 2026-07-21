@@ -178,6 +178,118 @@ def test_processing_error_crosses_the_boundary_intact(monkeypatch, tmp_path):
     assert exc.http_status == 502 and exc.transient is False
 
 
+def test_unpicklable_processing_error_detail_keeps_taxonomy(monkeypatch, tmp_path):
+    """Review-confirmed hole, now closed: an unpicklable detail dict used to blow up
+    the child's send, exiting cleanly with code 0 — the parent then misread a
+    TERMINAL failure as a transient 'died' (taxonomy flip). The child now falls back
+    to a sanitized string detail that PRESERVES the transient/status flags."""
+    monkeypatch.setenv("INGEST_ISOLATION", "subprocess")
+    monkeypatch.setenv("INGEST_SUBPROC_START", "fork")
+
+    class ExoticTerm(Processor):
+        modality = "audio"
+        content_kind = "transcript"
+        def pipeline_version(self, settings): return "t-v0"
+        def process(self, c1, blob, settings, span_seconds):
+            raise ProcessingError({"error": "corrupt", "handle": lambda: None},  # unpicklable
+                                  http_status=502, transient=False)
+
+    registry.get_processor("audio")  # ensure discovery ran in-parent
+    monkeypatch.setitem(registry._REGISTRY, "audio", ExoticTerm())
+
+    from app.config import get_settings
+
+    async def go():
+        with pytest.raises(ProcessingError) as ei:
+            await run_processor_in_subprocess(
+                modality="audio", c1={"chunk_id": "iso-exotic", "modality": "audio"},
+                blob=b"x", settings=get_settings(), span_seconds=1.0)
+        return ei.value
+
+    exc = asyncio.run(go())
+    assert exc.http_status == 502 and exc.transient is False   # flags survived
+    assert "not picklable" in str(exc.detail.get("note", ""))  # sanitized, visible
+
+
+def test_large_child_reply_pins_recv_before_join(monkeypatch):
+    """A reply far beyond the ~64KB pipe buffer: the child blocks in send until the
+    parent drains, so any refactor to join-before-recv deadlocks HERE instead of in
+    production on the first real ASR/VLM chunk (review gap: only tiny replies were
+    exercised)."""
+    monkeypatch.setenv("INGEST_ISOLATION", "subprocess")
+    monkeypatch.setenv("INGEST_SUBPROC_START", "fork")
+    big = "x" * (1 << 20)  # 1 MiB of transcript
+
+    class BigProc(Processor):
+        modality = "audio"
+        content_kind = "transcript"
+        def pipeline_version(self, settings): return "t-v0"
+        def process(self, c1, blob, settings, span_seconds):
+            return [ProcessedUnit(content=ProcessedContent(kind="transcript", text=big))]
+
+    registry.get_processor("audio")
+    monkeypatch.setitem(registry._REGISTRY, "audio", BigProc())
+
+    from app.config import get_settings
+
+    async def go():
+        return await run_processor_in_subprocess(
+            modality="audio", c1={"chunk_id": "iso-big", "modality": "audio"},
+            blob=b"x", settings=get_settings(), span_seconds=1.0)
+
+    units = asyncio.run(go())
+    assert len(units) == 1 and units[0].content.text == big
+
+
+def test_each_retry_attempt_gets_a_fresh_child(monkeypatch, fake_storage, tmp_path):
+    """Pins the fresh-child-per-attempt contract BEFORE a warm child pool lands: a
+    retry must never reuse a child whose in-process state attempt 1 corrupted
+    (review gap: the flaky test passed identically with a reused child)."""
+    _env(monkeypatch, tmp_path, INGEST_SUBPROC_START="fork",
+         INGEST_ASYNC=1, INGEST_MAX_RETRIES=2, INGEST_RETRY_BACKOFF=0)
+    pids = tmp_path / "pids"
+    real = mock_asr.transcribe
+
+    def pid_logging(settings, audio_bytes, codec, chunk_seconds, chunk_id):
+        with open(pids, "a") as fh:
+            fh.write(f"{os.getpid()}\n")
+        if len(pids.read_text().splitlines()) == 1:
+            raise RuntimeError("first attempt fails")
+        return real(settings, audio_bytes, codec, chunk_seconds, chunk_id)
+
+    monkeypatch.setattr(mock_asr, "transcribe", pid_logging)
+
+    from app.main import create_app
+    app = create_app()
+    app.state.storage._transport = fake_storage.transport()
+    with TestClient(app) as c:
+        assert c.post("/ingest", json=make_c1(
+            fake_storage, chunk_id="iso-fresh", stream_id="s-fr",
+            sequence=0)).status_code == 202
+        assert _wait(lambda: len(fake_storage.record_posts) == 1)
+    attempt_pids = pids.read_text().split()
+    assert len(attempt_pids) == 2
+    assert attempt_pids[0] != attempt_pids[1], "retry reused the failed attempt's child"
+
+
+def test_async_mode_under_spawn_end_to_end(monkeypatch, fake_storage, tmp_path):
+    """The production combination (async workers + spawn children) was untested —
+    a job-dict field that stops being picklable, or a spawn-import regression, must
+    fail HERE, not in the first real deployment (review gap)."""
+    _env(monkeypatch, tmp_path, INGEST_SUBPROC_START="spawn", INGEST_ASYNC=1)
+    from app.main import create_app
+    app = create_app()
+    app.state.storage._transport = fake_storage.transport()
+    with TestClient(app) as c:
+        for i in range(2):
+            assert c.post("/ingest", json=make_c1(
+                fake_storage, chunk_id=f"iso-sp-{i}", stream_id="s-sp",
+                sequence=i)).status_code == 202
+        assert _wait(lambda: len(fake_storage.record_posts) == 2, timeout=30.0)
+        entry = c.get("/continuity/s-sp").json()
+        assert entry["processed"] == [[0, 1]] and entry["dead_lettered"] == []
+
+
 def test_drain_cancel_kills_the_child_and_chunk_stays_redrivable(
         monkeypatch, fake_storage, tmp_path):
     """THE ghost-computation test: a drain-timeout cancel SIGKILLs the mid-flight child
