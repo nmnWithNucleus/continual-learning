@@ -179,6 +179,101 @@ def test_no_limits_is_pure_fifo_dispatch(monkeypatch, fake_storage, tmp_path):
     assert stub.started == [f"fifo-{i}" for i in range(4)]  # strict arrival order
 
 
+def test_backoff_retrier_is_not_starved_by_a_sustained_backlog(
+        monkeypatch, fake_storage, tmp_path):
+    """Review-confirmed starvation, now closed: under audio=1 with a sustained audio
+    backlog, a finishing worker's same-tick rescan used to steal every freed permit
+    for a NEWER queued job before the parked retrier's wakeup ran — the oldest chunk's
+    retry was deferred until the backlog emptied (unbounded under continuous ingest).
+    Parked re-acquirers now hold a permit RESERVATION the dispatch scan must respect."""
+
+    class _SlowStub(_StubProcessor):
+        def process(self, c1, blob, settings, span_seconds):
+            if c1["chunk_id"].startswith("bl-"):
+                time.sleep(0.05)          # sustained backlog: each job takes a while
+            return super().process(c1, blob, settings, span_seconds)
+
+    stub = _SlowStub("audio", "transcript", fail_first={"st-fail"})
+    app = _app(monkeypatch, fake_storage, tmp_path, {"audio": stub},
+               INGEST_WORKERS=2, INGEST_MODALITY_LIMITS="audio=1",
+               INGEST_MAX_RETRIES=2, INGEST_RETRY_BACKOFF=0.1)
+    with TestClient(app) as c:
+        assert c.post("/ingest", json=make_c1(
+            fake_storage, chunk_id="st-fail", stream_id="s-st",
+            sequence=0)).status_code == 202
+        assert _wait(lambda: stub.started == ["st-fail"])  # first attempt failed
+        for i in range(10):                                # arrive DURING its backoff
+            assert c.post("/ingest", json=make_c1(
+                fake_storage, chunk_id=f"bl-{i}", stream_id="s-st",
+                sequence=i + 1)).status_code == 202
+        assert _wait(lambda: len(_posted(fake_storage)) == 11)
+    order = _posted(fake_storage)
+    # Backoff ~0.1s ≈ two 0.05s backlog jobs; the reservation hands the NEXT freed
+    # permit to the retrier. Unstarved, st-fail lands early — never behind the whole
+    # backlog (the pre-fix behavior put it dead last, index 10).
+    assert order.index("st-fail") < 8, \
+        f"retrier starved behind the backlog: {order}"
+
+
+def test_worker_backstop_after_run_job_blowup_releases_permit(
+        monkeypatch, fake_storage, tmp_path):
+    """The _worker generic-exception backstop (post-process_chunk failure, e.g.
+    continuity.note_processed raising) must release the modality permit — a leak
+    there permanently wedges the capped modality with zero signal (review gap)."""
+    stub = _StubProcessor("audio", "transcript")
+    app = _app(monkeypatch, fake_storage, tmp_path, {"audio": stub},
+               INGEST_WORKERS=2, INGEST_MODALITY_LIMITS="audio=1")
+    real_note = app.state.continuity.note_processed
+    blown = {"done": False}
+
+    def exploding_note(stream_id, sequence):
+        if not blown["done"]:
+            blown["done"] = True
+            raise RuntimeError("metrics/continuity blip AFTER the C2 was written")
+        return real_note(stream_id, sequence)
+
+    monkeypatch.setattr(app.state.continuity, "note_processed", exploding_note)
+    with TestClient(app) as c:
+        assert c.post("/ingest", json=make_c1(
+            fake_storage, chunk_id="bs-a", stream_id="s-bs", sequence=0)).status_code == 202
+        assert _wait(lambda: "bs-a" in _posted(fake_storage))  # C2 landed pre-blowup
+        # The permit must be free again: a second capped-modality chunk processes.
+        assert c.post("/ingest", json=make_c1(
+            fake_storage, chunk_id="bs-b", stream_id="s-bs", sequence=1)).status_code == 202
+        assert _wait(lambda: "bs-b" in _posted(fake_storage)), \
+            "permit leaked in the worker backstop — capped modality wedged"
+
+
+def test_drain_cancels_cleanly_during_backoff_and_permit_wait(
+        monkeypatch, fake_storage, tmp_path):
+    """Cancel during the backoff sleep (permit released, held=False) and during the
+    _acquire_permit park must not double-release or wedge the drain; the chunks stay
+    'accepted' in the journal — re-drivable (review gap: this path was unpinned)."""
+    stub = _StubProcessor("audio", "transcript", gated=True,
+                          fail_first={"dr-sleeper"})
+    app = _app(monkeypatch, fake_storage, tmp_path, {"audio": stub},
+               INGEST_WORKERS=2, INGEST_MODALITY_LIMITS="audio=1",
+               INGEST_MAX_RETRIES=3, INGEST_RETRY_BACKOFF=30,  # parks in backoff
+               INGEST_DRAIN_TIMEOUT=0.3)
+    with TestClient(app) as c:
+        # dr-sleeper: fails once -> releases permit -> 30s backoff (cancel hits here).
+        assert c.post("/ingest", json=make_c1(
+            fake_storage, chunk_id="dr-sleeper", stream_id="s-dr",
+            sequence=0)).status_code == 202
+        assert _wait(lambda: "dr-sleeper" in stub.started)
+        # dr-gated: takes the freed permit, blocks on the gate until drain cancels it.
+        assert c.post("/ingest", json=make_c1(
+            fake_storage, chunk_id="dr-gated", stream_id="s-dr",
+            sequence=1)).status_code == 202
+        assert _wait(lambda: "dr-gated" in stub.started)
+    # `with` exit: drain times out at 0.3s, cancels both workers (one in the backoff
+    # sleep, one in process) — exiting at all proves no wedge/double-release blowup.
+    stub.gate.set()  # unblock the abandoned threadpool thread promptly
+    accepted = sorted(c1["chunk_id"] for c1 in app.state.journal.pending_accepted())
+    assert accepted == ["dr-gated", "dr-sleeper"]     # both re-drivable
+    assert fake_storage.record_posts == []
+
+
 def test_limit_parsing_ignores_garbage_entries():
     async def go():
         q = IngestQueue(SimpleNamespace(state=SimpleNamespace()),  # duck-typed app

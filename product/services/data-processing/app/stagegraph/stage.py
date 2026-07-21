@@ -88,8 +88,10 @@ class SlotView:
         if key in self._deny_read:
             raise SlotAccessError(
                 f"stage {self._stage!r} may not read primary mutable slot {key!r} — "
-                "sidecars never touch (or see) primary state; declare a mutate stage "
-                "if this edit is intended (which forks the dialect)"
+                "a reference is mutation power (in-place writes bypass __setitem__): "
+                "sidecars never see primary mutable state, and a mutate sees only the "
+                "slots it declared in `writes` (declare it there — that also chains "
+                "you deterministically against the slot's other writers)"
             )
 
     def __getitem__(self, key: str):

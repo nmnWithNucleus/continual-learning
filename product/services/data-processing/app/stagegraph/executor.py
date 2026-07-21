@@ -50,6 +50,7 @@ import asyncio
 import logging
 from dataclasses import dataclass, replace
 from time import perf_counter
+from types import MappingProxyType
 from typing import Any, Optional
 
 from starlette.concurrency import run_in_threadpool
@@ -162,14 +163,20 @@ def resolve(modality: str, stages: list[Stage], settings) -> ResolvedGraph:
                 needs[nxt.name] = (*needs[nxt.name], prev.name)
 
     # Committed-slot ownership must be unambiguous: two enabled stages declaring the
-    # same `provides` key would be a silent last-writer-wins on the blackboard.
-    seen_provides: dict[str, str] = {}
+    # same `provides` key would be a silent last-writer-wins on the blackboard. The
+    # primary's mutable_slots are SEEDED as primary-owned whether or not the primary
+    # repeats them in `provides` — otherwise a sidecar declaring provides=('segments',)
+    # would pass resolution and blind-clobber the mutate cohort's output via a
+    # perfectly "declared" StageResult commit (review-confirmed hole).
+    seen_provides: dict[str, str] = {slot: primary.name for slot in primary.mutable_slots}
     for s in enabled.values():
         for key in s.provides:
-            if key in seen_provides:
+            owner = seen_provides.get(key)
+            if owner is not None and not (s is primary and owner == primary.name):
                 raise GraphResolutionError(
-                    f"{modality}: stages {seen_provides[key]!r} and {s.name!r} both "
-                    f"declare provides={key!r} — slot commits must have one owner"
+                    f"{modality}: stage {s.name!r} declares provides={key!r} already "
+                    f"owned by {owner!r} — slot commits must have one owner (the "
+                    "primary's mutable_slots are primary-owned by definition)"
                 )
             seen_provides[key] = s.name
 
@@ -249,15 +256,31 @@ def _count(metrics, name: str, labels: dict) -> None:
 
 def _slot_view(ctx: StageContext, stage: Stage, primary: Stage) -> StageContext:
     """The stage's capability-scoped context: same chunk fields, slots wrapped in a
-    ``SlotView``. Sidecars are denied even a READ of the primary's mutable slots (no
-    reference ⇒ no possible mutation); direct writes are allowed only for a mutate's
-    declared ``writes``. The primary needs no direct-write set — it produces its slots
-    via ``StageResult`` (commit-on-success) and ``assemble`` runs on the real dict."""
-    deny_read = (
-        frozenset(primary.mutable_slots) if stage.kind == "sidecar" else frozenset()
-    )
+    ``SlotView`` and ``c1`` wrapped read-only. Mutation power follows the REFERENCE:
+
+      * sidecar — denied even a READ of every primary mutable slot;
+      * mutate  — denied a read of mutable slots OUTSIDE its declared ``writes``
+        (reading one would hand it an aliased object it could scribble on without a
+        chain edge ordering it against that slot's real writers — an in-place write
+        through a read reference is invisible to ``__setitem__`` enforcement, so the
+        reference itself is what must be withheld); direct rebinds allowed for
+        ``writes`` only;
+      * primary — full access (it owns the slots); it also runs ``assemble`` on the
+        real dict.
+
+    ``c1`` is a read-only mapping view: chunk identity fields feed ``record_id`` and
+    the journal row AFTER the graph runs — a stage (esp. a best_effort one that then
+    "skips") must never be able to corrupt them."""
+    if stage.kind == "sidecar":
+        deny_read = frozenset(primary.mutable_slots)
+    elif stage.kind == "mutate":
+        deny_read = frozenset(primary.mutable_slots) - frozenset(stage.writes)
+    else:
+        deny_read = frozenset()
     allow_write = frozenset(stage.writes) if stage.kind == "mutate" else frozenset()
-    return replace(ctx, slots=SlotView(ctx.slots, stage.name, deny_read, allow_write))
+    return replace(ctx,
+                   slots=SlotView(ctx.slots, stage.name, deny_read, allow_write),
+                   c1=MappingProxyType(ctx.c1))
 
 
 def _allowed_commits(stage: Stage, primary: Stage) -> frozenset:
@@ -326,6 +349,12 @@ async def run_graph(resolved: ResolvedGraph, ctx: StageContext) -> list[Processe
                 f"{resolved.modality}/{stage.name}: committed undeclared slot(s) "
                 f"{sorted(undeclared)} — declare them in `provides` (slot ownership "
                 "must be reviewable, not emergent)"
+            )
+        if result.units and stage.kind != "sidecar":
+            raise RuntimeError(
+                f"{resolved.modality}/{stage.name}: a {stage.kind} stage returned "
+                f"{len(result.units)} unit(s) — only sidecars emit units from run; "
+                "the primary emits via assemble(), a mutate edits in place"
             )
         ctx.slots.update(result.slots)
         if result.units:

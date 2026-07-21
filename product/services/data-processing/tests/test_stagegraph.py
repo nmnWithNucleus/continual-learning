@@ -357,8 +357,95 @@ def test_duplicate_provides_is_resolution_error():
         name = "s2"; modality = "m"; kind = "sidecar"; order = 20; provides = ("dup",)
         def run_sync(self, ctx): return StageResult(slots={"dup": 2})
 
-    with pytest.raises(GraphResolutionError, match="both\\s+declare provides"):
+    with pytest.raises(GraphResolutionError, match="already owned by"):
         resolve("m", [_Primary(), S1(), S2()], None)
+
+
+def test_sidecar_provides_colliding_with_primary_mutable_slot_is_error():
+    """Review-confirmed hole, now closed: a sidecar declaring provides on a primary
+    MUTABLE slot would pass the old disjointness check (the primary need not repeat
+    mutable_slots in provides) and blind-clobber the mutate cohort's output via a
+    perfectly 'declared' StageResult commit. mutable_slots are primary-owned."""
+    class Clobber(Stage):
+        name = "clobber"; modality = "m"; kind = "sidecar"; order = 10
+        provides = ("shared",)   # collides with _Primary.mutable_slots
+        def run_sync(self, ctx): return StageResult(slots={"shared": ["scribble"]})
+
+    with pytest.raises(GraphResolutionError, match="already owned by"):
+        resolve("m", [_Primary(), Clobber()], None)
+
+
+def test_mutate_cannot_even_read_undeclared_mutable_slot():
+    """Review-confirmed aliasing hole, now closed: an in-place write through a READ
+    reference bypasses __setitem__, so the reference itself is withheld — a mutate
+    sees only the mutable slots it declared in `writes` (which also chains it)."""
+    class TwoSlot(_Primary):
+        mutable_slots = ("shared", "other")
+        def run_sync(self, ctx): return StageResult(slots={"shared": [], "other": []})
+
+    class Alias(Stage):
+        name = "alias"; modality = "m"; kind = "mutate"; writes = ("shared",); order = 10
+        def version_fragment(self, settings): return "+al"
+        def run_sync(self, ctx):
+            ctx.slots["other"].append(1)   # read-then-scribble on an UNDECLARED slot
+            return StageResult()
+
+    with pytest.raises(SlotAccessError, match="may not read primary mutable slot"):
+        _run([TwoSlot(), Alias()])
+
+
+def test_non_sidecar_returning_units_is_loud():
+    class BadMut(Stage):
+        name = "badmut"; modality = "m"; kind = "mutate"; writes = ("shared",); order = 10
+        def version_fragment(self, settings): return "+bm"
+        def run_sync(self, ctx):
+            return StageResult(units=[_unit("rogue")])   # mutates never emit units
+
+    with pytest.raises(RuntimeError, match="only sidecars emit units"):
+        _run([_Primary(), BadMut()])
+
+
+def test_stage_cannot_mutate_c1_chunk_identity():
+    """c1 feeds record_id + the journal row AFTER the graph runs — a stage must not
+    be able to corrupt chunk identity (esp. a best_effort one that then 'skips')."""
+    class Corrupt(Stage):
+        name = "corrupt"; modality = "m"; kind = "sidecar"; policy = "best_effort"; order = 10
+        def run_sync(self, ctx):
+            ctx.c1["chunk_id"] = "evil"   # read-only mapping -> TypeError -> skip
+            return StageResult()
+
+    ctx = _ctx()
+    original = dict(ctx.c1)
+    resolved = resolve("m", [_Primary(), Corrupt()], None)
+    asyncio.run(run_graph(resolved, ctx))  # best_effort: stage skips, chunk survives
+    assert ctx.c1 == original              # identity untouched
+
+
+def test_three_writer_chain_is_transitive_and_version_ordered():
+    """3 mutates on one slot: pairwise chain a->b->c, execution strictly ordered,
+    version fragments in chain sequence (pins the shape the roadmap's speaker_id /
+    redaction stages will exercise)."""
+    def mut(nm, ordr, frag, tag, delay):
+        async def run(self, ctx):
+            await asyncio.sleep(delay)
+            ctx.slots["shared"] = ctx.slots["shared"] + [tag]
+            return StageResult()
+        return type(nm, (Stage,), {
+            "name": nm, "modality": "m", "kind": "mutate", "order": ordr,
+            "writes": ("shared",),
+            "version_fragment": lambda self, s, f=frag: f,
+            "run_async": run,
+        })()
+
+    a = mut("A", 10, "+a", "a", 0.04)   # slowest first: concurrency would reorder
+    b = mut("B", 20, "+b", "b", 0.02)
+    c = mut("C", 30, "+c", "c", 0.0)
+    resolved = resolve("m", [_Primary(), c, a, b], None)   # declared shuffled
+    assert "A" in resolved.needs["B"] and "B" in resolved.needs["C"]
+    assert resolved.pipeline_version == "base-v0+a+b+c"
+    ctx = _ctx()
+    asyncio.run(run_graph(resolved, ctx))
+    assert ctx.slots["shared"] == ["a", "b", "c"]
 
 
 # ---- resolution errors ---------------------------------------------------------
