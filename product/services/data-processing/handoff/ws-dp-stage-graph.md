@@ -112,6 +112,9 @@ version tags) into the core, so **every processing step is one drop-in file**:
 **Fairness:** `INGEST_MODALITY_LIMITS` (e.g. `video=2`) — a per-modality max-in-flight
 semaphore held around each processing ATTEMPT (never across the retry backoff), so a video
 burst can't starve audio latency. Default empty = today's flat pool.
+**[Superseded 2026-07-21, WS-H: the semaphore design HOL-blocked (finding #3) and was
+replaced by permit-at-dispatch in the queue itself — see
+[ws-dp-hardening.md](ws-dp-hardening.md). The knob is now production-safe.]**
 
 ## Drop-in demonstration — how a future step lands
 
@@ -134,23 +137,21 @@ throughput refinement); C8 `interactive` profile (mechanism ready — a stage su
 request — consumed when input builds C8); per-stage `resource` classes + timeouts (cut as
 speculative at v0 scale per the design review).
 
-## Review follow-ups (tracked, not merge blockers — from the 2026-07-20 review)
-- **`INGEST_MODALITY_LIMITS` HOL-blocks (finding #3) — HARD PREREQUISITE before enabling.**
-  The per-modality permit is acquired AFTER `queue.get()` on one shared FIFO, so a blocked
-  worker holds a dequeued job and head-of-line-blocks the pool — *worse* than no limit.
-  Byte-identical to today while the knob is empty (the default), and a startup WARNING fires
-  if it's set. Correct fix needs a per-modality queue/worker partition or a
-  permit-before-dequeue peek/skip. **Do not enable in production until that lands.**
-- **Mutable-slots fingerprint guard is order-dependent (finding #6, LOW, defense-in-depth).**
-  Snapshotted at cohort-done while sidecars run concurrently, so an illegal sidecar write
-  landing *before* the last mutate finishes could be baked into the reference and missed. No
-  shipping sidecar writes a primary mutable_slot (the static rule — sidecars can't declare
-  `mutable_slots` — is the real guard). Harden later: a guarded slot proxy, or fingerprint
-  each mutate synchronously on the loop before sidecars run.
-- **Two concurrent mutate stages on an overlapping slot could race (finding #7, LOW, latent).**
-  `resolve` gives mutates an implicit dep on the primary only, not on sibling mutates. Only
-  one mutate (diarize) ships today. When a second lands, `resolve` must chain a deterministic
-  order among mutates sharing a written slot (or reject an undeclared overlap).
+## Review follow-ups — ALL THREE CLOSED (2026-07-21, WS-H — [ws-dp-hardening.md](ws-dp-hardening.md))
+- ~~**`INGEST_MODALITY_LIMITS` HOL-blocks (finding #3) — HARD PREREQUISITE before enabling.**~~
+  **CLOSED:** the queue now takes the modality permit ATOMICALLY at dispatch and scans past
+  capped jobs (permit-before-dequeue, one shared bound preserved) — no worker ever holds a
+  job it can't start. The startup EXPERIMENTAL warning is gone; the knob is production-safe.
+- ~~**Mutable-slots fingerprint guard is order-dependent (finding #6, LOW).**~~
+  **CLOSED:** the fingerprint guard is DELETED, replaced by the SlotView capability proxy —
+  a sidecar is refused even a READ of the primary's `mutable_slots` (no reference ⇒ illegal
+  mutation impossible by construction), violations raise `SlotAccessError` at the offending
+  line, order-independently.
+- ~~**Two concurrent mutate stages on an overlapping slot could race (finding #7, LOW, latent).**~~
+  **CLOSED:** mutates declare `writes` (⊆ primary `mutable_slots`, registration+resolution
+  enforced); intersecting writers are chained by `(order, name)` via implicit deps (never
+  concurrent), and `pipeline_version` composes mutate fragments in that chain order — the
+  dialect encodes the sequence. Shipped dialects byte-identical.
 
 ## Worklog
 - 2026-07-20 — Architecture atlas published; decisions locked. Pre-implementation design

@@ -72,6 +72,7 @@ class CaptionsStage(Stage):
     modality = "video"
     kind = "primary"
     needs = ("keyframes",)
+    provides = ("captions",)   # slot commits are declared (ownership is reviewable)
     order = 10
 
     def version_fragment(self, settings) -> str:

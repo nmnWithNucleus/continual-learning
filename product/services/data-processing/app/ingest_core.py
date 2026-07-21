@@ -114,23 +114,36 @@ async def process_chunk(
             )
 
     # ---- Run the modality Processor -----------------------------------------------
-    # A GraphProcessor exposes ``process_async``: awaited on the loop, it runs its stage
-    # graph with real intra-chunk concurrency (each stage self-offloads — run_sync →
-    # threadpool, run_async → native IO). A legacy sync ``process`` runs in the
-    # threadpool as before. Either way, the whole run is one ``dp_stage_seconds
-    # {stage="process"}`` observation, so the metric contract is unchanged.
+    # Three execution profiles, one metric: the whole run is a single
+    # ``dp_stage_seconds{stage="process"}`` observation regardless of profile.
+    #   * INGEST_ISOLATION=subprocess — the hardened path: the Processor step runs in a
+    #     killable CHILD (poison chunk kills one chunk, not the service; a drain cancel
+    #     SIGKILLs it instead of leaking a ghost thread). NOTE: the child re-resolves
+    #     the processor from the registry by modality (same env → same plugin); the
+    #     ``processor`` argument's pipeline_version was already computed in-parent.
+    #   * a GraphProcessor's ``process_async``: awaited on the loop, stages self-offload
+    #     (run_sync → threadpool, run_async → native IO) — real intra-chunk concurrency.
+    #   * a legacy sync ``process``: one threadpool hop, as always.
     span_seconds = chunk_span_seconds(c1)
     t0 = perf_counter()
-    process_async = getattr(processor, "process_async", None)
-    if process_async is not None:
-        resources = SimpleNamespace(
-            metrics=metrics, vlm_pool=getattr(app_state, "vlm_pool", None) if app_state else None,
+    if settings.ingest_isolation == "subprocess":
+        from .isolation import run_processor_in_subprocess  # lazy: only when enabled
+        units = await run_processor_in_subprocess(
+            modality=modality, c1=c1, blob=blob_bytes,
+            settings=settings, span_seconds=span_seconds,
         )
-        units = await process_async(c1, blob_bytes, settings, span_seconds, resources)
     else:
-        units = await run_in_threadpool(
-            processor.process, c1, blob_bytes, settings, span_seconds
-        )
+        process_async = getattr(processor, "process_async", None)
+        if process_async is not None:
+            resources = SimpleNamespace(
+                metrics=metrics,
+                vlm_pool=getattr(app_state, "vlm_pool", None) if app_state else None,
+            )
+            units = await process_async(c1, blob_bytes, settings, span_seconds, resources)
+        else:
+            units = await run_in_threadpool(
+                processor.process, c1, blob_bytes, settings, span_seconds
+            )
     _observe(metrics, "dp_stage_seconds", perf_counter() - t0,
              {"modality": modality, "stage": "process"})
     if not units:  # a Processor must return >= 1 unit — terminal (a plugin bug)

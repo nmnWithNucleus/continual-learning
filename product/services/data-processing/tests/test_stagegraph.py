@@ -16,7 +16,8 @@ from app.stagegraph.executor import (
     GraphResolutionError, resolve, run_graph,
 )
 from app.stagegraph.stage import (
-    SKIPPED, Stage, StageContext, StageRegistrationError, StageResult, register_stage,
+    SKIPPED, SlotAccessError, Stage, StageContext, StageRegistrationError, StageResult,
+    register_stage,
 )
 
 
@@ -73,27 +74,46 @@ def test_independent_stages_run_concurrently():
 
 # ---- version composition -------------------------------------------------------
 
-def test_pipeline_version_composes_sorted_fragments():
+def test_pipeline_version_mutates_in_chain_order_then_sorted_sidecars():
+    """Mutate fragments compose in (order, name) chain order — the dialect encodes the
+    mutate execution SEQUENCE (the records genuinely differ under a different order) —
+    then non-mutate fragments append sorted (declaration order never perturbs ids)."""
     class Diar(Stage):
         name = "diar"; modality = "m"; kind = "mutate"; needs = ("primary",); order = 10
+        writes = ("shared",)
         def version_fragment(self, settings): return "+diar"
         def run_sync(self, ctx): return StageResult()
 
-    class Z(Stage):  # sidecar with a fragment, out of order to prove sorting
+    class Z(Stage):  # sidecar with a fragment that sorts BEFORE the mutate's
         name = "z"; modality = "m"; kind = "sidecar"; order = 5
         def version_fragment(self, settings): return "+aaa"
         def run_sync(self, ctx): return StageResult()
 
     resolved = resolve("m", [_Primary(), Diar(), Z()], None)
-    assert resolved.pipeline_version == "base-v0+aaa+diar"  # base + sorted(fragments)
+    assert resolved.pipeline_version == "base-v0+diar+aaa"  # mutate chain, then sorted
 
-    # A disabled mutate contributes nothing (its enabledness IS its fragment).
+    # A disabled mutate contributes nothing (its enabledness IS its fragment) — and is
+    # exempt from the `writes` requirement (it will never run).
     class OffDiar(Stage):
         name = "diar"; modality = "m"; kind = "mutate"; needs = ("primary",); order = 10
         def version_fragment(self, settings): return ""   # off
         def run_sync(self, ctx): return StageResult()
 
     assert resolve("m", [_Primary(), OffDiar()], None).pipeline_version == "base-v0"
+
+
+def test_two_mutates_version_encodes_chain_order():
+    def mut(nm, ordr, frag):
+        return type(nm, (Stage,), {
+            "name": nm, "modality": "m", "kind": "mutate", "order": ordr,
+            "writes": ("shared",),
+            "version_fragment": lambda self, s, f=frag: f,
+            "run_sync": lambda self, ctx: StageResult(),
+        })()
+
+    # Declared out of order on purpose: composition follows (order, name), not the list.
+    resolved = resolve("m", [mut("later", 20, "+bbb"), _Primary(), mut("earlier", 10, "+zzz")], None)
+    assert resolved.pipeline_version == "base-v0+zzz+bbb"  # chain order, NOT sorted
 
 
 # ---- failure semantics ---------------------------------------------------------
@@ -137,7 +157,7 @@ def test_best_effort_failure_skips_and_cascades_and_commits_nothing():
     assert ran["c"] is False                          # cascade-skipped
 
 
-def test_commit_on_success_only():
+def test_commit_on_success_only_and_no_partial_leak():
     class Good(Stage):
         name = "good"; modality = "m"; kind = "sidecar"; policy = "best_effort"; order = 10
         provides = ("k",)
@@ -147,16 +167,17 @@ def test_commit_on_success_only():
         name = "bad"; modality = "m"; kind = "sidecar"; policy = "best_effort"; order = 20
         provides = ("j",)
         def run_sync(self, ctx):
-            ctx.slots["leaked"] = True   # a partial write BEFORE raising
-            raise ValueError("x")
+            ctx.slots["leaked"] = True   # direct write: REFUSED by the SlotView
+            raise ValueError("x")        # (never reached)
 
     resolved = resolve("m", [_Primary(), Good(), Bad()], None)
     ctx = _ctx()
     asyncio.run(run_graph(resolved, ctx))
     assert ctx.slots.get("k") == "v"          # succeeded stage committed
     assert "j" not in ctx.slots               # failed stage's provides absent
-    # (a direct ctx.slots mutation still lands — that's why the fingerprint guard exists
-    #  for the mutable primary slots; non-mutable keys are the stage's own business.)
+    # The old partial-leak hole is CLOSED: a direct ctx.slots write from a stage raises
+    # SlotAccessError at the call site (here: best_effort -> the stage just skips).
+    assert "leaked" not in ctx.slots
 
 
 # ---- guards --------------------------------------------------------------------
@@ -170,16 +191,261 @@ def test_duplicate_discriminator_is_terminal():
         _run([_Primary(), Dup()])
 
 
-def test_sidecar_mutating_primary_slot_is_caught():
+def test_sidecar_cannot_even_read_a_mutable_slot():
+    """The capability model: a sidecar is refused the REFERENCE (read raises), so
+    mutation is impossible by construction — caught at the offending line."""
     class Sneak(Stage):
         name = "sneak"; modality = "m"; kind = "sidecar"; needs = ("primary",); order = 10
         async def run_async(self, ctx):
-            await asyncio.sleep(0)          # let the fingerprint snapshot settle first
-            ctx.slots["shared"].append(1)  # illegal: mutate the primary's mutable slot
+            ctx.slots["shared"].append(1)  # illegal: raises on the READ of 'shared'
             return StageResult()
 
-    with pytest.raises(RuntimeError, match="mutable_slots changed"):
+    with pytest.raises(SlotAccessError, match="may not read primary mutable slot"):
         _run([_Primary(), Sneak()])
+
+
+def test_illegal_sidecar_access_caught_even_while_mutate_still_running():
+    """THE order-dependence hole the old fingerprint guard had: an illegal write landing
+    BEFORE the mutate cohort finished was baked into its reference snapshot and missed.
+    The SlotView catches it at the call site regardless of what else is in flight."""
+    class SlowMut(Stage):
+        name = "slowmut"; modality = "m"; kind = "mutate"; writes = ("shared",); order = 10
+        def version_fragment(self, settings): return "+slow"
+        async def run_async(self, ctx):
+            await asyncio.sleep(30)  # never finishes on its own; cancelled by the failure
+            return StageResult()
+
+    class Sneak(Stage):
+        name = "sneak"; modality = "m"; kind = "sidecar"; needs = ("primary",); order = 20
+        async def run_async(self, ctx):
+            ctx.slots["shared"].append(1)  # lands while slowmut is mid-flight
+            return StageResult()
+
+    with pytest.raises(SlotAccessError, match="may not read primary mutable slot"):
+        _run([_Primary(), SlowMut(), Sneak()])
+
+
+def test_sidecar_direct_slot_write_is_refused():
+    class Bad(Stage):
+        name = "bad"; modality = "m"; kind = "sidecar"; order = 10
+        def run_sync(self, ctx):
+            ctx.slots["mine"] = 1   # even a NON-mutable key: commits go via StageResult
+            return StageResult()
+
+    with pytest.raises(SlotAccessError, match="may not write slot"):
+        _run([_Primary(), Bad()])
+
+
+def test_mutate_write_outside_declared_writes_is_refused():
+    class TwoSlot(_Primary):
+        mutable_slots = ("shared", "other")
+        def run_sync(self, ctx): return StageResult(slots={"shared": [], "other": []})
+
+    class Mut(Stage):
+        name = "mut"; modality = "m"; kind = "mutate"; writes = ("shared",); order = 10
+        def version_fragment(self, settings): return "+m"
+        def run_sync(self, ctx):
+            ctx.slots["other"] = [1]   # declared writes say 'shared' only
+            return StageResult()
+
+    with pytest.raises(SlotAccessError, match="may not write slot"):
+        _run([TwoSlot(), Mut()])
+
+
+def test_undeclared_stageresult_commit_is_loud_even_for_best_effort():
+    class Sloppy(Stage):
+        name = "sloppy"; modality = "m"; kind = "sidecar"; policy = "best_effort"; order = 10
+        # provides NOT declared — the commit below is a stage-file bug, not skippable
+        def run_sync(self, ctx): return StageResult(slots={"surprise": 1})
+
+    with pytest.raises(RuntimeError, match="committed undeclared slot"):
+        _run([_Primary(), Sloppy()])
+
+
+# ---- mutate overlap chaining (finding #7) --------------------------------------
+
+def _mk_mutate(nm: str, ordr: int, frag: str, run):
+    return type(nm, (Stage,), {
+        "name": nm, "modality": "m", "kind": "mutate", "order": ordr,
+        "writes": ("shared",),
+        "version_fragment": lambda self, s, f=frag: f,
+        "run_async": run,
+    })()
+
+
+def test_overlapping_mutates_are_chained_by_order_never_concurrent():
+    """Two mutates writing the same slot execute strictly in (order, name) sequence —
+    the slower earlier one always lands first, so the mutated record is deterministic.
+    (Concurrent execution would interleave nondeterministically — the #7 race.)"""
+    async def run_a(self, ctx):
+        await asyncio.sleep(0.05)          # slower; concurrency would let B beat it
+        ctx.slots["shared"] = ctx.slots["shared"] + ["a"]
+        return StageResult()
+
+    async def run_b(self, ctx):
+        ctx.slots["shared"] = ctx.slots["shared"] + ["b"]
+        return StageResult()
+
+    a = _mk_mutate("A", 10, "+a", run_a)
+    b = _mk_mutate("B", 20, "+b", run_b)
+    resolved = resolve("m", [_Primary(), b, a], None)   # declared out of order
+    assert "A" in resolved.needs["B"]                    # the implicit chain edge
+    assert resolved.pipeline_version == "base-v0+a+b"    # dialect encodes the sequence
+    ctx = _ctx()
+    asyncio.run(run_graph(resolved, ctx))
+    assert ctx.slots["shared"] == ["a", "b"]             # order held despite A being slow
+
+
+def test_disjoint_mutates_are_not_chained():
+    class Wide(_Primary):
+        mutable_slots = ("shared", "other")
+        def run_sync(self, ctx): return StageResult(slots={"shared": [], "other": []})
+
+    async def run_x(self, ctx): return StageResult()
+    x = _mk_mutate("X", 10, "+x", run_x)
+    y = type("Y", (Stage,), {
+        "name": "Y", "modality": "m", "kind": "mutate", "order": 20,
+        "writes": ("other",),                    # disjoint from X's ('shared',)
+        "version_fragment": lambda self, s: "+y",
+        "run_async": run_x,
+    })()
+    resolved = resolve("m", [Wide(), x, y], None)
+    assert "X" not in resolved.needs["Y"]        # no chain edge — free to run concurrently
+
+
+def test_enabled_mutate_without_writes_is_resolution_error():
+    bad = type("NoWrites", (Stage,), {
+        "name": "nw", "modality": "m", "kind": "mutate", "order": 10,
+        "version_fragment": lambda self, s: "+nw",
+        "run_sync": lambda self, ctx: StageResult(),
+    })()
+    with pytest.raises(GraphResolutionError, match="must declare `writes`"):
+        resolve("m", [_Primary(), bad], None)
+
+
+def test_mutate_writes_outside_primary_mutables_is_resolution_error():
+    bad = type("Rogue", (Stage,), {
+        "name": "rogue", "modality": "m", "kind": "mutate", "order": 10,
+        "writes": ("not_offered",),
+        "version_fragment": lambda self, s: "+r",
+        "run_sync": lambda self, ctx: StageResult(),
+    })()
+    with pytest.raises(GraphResolutionError, match="not in primary"):
+        resolve("m", [_Primary(), bad], None)
+
+
+def test_explicit_needs_contradicting_chain_order_is_a_cycle_error():
+    """order says A(10) then B(20); A explicitly needing B contradicts the chain —
+    loud error, never a silent reorder."""
+    async def run(self, ctx): return StageResult()
+    a = type("A", (Stage,), {
+        "name": "A", "modality": "m", "kind": "mutate", "order": 10,
+        "writes": ("shared",), "needs": ("B",),
+        "version_fragment": lambda self, s: "+a", "run_async": run,
+    })()
+    b = _mk_mutate("B", 20, "+b", run)
+    with pytest.raises(GraphResolutionError, match="cycle"):
+        resolve("m", [_Primary(), a, b], None)
+
+
+def test_duplicate_provides_is_resolution_error():
+    class S1(Stage):
+        name = "s1"; modality = "m"; kind = "sidecar"; order = 10; provides = ("dup",)
+        def run_sync(self, ctx): return StageResult(slots={"dup": 1})
+
+    class S2(Stage):
+        name = "s2"; modality = "m"; kind = "sidecar"; order = 20; provides = ("dup",)
+        def run_sync(self, ctx): return StageResult(slots={"dup": 2})
+
+    with pytest.raises(GraphResolutionError, match="already owned by"):
+        resolve("m", [_Primary(), S1(), S2()], None)
+
+
+def test_sidecar_provides_colliding_with_primary_mutable_slot_is_error():
+    """Review-confirmed hole, now closed: a sidecar declaring provides on a primary
+    MUTABLE slot would pass the old disjointness check (the primary need not repeat
+    mutable_slots in provides) and blind-clobber the mutate cohort's output via a
+    perfectly 'declared' StageResult commit. mutable_slots are primary-owned."""
+    class Clobber(Stage):
+        name = "clobber"; modality = "m"; kind = "sidecar"; order = 10
+        provides = ("shared",)   # collides with _Primary.mutable_slots
+        def run_sync(self, ctx): return StageResult(slots={"shared": ["scribble"]})
+
+    with pytest.raises(GraphResolutionError, match="already owned by"):
+        resolve("m", [_Primary(), Clobber()], None)
+
+
+def test_mutate_cannot_even_read_undeclared_mutable_slot():
+    """Review-confirmed aliasing hole, now closed: an in-place write through a READ
+    reference bypasses __setitem__, so the reference itself is withheld — a mutate
+    sees only the mutable slots it declared in `writes` (which also chains it)."""
+    class TwoSlot(_Primary):
+        mutable_slots = ("shared", "other")
+        def run_sync(self, ctx): return StageResult(slots={"shared": [], "other": []})
+
+    class Alias(Stage):
+        name = "alias"; modality = "m"; kind = "mutate"; writes = ("shared",); order = 10
+        def version_fragment(self, settings): return "+al"
+        def run_sync(self, ctx):
+            ctx.slots["other"].append(1)   # read-then-scribble on an UNDECLARED slot
+            return StageResult()
+
+    with pytest.raises(SlotAccessError, match="may not read primary mutable slot"):
+        _run([TwoSlot(), Alias()])
+
+
+def test_non_sidecar_returning_units_is_loud():
+    class BadMut(Stage):
+        name = "badmut"; modality = "m"; kind = "mutate"; writes = ("shared",); order = 10
+        def version_fragment(self, settings): return "+bm"
+        def run_sync(self, ctx):
+            return StageResult(units=[_unit("rogue")])   # mutates never emit units
+
+    with pytest.raises(RuntimeError, match="only sidecars emit units"):
+        _run([_Primary(), BadMut()])
+
+
+def test_stage_cannot_mutate_c1_chunk_identity():
+    """c1 feeds record_id + the journal row AFTER the graph runs — a stage must not
+    be able to corrupt chunk identity (esp. a best_effort one that then 'skips')."""
+    class Corrupt(Stage):
+        name = "corrupt"; modality = "m"; kind = "sidecar"; policy = "best_effort"; order = 10
+        def run_sync(self, ctx):
+            ctx.c1["chunk_id"] = "evil"   # read-only mapping -> TypeError -> skip
+            return StageResult()
+
+    ctx = _ctx()
+    original = dict(ctx.c1)
+    resolved = resolve("m", [_Primary(), Corrupt()], None)
+    asyncio.run(run_graph(resolved, ctx))  # best_effort: stage skips, chunk survives
+    assert ctx.c1 == original              # identity untouched
+
+
+def test_three_writer_chain_is_transitive_and_version_ordered():
+    """3 mutates on one slot: pairwise chain a->b->c, execution strictly ordered,
+    version fragments in chain sequence (pins the shape the roadmap's speaker_id /
+    redaction stages will exercise)."""
+    def mut(nm, ordr, frag, tag, delay):
+        async def run(self, ctx):
+            await asyncio.sleep(delay)
+            ctx.slots["shared"] = ctx.slots["shared"] + [tag]
+            return StageResult()
+        return type(nm, (Stage,), {
+            "name": nm, "modality": "m", "kind": "mutate", "order": ordr,
+            "writes": ("shared",),
+            "version_fragment": lambda self, s, f=frag: f,
+            "run_async": run,
+        })()
+
+    a = mut("A", 10, "+a", "a", 0.04)   # slowest first: concurrency would reorder
+    b = mut("B", 20, "+b", "b", 0.02)
+    c = mut("C", 30, "+c", "c", 0.0)
+    resolved = resolve("m", [_Primary(), c, a, b], None)   # declared shuffled
+    assert "A" in resolved.needs["B"] and "B" in resolved.needs["C"]
+    assert resolved.pipeline_version == "base-v0+a+b+c"
+    ctx = _ctx()
+    asyncio.run(run_graph(resolved, ctx))
+    assert ctx.slots["shared"] == ["a", "b", "c"]
 
 
 # ---- resolution errors ---------------------------------------------------------
@@ -256,6 +522,24 @@ def test_registration_requires_exactly_one_run_method(clean_reg):
         register_stage(type("Bad", (Stage,), {
             "name": "b", "modality": "zz", "kind": "sidecar", "order": 0,
         }))  # neither run_sync nor run_async defined
+
+
+def test_registration_requires_writes_on_mutate(clean_reg):
+    with pytest.raises(StageRegistrationError, match="must declare `writes`"):
+        register_stage(type("Bad", (Stage,), {
+            "name": "b", "modality": "zz", "kind": "mutate", "order": 0,
+            "version_fragment": lambda self, s: "+t",
+            "run_sync": lambda self, ctx: StageResult(),
+        }))
+
+
+def test_registration_rejects_writes_on_non_mutate(clean_reg):
+    with pytest.raises(StageRegistrationError, match="only mutate stages declare"):
+        register_stage(type("Bad", (Stage,), {
+            "name": "b", "modality": "zz", "kind": "sidecar", "order": 0,
+            "writes": ("x",),
+            "run_sync": lambda self, ctx: StageResult(),
+        }))
 
 
 def test_registration_rejects_duplicate_order(clean_reg):

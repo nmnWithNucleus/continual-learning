@@ -9,7 +9,8 @@ byte-for-byte the pre-seam v0 id.
 ``version_fragment`` is the BASE audio dialect (``asr-mock-v0`` / ``asr-fw-v1``),
 delegating to the selected backend exactly as ``pipeline_version`` always has. The
 ``segments`` + ``enrichments`` slots are declared mutable — the diarize stage fills
-speakers into them in place; the executor's fingerprint guard keeps everyone else out.
+speakers into them in place; the executor's SlotView keeps everyone else out (a
+sidecar is never even handed a reference to them).
 """
 from __future__ import annotations
 
