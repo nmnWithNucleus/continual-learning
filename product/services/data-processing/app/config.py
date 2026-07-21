@@ -15,6 +15,11 @@ def _as_bool(value: str) -> bool:
     return value.strip().lower() not in ("0", "false", "no", "off", "")
 
 
+def _choice(value: str, allowed: tuple[str, ...], default: str) -> str:
+    value = value.strip().lower()
+    return value if value in allowed else default
+
+
 def _default_var_dir() -> str:
     """<service>/var — the durable ingest journal (dp.db) lives here."""
     return str(Path(__file__).resolve().parents[1] / "var")
@@ -52,6 +57,13 @@ class Settings:
     redrive_max_attempts: int  # startup re-drives before a chunk dead-letters (crash-loop cap)
     # --- Fairness ------------------------------------------------------------------
     ingest_modality_limits: str  # per-modality max-in-flight, e.g. "video=2,audio=4"
+    # --- Subprocess isolation (M7 hardening) ----------------------------------------
+    # "subprocess" runs each chunk's Processor step in a killable child: a poison
+    # chunk's segfault/OOM takes down ONE chunk (not the service), and a drain cancel
+    # SIGKILLs the child instead of leaking an unkillable ghost thread. Default off:
+    # in-process, byte-identical.
+    ingest_isolation: str        # "off" | "subprocess"
+    ingest_subproc_start: str    # multiprocessing start method: spawn | fork | forkserver
     # --- D9 observability ----------------------------------------------------------
     metrics_enabled: bool     # expose /metrics + record request/pipeline metrics
 
@@ -80,5 +92,9 @@ def get_settings() -> Settings:
         dp_var_dir=os.getenv("DP_VAR_DIR", _default_var_dir()),
         redrive_max_attempts=max(1, int(os.getenv("DP_REDRIVE_MAX_ATTEMPTS", "5"))),
         ingest_modality_limits=os.getenv("INGEST_MODALITY_LIMITS", "").strip(),
+        ingest_isolation=_choice(os.getenv("INGEST_ISOLATION", "off"),
+                                 ("off", "subprocess"), "off"),
+        ingest_subproc_start=_choice(os.getenv("INGEST_SUBPROC_START", "spawn"),
+                                     ("spawn", "fork", "forkserver"), "spawn"),
         metrics_enabled=_as_bool(os.getenv("METRICS_ENABLED", "1")),
     )
