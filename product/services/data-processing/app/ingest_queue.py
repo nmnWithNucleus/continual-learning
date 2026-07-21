@@ -11,6 +11,19 @@ retries → visible ``gaps``) instead of an unbounded backlog an OOM-kill would 
 silently. Disjoint counters — ``queued`` (in the queue) vs ``processing`` (in a worker)
 — so the drain barrier and the queue-depth gauge never double-count a claimed item.
 
+Per-modality fairness (``INGEST_MODALITY_LIMITS``, e.g. ``"video=2"``) is enforced
+AT DISPATCH: a worker atomically takes a modality permit in the same event-loop tick it
+removes a job, and it only removes a job whose permit is available — scanning past
+capped-modality jobs to the first eligible one. A capped burst therefore QUEUES without
+occupying a single worker, and other modalities keep flowing around it (the old design
+acquired the permit after a shared-FIFO ``get`` and head-of-line-blocked the pool —
+review finding #3, fixed here). One shared bound still governs backpressure: capacity
+counts every queued job regardless of modality, so the 503 story is unchanged. With the
+knob empty (default), every job is always eligible and dispatch is exactly FIFO —
+byte-identical to the unlimited pool. A chunk waiting out a retry backoff releases its
+permit for the sleep (a sleeping chunk must not occupy a modality slot) and re-acquires
+before the next attempt.
+
 Failure handling per chunk:
   * ``TransientError`` (blob 5xx / timeout, /context blip) → retry up to
     ``INGEST_MAX_RETRIES`` with linear backoff, then dead-letter;
@@ -22,18 +35,19 @@ Failure handling per chunk:
     COUNTER, not a recoverable DLQ: nothing re-drives it in this slice (durable
     pending-journal auto-recovery stays M7). The loss is VISIBLE, not silent.
 
-Graceful drain: on shutdown, ``await wait_for(queue.join(), INGEST_DRAIN_TIMEOUT)`` lets
-in-flight + queued work finish, then workers are cancelled. A chunk cancelled mid-flight
+Graceful drain: on shutdown, wait (bounded by ``INGEST_DRAIN_TIMEOUT``) for queued +
+in-flight work to finish, then workers are cancelled. A chunk cancelled mid-flight
 (drain timeout, or kill) releases its claim in a ``finally`` so it is never orphaned —
 it reads ``recording`` in the report (in-flight/unconfirmed), re-drivable from
-recording's durable ledger. ``task_done()`` runs in a ``finally`` too, so a mid-process
-cancel can't wedge ``queue.join()`` forever.
+recording's durable ledger. The done-accounting runs in a ``finally`` too, so a
+mid-process cancel can't wedge the drain barrier forever.
 """
 from __future__ import annotations
 
 import asyncio
 import contextlib
 import logging
+from collections import deque
 from typing import Any
 
 from fastapi import FastAPI
@@ -53,7 +67,15 @@ class QueueFull(Exception):
 
 
 class IngestQueue:
-    """A bounded asyncio queue + N worker tasks, pinned to the running loop."""
+    """A bounded job buffer + N worker tasks with permit-at-dispatch fairness,
+    pinned to the running loop.
+
+    Wakeup discipline: every state change that could make a blocked coroutine
+    runnable (enqueue, permit release, slot freed) wakes ALL relevant waiters, which
+    re-scan and re-wait if still blocked. No permit/item is ever transferred through
+    a future, so a waiter cancelled between wake and resume can never strand one
+    (lost-wakeup-safe by construction; the herd is tiny at worker-pool scale).
+    """
 
     def __init__(self, app: FastAPI, *, workers: int, maxsize: int,
                  max_retries: int, backoff: float, modality_limits: str = "") -> None:
@@ -61,19 +83,20 @@ class IngestQueue:
         self._n_workers = max(1, workers)
         self._max_retries = max(0, max_retries)
         self._backoff = backoff
-        self._queue: asyncio.Queue = asyncio.Queue(maxsize=max(1, maxsize))
+        self._maxsize = max(1, maxsize)
+        self._buf: deque[dict[str, Any]] = deque()   # ONE shared bound (503 story)
         self._tasks: list[asyncio.Task] = []
         self._processing = 0
+        self._unfinished = 0                          # queued + in-worker (drain barrier)
+        self._all_done = asyncio.Event()
+        self._all_done.set()                          # empty queue == drained
+        self._getters: deque[asyncio.Future] = deque()  # workers awaiting dispatchability
+        self._putters: deque[asyncio.Future] = deque()  # submit_wait awaiting a free slot
         self.dead_letters: list[dict[str, Any]] = []
         self.loop = asyncio.get_running_loop()
-        # Per-modality fairness: a max-in-flight semaphore per modality so a burst of one
-        # (e.g. video) can't occupy every worker and starve another's (audio) latency.
-        # Created on THIS loop (loop-affinity). Empty config -> flat pool (today's path,
-        # byte-identical). ⚠️ EXPERIMENTAL / off by default: the permit is acquired AFTER
-        # the shared-FIFO dequeue, so under load a blocked worker HOL-blocks the pool
-        # (review finding #3). Do NOT enable in production until per-modality queue
-        # partitioning lands — see handoff/ws-dp-stage-graph.md §Review follow-ups.
-        self._modality_sems: dict[str, asyncio.Semaphore] = {}
+        # Per-modality max-in-flight permits: available counts, taken at dispatch.
+        # Empty config -> no limits -> pure FIFO (today's path, byte-identical).
+        self._limits: dict[str, int] = {}
         for part in modality_limits.split(","):
             part = part.strip()
             if not part or "=" not in part:
@@ -84,13 +107,13 @@ class IngestQueue:
             except ValueError:
                 continue
             if name.strip() and limit > 0:
-                self._modality_sems[name.strip()] = asyncio.Semaphore(limit)
-        if self._modality_sems:
-            logger.warning(
-                "INGEST_MODALITY_LIMITS=%r is EXPERIMENTAL: the permit is acquired after "
-                "the shared-FIFO dequeue, so it can head-of-line-block the pool. Not for "
-                "production until per-modality queue partitioning lands (ws-dp-stage-graph).",
-                modality_limits,
+                self._limits[name.strip()] = limit
+        self._permits: dict[str, int] = dict(self._limits)
+        if self._limits:
+            logger.info(
+                "per-modality in-flight limits active: %r — permits are taken at "
+                "dispatch (a capped modality's backlog queues without occupying a "
+                "worker; other modalities flow around it)", self._limits,
             )
 
     # ------------------------------------------------------------------ lifecycle
@@ -99,7 +122,7 @@ class IngestQueue:
             self.loop.create_task(self._worker(i)) for i in range(self._n_workers)
         ]
         logger.info("ingest queue started: %d workers, maxsize=%d",
-                    self._n_workers, self._queue.maxsize)
+                    self._n_workers, self._maxsize)
 
     async def drain_and_close(self, timeout: float) -> None:
         """Finish queued + in-flight work (bounded by ``timeout``), then stop workers.
@@ -109,12 +132,12 @@ class IngestQueue:
         still merely QUEUED at a hard timeout is lost-but-visible (reads 'recording' /
         re-POST-able) — the honest boundary of this slice (durable-queue recovery = M7)."""
         try:
-            await asyncio.wait_for(self._queue.join(), timeout)
+            await asyncio.wait_for(self._all_done.wait(), timeout)
         except asyncio.TimeoutError:
             logger.warning(
                 "ingest drain timed out after %.1fs: %d queued, %d processing — "
                 "cancelling; unfinished chunks are re-drivable from recording's ledger",
-                timeout, self._queue.qsize(), self._processing,
+                timeout, len(self._buf), self._processing,
             )
         for task in self._tasks:
             task.cancel()
@@ -123,39 +146,108 @@ class IngestQueue:
 
     # ------------------------------------------------------------------- counters
     def queued(self) -> int:
-        return self._queue.qsize()
+        return len(self._buf)
 
     def processing(self) -> int:
         return self._processing
 
     def depth(self) -> int:
         """Total outstanding work = queued + in a worker (disjoint sum)."""
-        return self._queue.qsize() + self._processing
+        return len(self._buf) + self._processing
 
     # ---------------------------------------------------------------------- submit
     def submit(self, job: dict[str, Any]) -> None:
         """Enqueue a claimed chunk. Raises ``QueueFull`` if at capacity — the caller
         MUST release the dedup claim + return 503 (never a silent drop)."""
-        try:
-            self._queue.put_nowait(job)
-        except asyncio.QueueFull as exc:
-            raise QueueFull() from exc
+        if len(self._buf) >= self._maxsize:
+            raise QueueFull()
+        self._enqueue(job)
 
     async def submit_wait(self, job: dict[str, Any]) -> None:
         """Enqueue, WAITING for capacity — the startup re-drive path. Unlike the HTTP
         accept (which must answer now: full -> 503), the re-driver is a background task
         that can simply wait for workers to drain a slot, so a pending backlog larger
         than the queue bound is re-driven completely instead of stranded."""
-        await self._queue.put(job)
+        while len(self._buf) >= self._maxsize:
+            await self._wait_on(self._putters)
+        self._enqueue(job)
+
+    def _enqueue(self, job: dict[str, Any]) -> None:
+        self._buf.append(job)
+        self._unfinished += 1
+        self._all_done.clear()
+        self._wake_all(self._getters)
+
+    # ------------------------------------------------------- dispatch + permits
+    def _wake_all(self, waiters: deque) -> None:
+        while waiters:
+            fut = waiters.popleft()
+            if not fut.done():
+                fut.set_result(None)
+
+    async def _wait_on(self, waiters: deque) -> None:
+        """Park until the matching state change wakes us; caller re-checks in a loop."""
+        fut = self.loop.create_future()
+        waiters.append(fut)
+        try:
+            await fut
+        finally:
+            with contextlib.suppress(ValueError):
+                waiters.remove(fut)  # cancelled (or raced) — never leave a dead future
+
+    def _take_permit(self, modality: str) -> bool:
+        """Atomically (single loop tick) claim a modality slot; True if unlimited."""
+        avail = self._permits.get(modality)
+        if avail is None:
+            return True
+        if avail <= 0:
+            return False
+        self._permits[modality] = avail - 1
+        return True
+
+    def _release_permit(self, modality: str) -> None:
+        if modality in self._permits:
+            self._permits[modality] += 1
+            # A queued job of this modality may now be dispatchable; a backoff-waiting
+            # retry may re-acquire. Both re-scan on wake.
+            self._wake_all(self._getters)
+
+    async def _acquire_permit(self, modality: str) -> None:
+        """Blocking permit re-acquire (the retry path, after a backoff sleep)."""
+        while not self._take_permit(modality):
+            await self._wait_on(self._getters)
+
+    async def _get_dispatchable(self) -> dict[str, Any]:
+        """Remove and return the FIRST job whose modality permit is available, taking
+        the permit in the same tick (atomic w.r.t. the loop — no await between check,
+        take and removal). Capped-modality jobs are scanned PAST, not blocked on: this
+        is the finding-#3 fix. FIFO holds among eligible jobs, and per-modality FIFO
+        holds absolutely (a skipped job stays ahead of its modality peers)."""
+        while True:
+            for i, job in enumerate(self._buf):
+                if self._take_permit(job["c1"]["modality"]):
+                    del self._buf[i]
+                    self._wake_all(self._putters)  # a bounded slot was freed
+                    return job
+            await self._wait_on(self._getters)
+
+    def _task_done(self) -> None:
+        self._unfinished -= 1
+        if self._unfinished <= 0:
+            self._all_done.set()
 
     # ---------------------------------------------------------------------- worker
     async def _worker(self, idx: int) -> None:
         while True:
-            job = await self._queue.get()  # cancel here → no item taken, no task_done
-            chunk_id = job["c1"]["chunk_id"]
+            job = await self._get_dispatchable()  # cancel here → nothing taken
+            c1 = job["c1"]
+            chunk_id, modality = c1["chunk_id"], c1["modality"]
+            # Permit bookkeeping rides a mutable flag so a cancel during a backoff
+            # sleep (permit already released) can never double-release in the finally.
+            permit = {"held": modality in self._limits}
             self._processing += 1
             try:
-                await self._run_job(job)
+                await self._run_job(job, permit)
             except asyncio.CancelledError:
                 # Drain/shutdown mid-flight: release the claim so it's never orphaned.
                 self._deps().dedup.release_inflight(chunk_id)
@@ -169,17 +261,13 @@ class IngestQueue:
                                  idx, chunk_id)
             finally:
                 self._processing -= 1
-                self._queue.task_done()  # exactly one per get() — join() stays correct
+                if permit["held"]:
+                    self._release_permit(modality)
+                self._task_done()  # exactly one per dispatch — the drain barrier holds
 
-    def _sem_for(self, modality: str):
-        """Per-modality fairness gate for ONE processing attempt (nullcontext when no
-        limit is configured). Held only around process_chunk — NOT across the retry
-        backoff sleep, so a chunk waiting to retry never occupies a modality slot."""
-        sem = self._modality_sems.get(modality)
-        return sem if sem is not None else contextlib.nullcontext()
-
-    async def _run_job(self, job: dict[str, Any]) -> None:
+    async def _run_job(self, job: dict[str, Any], permit: dict[str, bool]) -> None:
         c1 = job["c1"]
+        modality = c1["modality"]
         deps = self._deps()
         # Crash-loop attribution: charge a re-drive processing attempt to THIS chunk once,
         # before touching it — so a chunk whose processing hard-crashes the service accrues
@@ -190,19 +278,18 @@ class IngestQueue:
         attempt = 0
         while True:
             try:
-                async with self._sem_for(c1["modality"]):
-                    await process_chunk(
-                        c1=c1,
-                        settings=job["settings"],
-                        processor=job["processor"],
-                        pipeline_version=job["pipeline_version"],
-                        storage=self._app.state.storage,  # read per call (test seam)
-                        dedup=deps.dedup,
-                        metrics=deps.metrics,
-                        journal=deps.journal,          # durable receipt inside the core,
-                        epoch=job.get("epoch", 0),     # epoch-guarded against stale workers
-                        app_state=self._app.state,
-                    )
+                await process_chunk(
+                    c1=c1,
+                    settings=job["settings"],
+                    processor=job["processor"],
+                    pipeline_version=job["pipeline_version"],
+                    storage=self._app.state.storage,  # read per call (test seam)
+                    dedup=deps.dedup,
+                    metrics=deps.metrics,
+                    journal=deps.journal,          # durable receipt inside the core,
+                    epoch=job.get("epoch", 0),     # epoch-guarded against stale workers
+                    app_state=self._app.state,
+                )
             except asyncio.CancelledError:
                 raise
             except ProcessingError as exc:
@@ -221,15 +308,23 @@ class IngestQueue:
                 # before-dedup); here only the in-memory note + metrics remain.
                 deps.continuity.note_processed(c1["stream_id"], c1["sequence"])
                 self._inc("dp_ingest_total",
-                          {"modality": c1["modality"], "result": "processed"})
+                          {"modality": modality, "result": "processed"})
                 return
 
             if transient and attempt < self._max_retries:
                 attempt += 1
-                self._inc("dp_ingest_retries_total", {"modality": c1["modality"]})
+                self._inc("dp_ingest_retries_total", {"modality": modality})
                 logger.warning("transient failure on chunk %s (retry %d/%d): %s",
                                c1["chunk_id"], attempt, self._max_retries, detail)
+                # A chunk waiting out its backoff must not occupy a modality slot:
+                # release for the sleep, re-acquire before the next attempt.
+                if permit["held"]:
+                    permit["held"] = False
+                    self._release_permit(modality)
                 await asyncio.sleep(self._backoff * attempt)
+                if modality in self._limits:
+                    await self._acquire_permit(modality)
+                    permit["held"] = True
                 continue
             await self._dead_letter(c1, detail, transient=transient, epoch=job.get("epoch", 0))
             return
