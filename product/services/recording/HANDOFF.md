@@ -151,6 +151,15 @@ recording suite **120 tests** (110 + 7 async-seam/redrive/migration + 3 metrics)
   callable on restart / periodically) re-pushes each `dp_state='accepted'` chunk's original C1;
   DP's dedup makes it idempotent (a done chunk short-circuits to 200+record_ids → `confirm_chunk`
   → `clean`; still-pending re-ACKs 202). Detail: [../data-processing/handoff/ws-async-observability.md](../data-processing/handoff/ws-async-observability.md).
+  - **DP-side alignment (DP v1 + hardening, merged 2026-07-21):** DP now carries a **durable
+    ingest journal** — an accepted chunk survives a DP kill/restart and **auto-recovers on the
+    DP side** (its `/continuity` `processed`/`dead_lettered` sets rehydrate from the journal, so
+    a DP restart can no longer mis-report intact history as a gap). Net: the guarantee is now
+    durable on **both** legs. Recording's `/redrive` stays the belt-and-suspenders (and the
+    means to converge a chunk lost past DP's drain-timeout / a hard kill, which DP's journal
+    marks re-drivable but does not itself re-push to us). No recording change needed; the async
+    seam is unchanged (still 120 tests). Flipping `INGEST_ASYNC=1` on the fleet remains the
+    open D16 re-drive-drill decision.
 - **Glossary** (pinned so docs/sessions stay unambiguous): **segment** = client→server
   upload unit (~10 s self-contained clip; `seq` dense per capture session) · **chunk** =
   server→DP single-modality unit (one `/raw` blob + one C1 envelope; `sequence` dense per

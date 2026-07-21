@@ -182,8 +182,12 @@ Decided 2026-07-09 (D9). Observability is a **standing obligation on every servi
 add-on: an always-on system needs both founders to open one place and see any service's health.
 
 - **Each service exposes `/metrics`** (Prometheus text format) on its own port. Baseline every
-  service emits: **request rate, request-latency histogram, error rate** (the FastAPI services
-  get these from `prometheus-fastapi-instrumentator`; non-HTTP work emits equivalent counters).
+  service emits: **request rate, request-latency histogram, error rate**. *(Implementation note:
+  the first two services to ship `/metrics` — data-processing + recording, 2026-07-19 — use a
+  **zero-dependency in-house emitter** (`app/metrics.py`: a pure-ASGI middleware, no bodies
+  touched) rather than pull `prometheus-fastapi-instrumentator` into the frozen requirements, to
+  keep the headless/CI suite dependency-free; other services may use a library if they prefer.
+  Non-HTTP work emits equivalent counters.)*
   Service-specific additions: **inference → GPU** (via dcgm-exporter), **storage → DB/query**
   metrics, **data-processing → pipeline throughput/queue depth**, **recording → ingest rate +
   capture-health**, **continuum → training-job + eval-gate** metrics.

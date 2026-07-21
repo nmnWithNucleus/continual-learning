@@ -1,4 +1,8 @@
-# data-processing — VIDEO modality, HEAVY / OPTIONAL deps.
+# data-processing — VIDEO modality: system prereq + real-endpoint recipe.
+# NOTE: this file intentionally pins NO pip packages today — the mock path is stdlib +
+# base httpx, and the real `vlm` backend is base httpx to an HTTP endpoint. It documents
+# the ffmpeg SYSTEM prerequisite and the vLLM endpoint recipe, and holds the per-modality
+# slot for real video pip deps if any land later (kept parallel to requirements-audio.txt).
 #
 # The base service (requirements.txt) and the DEFAULT video path stay light: the
 # mock captioner (VIDEO_BACKEND=mock) needs nothing here, and the real captioner
