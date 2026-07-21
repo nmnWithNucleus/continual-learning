@@ -4,7 +4,7 @@
 > Cross-service build sequencing, integration plans, infra calls. Service-internal
 > engineering lives in each service's canvas, not here.
 
-**Status:** active · **Last updated:** 2026-07-20
+**Status:** active · **Last updated:** 2026-07-21
 
 ---
 
@@ -651,12 +651,41 @@ Considered and passed, on the record so we don't re-litigate:
   26** green), refs `main`=`dev`=origin confirmed, `INGEST_ASYNC` still 0-default, the
   fairness-knob startup warning present in code (`ingest_queue.py:88`). **The D16-era
   deferred false-`gaps` caveat is closed** (journal rehydration), so the async-trust rider
-  is now satisfiable — the `INGEST_ASYNC` fleet flip is a live decision. **CTO caveat drill
-  pending**; founders' inventory prepared: (1) `INGEST_MODALITY_LIMITS` HOL-block —
-  partition vs peek/skip vs remove-the-knob; (2) a mutate-ordering rule in `resolve` is a
-  hard prerequisite for any SECOND mutate stage (the ws drop-in table's own speaker-ID
-  example would trip finding #7); (3) fingerprint-guard order-dependence (LOW — the static
-  rule is the real guard); plus: Architecture-Atlas custody vs the D2 single-doc protocol
-  (the atlas isn't in the repo); the journal's `pipeline_version`-staleness reprocess
-  mechanics as the first real OQ5 code (continuum-kickoff input); `processed` retention;
-  fleet two merges behind (restart pending). Board synced.
+  is now satisfiable — the `INGEST_ASYNC` fleet flip is a live decision. Founders' caveat
+  inventory prepared for a drill: (1) `INGEST_MODALITY_LIMITS` HOL-block; (2) a mutate-ordering
+  rule in `resolve` as a hard prerequisite for any SECOND mutate stage (the ws drop-in table's
+  own speaker-ID example would trip finding #7); (3) fingerprint-guard order-dependence (LOW).
+  Also flagged: Architecture-Atlas custody vs the D2 single-doc protocol; the journal's
+  `pipeline_version`-staleness reprocess mechanics as the first real OQ5 code (continuum input);
+  `processed` retention; fleet behind (restart pending). Board synced.
+- 2026-07-21 — **DP hardening slice consumed + verified; docs aligned to DP final state
+  (founders).** The DP deep session shipped a hardening slice and merged it (`5350f7a`,
+  conflict-free, carrying `aaebd88`; `dev`=`13bad86`; pushed). **It overtook the caveat drill
+  by closing inventory items (1)–(3) structurally**: SlotView capability slot-ownership
+  (fingerprint guard *deleted*), mutate `writes` + deterministic overlap chaining with
+  chain-order in the dialect, and a permit-at-dispatch queue rewrite (fairness knob now
+  production-safe, EXPERIMENTAL warning gone). Added opt-in `INGEST_ISOLATION=subprocess`
+  (poison chunk → 1 chunk; drain-cancel SIGKILLs the ghost). A 47-agent adversarial round
+  (19 confirmed / 2 refuted → 9 fixes + 7 drills) caught two HIGH bugs in the *new* code.
+  Founders re-verified independently: **DP 163 / recording 120 / storage 26 green**, merge
+  topology + attribution-free commits + off-by-default knobs checked; byte-identity re-proven
+  by the session's own C2-digest diff. **Recorded engineering decisions absorbed from the ws
+  file:** (a) **sync/inline path — KEEP** (considered retiring it "now that async is fast";
+  it is the C8/M6 skeleton — the single shared `process_chunk` core plus ~40 lines of HTTP
+  mapping — and the byte-identical verification baseline; flipping the async *production
+  default* stays a founders' call after the D16 re-drive drill; retiring the inline *handler*
+  waits until C8 lands its own surface — never the shared core); (b) **M7 is substantially
+  done** (backpressure/dead-letter/durable-journal/kill-recovery/epochs/bounded-re-drive/
+  fairness/isolation all ✓), remaining: dead-letter backfill tooling, reprocess-by-version
+  drill at pilot-day scale, `processed` retention, warm child pool + wall-clock kill, and the
+  **ops story for WHO restarts DP** (no supervisor config in-repo — platform owns deploy; must
+  be confirmed before the M7 box is checked). **Doc-alignment pass (this session):** DP
+  HANDOFF H-row → merged; recording HANDOFF given a DP-durability alignment note (guarantee now
+  durable on both legs; `/redrive` stays belt-and-suspenders); ARCHITECTURE §Observability
+  corrected (the shipped `/metrics` use a **zero-dep in-house emitter**, not
+  `prometheus-fastapi-instrumentator` as the prose claimed); `requirements-video.txt` header
+  clarified (no pip deps — system prereq + endpoint recipe). Verified accurate, no edit:
+  storage docs (frozen C2 contract, unaffected), PROMPTS, root/services READMEs (serve-loop
+  scoped). **Open threads into the next session** (all in the handoff docs): D16 re-drive drill
+  (gate to flip async default), M1 WER/DER exit measurement, M2 text/image as the next
+  unstarted charter work, supervisor/deploy confirmation with platform.

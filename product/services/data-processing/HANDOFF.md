@@ -29,7 +29,7 @@ one chunk, not the service; drain cancel SIGKILLs the ghost)** — capture alpha
 | V | **Real VIDEO pipeline** (M3): ffmpeg keyframes → caption (`VIDEO_BACKEND=mock\|vlm`) + **per-keyframe timing hook** (OQ14a) + OCR weave (D8) | built + verified + reviewed; real **Qwen3-VL-8B** E2E; suite **68 green** (+11 video) | [handoff/ws-video-pipeline.md](handoff/ws-video-pipeline.md) | video-pipeline lead |
 | AO | **Async `/ingest`** (M7-early, `INGEST_ASYNC` off by default) + **D9 `/metrics` + dashboard** (M8) + **node-7 smoke** of the 3 real audio backends | built + tested + reviewed; DP **98 green**; recording seam updated (120 green); +2 pyannote fixes | [handoff/ws-async-observability.md](handoff/ws-async-observability.md) | async-observability lead |
 | SG | **DP v1**: **durable ingest journal** (`app/journal.py` — kill-recovery + restart-amnesia closed, epochs, bounded re-drive) + **stage-graph pipeline** (`app/stagegraph/` + `app/stages/` — drop-in stage files; audio+video ported byte-identical; per-modality fairness) | built + tested + reviewed; DP **127 green**; real backends re-validated through the graph on node-7 | [handoff/ws-dp-stage-graph.md](handoff/ws-dp-stage-graph.md) | async-observability lead (v1) |
-| H | **Hardening**: review findings #3/#6/#7 CLOSED (**SlotView** capability slot-ownership + mutate `writes`/overlap **chaining** with chain-order dialect; **permit-at-dispatch** fairness, HOL-block dead) + **`INGEST_ISOLATION=subprocess`** (killable per-chunk child: poison blast radius = 1 chunk; drain SIGKILL reclaims ghosts) + milestone eval + sync-retirement recommendation (KEEP inline for C8) | built + tested + workflow-reviewed; DP **163 green**; branch `svc/dp-hardening` (5 commits) awaiting merge review | [handoff/ws-dp-hardening.md](handoff/ws-dp-hardening.md) | DP hardening session |
+| H | **Hardening**: review findings #3/#6/#7 CLOSED (**SlotView** capability slot-ownership + mutate `writes`/overlap **chaining** with chain-order dialect; **permit-at-dispatch** fairness, HOL-block dead) + **`INGEST_ISOLATION=subprocess`** (killable per-chunk child: poison blast radius = 1 chunk; drain SIGKILL reclaims ghosts) + milestone eval + sync-retirement recommendation (KEEP inline for C8) | built + tested + workflow-reviewed; DP **163 green**; **MERGED to `main` (`5350f7a`) + pushed 2026-07-21** | [handoff/ws-dp-hardening.md](handoff/ws-dp-hardening.md) | DP hardening session |
 
 ## Processor seam — how to add a modality (READ THIS before owning image/video/text)
 The core (`app/main.py` `POST /ingest` + `app/pipeline.py` `build_c2`) is **modality-agnostic**:
@@ -106,8 +106,9 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
   [handoff/ws-dp-hardening.md](handoff/ws-dp-hardening.md):** all 3 tracked stage-graph
   review findings closed (slot ownership by construction; mutate overlap chaining;
   permit-at-dispatch fairness — `INGEST_MODALITY_LIMITS` now production-safe) + opt-in
-  `INGEST_ISOLATION=subprocess`. **Merge review + the D16 re-drive drill are the open
-  gates**; the ws file carries the full M0–M8 milestone evaluation (M1 exit needs WER/DER
+  `INGEST_ISOLATION=subprocess`. **MERGED to `main` (`5350f7a`, 2026-07-21); the D16
+  re-drive drill is the remaining gate** (to flip the async production default); the ws
+  file carries the full M0–M8 milestone evaluation (M1 exit needs WER/DER
   baseline; M2 text/image next unstarted; M7 remaining: backfill tooling,
   reprocess-by-version drill, retention, supervisor/deploy confirmation with platform)
   and the sync-retirement evaluation (**KEEP inline** — it is the C8 skeleton; flip the

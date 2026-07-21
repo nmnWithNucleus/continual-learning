@@ -6,7 +6,7 @@
 > [ARCHITECTURE.md](ARCHITECTURE.md) · [ORG.md](ORG.md) · [PROMPTS.md](PROMPTS.md).
 > Service-level state lives in each service's own HANDOFF.md — this board links, not restates.
 
-**Last updated:** 2026-07-19 · maintained across founders' sessions.
+**Last updated:** 2026-07-21 · maintained across founders' sessions.
 
 ---
 
@@ -15,7 +15,7 @@
 | Service | Status | Lead session | Canvas |
 |---|---|---|---|
 | Recording | **capture M1 + computer surfaces — ALPHA COMPLETE** (checked gap-detection + VAD-cut chunking + 3 capture clients: phone web / Chrome-MV3 extension / mac CLI, all verified `clean` on real hardware — 2026-07-19; 110 tests) **+ async seam (D16: `dp_state` ledger + `/redrive`) + D9 `/metrics`+dashboard (M6 emission) — 120 tests** | computer-capture → **M6 emission DONE (merged 2026-07-19)** | [canvas](services/recording/HANDOFF.md) |
-| Data Processing | **v1: DURABLE ingest journal (kill-recovery; restart-amnesia/false-`gaps` CLOSED) + STAGE-GRAPH pipeline (every step a drop-in file; audio/video ported byte-identically; real backends re-validated through the graph on node-7)** — on top of async `/ingest` (D16 wire, off-by-default) + D9 `/metrics` (merged+pushed `86acb95` 2026-07-20; suites re-verified by founders; **128 tests**) | async-observability lead (v1) → **CTO caveat drill pending** | [canvas](services/data-processing/HANDOFF.md) |
+| Data Processing | **v1 + HARDENING done: durable ingest journal (kill-recovery; restart-amnesia/false-`gaps` CLOSED) · stage-graph pipeline (every step a drop-in file) · all 3 v1 review findings closed by construction (SlotView slot-ownership · mutate-overlap chaining · permit-at-dispatch fairness) · opt-in subprocess isolation (poison chunk → 1 chunk, not the service)** — on async `/ingest` (D16 wire, off-by-default) + D9 `/metrics`; audio/video byte-identical, real backends re-validated on node-7 (merged `5350f7a`, pushed 2026-07-21; suites re-verified by founders; **163 tests**) | DP deep session → **merged; M7 substantially done** | [canvas](services/data-processing/HANDOFF.md) |
 | Storage | **v0.0 + capture M0 built + integrated E2E** (serve loop + `/raw`/`/context` mock capture loop 2026-07-09) | serve + learn | [canvas](services/storage/HANDOFF.md) |
 | Input | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-A | [canvas](services/input/HANDOFF.md) |
 | Inference | **v0.0 live on real Qwen3-VL-32B** (vLLM TP=8 on node-7, verified E2E 2026-07-09) | serve-loop WS-B | [canvas](services/inference/HANDOFF.md) |
@@ -27,7 +27,7 @@
 
 | Aspect | File | State |
 |---|---|---|
-| Engineering | [handoff/engineering.md](handoff/engineering.md) | active — serve-loop v0.0 **closed on real Qwen3-VL-32B**; capture M0 + modality seams done; **recording-led capture M1 + computer capture surfaces DONE (alpha complete 2026-07-19)**; **deep session DONE + MERGED; DP v1 (journal + stage graph) shipped + verified 2026-07-20** (128/120/26); **CTO caveat drill pending**; now: **D15 — continuum kickoff (C10 freeze gate) + platform D9 backbone** |
+| Engineering | [handoff/engineering.md](handoff/engineering.md) | active — serve-loop v0.0 **closed on real Qwen3-VL-32B**; capture M0 + modality seams done; **recording-led capture M1 + computer capture surfaces DONE (alpha complete 2026-07-19)**; **DP v1 + HARDENING merged + verified 2026-07-21** (163/120/26; all 3 v1 findings closed by construction, subprocess isolation, M7 substantially done); now: **D15 — continuum kickoff (C10 freeze gate) closes the learn loop + platform D9 backbone** |
 | Research | [handoff/research.md](handoff/research.md) | seeded — first agenda: POC→continuum bridge, research agenda v1 |
 | Design / UX | [handoff/design.md](handoff/design.md) | seeded |
 | Hiring / Ops | [handoff/hiring-ops.md](handoff/hiring-ops.md) | seeded |
@@ -193,11 +193,36 @@ was proposed + ratified in-session 2026-07-19 → **D16**.)*
   backends re-validated through the graph on node-7. Two adversarial rounds (9 confirmed →
   2 fix-before-merge fixed). Founders re-verified: **DP 128 · recording 120 · storage 26
   green**, refs + attribution-free commit + off-by-default knobs + the fairness-knob startup
-  warning all checked in code. **3 tracked follow-ups + the experimental
-  `INGEST_MODALITY_LIMITS` knob feed the pending CTO caveat drill** (headline: it HOL-blocks
-  until per-modality queue partitioning lands — do not enable); the async-trust rider
-  (durable journal before final archived verdicts) is now satisfiable — the `INGEST_ASYNC`
-  flip is a live decision for the drill.
+  warning all checked in code. (The 3 tracked v1 follow-ups — `INGEST_MODALITY_LIMITS`
+  HOL-block, mutate-overlap race, order-dependent fingerprint guard — were then **closed by
+  the hardening slice below**, so the v1 caveat drill was overtaken by that work rather than
+  held separately.)
+
+- 2026-07-21 (DP hardening): **the DP deep session shipped a hardening slice + merged it**
+  (`5350f7a`, conflict-free merge carrying the founders' `aaebd88` board-sync; `dev` at the
+  raw tip `13bad86`; pushed; DP trees identical between `main` and `dev`). It **closes all 3
+  v1 review findings by construction, not by patch**: (1) a **SlotView capability proxy** —
+  a sidecar can't even READ the primary's mutable slots, illegal writes raise synchronously
+  at the offending line (the order-dependent end-of-run fingerprint guard is *deleted*);
+  (2) mutate **`writes` + deterministic overlap chaining**, with the chain order folded into
+  `pipeline_version` (a future second mutate like speaker-ID composes on diarize, can't race
+  it); (3) a **permit-at-dispatch** queue rewrite — the modality-fairness knob no longer
+  head-of-line-blocks, so `INGEST_MODALITY_LIMITS` is production-safe and the EXPERIMENTAL
+  warning is gone. Plus a **new containment layer**: opt-in `INGEST_ISOLATION=subprocess`
+  runs each chunk's Processor in a killable child (a segfault/native-OOM/`os._exit` in model
+  code kills ONE chunk, not the service; a drain-cancel SIGKILLs the ghost compute a
+  threadpool can't). A **47-agent adversarial round** (5 dimensions → 2 refuters/finding)
+  confirmed 19 / refuted 2 → 9 code fixes + 7 gap drills, catching two HIGH bugs *in the new
+  code* (a reproduced retry-starvation in the new dispatch; an event-loop stall in spawn
+  isolation). Byte-identity re-proven empirically (identical C2 digests vs `main` across
+  dialects AND under isolation). Founders re-verified independently: **DP 163 · recording
+  120 · storage 26 green**; merge topology + attribution-free commits + off-by-default knobs
+  checked. The ws file also carries a full **M0–M8 milestone eval** (M0/M3/M7-core/M8 done;
+  **M1 exit open** — no denoise stage + WER/DER baseline unmeasured; **M2 text/image is the
+  next unstarted charter work**; M4/M5/M6 not started) and a **sync-path decision: KEEP
+  inline** — it's the C8/M6 skeleton and the byte-identical verification baseline; flipping
+  the async production default stays a founders' call after the **D16 re-drive drill** (still
+  the one open gate). Detail: [ws-dp-hardening](services/data-processing/handoff/ws-dp-hardening.md).
 
 ## Next
 
@@ -213,8 +238,10 @@ was proposed + ratified in-session 2026-07-19 → **D16**.)*
   video container-copy — resolution-bound not bitrate-bound, ~2560 px only for OCR-heavy
   screens; cost dial = keyframe cadence). Suites re-verified independently by the founders'
   session: **DP 98 · recording 120 · storage 26**. Honest residuals (ws file): DP-restart
-  false-`gaps` window fails SAFE (M7 journal closes it); whisper-translate unproven on a
-  genuine non-English source; pyannote pinned 3.1.1, smoked 3.3.2. **Fleet note:** node-7
+  false-`gaps` window fails SAFE (**now CLOSED by the v1 durable journal, 2026-07-20**);
+  whisper-translate unproven on a genuine non-English source; pyannote pinned 3.1.1, smoked
+  3.3.2. *(This slice was superseded by DP v1 + hardening — see the current-state entries
+  above; residuals tracked there.)* **Fleet note:** node-7
   still runs pre-merge code — restart `run_learn.sh` at convenience to start emitting
   `/metrics` (async stays off by default; flipping `INGEST_ASYNC=1` retires
   `RECORDING_HTTP_TIMEOUT=120`).
@@ -239,6 +266,8 @@ was proposed + ratified in-session 2026-07-19 → **D16**.)*
   (vLLM + app services) is down** — relaunch `run_all.sh` + `services/inference/serve_vllm.sh`
   when needed. The wider cluster runs Gnandeep's continuum-side experiments — product work keeps
   to **node-7**; allocate more nodes on demand. *Learn loop re-verified up by the 2026-07-19
-  sequencing session. Post-merge: the running fleet now predates BOTH merges (`0ce4941`,
-  `86acb95` DP v1) — restart to start emitting `/metrics` + gain the durable journal
-  (behavior otherwise unchanged; `INGEST_ASYNC` off by default).*
+  sequencing session. Post-merge: the running fleet predates all three DP merges (`0ce4941`
+  async, `86acb95` v1, `5350f7a` hardening) — restart to start emitting `/metrics` + gain the
+  durable journal + isolation knob (behavior otherwise unchanged; `INGEST_ASYNC` +
+  `INGEST_ISOLATION` both off by default). WHO restarts DP (supervisor/deploy) is an open M7
+  ops item with platform.*
