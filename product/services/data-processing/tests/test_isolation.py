@@ -138,9 +138,12 @@ def test_child_generic_error_is_transient_and_retries(monkeypatch, fake_storage,
     with TestClient(app) as c:
         assert c.post("/ingest", json=make_c1(
             fake_storage, chunk_id="iso-flaky", stream_id="s-fl", sequence=0)).status_code == 202
-        assert _wait(lambda: len(fake_storage.record_posts) == 1), "retry never succeeded"
-        entry = c.get("/continuity/s-fl").json()
-        assert entry["processed"] == [[0, 0]] and entry["dead_lettered"] == []
+        # Wait on continuity 'processed' — the true done-signal (record_posts fires a
+        # hair earlier, in the post-write / pre-note window; asserting on it races).
+        assert _wait(lambda: c.get("/continuity/s-fl").json()["processed"] == [[0, 0]]), \
+            "retry never succeeded"
+        assert len(fake_storage.record_posts) == 1
+        assert c.get("/continuity/s-fl").json()["dead_lettered"] == []
         metrics = c.get("/metrics").text
     assert 'dp_ingest_retries_total{modality="audio"} 1' in metrics
     assert "dp_dead_letter_total" not in metrics
@@ -285,9 +288,12 @@ def test_async_mode_under_spawn_end_to_end(monkeypatch, fake_storage, tmp_path):
             assert c.post("/ingest", json=make_c1(
                 fake_storage, chunk_id=f"iso-sp-{i}", stream_id="s-sp",
                 sequence=i)).status_code == 202
-        assert _wait(lambda: len(fake_storage.record_posts) == 2, timeout=30.0)
-        entry = c.get("/continuity/s-sp").json()
-        assert entry["processed"] == [[0, 1]] and entry["dead_lettered"] == []
+        # Wait on continuity 'processed' — the TRUE done-signal (record_posts fires a
+        # hair earlier, in the post-write / pre-note window). Generous timeout: each
+        # spawn child boots a fresh interpreter.
+        assert _wait(lambda: c.get("/continuity/s-sp").json()["processed"] == [[0, 1]],
+                     timeout=30.0), "spawn children never completed"
+        assert c.get("/continuity/s-sp").json()["dead_lettered"] == []
 
 
 def test_drain_cancel_kills_the_child_and_chunk_stays_redrivable(
