@@ -11,14 +11,28 @@ Kinds (who may touch what — enforced):
                    the modality's primary units in order. Its ``version_fragment`` is the
                    BASE dialect (non-empty whenever enabled).
   * ``mutate``   — mutates the primary's declared ``mutable_slots`` in place (e.g.
-                   diarization filling speakers). **Enabledness IS
+                   diarization filling speakers), declaring exactly WHICH in ``writes``
+                   (must be a subset of the primary's ``mutable_slots`` — resolution
+                   errors otherwise). **Enabledness IS
                    ``version_fragment(settings) != ''``** — one resolver drives both, so
                    a mutate stage physically cannot run without forking the dialect (the
                    silent-overwrite bug class the audio slice once caught by review is
                    now structural). Overriding ``enabled`` on a mutate stage is a
-                   registration error. Implicitly depends on the primary.
+                   registration error. Implicitly depends on the primary; two mutates
+                   whose ``writes`` intersect are CHAINED deterministically by ``order``
+                   (never concurrent — see executor.resolve), and their fragments
+                   compose in that same chain order, so the dialect encodes the sequence.
   * ``sidecar``  — returns ADDITIONAL units (own discriminators); never touches the
                    primary. May be ``best_effort``.
+
+Slot ownership is CAPABILITY-SCOPED at runtime, not just declared: each stage's run
+receives a ``SlotView`` of the shared slots that (a) refuses writes to any key the stage
+does not own, and (b) refuses to even HAND a sidecar a reference to the primary's
+``mutable_slots`` — so an illegal mutation is impossible by construction (you cannot
+scribble on an object you were never given), raising ``SlotAccessError`` at the exact
+offending line, order-independently. This replaced the old end-of-run fingerprint guard,
+which was order-dependent (an illegal write landing before the mutate cohort finished
+was baked into the reference and missed).
 
 Policies: ``required`` (default — failure fails the chunk, worker taxonomy applies) or
 ``best_effort`` (failure skips the stage + its downstream best_effort cone, counted;
@@ -43,6 +57,74 @@ from ..processing.base import ProcessedUnit
 
 class StageRegistrationError(Exception):
     """A malformed stage file — raised at import/discovery so a bad drop-in fails loudly."""
+
+
+class SlotAccessError(RuntimeError):
+    """A stage touched a slot it does not own — a stage-file bug, raised AT the offending
+    read/write (synchronously, order-independently), never deferred to an end-of-run
+    check. Subclasses RuntimeError so existing required-failure taxonomy applies."""
+
+
+class SlotView:
+    """A stage-scoped capability view over the shared slot dict.
+
+    Reads pass through EXCEPT keys in ``deny_read`` (a sidecar asking for the primary's
+    mutable slots — refusing the reference is what makes illegal mutation structurally
+    impossible: you cannot scribble on an object you were never handed). Direct writes
+    are allowed only for keys in ``allow_write`` (a mutate's declared ``writes``); all
+    other slot production goes through ``StageResult.slots`` so commit-on-success holds.
+    """
+
+    __slots__ = ("_slots", "_stage", "_deny_read", "_allow_write")
+
+    def __init__(self, slots: dict, stage_name: str,
+                 deny_read: frozenset, allow_write: frozenset) -> None:
+        self._slots = slots
+        self._stage = stage_name
+        self._deny_read = deny_read
+        self._allow_write = allow_write
+
+    def _check_read(self, key: str) -> None:
+        if key in self._deny_read:
+            raise SlotAccessError(
+                f"stage {self._stage!r} may not read primary mutable slot {key!r} — "
+                "a reference is mutation power (in-place writes bypass __setitem__): "
+                "sidecars never see primary mutable state, and a mutate sees only the "
+                "slots it declared in `writes` (declare it there — that also chains "
+                "you deterministically against the slot's other writers)"
+            )
+
+    def __getitem__(self, key: str):
+        self._check_read(key)
+        return self._slots[key]
+
+    def get(self, key: str, default=None):
+        self._check_read(key)
+        return self._slots.get(key, default)
+
+    def __setitem__(self, key: str, value) -> None:
+        if key not in self._allow_write:
+            raise SlotAccessError(
+                f"stage {self._stage!r} may not write slot {key!r} directly — return it "
+                "via StageResult.slots (commit-on-success), or declare it in `writes` "
+                "on a mutate stage"
+            )
+        self._slots[key] = value
+
+    def __delitem__(self, key: str) -> None:
+        raise SlotAccessError(f"stage {self._stage!r} may not delete slot {key!r}")
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._slots and key not in self._deny_read
+
+    def __iter__(self):
+        return (k for k in self._slots if k not in self._deny_read)
+
+    def __len__(self) -> int:
+        return sum(1 for _ in self)
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"SlotView(stage={self._stage!r}, keys={sorted(self)!r})"
 
 
 # Sentinel a skipped stage's future resolves to; dependents cascade-skip on it.
@@ -82,8 +164,11 @@ class Stage:
     kind: str = "sidecar"                 # primary | mutate | sidecar
     policy: str = "required"              # required | best_effort (sidecar only)
     needs: tuple[str, ...] = ()           # stage names this one awaits
-    provides: tuple[str, ...] = ()        # slot keys this stage commits (documentation + review surface)
+    provides: tuple[str, ...] = ()        # slot keys this stage commits via StageResult (AUTHORITATIVE:
+                                          # committing an undeclared key is a runtime error)
     mutable_slots: tuple[str, ...] = ()   # PRIMARY only: slots mutate stages may write in place
+    writes: tuple[str, ...] = ()          # MUTATE only: which mutable_slots it edits in place
+                                          # (drives overlap-chaining; ⊆ primary.mutable_slots)
     order: int = 0                        # deterministic assembly order (unique per modality)
 
     # ---- resolution-time switches -------------------------------------------------
@@ -153,6 +238,17 @@ def register_stage(cls: type[Stage]) -> type[Stage]:
         raise StageRegistrationError(f"{cls.__name__}: primary stages must define assemble()")
     if stage.kind != "primary" and stage.mutable_slots:
         raise StageRegistrationError(f"{cls.__name__}: only primary declares mutable_slots")
+    if stage.kind == "mutate" and not stage.writes:
+        raise StageRegistrationError(
+            f"{cls.__name__}: mutate stages must declare `writes` (which of the "
+            "primary's mutable_slots they edit in place) — it drives write access AND "
+            "the deterministic chaining of overlapping mutates"
+        )
+    if stage.kind != "mutate" and stage.writes:
+        raise StageRegistrationError(
+            f"{cls.__name__}: only mutate stages declare `writes`; a {stage.kind} "
+            "produces slots via StageResult (see `provides`), it never edits in place"
+        )
 
     by_name = _REGISTRY.setdefault(stage.modality, {})
     existing = by_name.get(stage.name)

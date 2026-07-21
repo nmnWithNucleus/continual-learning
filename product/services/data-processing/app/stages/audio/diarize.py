@@ -1,8 +1,9 @@
 """Audio MUTATE stage: diarization fills segments[].speaker + enrichments.speakers.
 
 Byte-identical transplant of the monolithic ``_diarize`` stage. It MUTATES the primary's
-``segments``/``enrichments`` slots in place (the two slots ``asr`` declared mutable), so
-the framework fingerprint-guards them for everyone else and — the load-bearing part —
+``segments``/``enrichments`` slots in place (the two slots ``asr`` declared mutable and
+this stage declares in ``writes``), so the framework scopes write access to it via the
+SlotView (everyone else is refused the reference) and — the load-bearing part —
 its enabledness IS its ``version_fragment``: both come from ``diarize._resolve`` via the
 existing ``diarize.select`` / ``diarize.version_tag`` pair, so the stage can never fill
 speakers under the undiarized dialect (the silent-overwrite class the audio review once
@@ -23,6 +24,11 @@ class DiarizeStage(Stage):
     modality = "audio"
     kind = "mutate"
     needs = ("asr",)
+    # The mutable slots this stage edits in place: fills segments[].speaker and
+    # enrichments.speakers. Grants write access via the SlotView AND chains this stage
+    # deterministically against any future mutate touching the same slots (e.g. a
+    # speaker-identity stage composing on the diarized turns).
+    writes = ("segments", "enrichments")
     order = 10
 
     def version_fragment(self, settings) -> str:

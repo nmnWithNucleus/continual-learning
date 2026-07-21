@@ -12,9 +12,12 @@ per-keyframe timing hook + OCR weave (genuine Qwen3-VL-8B run) + **ASYNC `/inges
 behind `INGEST_ASYNC`, off by default = byte-identical inline** + **D9 `/metrics` + Grafana
 dashboard (M8)** + **DP v1: DURABLE ingest journal (kill-recovery + restart-amnesia closed)
 + STAGE-GRAPH pipeline (every processing step a drop-in file; audio/video ported
-byte-identically, real backends re-validated through the graph on node-7)** — capture alpha
-still green (3 real clients) —
-**127 tests** · **Last updated:** 2026-07-20 (async-observability session, v1)
+byte-identically, real backends re-validated through the graph on node-7)** + **HARDENING
+(WS-H): all 3 tracked review findings closed (SlotView slot ownership · mutate overlap
+chaining · permit-at-dispatch fairness) + opt-in subprocess isolation (poison chunk kills
+one chunk, not the service; drain cancel SIGKILLs the ghost)** — capture alpha still green
+(3 real clients) —
+**163 tests** · **Last updated:** 2026-07-21 (DP hardening session, branch `svc/dp-hardening`)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
@@ -26,6 +29,7 @@ still green (3 real clients) —
 | V | **Real VIDEO pipeline** (M3): ffmpeg keyframes → caption (`VIDEO_BACKEND=mock\|vlm`) + **per-keyframe timing hook** (OQ14a) + OCR weave (D8) | built + verified + reviewed; real **Qwen3-VL-8B** E2E; suite **68 green** (+11 video) | [handoff/ws-video-pipeline.md](handoff/ws-video-pipeline.md) | video-pipeline lead |
 | AO | **Async `/ingest`** (M7-early, `INGEST_ASYNC` off by default) + **D9 `/metrics` + dashboard** (M8) + **node-7 smoke** of the 3 real audio backends | built + tested + reviewed; DP **98 green**; recording seam updated (120 green); +2 pyannote fixes | [handoff/ws-async-observability.md](handoff/ws-async-observability.md) | async-observability lead |
 | SG | **DP v1**: **durable ingest journal** (`app/journal.py` — kill-recovery + restart-amnesia closed, epochs, bounded re-drive) + **stage-graph pipeline** (`app/stagegraph/` + `app/stages/` — drop-in stage files; audio+video ported byte-identical; per-modality fairness) | built + tested + reviewed; DP **127 green**; real backends re-validated through the graph on node-7 | [handoff/ws-dp-stage-graph.md](handoff/ws-dp-stage-graph.md) | async-observability lead (v1) |
+| H | **Hardening**: review findings #3/#6/#7 CLOSED (**SlotView** capability slot-ownership + mutate `writes`/overlap **chaining** with chain-order dialect; **permit-at-dispatch** fairness, HOL-block dead) + **`INGEST_ISOLATION=subprocess`** (killable per-chunk child: poison blast radius = 1 chunk; drain SIGKILL reclaims ghosts) + milestone eval + sync-retirement recommendation (KEEP inline for C8) | built + tested + workflow-reviewed; DP **163 green**; branch `svc/dp-hardening` (5 commits) awaiting merge review | [handoff/ws-dp-hardening.md](handoff/ws-dp-hardening.md) | DP hardening session |
 
 ## Processor seam — how to add a modality (READ THIS before owning image/video/text)
 The core (`app/main.py` `POST /ingest` + `app/pipeline.py` `build_c2`) is **modality-agnostic**:
@@ -98,6 +102,16 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
     which demuxes to the same C1 the phone already used). Suite unregressed at 38.
 
 ## Next
+- **Hardening slice (2026-07-21, WS-H, branch `svc/dp-hardening`) —
+  [handoff/ws-dp-hardening.md](handoff/ws-dp-hardening.md):** all 3 tracked stage-graph
+  review findings closed (slot ownership by construction; mutate overlap chaining;
+  permit-at-dispatch fairness — `INGEST_MODALITY_LIMITS` now production-safe) + opt-in
+  `INGEST_ISOLATION=subprocess`. **Merge review + the D16 re-drive drill are the open
+  gates**; the ws file carries the full M0–M8 milestone evaluation (M1 exit needs WER/DER
+  baseline; M2 text/image next unstarted; M7 remaining: backfill tooling,
+  reprocess-by-version drill, retention, supervisor/deploy confirmation with platform)
+  and the sync-retirement evaluation (**KEEP inline** — it is the C8 skeleton; flip the
+  async default via a founders' decision after the re-drive drill).
 - ~~Async `/ingest` (ACK 202 + worker queue)~~ **DONE (2026-07-19, WS-AO, M7-early) —
   [handoff/ws-async-observability.md](handoff/ws-async-observability.md).** Behind
   `INGEST_ASYNC` (default off = inline, byte-identical). Async = ACK `202
