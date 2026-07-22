@@ -13,9 +13,53 @@ round), real-backend port queued on Gnandeep's answers · **Last updated:** 2026
 | WS | What | Status | Working file | Owner session |
 |---|---|---|---|---|
 | WS1 | Nightly-loop scaffold: mock cycle headless green (window→daylog→amplify→replay→train→gate→publish, journaled + idempotent) | **done** | [handoff/ws-nightly-scaffold.md](handoff/ws-nightly-scaffold.md) | this session |
-| WS2 | Engram core port (real `TRAINER_BACKEND`); exit = one Speed-data night reproduces recipe-v1.0 numbers through our gate + C5 path | queued — blocked on the 5 lethal questions | [handoff/ws-engram-port.md](handoff/ws-engram-port.md) | — |
+| WS2 | Engram core port (real `TRAINER_BACKEND`); exit = Speed-data night reproduces recipe-v1.0 numbers through our gate + C5 path | **unblocked** (Gnandeep answered 2026-07-22); sequenced behind the Phase-1 baseline | [handoff/ws-engram-port.md](handoff/ws-engram-port.md) | — |
 | WS3 | C10 v0 freeze (with storage; founders ratify) + real storage integration + watermark/late-data policy | queued | *(opens with the freeze session)* | — |
 | WS4 | Eval gates v1: probe generation (generator ≠ corpus-generator), Gemini judge on our creds, the 3 unwired gate checks | queued — after WS2 | *(opens with work)* | — |
+
+## Validation strategy — replay Speed's data to prove the port (2026-07-22)
+
+The learn-loop gets validated on Speed's existing 35-day-tour data *before* new capture
+feeds it. **Key provenance finding** (full trace in this session): the recipe-v1.0 numbers
+(0.26–0.35 recall, +0.33 separation, traps 0.50) came from the **engram** path —
+pre-existing **5-min Gemini descriptions** → `build_day_corpus` → 48× amplify → CPT → judge.
+The speed-lora **RUN2/PROJECT_REPORT** docs describe the *failed* QA-SFT branch (null
+separation through full-FT) — valuable as diagnosis (why the recipe has amplification +
+deny-then-correct negatives), NOT a path to port. The DESIGN_PROD **10s-segment/2min-block
+schema was never materialized** (zero producing code); a research "block" = one 5-min
+description. Two separable exercises, only the first judged by "matches his numbers":
+
+- **Exercise 1 (port fidelity):** reproduce his numbers on **his data shape** (5-min
+  descriptions → engram chain), standalone — **no product pipeline**. Clean A/B (his code vs
+  our port on identical input). This is the M0 exit + "perfect port" proof.
+- **Exercise 2 (DP dogfood):** push Speed data through **our** recording→DP→storage→continuum
+  (injecting the stored ASR/caption stage outputs), producing the product-shape day-log.
+  Validated as **plumbing + the first real data on the domain-transfer question** (DESIGN_PROD
+  R1b) — **cannot** be judged by exact numbers (different data shape; an open research question).
+
+Out of scope for both: **fast-memory slots** (serve-time only; the learn loop never touches
+them; recall is pure life-adapter CPT). **Records stay** the faithful substrate — day-log
+segments/blocks are a *derived view*, not a replacement (the serve loop + paging depend on
+C2 records).
+
+## Execution steps (locked 2026-07-22)
+
+0. **DONE this session:** re-pin the engram port source `9711f4a → b3c58e1` ("32B chain
+   verdict"; ws-engram-port); flag the serve-tier drift in inference's HANDOFF (the harness
+   is now a **4-lane** stack — Council added — + page-weight cache, richer than the "3 lanes"
+   recorded at kickoff).
+1. **Phase 0 (founder, no blockers):** locate/confirm Speed data on the cluster —
+   `descriptions/{1,5,10,20}min/`, `holdout_manifest.csv`, WhisperX/pyannote ASR, frame grids.
+   (Local `poc/live_stream_stability/.../ishowspeed/tour` holds the *collection* code + manifests;
+   the 61k descriptions live on the cluster at `~/speed_lora/data/descriptions/`.)
+2. **Phase 1 — Exercise 1a (baseline, his code on our infra):** run `build_day_corpus →
+   gen_narrative --variants 48 --neg-frac 0.15 → phase_d_driver --arm replay --replay-frac 0.30
+   → judge_exact` on ~3 probe-dense days; confirm ≈0.26–0.35 / +0.33 / traps ≈0.50. **Standalone,
+   not through the product.** Blocked only on lethal-Q4 (envs export + our judge creds).
+3. **Phase 2 — Exercise 1b (WS2 port):** port module-by-module behind `TRAINER_BACKEND=engram`,
+   parity-checked against Phase 1 at each stage. Exit = parity = perfect port = M0 done.
+4. **Phase 3 — Exercise 2 (DP dogfood):** the throwaway processor through our DP → derived
+   day-log view → continuum nightly loop; measure the shape-gap vs Phase 2 (the R1b result).
 
 ## Kickoff decisions (founder, 2026-07-21/22 sessions)
 
@@ -64,13 +108,24 @@ founders'-board ratification** (D-numbers to be minted there) — flagged per it
   design says Vertex amplify backend, code implements vllm/hf only (Gemini is only the judge).
 - D9 observability obligation unchanged (metrics + dashboard, off the request path) — not started.
 
-## Pending Gnandeep (the 5 lethal questions — full text in [ws-engram-port](handoff/ws-engram-port.md))
-32B chain result + exact base id · production-night entrypoint + stable commit · blessed
-replay knobs (frac/source/neg-boost) · env exports + judge-project OK · prompt/anchor
-de-Speed-ification approach (blocks real-user nights only). Founder is sending these.
+## Gnandeep answers (2026-07-22) — folded into [ws-engram-port](handoff/ws-engram-port.md)
+- **32B ≈ 8B (a TIE):** 0.083 vs 0.092 on identical probes → consolidation is **write-bound,
+  not capacity-bound**; 8B is his serving substrate. We still train **32B** adapters (BWM=D6;
+  adapter must match the served base; recipe is base-agnostic + 32B chain proven), paying 32B
+  compute for serve-quality not memory-quality — an 8B memory substrate is a later founders' call.
+- **Entrypoint:** the phased/replay chain (`phased_run.sh`/`submit_chain.sh` → `build_day_corpus
+  → gen_narrative → phase_d_driver --arm replay → judge_exact`); `phase_d_driver`'s replay arm
+  IS the production night. Stable snapshot = `b3c58e1` (re-pinned).
+- **Knobs:** replay-frac **0.30**; replay-source **raw is a tie → acceptable + simpler** (may let
+  v0 replay from retained raw day logs instead of an amplified reservoir); neg-boost = read off
+  the chain args (no default on faith). Confirm all three at the actual invocation.
+- **Envs/judge:** `speedlora`+`vllm23` exports coming to `research/engram/envs/`; judge =
+  Gemini-2.5-flash via litellm/Vertex; **our own GCP creds via IAM** (his project is his billing).
+- **Still open (real-user nights only):** de-Speed the prompt/anchor scheme.
 
 ## Next
-1. **WS2 port** the moment Q1/Q2/Q3 come back (Q4 gates the judge, Q5 gates real users).
+1. **Run the Execution steps above** (Phase 0 → 1 → 2 → 3). Phase 1 is the immediate action
+   once the founder confirms the cluster data + we have envs/judge creds (lethal-Q4).
 2. **C10 freeze session** with storage (founders ratify) — first contract act, per D15.
    Propose: beta range read + `pipeline_version`/modality filters + (t_start, record_id)
    ordering + cursor; watermark/late-data policy rides along (charter OQ9).
