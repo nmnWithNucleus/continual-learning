@@ -48,6 +48,13 @@
 - Load-bearing constraint from the research: **two model instances, routed, never merged** —
   today-path = base + reader-LoRA + fast module (NO life adapter); past-path = base + life
   adapter (+ paging). Merging loses ~65% of the fast-memory gap.
+- **Serve tier is more mature than the kickoff note said** (research @ `b3c58e1`, v39): the
+  serving harness `engram_server.py` boots the two-path router + think-back paging + muon-h8192
+  fast memory **today** on the 35-day testbed, and it's now a **4-lane** stack — a **Council**
+  lane was added (classic / planner / orchestrator / council) plus a page-weight cache (~2s vs
+  ~90s paging). What is NOT built is the production **ingest** layer (continuous capture, 10s-segment
+  day-log, surprise-gating, Vertex captioner) — that greenfield is DP + storage scope, not a
+  research artifact to port.
 - Deferred until continuum's nightly loop closes. Details: continuum
   [HANDOFF](../continuum/HANDOFF.md) § Kickoff decisions + [ws-engram-port](../continuum/handoff/ws-engram-port.md)
   (the not-ported-here rows are this service's future scope).
