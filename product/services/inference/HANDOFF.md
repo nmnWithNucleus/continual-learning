@@ -38,6 +38,20 @@
   mentors (C7). Text-only. Trace arrays are present-but-empty so C4's shape never changes when
   harness/mentors arrive. Mid-turn C9 frames are reserved, not emitted.
 
+## Incoming — serve-time memory harness (continuum kickoff decision, 2026-07-22; pending founders'-board ratification)
+- Founder placed the **memory harness runtime HERE**: fast-memory (mneme/SSM) per-user state
+  fed by tailing recent `/context` records, the think-back paging executor (~80–120 temporary
+  LoRA steps on a past day's log + snapshot rollback at question time), day-log-grounded
+  answering, and the memory router. Continuum **trains** the artifacts (nightly life adapter
+  via C5 — your M1; later a versioned mneme module + reader-LoRA + paging recipe, likely a C5
+  *bundle* — shape needs this service at the table before freezing); this service **executes** them.
+- Load-bearing constraint from the research: **two model instances, routed, never merged** —
+  today-path = base + reader-LoRA + fast module (NO life adapter); past-path = base + life
+  adapter (+ paging). Merging loses ~65% of the fast-memory gap.
+- Deferred until continuum's nightly loop closes. Details: continuum
+  [HANDOFF](../continuum/HANDOFF.md) § Kickoff decisions + [ws-engram-port](../continuum/handoff/ws-engram-port.md)
+  (the not-ported-here rows are this service's future scope).
+
 ## Next
 - ~~**Real model (M0 finish)**~~ **DONE 2026-07-09** — `serve_vllm.sh` ran on node-7 (TP=8);
   `/infer` with `MODEL_BACKEND=vllm` drove a genuine turn E2E (real usage in the C9 end frame;
