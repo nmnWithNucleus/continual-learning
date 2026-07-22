@@ -5,7 +5,9 @@
 > state lives in [HANDOFF.md](HANDOFF.md); system-wide architecture + contracts in
 > [../../ARCHITECTURE.md](../../ARCHITECTURE.md).
 
-**Status:** chartered · **Last updated:** 2026-07-08
+**Status:** chartered; kicked off · **Last updated:** 2026-07-22 (kickoff amendments: injected
+research core = the engram consolidation line, ported per [handoff/ws-engram-port.md](handoff/ws-engram-port.md);
+serve-time memory harness placed with inference — see [HANDOFF.md](HANDOFF.md) § Kickoff decisions)
 
 ## Mission
 
@@ -24,6 +26,8 @@ long-term retention, self-distillation, and the LoRA → MoE-experts-per-user sc
 |---|---|
 | Cycle data curation | New `/context` + `/sessions` records since last watermark, read via C10 → training mixture; mentor traces (logged via C4) are first-class distillation targets |
 | Anti-forgetting replay mixture | Capability-aligned replay (text + vision) trained alongside the personal data; ratio + LR schedule are the levers |
+| Amplification (train-time) | The nightly corpus build: styled retellings + deny-then-correct negatives generated FROM the day's faithful records, per the pinned recipe. Output is a training artifact — **amplified/synthetic text never lands in `/context`** (grounding + paging read the faithful record only) |
+| Training reservoir | Permanent per-user store of past amplified corpora (replay is what prevents sequential collapse; generative replay demonstrably fails). Storage custody is the plan of record; deletion is a privacy act, never housekeeping |
 | LoRA training jobs | Per-user LoRA over **all layers** of the BWM (v0 decision); runs on the shared SLURM partition |
 | Pre-publish eval gates | Personal-recall suite (does it know yesterday?) + general-capability forgetting suite (did it get dumber?); no green, no publish |
 | Publish / rollback | C5 adapter version entries in the model directory; one-command rollback to the previous active version |
@@ -35,6 +39,7 @@ long-term retention, self-distillation, and the LoRA → MoE-experts-per-user sc
 | Out of scope | Owner |
 |---|---|
 | Serving adapters / hot-swap in vLLM (C6 resolution) | Inference Service |
+| Serve-time memory harness — fast-memory (SSM/mneme) runtime + per-user state, think-back paging executor, day-log-grounded answering, memory routing | Inference Service (kickoff decision 2026-07-22, pending founders'-board ratification; we TRAIN and publish the memory artifacts — mneme module, reader-LoRA, paging recipe — they execute them) |
 | `/context` + `/sessions` storage engine and query APIs | Storage Service |
 | Producing the records we consume (stream + session processing) | Data Processing Service (C2), Inference Service (C4) |
 | Calling mentor models (traces reach us only as stored C4 records) | Inference Service (C7) |
@@ -60,7 +65,7 @@ trigger ownership is tracked as output's proactive open question ([../output/CHA
 
 | M | Deliverable | Exit criterion |
 |---|---|---|
-| M0 | **Recipe lock + trainer skeleton.** Port POC learnings into a v0 recipe doc (LoRA all-layers config, replay skeleton, KL-anchor default, loss shape for C2 vs C4 records); dry-run trainer | One full LoRA cycle runs end-to-end on a synthetic day of C2/C4-shaped records on one a3-mega node; resulting adapter loads in vLLM |
+| M0 | **Recipe lock + trainer skeleton.** Recipe = the engram consolidation line (48× amplification + 15% deny-then-correct + LoRA r128/α256 CPT + ~30% reservoir replay + 6-check gate), pinned as `recipes/consolidation-v1.0.json`; nightly cycle behind the `TRAINER_BACKEND` seam (mock default, headless green — **done, [ws-nightly-scaffold](handoff/ws-nightly-scaffold.md)**); real backend ported per [ws-engram-port](handoff/ws-engram-port.md) | One full LoRA cycle runs end-to-end on a synthetic day of C2-shaped records on one a3-mega node; resulting adapter loads in vLLM |
 | M1 | **Single-user cycle v1.** Watermarked reader over `/context` + `/sessions` (C10) → mixture builder → SLURM LoRA job → candidate adapter artifact | Nightly cycle produces a candidate adapter from one pilot user's real day, idempotent + resumable across job failure |
 | M2 | **Eval gates + publish/rollback.** Personal-recall suite auto-derived from the cycle window; general-capability forgetting suite; C5 publish on green only | A deliberately-degraded candidate is blocked; a green candidate goes live via C5 and resolves via C6; rollback restores the prior version in one command |
 | M3 | **Replay v1 + mentor distillation.** Capability-aligned replay mixture in every cycle; loss-masked mentor-trace targets in the personal mix | Forgetting suite stays within its threshold band over 7 consecutive real cycles; recall suite beats the Day-0 baseline on each cycle's window |
@@ -130,6 +135,13 @@ protocol (manager notes + running logs) per [../../ORG.md](../../ORG.md).
 
 ## Related work
 
+- **nucleus-research `continuum-research` — the engram line (the injected core).** Two-timescale
+  memory on frozen Qwen3-VL, validated across a 32-day corpus: nightly consolidation into ONE
+  standard PEFT life adapter (vLLM-servable as-is), fast memory (mneme) + think-back paging on the
+  serving side, raw day logs as fact authority. Recipe v1.0 + the 6-check gate are this service's
+  M0/M2 substance; port policy + source pin in [handoff/ws-engram-port.md](handoff/ws-engram-port.md).
+  Two laws inherited as design constraints: components compose by ROUTING, never merging; forgetting
+  is ACCESS decay, not destruction (replay re-teaches; paging revives; raw logs kept forever).
 - **[poc/live_stream_stability](../../../poc/live_stream_stability/README.md)** — direct lineage.
   Phase-3.1 (capability-first anti-forgetting replay mixture, vision replay as the fragile bucket),
   Phase-3.2 (Day-0/Day-N personal-recall + general-forgetting eval suites; frozen held-out split;
