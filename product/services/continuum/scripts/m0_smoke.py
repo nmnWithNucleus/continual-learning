@@ -44,6 +44,8 @@ def main() -> int:
     ap.add_argument("--user", default="speed-dryrun")
     ap.add_argument("--epochs", type=int, default=0, help="0 = the recipe's value")
     ap.add_argument("--gpu-mem-util", type=float, default=0.92)
+    ap.add_argument("--batch-size", type=int, default=0, help="0 = the recipe's value; "
+                    "1 halves activation memory if 32B will not fit one card")
     ap.add_argument("--skip-vllm", action="store_true")
     args = ap.parse_args()
 
@@ -64,8 +66,10 @@ def main() -> int:
     budget = matched_compute_budget(adapter.tokenizer, corpus, recipe.chunk_tokens)
     stats = adapter.train_on(corpus, CptConfig(
         epochs=args.epochs or recipe.epochs, seq_len=recipe.chunk_tokens,
-        batch_size=recipe.batch_size, lr=recipe.lr, max_chunks=budget), tag="m0")
-    record["train"] = stats.__dict__ | {"hours": round((time.time() - started) / 3600, 2)}
+        batch_size=args.batch_size or recipe.batch_size, lr=recipe.lr,
+        max_chunks=budget), tag="m0")
+    record["train"] = stats.__dict__ | {"hours": round((time.time() - started) / 3600, 2),
+                                        "batch_size": args.batch_size or recipe.batch_size}
     adapter_dir = out / "adapter"
     adapter.save(adapter_dir)
     print(json.dumps(record["train"]), flush=True)
