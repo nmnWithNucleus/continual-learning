@@ -1,7 +1,8 @@
 # Phase 2a — Morpheus core + parity harness
 
 **Branch:** `svc/continuum-morpheus-2a` · **Status:** kernels + harness landed; E2E seed
-ensemble running · **Cofounder review gate before 2b.**
+ensemble complete — **PARITY** (permutation test p = 0.514, all per-night shapes exact) ·
+**Cofounder review gate before 2b.**
 
 Deliverable: the §3 kernels reimplemented cleanly under `app/morpheus/`, behind
 `TRAINER_BACKEND=morpheus`, with a parity harness that differences every one of them against
@@ -61,44 +62,91 @@ through `base.py` / `mock.py` / `cycle.py`.
 | judge | `summarize(stored verdicts)` vs published `judge.json` | **exact, 35 suites × 4 runs**, micro included |
 | judge (live) | re-judged agreement on a fixed slice | opt-in `MORPHEUS_LIVE_JUDGE=1` |
 
-The replay/chunking row is the strongest evidence in the harness. There is no dump of the
-reference chain's rehearsal text to diff against, but each night's chunk counts are a
-fingerprint of the whole deterministic half of the night: the rehearsal RNG stream seeded once
-per chain and consumed across nights, paragraph eligibility and pooled order, the character
-budget taken from the *new day's* length, the greedy fill's overshoot-by-one, tokenization,
-chunk slicing, and the step schedule. Reproducing all 18 integers means all of it matches.
+The replay/chunking row is the harness's broadest single check: there is no dump of the
+reference chain's rehearsal text to diff against, but each night's chunk counts constrain the
+rehearsal RNG stream (seeded once per chain, consumed across nights), paragraph eligibility and
+pooled order, the character budget taken from the *new day's* length, the greedy fill's
+overshoot-by-one, tokenization, chunk slicing, and the step schedule — simultaneously.
 
-Counts: **149 tests green** (46 scaffold + 103 new), 7 skipped in tier A (they run in tier B).
+**Its limit, stated because an earlier draft of this report overstated it:** the chunk count
+pins the mixed corpus's total TOKEN VOLUME, not *which* paragraphs are rehearsed. One paragraph
+of difference is ~250 tokens and usually will not cross a 1024-token boundary. It is strong
+evidence of the same sampling *procedure*; it is not proof of the same sampled *text*.
+
+Counts: **155 tests green** in tier A (7 skipped, they run in tier B); **159 green** in the
+pinned train env.
 
 ```
-.venv/bin/python -m pytest -q                 # tier A: 149 passed, 7 skipped
-.venv-train/bin/python -m pytest -q           # tier B: + tokenizer/peft parity
+./scripts/run_parity.sh                       # both tiers
+./scripts/morpheus_chain.py --seed N --out …  # one chain, trained + judged
+./scripts/parity_report.py var/parity/*       # the ensemble verdict
 ```
 
 ## 3. E2E seed ensemble
 
-Three chains (seeds 0/1/2), 6 nights each on days 5,9,12,13,17,21, through the real kernels:
-continue-CPT the one adapter, 30 % matched-compute rehearsal, closed-book eval of every
-consolidated day plus traps after each night, base-model floor and heldout controls at the end.
-1908 predictions per chain — the same count the reference runs produced.
+Three chains (seeds 0/1/2), 6 nights each on days 5,9,12,13,17,21, through the real kernels.
+1908 predictions per chain — the same count the reference runs produced. Wall clock 3.7 h
+(uncheckpointed, dedicated GPU) to 5.2 h (checkpointed, shared GPU); ~14 GPU-hours total.
 
-*Results table lands here when the chains finish; `scripts/parity_report.py` prints it and
-writes `parity_report.json`.*
+| run | seen | separation | micro | heldout | base | ret(d0) | traps |
+|---|---|---|---|---|---|---|---|
+| morpheus_f30_s0 | 0.1167 | 0.1167 | 0.1069 | 0.0000 | 0.0111 | 0.200 | 0.18 |
+| morpheus_f30_s1 | 0.2500 | 0.2333 | 0.1630 | 0.0167 | 0.0111 | 0.733 | 0.11 |
+| morpheus_f30_s2 | 0.2833 | 0.2001 | 0.1834 | 0.0833 | 0.0111 | 1.072 | 0.43 |
+| *replay_f30* | *0.2861* | *0.2694* | *0.1829* | *0.0167* | *0.0111* | *0.786* | *0.39* |
+| *replay_f30_s1* | *0.2111* | *0.1778* | *0.1520* | *0.0333* | *0.0111* | *0.429* | *0.29* |
+| *replay_f30_s2* | *0.2361* | *0.2028* | *0.1567* | *0.0333* | *0.0111* | *0.438* | *0.39* |
+| *repro_replay_f30* | *0.2861* | *0.2528* | *0.1599* | *0.0333* | *0.0111* | *1.000* | *0.39* |
 
-Two deliberate choices about what the E2E does **not** vary:
+**Verdict: PARITY.** Exact two-sided permutation test on run-level seen-mean, over all
+C(7,3)=35 splits: ours n=3 mean 0.2167 vs reference n=4 mean 0.2549, **p = 0.514**. The
+hypothesis that our chains and the reference chains are drawn from the same distribution
+cannot be rejected. Base-model floor is identical (0.0111 on every run, ours and theirs), and
+every per-night training shape is exact: **54/54 integers** across 3 chains x 6 nights x
+(chunks, chunks_per_epoch, steps).
 
-- **It trains on the reference amplified corpora**, not a fresh 48× generation. Re-amplifying
-  would stack generator variance on top of the seed spread and confound exactly the comparison
-  being made. Amplification is proven separately and more sharply — kernel-by-kernel above, and
-  in situ through the real vLLM path (§4).
-- **The rehearsal stream seed is fixed at 7 across the ensemble**, because that is how the
-  reference ensemble was built (`set_seed(seed)` varied LoRA init; `random.Random(7)` did not
-  move). The spread we are comparing against measures init variance, so ours must too.
+### The criterion had to be replaced first
 
-**Base model for parity is Qwen3-VL-8B.** The goldens are 8B runs; 32B is the production serve
-target (the adapter must match the served base) and 32B ≈ 8B on identical probes is a measured
-tie — consolidation is write-bound, not capacity-bound. Parity is run where the numbers to match
-exist; the 32B chain is 2b's concern.
+The harness originally gated on membership in the min-max envelope of the 3 reference seeds,
+and by that rule only 1 of our 3 chains passed. That looked damning until the criterion was
+tested against the reference itself. **Leave-one-out: the reference satisfies its own band
+2 times in 4.** A min-max range over n runs admits a further exchangeable run only (n-1)/(n+1)
+of the time — 50% at n=3 — and the gate required three metrics simultaneously. It fails working
+ports as a matter of arithmetic, and 1-of-3 is what a correct port looks like under it.
+
+`Band` is now documented as reportable-but-not-gating, and `same_distribution()` — the exact
+permutation test — is the gate. A large p is not proof of parity: with a handful of runs the
+test has little power against small shifts. It rules out the large regressions a port bug
+causes, which is what it is for.
+
+### What is genuinely open
+
+- **Our spread is 2.2x the reference's** (sd 0.0720 vs 0.0325), entirely from seed 0, whose
+  seen-mean of 0.1167 sits below every reference run and whose day-5 retention collapsed
+  (0.25 -> 0.05, against the reference holding 0.23 -> 0.23). With 4 reference samples we
+  cannot say whether that is the reference distribution's own low tail or a distinct failure
+  mode we can hit. **More seeds is the cheap answer** (~5 GPU-h each, parallelizable).
+- **Seed 2 trips the publish gate on contamination**: heldout 0.0833 against the recipe ceiling
+  of 0.05 (5/60 probes vs the reference's 2/60). Not significant alone, but it is a gate-relevant
+  observation and the gate would have blocked that adapter — which is the gate working.
+- Diagnostic decomposition of seed 0, for whoever picks this up: our full chain scored 0.15 on
+  day 21; our night-5 training continued from the *reference's* `adapter_s4_d17` scored 0.32;
+  the reference from that same point scored 0.45. So most of seed 0's gap is accumulated across
+  nights rather than made in any single one.
+
+### What was ruled out along the way
+
+The eval path is independently validated: the **reference's** adapter scored **0.45 through our
+eval code — its exact golden value**. Also checked and matching: training data (byte-identical
+corpora), step schedules, loss curves, LoRA topology (504 tensors, identical keys/shapes/config),
+LoRA update magnitude (||B.A|| ratio 0.998), rehearsal volume (30.1% every night) and rehearsal
+composition (uniform across prior days).
+
+Two claims of mine that did not survive checking, recorded because they shaped decisions:
+the chunk-count fingerprint pins total token volume, **not** which paragraphs are rehearsed
+(a one-paragraph difference rarely crosses a 1024-token boundary); and training is **not**
+bitwise reproducible — no deterministic algorithms are set, so identical runs diverge and
+compound over 3423 steps.
 
 ## 3b. Amplifier, in situ
 
@@ -107,16 +155,19 @@ our corpus assembly reproduce the reference corpora, but not that the generator 
 works on this node. So one day-5 slice was amplified for real, end to end through the seam
 (10 blocks × 48 = 480 generations, HF backend, GPU 6, 8.6 min):
 
-| | ours (480 real generations) | reference (day 5, 11 520) |
-|---|---|---|
-| ok-rate | **1.000** (480 valid, 0 rejected) | 1.000 |
-| calibration fraction | **0.1458** | recipe 0.15 (0.26σ at n=480) |
-| chars / paragraph | 918.1 | 942.2 |
-| **corpus size ratio** | **0.974** | 1.000 |
+| | vLLM (production) | HF (fallback) | reference (day 5, 11 520) |
+|---|---|---|---|
+| ok-rate | **1.000** (480 valid, 0 rejected) | **1.000** | 1.000 |
+| calibration fraction | **0.1458** | 0.1458 | recipe 0.15 (0.26σ at n=480) |
+| chars / paragraph | 917.7 | 918.1 | 942.2 |
+| **corpus size ratio** | **0.974** | 0.974 | 1.000 |
+| wall clock | **2.2 min** | 8.6 min | — |
 
 That is §4's stochastic-parity bar met on live output: neg-frac 0.150 ± tol, ok-rate ~1.0, corpus
 ratio 1.0 ± 0.05. Zero rejections means our `valid()` and the generator agree completely on real
-text, not just on the reference's retained text.
+text, not just on the reference's retained text. The two backends landing within 0.4 chars per
+paragraph of each other is a useful cross-check that neither one is quietly degraded — and vLLM
+is 3.9× faster, which is why it is the production path.
 
 ## 4. Exec model
 

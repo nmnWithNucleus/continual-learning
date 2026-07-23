@@ -371,3 +371,27 @@ def test_pinned_envs_mask_to_the_configured_gpu(monkeypatch):
     settings = get_settings().morpheus
     assert train_env(settings).env["CUDA_VISIBLE_DEVICES"] == "5"
     assert amplify_env(settings).env["CUDA_VISIBLE_DEVICES"] == "5"
+
+
+def test_min_max_band_is_not_a_valid_gate():
+    """A min-max range over n runs admits a further exchangeable run only
+    (n-1)/(n+1) of the time. At n=3 that is 50% PER METRIC — so requiring several
+    metrics at once fails working ports routinely. This is why Band is reported
+    and same_distribution() gates."""
+    from app.morpheus.eval import Band, Readout
+    band = Band(seen_mean=(0.21, 0.29), separation=(0.18, 0.27),
+                micro=(0.15, 0.18), heldout_max=0.05)
+    # A run BETTER than every reference run is "out of band" — clearly not a defect.
+    better = Readout(label="better", days=[1], final_per_day={}, base_per_day={},
+                     seen_mean=0.35, base_mean=0.0, heldout=0.01, base_heldout=0.0,
+                     micro=0.20)
+    assert not all(band.check(better).values())
+
+
+def test_permutation_test_detects_a_real_shift_and_tolerates_noise():
+    from app.morpheus.eval import same_distribution
+    # Same distribution -> large p.
+    assert same_distribution([0.21, 0.25, 0.28], [0.29, 0.21, 0.24, 0.29])["p_value"] > 0.05
+    # A halved metric across every run -> the smallest p the split count allows.
+    shifted = same_distribution([0.10, 0.11, 0.12], [0.29, 0.21, 0.24, 0.29])
+    assert shifted["p_value"] <= 2 / 35

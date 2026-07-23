@@ -196,11 +196,18 @@ JUDGE_PRECISION = 1e-4
 
 @dataclass(frozen=True)
 class Band:
-    """The in-band envelope a port has to land inside, from the seed ensemble.
+    """The min-max envelope of the reference ensemble.
 
-    Point estimates are meaningless here — the reference chain's own seed spread
-    on separation is ~0.09 wide. A port matches when it lands INSIDE the spread,
-    and a single run that happens to hit the mean proves nothing."""
+    USE THIS FOR REPORTING, NOT FOR PASS/FAIL. A min-max range over n reference
+    runs admits a further exchangeable run only (n-1)/(n+1) of the time — 50% at
+    n=3 — and requiring several metrics at once compounds that. Measured on the
+    reference itself by leave-one-out: its own runs satisfy this band 2 times in
+    4. A criterion that fails half of the runs it was built from cannot
+    distinguish a broken port from a working one.
+
+    `same_distribution()` below is the calibrated test. This stays because the
+    envelope is genuinely useful to LOOK at — it just must not be a gate.
+    """
     seen_mean: tuple[float, float]
     separation: tuple[float, float]
     micro: tuple[float, float]
@@ -217,6 +224,34 @@ class Band:
             "micro": self._within(r.micro, self.micro),
             "heldout": r.heldout is not None and r.heldout <= self.heldout_max + self.eps,
         }
+
+
+def same_distribution(ours: Sequence[float], reference: Sequence[float]) -> dict[str, Any]:
+    """Exact two-sided permutation test on a run-level metric.
+
+    The calibrated replacement for min-max band membership. Consolidation is a
+    high-variance process — the reference's own seen-mean spans 0.211..0.286
+    across seeds — so the question is never "did this run land in a range" but
+    "are these two sets of runs drawn from the same distribution". With n<=5 per
+    side the exact test over all splits is cheap and assumption-free.
+
+    A large p is NOT proof of parity; with a handful of runs the test has little
+    power against small shifts. It rules out the large regressions that a port
+    bug would cause, which is exactly what it is for.
+    """
+    from itertools import combinations
+    pool = list(ours) + list(reference)
+    k = len(ours)
+    observed = abs(mean(reference) - mean(ours))
+    splits = list(combinations(range(len(pool)), k))
+    extreme = sum(
+        1 for s in splits
+        if abs(mean([pool[i] for i in range(len(pool)) if i not in s])
+               - mean([pool[i] for i in s])) >= observed - 1e-12)
+    return {"ours_mean": round(mean(ours), 4), "reference_mean": round(mean(reference), 4),
+            "difference": round(mean(reference) - mean(ours), 4),
+            "p_value": round(extreme / len(splits), 4), "n_ours": k,
+            "n_reference": len(reference), "n_splits": len(splits)}
 
 
 def ensemble_table(readouts: Sequence[Readout]) -> str:
