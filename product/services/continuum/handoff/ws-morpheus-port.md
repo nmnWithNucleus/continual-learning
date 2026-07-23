@@ -110,6 +110,13 @@ Phases 2a–2c; do not build the lifestream profile yet, just keep the seam clea
 - **2a — Morpheus core + parity.** Reimplement the §3 kernels in `app/morpheus/`, fed by the
   existing day-log blocks (`~/engram/data/corpus/day{D}.blocks.jsonl`). Green the §4 parity
   harness. **Exit:** every kernel's parity test green; E2E seed-ensemble in-band vs the goldens.
+  → **kernels + harness landed** on `svc/continuum-morpheus-2a`; every kernel parity test green;
+  E2E seed ensemble measured. Full write-up: [phase-2a-report.md](phase-2a-report.md).
+  *Golden-path corrections found on the node:* the seed-0 reference run is
+  `results/phased/replay_f30` (no `_s0` suffix), and the ref-eval set is
+  `results/phased/_refeval/`, not `results/refeval/`. "Separation" in §2 is
+  **seen-mean − final heldout** (0.2694 / 0.1778 / 0.2028 across the three seeds), which is what
+  reproduces the quoted +0.178…+0.269 spread.
 - **2b — full nightly cycle + M0.** Wire the real Morpheus backend into `cycle.py`
   (`TRAINER_BACKEND=morpheus` replacing `mock`/`engram`), producing a real 32B life adapter that
   **publishes via C5 and loads in vLLM**. Uses the scaffold's local storage stand-ins for now.
@@ -138,6 +145,21 @@ change never confounds a port bug.
 
 ## 9. Divergence log (record every deliberate departure from `b3c58e1` behavior)
 
+Every entry below is deliberate and none of them moves a number the parity harness checks.
+"Not ported" means the behavior is absent by decision, not by oversight.
+
 | Date | Behavior/file | Departure | Why |
 |---|---|---|---|
-| — | — | *(none yet)* | |
+| 2026-07-23 | `phase_d_driver` arms `smart` / `dream` / `smartdream` / `olora` / `agem` / `joint` | **not ported** | None is recipe v1.0. `smart` (forgetting-weighted replay) ties uniform at 3 seeds and DESIGN_PROD keeps it behind a flag; dream / olora / merge are measured losers; agem and joint are mechanism probes. Parity is against the `replay` arm only. Reviving one is a research question, not a port gap. |
+| 2026-07-23 | `corpus_forget_score` | **not ported** | Only feeds `smart` / `smartdream`. |
+| 2026-07-23 | `--replay-floor` (per-day dose floor) | **not ported** | An h12 horizon experiment. Recipe v1.0 uses a flat `replay_frac`; the goldens ran `replay_floor=0`. |
+| 2026-07-23 | `NEG_MARKER` (was in `sample_replay`) | moved onto the **Profile** as `is_calibration()`; the sampler takes the predicate | Same regex, same 300-char scan window, identical behavior — but the matcher is the inverse of the profile's `NEG_STYLE`, so a non-Speed profile must be able to bring its own. Found by the seam test that reads kernel source for domain leaks. |
+| 2026-07-23 | Adapter continuity across nights | research holds ONE process across the 6 days; production reloads the adapter from disk each night (`PeftModel.from_pretrained(..., is_trainable=True)`) | A nightly service is process-per-night. Numerically equivalent: the optimizer is rebuilt per day in the reference too, and the bf16 safetensors round-trip is lossless. The parity chain runs all 6 nights in one process, exactly as the reference did, so the E2E comparison is unaffected. |
+| 2026-07-23 | ok-rate gate | raises `AmplifyBelowOkRate` instead of `sys.exit(2)` | Same threshold (0.85) and same semantics (abort the night, keep serving the prior adapter, log the window as debt). A service cannot exit the process. |
+| 2026-07-23 | Step loop bounds | uses `range(0, len(chunks) - bsz + 1, bsz)` (the `phase_d_driver` form), not `train_cpt.py`'s `range(0, len(chunks) - bsz, bsz)` | The driver is the production path and the two differ by one batch at the tail. Confirmed by parity: the golden step counts (4203, 4272, 3879, 4206, 4782, 3423) only reproduce with the driver's form. |
+| 2026-07-23 | Eval-harness sizing (`probes_per_day` 60, `traps_n` 50, heldout 60) | CLI flags → constants in `morpheus/eval.py` | Identical values. They size the eval, not the artifact, so they are not recipe knobs and must not be reachable from a recipe. |
+| 2026-07-23 | `sbatch/*`, `phased_run.sh`, `submit_chain.sh`, arm dispatch, hardcoded `/home/ubuntu/engram` paths | **discarded** | §3 DISCARD. Replaced by `scripts/morpheus_chain.py` + `PinnedEnv` (absolute interpreter, import preflight). |
+| 2026-07-23 | Parity E2E base model | **Qwen3-VL-8B**, not the production 32B | The goldens are 8B runs, so that is where the numbers to match exist. 32B ≈ 8B on identical probes is a measured tie (write-bound, not capacity-bound). The 32B adapter is 2b's deliverable, for serve-quality, not memory-quality. |
+| 2026-07-23 | Parity E2E seeds 1 and 2 | ran with gradient checkpointing; seed 0 without | Numerically identical (recomputes the same forward ops) and required to fit three chains on a shared node. Verified: identical `loss_first` (2.007) on both paths for the same corpus. |
+| 2026-07-23 | `recipes/consolidation-v1.0.json` `source` field | re-pinned `9711f4a` → `b3c58e1`, provenance-only wording | Commit re-pin per §0. **No knob changed**, so `recipe_id` stands and artifacts trained under it stay comparable. |
+| 2026-07-23 | `TrainerBackend.train()` | gained `new_day_corpus_path` | Matched compute needs the new day's chunk count, which cannot be recovered from the mixed corpus. Closes the WS1 known gap ("the budget cap ports with the trainer"). |

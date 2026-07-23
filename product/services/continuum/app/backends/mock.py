@@ -56,7 +56,8 @@ class MockBackend:
                              n_negatives=n_neg)
 
     def train(self, corpus_path: str, recipe: Recipe, *, out_dir: str,
-              resume_adapter: str | None) -> TrainResult:
+              resume_adapter: str | None,
+              new_day_corpus_path: str | None = None) -> TrainResult:
         corpus = Path(corpus_path).read_text()
         # Version derives from CONTENT + lineage (the resume adapter's version
         # name), never absolute paths — relocating var_dir must not fork versions.

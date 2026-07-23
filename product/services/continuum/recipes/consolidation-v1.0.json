@@ -1,6 +1,7 @@
 {
   "recipe_id": "consolidation-v1.0",
-  "source": "nucleus-research@continuum-research 9711f4a — research/engram/RECIPE_CONSOLIDATION.md (recipe v1.0) + DESIGN_PROD.md §2c; knobs pending Gnandeep's blessed-defaults confirmation (replay_frac 0.15 vs 0.30, replay_source amp vs rawlog, neg_boost)",
+  "source": "nucleus-research consolidation line @ b3c58e1 (provenance only). Knobs confirmed against the Phase-1 goldens: replay frac 0.30, source amp, neg_boost 0. Flipping source to rawlog is a validated tie but needs the day-log fetch client and forks recipe_id to v1.1.",
+  "note": "Provenance/commit re-pin only — no knob changed, so recipe_id stands and artifacts trained under it remain comparable.",
   "amplify": {
     "variants": 48,
     "neg_frac": 0.15,

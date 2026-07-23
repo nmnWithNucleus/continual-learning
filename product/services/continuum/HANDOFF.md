@@ -5,14 +5,15 @@
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
 **Status:** scaffold landed (WS1, 46 tests green); Speed-data reproduction **REPRODUCED ✅**
-(Phase 1); Morpheus port **ready to build** (WS2, decisions locked). Storage-expansion +
-continuum-slimming pending board · **Last updated:** 2026-07-23 (repro + port-design session)
+(Phase 1); Morpheus port **Phase 2a landed** — kernels + parity harness green, E2E seed ensemble
+measured (WS2). Storage-expansion + continuum-slimming pending board ·
+**Last updated:** 2026-07-23 (Morpheus 2a session)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
 |---|---|---|---|---|
 | WS1 | Nightly-loop scaffold: mock cycle headless green (window→daylog→amplify→replay→train→gate→publish, journaled + idempotent) | **done** | [handoff/ws-nightly-scaffold.md](handoff/ws-nightly-scaffold.md) | this session |
-| WS2 | **Morpheus port** (real `TRAINER_BACKEND=morpheus`); Phase 2a parity → 2b M0 → 2c lean/storage-seams; exit = Speed-data night reproduces recipe-v1.0 numbers through our gate + C5 path | **ready to build** (repro landed 2026-07-22; decisions locked 2026-07-23) | [handoff/ws-morpheus-port.md](handoff/ws-morpheus-port.md) | — |
+| WS2 | **Morpheus port** (real `TRAINER_BACKEND=morpheus`); Phase 2a parity → 2b M0 → 2c lean/storage-seams; exit = Speed-data night reproduces recipe-v1.0 numbers through our gate + C5 path | **2a landed** (kernels + parity green; E2E ensemble measured) → 2b next | [ws-morpheus-port.md](handoff/ws-morpheus-port.md) · [phase-2a-report.md](handoff/phase-2a-report.md) | 2a: Morpheus session |
 | WS3 | C10 v0 freeze (with storage; founders ratify) + real storage integration + watermark/late-data policy | queued | *(opens with the freeze session)* | — |
 | WS4 | Eval gates v1: probe generation (generator ≠ corpus-generator), Gemini judge on our creds, the 3 unwired gate checks | queued — after WS2 | *(opens with work)* | — |
 
@@ -50,9 +51,14 @@ C2 records).
 2. **Phase 1 — DONE ✅ REPRODUCED:** ran his replay_f30 chain on our infra — seen-mean 0.286
    (== his seed-0), separation **+0.253** (in his +0.178…+0.269 spread), day-5 retention 1.00,
    corpus rebuild ratio 1.004. GO for Phase 2.
-3. **Phase 2 — Morpheus port (WS2, ready to build):** 2a Morpheus core + parity harness → 2b
-   full cycle + M0 (adapter loads in vLLM) → 2c lean architecture + storage-client seams. Full
-   self-contained spec: [handoff/ws-morpheus-port.md](handoff/ws-morpheus-port.md).
+3. **Phase 2 — Morpheus port (WS2):** **2a DONE** — kernels reimplemented under
+   `app/morpheus/` behind `TRAINER_BACKEND=morpheus`, parity harness green against the Phase-1
+   goldens (`render_block` byte-identical on 1427/1427 blocks; replay+chunking fingerprint 18/18
+   integers exact; LoRA target set 252/252 modules; judge summary exact on 35 suites × 4 runs),
+   E2E seed ensemble run on the node. → 2b full cycle + M0 (adapter loads in vLLM) → 2c lean
+   architecture + storage-client seams. Spec:
+   [handoff/ws-morpheus-port.md](handoff/ws-morpheus-port.md) · results:
+   [handoff/phase-2a-report.md](handoff/phase-2a-report.md).
 4. **Phase 3 — DP dogfood (later):** records → storage day-log view → continuum; measures the
    shape-gap vs Phase 2 (the R1b domain-transfer result).
 
@@ -108,8 +114,13 @@ founders'-board ratification** (D-numbers to be minted there) — flagged per it
   `./run.sh` demos a synthetic night end-to-end (publish + reservoir admission + journal).
   Adversarial review round (26 confirmed findings → all fixed): details in
   [ws-nightly-scaffold](handoff/ws-nightly-scaffold.md).
-  Recipe pinned at `recipes/consolidation-v1.0.json` (engram v1.0 knobs; replay/source
-  values pending Gnandeep confirmation).
+- **Morpheus 2a is live** on `svc/continuum-morpheus-2a`: the real kernels under
+  `app/morpheus/` (Profile seam · blocks · amplify+generate · replay · train · scorers · probes ·
+  judge · eval · pinned-env exec), the `morpheus` backend behind the three-verb seam, and
+  `tests/parity/` as the contract. `./scripts/run_parity.sh` runs both tiers;
+  `scripts/morpheus_chain.py` runs a full chain and judges it. Env lockfiles in `env/`.
+  Recipe knobs are now CONFIRMED against the goldens (frac 0.30 / source amp / neg_boost 0);
+  the source flip to rawlog is a validated tie that forks `recipe_id` and lands with 2c.
 - **Maturity read of the research repo is complete** (line-by-line: LOG, DESIGN_PROD, all
   of engram/code, speed-lora, continuum thread) — the kickoff brief's Q1–Q4 are resolved in
   session notes; key headline: the nightly product is a stock PEFT LoRA (vLLM-servable),

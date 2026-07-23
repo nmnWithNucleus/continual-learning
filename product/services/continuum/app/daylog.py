@@ -2,7 +2,7 @@
 
 The day log is the ONLY interface between ingest and consolidation (the
 research design's frozen-schema rule), so field names here deliberately match
-the engram schema: segment rows carry seg_id / t_start / t_end / caption / asr
+the day-log schema: segment rows carry seg_id / t_start / t_end / caption / asr
 / ocr / quality; block rows carry block_id / seg_ids / text / anchors /
 quality. The trainer seam renders these to segments.jsonl / blocks.jsonl
 byte-compatible with what the ported research code consumes.
@@ -14,7 +14,7 @@ its bucket. Records are attributed by t_start (window rule).
 
 v0 renderer note: block text is labeled anchored lines (anchor line + Caption /
 Heard / World text). The research prose renderer (render_block's structured
-fields + in-text anchor weaving) ports with ws-engram-port; the seam and field
+fields + in-text anchor weaving) lives in morpheus/blocks.py; the seam and field
 names are already its shape.
 """
 from __future__ import annotations

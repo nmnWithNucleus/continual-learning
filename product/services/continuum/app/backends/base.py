@@ -11,9 +11,15 @@ backends. What a backend supplies is the three GPU/LLM-shaped steps:
     evaluate()  candidate adapter -> raw eval scores (the gate VERDICT —
                 thresholds, two-strike — stays service-owned in gate.py)
 
-`mock` (default) runs the whole cycle headless-green with no GPU. `engram` is
-the ported research core (ws-engram-port); until the port lands it fails
-loudly with a pointer, never silently.
+`train()` takes the mixed corpus AND the new-day-only corpus, because the
+rehearsal mix is matched-compute: the per-epoch step budget is what the new day
+alone would have cost, so replay DISPLACES new-day chunks rather than buying
+extra gradient steps. Passing only the mixed corpus would silently make a
+30%-rehearsal night a 30%-longer night.
+
+`mock` (default) runs the whole cycle headless-green with no GPU. `morpheus`
+is our real nightly-consolidation core (app/morpheus/, ws-morpheus-port):
+recipe-coupled amplification, LoRA CPT, and the judged closed-book eval.
 """
 from __future__ import annotations
 
@@ -54,7 +60,8 @@ class TrainerBackend(Protocol):
     def amplify(self, blocks: list[Block], recipe: Recipe, *, seed: int) -> AmplifyResult: ...
 
     def train(self, corpus_path: str, recipe: Recipe, *, out_dir: str,
-              resume_adapter: str | None) -> TrainResult: ...
+              resume_adapter: str | None,
+              new_day_corpus_path: str | None = None) -> TrainResult: ...
 
     def evaluate(self, adapter_dir: str, blocks: list[Block], recipe: Recipe) -> EvalScores: ...
 
@@ -63,7 +70,7 @@ def get_backend(name: str) -> TrainerBackend:
     if name == "mock":
         from .mock import MockBackend
         return MockBackend()
-    if name == "engram":
-        from .engram import EngramBackend
-        return EngramBackend()
+    if name == "morpheus":
+        from .morpheus import MorpheusBackend
+        return MorpheusBackend()
     raise ValueError(f"unknown TRAINER_BACKEND {name!r}")
