@@ -80,6 +80,7 @@ class MorpheusBackend:
             resume_adapter=resume_adapter,
             lora=LoraSpec(r=recipe.lora_r, alpha=recipe.lora_alpha),
             shard_gpus=settings.shard_gpus,
+            shard_max_memory=settings.shard_max_memory,
             grad_checkpointing=settings.grad_checkpointing)
         corpus = Path(corpus_path).read_text()
         budget = None
@@ -130,7 +131,8 @@ class MorpheusBackend:
 
         adapter = LifeAdapter.open(base_model=settings.base_model, device=settings.device,
                                    resume_adapter=adapter_dir,
-                                   shard_gpus=settings.shard_gpus)
+                                   shard_gpus=settings.shard_gpus,
+                                   shard_max_memory=settings.shard_max_memory)
         day_preds = [{"suite": "new_day", "q": p.question, "gold": p.gold,
                       "pred": adapter.answer(p.question)} for p in day_probes]
         held_preds = [{"suite": "heldout", "q": p.question, "gold": p.gold,
