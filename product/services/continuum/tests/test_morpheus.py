@@ -330,3 +330,15 @@ def test_configured_probe_generator_is_independent_of_the_base_model():
     settings = get_settings().morpheus
     assert_independent_generators(probe_generator=settings.probe_generator,
                                   corpus_generator=settings.base_model)
+
+
+def test_amplify_and_train_envs_are_separate():
+    """vLLM and the training stack pin incompatible transformers, so 'the ML env'
+    does not exist. A config that collapsed them would fail only at the generator
+    call, after the day log was already built."""
+    from app.config import get_settings
+    from app.morpheus.pinned_env import amplify_env, judge_env, train_env
+    settings = get_settings().morpheus
+    assert settings.amplify_python != settings.train_python
+    assert {e.name for e in (train_env(settings), amplify_env(settings),
+                             judge_env(settings))} == {"train", "amplify", "judge"}

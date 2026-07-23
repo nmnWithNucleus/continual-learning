@@ -1,8 +1,9 @@
 """Pinned-environment execution.
 
-Morpheus spans two environments that cannot be merged: training/eval needs
-torch+peft+transformers, judging needs litellm with Vertex ADC. They are invoked
-by ABSOLUTE INTERPRETER PATH — never `conda activate`.
+Morpheus spans THREE environments that cannot be merged, and the count is the
+point: training/eval needs torch+peft, amplification needs vLLM (which pins its
+own, different transformers), and judging needs litellm with Vertex ADC. They are
+invoked by ABSOLUTE INTERPRETER PATH — never `conda activate`.
 
 That is not a style preference. The research chain's `phased_run.sh` did
 `conda activate speedlora && python phase_d_driver.py` and died a minute in
@@ -81,6 +82,16 @@ def train_env(settings) -> PinnedEnv:
                      requires=("torch", "transformers", "peft"),
                      env={"CUDA_VISIBLE_DEVICES": index,
                           "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True"})
+
+
+def amplify_env(settings) -> PinnedEnv:
+    """vLLM lives apart from the trainer — they pin incompatible transformers, so
+    a single "the ML env" does not exist. Discovering that at the generator call
+    wastes however long the day-log build took."""
+    index = settings.device.rsplit(":", 1)[-1] if ":" in settings.device else "0"
+    return PinnedEnv(name="amplify", interpreter=settings.amplify_python,
+                     requires=("vllm",) if settings.amplify_backend == "vllm" else ("torch",),
+                     env={"CUDA_VISIBLE_DEVICES": index})
 
 
 def judge_env(settings) -> PinnedEnv:
