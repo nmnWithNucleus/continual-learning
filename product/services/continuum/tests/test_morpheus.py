@@ -395,3 +395,19 @@ def test_permutation_test_detects_a_real_shift_and_tolerates_noise():
     # A halved metric across every run -> the smallest p the split count allows.
     shifted = same_distribution([0.10, 0.11, 0.12], [0.29, 0.21, 0.24, 0.29])
     assert shifted["p_value"] <= 2 / 35
+
+
+def test_grad_checkpointing_is_not_silently_ignored():
+    """MORPHEUS_GRAD_CKPT only reaches the trainer through get_settings(). A script
+    that builds a LifeAdapter directly and forgets to read it trains at ~52 GB
+    instead of ~38 GB — which is how five sweep jobs OOM'd on shared cards. Every
+    script that opens an adapter must consult the setting."""
+    import re
+    from pathlib import Path
+    scripts = Path(__file__).resolve().parents[1] / "scripts"
+    for path in scripts.glob("*.py"):
+        source = path.read_text()
+        if "LifeAdapter.open(" not in source:
+            continue
+        assert re.search(r"grad_checkpointing\s*=", source), (
+            f"{path.name} opens a LifeAdapter without deciding grad_checkpointing")

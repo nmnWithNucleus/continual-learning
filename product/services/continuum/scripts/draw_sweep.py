@@ -24,6 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from app.config import get_settings                                 # noqa: E402
 from app.morpheus.probes import QA_SUITE, day_pool, load_suite      # noqa: E402
 from app.morpheus.replay import sample_replay                       # noqa: E402
 from app.morpheus.train import CptConfig, LifeAdapter, matched_compute_budget  # noqa: E402
@@ -58,13 +59,21 @@ def main() -> int:
     ap.add_argument("--base-model", default="Qwen/Qwen3-VL-8B-Instruct")
     ap.add_argument("--probes-dir", default="/home/ubuntu/engram/data/probes_merged")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--grad-ckpt", action="store_true",
+                    help="override; otherwise MORPHEUS_GRAD_CKPT is honoured")
     args = ap.parse_args()
 
     corpora = {d: Path(CORPUS.format(day=d)).read_text() for d in DAYS}
     text = night5_text(args.rehearsal_seed, corpora)
 
+    # Honour the checkpointing setting. Scripts that build a LifeAdapter directly
+    # do NOT pick this up from the environment on their own — an earlier version of
+    # this script set MORPHEUS_GRAD_CKPT in its launcher and silently trained
+    # uncheckpointed at 52 GB instead of 38 GB, which OOM'd five jobs on shared
+    # cards. Read it explicitly or do not claim to support it.
+    ckpt = args.grad_ckpt or get_settings().morpheus.grad_checkpointing
     adapter = LifeAdapter.open(base_model=args.base_model, device=args.device,
-                               resume_adapter=START_ADAPTER)
+                               resume_adapter=START_ADAPTER, grad_checkpointing=ckpt)
     budget = matched_compute_budget(adapter.tokenizer, corpora[21], 1024)
     started = time.time()
     stats = adapter.train_on(text, CptConfig(epochs=3, seq_len=1024, batch_size=2,
@@ -81,6 +90,7 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("".join(json.dumps(r) + "\n" for r in rows))
     meta = {"rehearsal_seed": args.rehearsal_seed, "start_adapter": START_ADAPTER,
+            "grad_checkpointing": ckpt,
             "minutes": round((time.time() - started) / 60, 1),
             "replay_chars": len(text) - len(corpora[21]) - 2, **stats.__dict__}
     out.with_suffix(".meta.json").write_text(json.dumps(meta, indent=1))
