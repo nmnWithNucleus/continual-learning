@@ -11,8 +11,11 @@ of GB, so a run that plans zero jobs must never pay for one.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Callable, Protocol, Sequence
+
+from .pinned_env import device_index
 
 Generator = Callable[[Sequence[str]], list[str]]
 
@@ -43,13 +46,22 @@ def _as_chat(tokenizer: _ChatFormatter, prompts: Sequence[str]) -> list[str]:
 
 
 def vllm_generator(cfg: GenerationConfig) -> Generator:
-    """Throughput backend — the production amplifier (11k+ paragraphs a night)."""
+    """Throughput backend — the production amplifier (11k+ paragraphs a night).
+
+    vLLM's engine takes NO device argument: it places itself by
+    CUDA_VISIBLE_DEVICES and otherwise defaults to card 0. So the configured
+    device has to become a mask, set before the import, or `MORPHEUS_DEVICE` is
+    silently ignored and every amplification lands on GPU 0 — the exact
+    hardcoding the exec model exists to remove. An existing mask (we are already
+    inside a PinnedEnv) is respected, not overwritten.
+    """
     engine = {}
 
     def generate(prompts: Sequence[str]) -> list[str]:
         if not prompts:
             return []
         if "llm" not in engine:
+            os.environ.setdefault("CUDA_VISIBLE_DEVICES", device_index(cfg.device))
             from vllm import LLM
             engine["llm"] = LLM(model=cfg.model, max_model_len=cfg.max_model_len,
                                 gpu_memory_utilization=cfg.gpu_memory_utilization)

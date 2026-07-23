@@ -342,3 +342,32 @@ def test_amplify_and_train_envs_are_separate():
     assert settings.amplify_python != settings.train_python
     assert {e.name for e in (train_env(settings), amplify_env(settings),
                              judge_env(settings))} == {"train", "amplify", "judge"}
+
+
+def test_device_index_extraction():
+    from app.morpheus.pinned_env import device_index
+    assert [device_index(d) for d in ("cuda:6", "cuda:0", "6", "")] == ["6", "0", "6", "0"]
+
+
+def test_visible_device_follows_the_cuda_mask(monkeypatch):
+    """Inside a masked process the chosen card is index 0; unmasked, the
+    configured physical index stands. Getting this backwards either crashes or
+    silently lands the job on another tenant's GPU."""
+    from app.config import get_settings
+    from app.morpheus.pinned_env import visible_device
+    monkeypatch.setenv("MORPHEUS_DEVICE", "cuda:6")
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    assert visible_device(get_settings().morpheus) == "cuda:6"
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "6")
+    assert visible_device(get_settings().morpheus) == "cuda:0"
+
+
+def test_pinned_envs_mask_to_the_configured_gpu(monkeypatch):
+    """MORPHEUS_DEVICE must reach every environment as a mask — vLLM in
+    particular has no device argument and would otherwise take GPU 0."""
+    from app.config import get_settings
+    from app.morpheus.pinned_env import amplify_env, train_env
+    monkeypatch.setenv("MORPHEUS_DEVICE", "cuda:5")
+    settings = get_settings().morpheus
+    assert train_env(settings).env["CUDA_VISIBLE_DEVICES"] == "5"
+    assert amplify_env(settings).env["CUDA_VISIBLE_DEVICES"] == "5"
