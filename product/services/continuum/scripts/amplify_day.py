@@ -28,6 +28,7 @@ from app.config import get_settings                                    # noqa: E
 from app.morpheus.amplify import amplify                               # noqa: E402
 from app.morpheus.blocks import load_blocks                            # noqa: E402
 from app.morpheus.generate import GenerationConfig, get_generator      # noqa: E402
+from app.morpheus.pinned_env import amplify_env                        # noqa: E402
 from app.morpheus.profiles import get_profile                          # noqa: E402
 from app.recipe import load_recipe                                     # noqa: E402
 
@@ -53,6 +54,9 @@ def main() -> int:
     settings = get_settings().morpheus
     recipe = load_recipe(get_settings().recipe_path)
     profile = get_profile(settings.profile)
+    # Amplification's env is NOT the trainer's: vLLM pins its own transformers.
+    # Fail here rather than after the day log is loaded and the plan is built.
+    amplify_env(settings).preflight()
 
     blocks = load_blocks(Path(args.blocks_pattern.format(day=args.day)).expanduser(),
                          extra_anchors={"day": args.day})

@@ -63,10 +63,12 @@ class MorpheusSettings:
     here is *where and on what hardware* a run happens — the bits that legitimately
     differ between the cluster node, a container, and CI.
 
-    Exec model (ws-morpheus-port §5): training and judging run under PINNED envs
-    invoked by ABSOLUTE interpreter path, never `conda activate` (the research
-    chain crashed on exactly that — activate didn't fix PATH and python lacked
-    peft). Both interpreters are validated at use, not at import.
+    Exec model (ws-morpheus-port §5): amplification, training and judging each run
+    under a PINNED env invoked by ABSOLUTE interpreter path, never `conda activate`
+    (the research chain crashed on exactly that — activate didn't fix PATH and
+    python lacked peft). THREE environments, because vLLM and the training stack
+    pin incompatible transformers and cannot be merged. Every interpreter is
+    validated at use, not at import.
     """
     base_model: str            # HF id / local path of the base the adapter must match
     profile: str               # domain Profile id (§6 seam) — "speed" is the only one in 2a
@@ -75,8 +77,9 @@ class MorpheusSettings:
     device: str                # torch device for train/eval, e.g. "cuda:3" (no GPU-0 hardcoding)
     gpu_memory_utilization: float   # vLLM amplification backend's share of the device
     amplify_backend: str       # "vllm" | "hf" | "stub" (stub = tests, no GPU)
-    train_python: str          # absolute interpreter for the train/eval env (speedlora)
-    judge_python: str          # absolute interpreter for the judge env (vllm23, litellm+Vertex)
+    train_python: str          # absolute interpreter for the train/eval env (torch+peft)
+    amplify_python: str        # absolute interpreter for the amplify env (vLLM) — NOT the train env
+    judge_python: str          # absolute interpreter for the judge env (litellm+Vertex)
     judge_model: str           # litellm model id for the eval judge
     vertex_project: str        # GCP project billing the judge
     vertex_location: str
@@ -101,6 +104,10 @@ def _morpheus_settings() -> MorpheusSettings:
                                 ("vllm", "hf", "stub"), "vllm"),
         train_python=os.getenv("MORPHEUS_TRAIN_PYTHON",
                                "/home/ubuntu/miniconda3/envs/speedlora/bin/python"),
+        # vLLM and the training stack cannot share an environment (they pin
+        # different transformers). Amplification therefore runs in its own.
+        amplify_python=os.getenv("MORPHEUS_AMPLIFY_PYTHON",
+                                 "/home/ubuntu/miniconda3/envs/vllm23/bin/python"),
         judge_python=os.getenv("MORPHEUS_JUDGE_PYTHON",
                                "/home/ubuntu/miniconda3/envs/vllm23/bin/python"),
         judge_model=os.getenv("JUDGE_MODEL", "vertex_ai/gemini-2.5-flash"),

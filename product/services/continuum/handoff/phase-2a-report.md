@@ -100,6 +100,24 @@ target (the adapter must match the served base) and 32B ≈ 8B on identical prob
 tie — consolidation is write-bound, not capacity-bound. Parity is run where the numbers to match
 exist; the 32B chain is 2b's concern.
 
+## 3b. Amplifier, in situ
+
+The kernel parity above is differential and offline — it proves our plan, our validity gate and
+our corpus assembly reproduce the reference corpora, but not that the generator in front of them
+works on this node. So one day-5 slice was amplified for real, end to end through the seam
+(10 blocks × 48 = 480 generations, HF backend, GPU 6, 8.6 min):
+
+| | ours (480 real generations) | reference (day 5, 11 520) |
+|---|---|---|
+| ok-rate | **1.000** (480 valid, 0 rejected) | 1.000 |
+| calibration fraction | **0.1458** | recipe 0.15 (0.26σ at n=480) |
+| chars / paragraph | 918.1 | 942.2 |
+| **corpus size ratio** | **0.974** | 1.000 |
+
+That is §4's stochastic-parity bar met on live output: neg-frac 0.150 ± tol, ok-rate ~1.0, corpus
+ratio 1.0 ± 0.05. Zero rejections means our `valid()` and the generator agree completely on real
+text, not just on the reference's retained text.
+
 ## 4. Exec model
 
 - Both environments are invoked by **absolute interpreter path**. `PinnedEnv.preflight()` imports
@@ -118,6 +136,44 @@ exist; the 32B chain is 2b's concern.
 
   peft 0.19.1 is the exact version stamped in the golden `adapter_config.json`.
 - Judge credentials verified on our own Vertex access (`VERTEX_PROJECT=poetic-avenue-438401-a7`).
+
+**Two timing results worth carrying into 2b**, both measured on the node while the parity
+chains ran:
+
+- **Cold model load off NFS is ~25–31 min; warm is 7.6 s.** `HF_HOME` sits on the NFS share, and
+  three chains starting together pulled 3 × 16 GB of safetensors through it concurrently. It is a
+  once-per-process cost, not per-night, but a nightly fleet that starts one process per user per
+  night pays it *every night, per user*. A node-local model cache (or a pre-warm step in the
+  SLURM wrapper) is the fix, and it is worth more than any kernel optimization here.
+- **Batched generation is 3.6× faster than one-at-a-time** (0.62 vs 2.24 s/generation at batch 12,
+  8B, 48 greedy tokens). Deliberately NOT used in the parity chains: the reference evaluated one
+  probe at a time, and left-padding a batch can perturb greedy decoding, so parity keeps the
+  slower path. Eval is ~1.1 h of a 4.4 h chain, so this is the obvious lever if 2b ever needs
+  eval to be cheap — behind a flag, never on the parity path.
+
+For the record, per-generation and per-token costs measured here (8B, one H100): training
+0.377 s/step uncheckpointed and 0.64 s/step checkpointed-on-a-shared-card; tokenization
+1.64 MB/s single-threaded (6.6 s per day corpus); closed-book answer 2.24 s.
+
+**Gap found while running, owed to 2b — we are not going through SLURM.** The parity chains were
+launched directly on node-7 with `setsid`, so they carry no `SLURM_JOB_ID` and do not appear in
+`squeue`. Node-7 is meanwhile allocated *in full* (208 CPUs, all 8 GPUs) to SLURM job 698
+`lane_council32b` — the research **serve-time** 4-lane stack (`server_live4.sh`), which is
+explicitly out of this workstream's scope. In practice we are co-tenanting a node the scheduler
+believes is exclusively held, and the only reason it works is that the serving stack left GPUs
+idle. Observed headroom mid-run, after that job's worker pools finished allocating:
+
+| GPU | ours | neighbour | free |
+|---|---|---|---|
+| 2 (seed 1) | 31.4 GB | 37.4 GB | 12.2 GB |
+| 4 (seed 2) | 31.4 GB | 44.4 GB | **5.3 GB** |
+| 7 (seed 0) | 52.0 GB | — | 29.0 GB |
+
+Both sides are at steady state (flat across samples; our peak is training, and eval uses less),
+so the runs were left in place rather than restarted. But 5 GB of headroom on a five-hour job is
+luck, not engineering. §5 of the spec already calls for "our scheduler/SLURM wrapper, chained by
+dependency" — that wrapper is the missing piece and belongs in 2b, before any run we would be
+unhappy to lose.
 
 ## 5. The `Profile` seam
 
