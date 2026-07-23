@@ -24,7 +24,7 @@ from statistics import mean
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.morpheus.eval import ensemble_table, readout                  # noqa: E402
+from app.morpheus.eval import ensemble_table, readout, same_distribution  # noqa: E402
 from tests.parity import goldens                                       # noqa: E402
 
 
@@ -157,10 +157,21 @@ def main() -> int:
           f"separation {verdict['ensemble']['separation_mean']}  "
           f"spread {verdict['ensemble']['separation_spread']} "
           f"(reference {their_spread:.4f})")
-    passed = verdict["ensemble"]["all_in_band"] and dynamics["all_shapes_exact"]
-    print(f"VERDICT: {'PARITY' if passed else 'NOT IN PARITY'}"
-          f"  (in-band: {verdict['ensemble']['all_in_band']}, "
-          f"shapes exact: {dynamics['all_shapes_exact']})")
+    # The calibrated verdict. Band membership is reported above but does NOT gate:
+    # measured by leave-one-out, the reference satisfies its own band 2 times in 4.
+    reference_seen = [goldens.golden_readout(r).seen_mean
+                      for r in (*goldens.SEED_ENSEMBLE, goldens.REPRODUCTION)]
+    test = same_distribution([r.seen_mean for r in ours], reference_seen)
+    verdict["same_distribution"] = test
+    print(f"\nCALIBRATED VERDICT — exact permutation test on run-level seen-mean")
+    print(f"  ours n={test['n_ours']} mean {test['ours_mean']}  vs  "
+          f"reference n={test['n_reference']} mean {test['reference_mean']}")
+    print(f"  difference {test['difference']}   p = {test['p_value']} "
+          f"over {test['n_splits']} splits")
+    passed = test["p_value"] > 0.05 and dynamics["all_shapes_exact"]
+    print(f"\nVERDICT: {'PARITY' if passed else 'NOT IN PARITY'}"
+          f"  (distribution p={test['p_value']}, shapes exact: "
+          f"{dynamics['all_shapes_exact']}; band membership is reported, not gating)")
 
     if args.out:
         Path(args.out).write_text(json.dumps(verdict, indent=1))
