@@ -85,6 +85,7 @@ class MorpheusSettings:
     vertex_location: str
     judge_workers: int
     shard_gpus: int            # >0 shards the base across N GPUs (32B does not fit one H100)
+    shard_max_memory: str      # per-card budget when sharding, e.g. '38GiB' on a shared node
     grad_checkpointing: bool   # numerically identical, ~35% slower, required for 32B on one GPU
 
 
@@ -115,6 +116,10 @@ def _morpheus_settings() -> MorpheusSettings:
         vertex_location=os.getenv("VERTEX_LOCATION", "global"),
         judge_workers=int(os.getenv("MORPHEUS_JUDGE_WORKERS", "16")),
         shard_gpus=int(os.getenv("MORPHEUS_SHARD_GPUS", "0")),
+        # Measured 2026-07-23: 32B LoRA CPT does not fit ONE 80GB H100 at any batch
+        # size (OOM at the first forward, 79.16/79.18 GiB). It must be sharded, and
+        # on a shared node the per-card budget cannot assume the whole card.
+        shard_max_memory=os.getenv("MORPHEUS_SHARD_MAX_MEMORY", "76GiB"),
         grad_checkpointing=_as_bool(os.getenv("MORPHEUS_GRAD_CKPT", "0")),
     )
 

@@ -411,3 +411,20 @@ def test_grad_checkpointing_is_not_silently_ignored():
             continue
         assert re.search(r"grad_checkpointing\s*=", source), (
             f"{path.name} opens a LifeAdapter without deciding grad_checkpointing")
+
+
+def test_shard_budget_is_configurable_not_assumed(monkeypatch):
+    """32B needs sharding (measured: it does not fit one 80GB card at any batch
+    size). A hardcoded 76GiB-per-card budget silently assumes we own the whole
+    card, which is false on a node with a co-tenant."""
+    import inspect
+    from app.config import get_settings
+    from app.morpheus import train
+    # A default in the signature is fine and documented; what must not exist is a
+    # literal budget baked into the loader call, which no config could override.
+    source = inspect.getsource(train.LifeAdapter.open.__func__)
+    assert 'max_memory={i: shard_max_memory' in source, \
+        "the per-card shard budget is not threaded from the argument"
+    assert 'max_memory={i: "' not in source, "per-card shard budget hardcoded in the loader"
+    monkeypatch.setenv("MORPHEUS_SHARD_MAX_MEMORY", "38GiB")
+    assert get_settings().morpheus.shard_max_memory == "38GiB"

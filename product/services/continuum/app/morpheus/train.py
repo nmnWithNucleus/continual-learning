@@ -129,6 +129,7 @@ class LifeAdapter:
     def open(cls, *, base_model: str, device: str = "cuda:0",
              resume_adapter: str | Path | None = None, lora: LoraSpec | None = None,
              seed: int | None = None, shard_gpus: int = 0,
+             shard_max_memory: str = "76GiB",
              grad_checkpointing: bool = False) -> "LifeAdapter":
         import torch
         from peft import LoraConfig, PeftModel, get_peft_model
@@ -139,10 +140,12 @@ class LifeAdapter:
         tokenizer = AutoTokenizer.from_pretrained(base_model)
         load = dict(dtype=torch.bfloat16, attn_implementation="sdpa")
         if shard_gpus:
-            # 32B in bf16 is ~70GB — one 80GB card has no margin for activations.
+            # 32B in bf16 is ~66GB and does NOT fit one 80GB card for CPT at any
+            # batch size — measured, OOM at the first forward. The per-card budget
+            # is configurable because on a shared node we do not own the whole card.
             base = AutoModelForImageTextToText.from_pretrained(
                 base_model, **load, device_map="auto",
-                max_memory={i: "76GiB" for i in range(shard_gpus)})
+                max_memory={i: shard_max_memory for i in range(shard_gpus)})
         else:
             base = AutoModelForImageTextToText.from_pretrained(base_model, **load).to(device)
         for p in base.parameters():
