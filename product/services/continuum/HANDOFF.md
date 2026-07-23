@@ -4,16 +4,15 @@
 > Read [CHARTER.md](CHARTER.md) first (mission/scope/interfaces), then this file — the
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
-**Status:** kickoff DONE (2026-07-21/22 founder sessions) — architecture split settled at
-founder level, scaffold landed (WS1, 46 tests green incl. an adversarially-reviewed fix
-round), real-backend port queued on Gnandeep's answers · **Last updated:** 2026-07-22
-(kickoff + scaffold session)
+**Status:** scaffold landed (WS1, 46 tests green); Speed-data reproduction **REPRODUCED ✅**
+(Phase 1); Morpheus port **ready to build** (WS2, decisions locked). Storage-expansion +
+continuum-slimming pending board · **Last updated:** 2026-07-23 (repro + port-design session)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
 |---|---|---|---|---|
 | WS1 | Nightly-loop scaffold: mock cycle headless green (window→daylog→amplify→replay→train→gate→publish, journaled + idempotent) | **done** | [handoff/ws-nightly-scaffold.md](handoff/ws-nightly-scaffold.md) | this session |
-| WS2 | Engram core port (real `TRAINER_BACKEND`); exit = Speed-data night reproduces recipe-v1.0 numbers through our gate + C5 path | **unblocked** (Gnandeep answered 2026-07-22); sequenced behind the Phase-1 baseline | [handoff/ws-engram-port.md](handoff/ws-engram-port.md) | — |
+| WS2 | **Morpheus port** (real `TRAINER_BACKEND=morpheus`); Phase 2a parity → 2b M0 → 2c lean/storage-seams; exit = Speed-data night reproduces recipe-v1.0 numbers through our gate + C5 path | **ready to build** (repro landed 2026-07-22; decisions locked 2026-07-23) | [handoff/ws-morpheus-port.md](handoff/ws-morpheus-port.md) | — |
 | WS3 | C10 v0 freeze (with storage; founders ratify) + real storage integration + watermark/late-data policy | queued | *(opens with the freeze session)* | — |
 | WS4 | Eval gates v1: probe generation (generator ≠ corpus-generator), Gemini judge on our creds, the 3 unwired gate checks | queued — after WS2 | *(opens with work)* | — |
 
@@ -42,24 +41,37 @@ them; recall is pure life-adapter CPT). **Records stay** the faithful substrate 
 segments/blocks are a *derived view*, not a replacement (the serve loop + paging depend on
 C2 records).
 
-## Execution steps (locked 2026-07-22)
+## Execution steps
 
-0. **DONE this session:** re-pin the engram port source `9711f4a → b3c58e1` ("32B chain
-   verdict"; ws-engram-port); flag the serve-tier drift in inference's HANDOFF (the harness
-   is now a **4-lane** stack — Council added — + page-weight cache, richer than the "3 lanes"
-   recorded at kickoff).
-1. **Phase 0 (founder, no blockers):** locate/confirm Speed data on the cluster —
-   `descriptions/{1,5,10,20}min/`, `holdout_manifest.csv`, WhisperX/pyannote ASR, frame grids.
-   (Local `poc/live_stream_stability/.../ishowspeed/tour` holds the *collection* code + manifests;
-   the 61k descriptions live on the cluster at `~/speed_lora/data/descriptions/`.)
-2. **Phase 1 — Exercise 1a (baseline, his code on our infra):** run `build_day_corpus →
-   gen_narrative --variants 48 --neg-frac 0.15 → phase_d_driver --arm replay --replay-frac 0.30
-   → judge_exact` on ~3 probe-dense days; confirm ≈0.26–0.35 / +0.33 / traps ≈0.50. **Standalone,
-   not through the product.** Blocked only on lethal-Q4 (envs export + our judge creds).
-3. **Phase 2 — Exercise 1b (WS2 port):** port module-by-module behind `TRAINER_BACKEND=engram`,
-   parity-checked against Phase 1 at each stage. Exit = parity = perfect port = M0 done.
-4. **Phase 3 — Exercise 2 (DP dogfood):** the throwaway processor through our DP → derived
-   day-log view → continuum nightly loop; measure the shape-gap vs Phase 2 (the R1b result).
+0. **DONE:** re-pin source `9711f4a → b3c58e1`; flag serve-tier drift in inference (4-lane
+   stack + page-weight cache).
+1. **Phase 0 — DONE:** Speed data confirmed on the cluster (`descriptions/{1,5,10,20}min/`,
+   `holdout_manifest.csv`); prebuilt corpora/adapters/results all present on the node.
+2. **Phase 1 — DONE ✅ REPRODUCED:** ran his replay_f30 chain on our infra — seen-mean 0.286
+   (== his seed-0), separation **+0.253** (in his +0.178…+0.269 spread), day-5 retention 1.00,
+   corpus rebuild ratio 1.004. GO for Phase 2.
+3. **Phase 2 — Morpheus port (WS2, ready to build):** 2a Morpheus core + parity harness → 2b
+   full cycle + M0 (adapter loads in vLLM) → 2c lean architecture + storage-client seams. Full
+   self-contained spec: [handoff/ws-morpheus-port.md](handoff/ws-morpheus-port.md).
+4. **Phase 3 — DP dogfood (later):** records → storage day-log view → continuum; measures the
+   shape-gap vs Phase 2 (the R1b domain-transfer result).
+
+## Architecture decisions (cofounders, 2026-07-23) — pending board ratification where noted
+
+- **Storage owns the data jobs** (re-cuts storage charter → board): **day-log materialization**
+  (scheduled C2 → segments/blocks + `render_block`), the **recipe registry** (versioned; continuum
+  *and* inference pull), the **training reservoir** (amplified-corpus write + replay read), plus
+  the model directory. Continuum *consumes* all of these.
+- **Continuum slims to a 5-verb loop:** fetch recipe · fetch day-log · **amplify** · **finetune** ·
+  gate · publish. Amplification stays here (recipe-coupled, synthetic-not-faithful); its output is
+  written to the reservoir via a storage API.
+- **Naming: Morpheus** (`continuum/app/morpheus/`), versioned per method change. "Engram" dropped
+  from our surface (provenance = commit `b3c58e1` only).
+- **Recipe v1.0 is the target; no over-calibration** — 40% neg-boost lobotomizes (recall→0.021);
+  horizon trap-erosion is handled at the gate (≥0.40 blocks + refresher), `replay_neg_boost` a
+  ≤10% tunable default-off. Replay source = **raw** (tie) → replay re-fetches prior day-logs.
+- **Contract consequences (pin later):** **C10 evolves** to "fetch the day-log for a window" (not
+  raw records); **new** recipe-registry + reservoir seams; C5 publish unchanged.
 
 ## Kickoff decisions (founder, 2026-07-21/22 sessions)
 
@@ -85,7 +97,7 @@ founders'-board ratification** (D-numbers to be minted there) — flagged per it
    serve-time path (router/slots/paging) is the NEXT step, co-designed with inference.
 5. **Port, don't pin** — research files are ported into `app/engram/` and adapted in place;
    Gnandeep works in our modules once the service runs E2E. Source snapshot `9711f4a` +
-   divergence log in [handoff/ws-engram-port.md](handoff/ws-engram-port.md).
+   divergence log in [handoff/ws-morpheus-port.md](handoff/ws-morpheus-port.md).
 6. **Nomenclature** — engram's day-log terms adopted as *derived views over C2* (our
    ~10 s client "segment" ≈ his segment span; day-log segment rows are a TIME-WINDOW join
    over C2 records, since audio chunks are 5–30 s VAD-carved and video captions per-keyframe).
@@ -108,7 +120,7 @@ founders'-board ratification** (D-numbers to be minted there) — flagged per it
   design says Vertex amplify backend, code implements vllm/hf only (Gemini is only the judge).
 - D9 observability obligation unchanged (metrics + dashboard, off the request path) — not started.
 
-## Gnandeep answers (2026-07-22) — folded into [ws-engram-port](handoff/ws-engram-port.md)
+## Gnandeep answers (2026-07-22) — folded into [ws-morpheus-port](handoff/ws-morpheus-port.md)
 - **32B ≈ 8B (a TIE):** 0.083 vs 0.092 on identical probes → consolidation is **write-bound,
   not capacity-bound**; 8B is his serving substrate. We still train **32B** adapters (BWM=D6;
   adapter must match the served base; recipe is base-agnostic + 32B chain proven), paying 32B

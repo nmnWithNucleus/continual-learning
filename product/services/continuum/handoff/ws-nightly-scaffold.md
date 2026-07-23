@@ -25,7 +25,7 @@ break on camera-off gaps. Regression suite: `tests/test_review_regressions.py`.
 | `app/context_reader.py` | C10 client on the beta range-read shape (`GET /context/records?user_id=&from=&to=`); fails loudly, never trains on a truncated window |
 | `app/daylog.py` | C2 records → ~10 s segment rows (TIME-WINDOW join — audio chunks are 5–30 s VAD-carved, video captions per-keyframe; diarized sub-spans land in their own buckets) → ~2 min blocks; engram field names (`seg_id/caption/asr/ocr/quality`, `block_id/seg_ids/text/anchors`) so the ported code's I/O is already the shape |
 | `app/renderer.py` | materializes `segments.jsonl`/`blocks.jsonl`/`day.txt` at the trainer seam (canonical rows live upstream; files are a boundary artifact) |
-| `app/backends/` | the seam: `amplify/train/evaluate` protocol; `mock` (deterministic, recipe-shaped output incl. deny-then-correct negatives + ok-rate stat); `engram` fails loudly with a pointer until ws-engram-port lands |
+| `app/backends/` | the seam: `amplify/train/evaluate` protocol; `mock` (deterministic, recipe-shaped output incl. deny-then-correct negatives + ok-rate stat); `engram` fails loudly with a pointer until ws-morpheus-port lands |
 | `app/reservoir.py` | permanent per-user store of amplified corpora; uniform pooled-paragraph replay sampler with `before_window` guard; negatives tagged at admission (for the neg-boost knob later) |
 | `app/gate.py` | service-owned verdict; 3 of the 6 research checks wired (new-day floor, traps floor, heldout ceiling) + probe-count floor; unwired checks visibly listed in every report |
 | `app/publish.py` | C5-shaped `entries.jsonl` + atomic `active.json` alias + `rollback()` + 14-snapshot retention (never prunes active); `active_before(window)` gives the correct resume adapter for re-runs |
@@ -48,7 +48,7 @@ Run everything: `./run.sh` (venv bootstrap → pytest → one synthetic night).
 - **Gate-fail policy:** candidate recorded (`status=gate_failed`, audit trail), prior
   adapter keeps serving, strike counted, window added to debt; 2 consecutive strikes
   freeze the user (`--force` or state-file clear to resume). Failed-day *merge* into the
-  next night's corpus is ws-engram-port scope (debt is already tracked).
+  next night's corpus is ws-morpheus-port scope (debt is already tracked).
 - **First night has no replay** (empty reservoir) — matches the research recipe; the
   sequential-collapse risk begins night 2, which is exactly when replay kicks in.
 - **`skipped_no_data`** (empty window) is not a strike — the charter M4 min-data rule's
