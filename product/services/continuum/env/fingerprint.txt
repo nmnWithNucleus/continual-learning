@@ -1,0 +1,11 @@
+# Morpheus environment fingerprint — 2026-07-23T03:18:24Z
+train_interpreter: /home/ubuntu/miniconda3/envs/speedlora/bin/python
+judge_interpreter: /home/ubuntu/miniconda3/envs/vllm23/bin/python
+torch: 2.12.1
+transformers: 5.12.1
+peft: 0.19.1
+accelerate: 1.14.0
+safetensors: 0.8.0
+litellm: 1.92.0
+google-cloud-aiplatform: MISSING
+gpu: NVIDIA H100 80GB HBM3, 580.159.03

@@ -15,7 +15,7 @@ it, and counts a strike; `consecutive_fail_freeze` strikes freeze the user's
 consolidation until a human clears it. Strikes are window-monotonic — retries
 of one night and re-consolidations of old nights never add strikes. The
 design-of-record's failed-day merge (fold day N into night N+1's corpus) is
-tracked as debt in the state file — wiring it is ws-engram-port scope.
+tracked as debt in the state file — wiring it is ws-morpheus-port scope.
 """
 from __future__ import annotations
 
@@ -182,8 +182,9 @@ def run_cycle(records: list[dict[str, Any]], win: Window, *,
     # ---- stage: replay mix -------------------------------------------------------
     if recipe.replay_source != "amp":
         raise NotImplementedError(
-            f"replay_source={recipe.replay_source!r}: the v0 reservoir serves "
-            "amplified corpora only; the rawlog sampler ports with ws-engram-port")
+            f"replay_source={recipe.replay_source!r}: morpheus.replay implements it, "
+            "but rehearsing RAW prior day-logs needs the day-log-fetch client "
+            "(ws-morpheus-port 2c) — the reservoir only holds amplified corpora")
     # Key includes each reservoir corpus's CONTENT hash: a re-consolidated past
     # day (overwritten reservoir entry) must invalidate this night's mix.
     reservoir_state = ";".join(
@@ -216,7 +217,8 @@ def run_cycle(records: list[dict[str, Any]], win: Window, *,
     else:
         result = backend.train(str(mix_path), recipe,
                                out_dir=str(var_dir / "adapters" / win.user_id / win.window_id),
-                               resume_adapter=resume_adapter)
+                               resume_adapter=resume_adapter,
+                               new_day_corpus_path=str(amp_path))
         adapter_dir, adapter_version = result.adapter_dir, result.adapter_version
         journal.record("train", train_key, files=[adapter_dir],
                        adapter_dir=adapter_dir, adapter_version=adapter_version)

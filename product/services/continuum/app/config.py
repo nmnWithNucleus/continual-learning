@@ -43,7 +43,7 @@ def _default_recipe_path() -> str:
 
 @dataclass(frozen=True)
 class Settings:
-    trainer_backend: str   # "mock" (default, no GPU) | "engram" (ported core; ws-engram-port)
+    trainer_backend: str   # "mock" (default, no GPU) | "morpheus" (the real core)
     storage_url: str       # /context range read (C10 proposal shape) lives here
     http_timeout: float    # inter-service httpx timeout (seconds)
     var_dir: str           # journals + reservoir + adapter artifacts + outbox
@@ -51,17 +51,72 @@ class Settings:
     # Mock-backend gate override for drills: "auto" scores deterministically from
     # the corpus; "fail" forces a failing eval (gate/rollback tests + fire drills).
     mock_gate: str         # "auto" | "fail"
+    morpheus: MorpheusSettings
+
+
+@dataclass(frozen=True)
+class MorpheusSettings:
+    """Everything the real backend needs that is NOT a recipe knob.
+
+    Recipe knobs (48x, neg_frac, LoRA shape, replay frac) are versioned config in
+    recipes/*.json and must never be reachable from the environment. What lives
+    here is *where and on what hardware* a run happens — the bits that legitimately
+    differ between the cluster node, a container, and CI.
+
+    Exec model (ws-morpheus-port §5): training and judging run under PINNED envs
+    invoked by ABSOLUTE interpreter path, never `conda activate` (the research
+    chain crashed on exactly that — activate didn't fix PATH and python lacked
+    peft). Both interpreters are validated at use, not at import.
+    """
+    base_model: str            # HF id / local path of the base the adapter must match
+    profile: str               # domain Profile id (§6 seam) — "speed" is the only one in 2a
+    probes_dir: str            # eval probe suites (storage-hosted once WS4 lands)
+    device: str                # torch device for train/eval, e.g. "cuda:3" (no GPU-0 hardcoding)
+    gpu_memory_utilization: float   # vLLM amplification backend's share of the device
+    amplify_backend: str       # "vllm" | "hf" | "stub" (stub = tests, no GPU)
+    train_python: str          # absolute interpreter for the train/eval env (speedlora)
+    judge_python: str          # absolute interpreter for the judge env (vllm23, litellm+Vertex)
+    judge_model: str           # litellm model id for the eval judge
+    vertex_project: str        # GCP project billing the judge
+    vertex_location: str
+    judge_workers: int
+    shard_gpus: int            # >0 shards the base across N GPUs (32B does not fit one H100)
+    grad_checkpointing: bool   # numerically identical, ~35% slower, required for 32B on one GPU
+
+
+def _morpheus_settings() -> MorpheusSettings:
+    return MorpheusSettings(
+        base_model=os.getenv("MORPHEUS_BASE_MODEL", "Qwen/Qwen3-VL-32B-Instruct"),
+        profile=os.getenv("MORPHEUS_PROFILE", "speed"),
+        probes_dir=os.getenv("MORPHEUS_PROBES_DIR", "/home/ubuntu/engram/data/probes_merged"),
+        device=os.getenv("MORPHEUS_DEVICE", "cuda:0"),
+        gpu_memory_utilization=float(os.getenv("MORPHEUS_GPU_MEM_UTIL", "0.90")),
+        amplify_backend=_choice("MORPHEUS_AMPLIFY_BACKEND",
+                                os.getenv("MORPHEUS_AMPLIFY_BACKEND", "vllm"),
+                                ("vllm", "hf", "stub"), "vllm"),
+        train_python=os.getenv("MORPHEUS_TRAIN_PYTHON",
+                               "/home/ubuntu/miniconda3/envs/speedlora/bin/python"),
+        judge_python=os.getenv("MORPHEUS_JUDGE_PYTHON",
+                               "/home/ubuntu/miniconda3/envs/vllm23/bin/python"),
+        judge_model=os.getenv("JUDGE_MODEL", "vertex_ai/gemini-2.5-flash"),
+        vertex_project=os.getenv("VERTEX_PROJECT", "poetic-avenue-438401-a7"),
+        vertex_location=os.getenv("VERTEX_LOCATION", "global"),
+        judge_workers=int(os.getenv("MORPHEUS_JUDGE_WORKERS", "16")),
+        shard_gpus=int(os.getenv("MORPHEUS_SHARD_GPUS", "0")),
+        grad_checkpointing=_as_bool(os.getenv("MORPHEUS_GRAD_CKPT", "0")),
+    )
 
 
 def get_settings() -> Settings:
     return Settings(
         trainer_backend=_choice("TRAINER_BACKEND",
                                 os.getenv("TRAINER_BACKEND", "mock"),
-                                ("mock", "engram"), "mock"),
+                                ("mock", "morpheus"), "mock"),
         storage_url=os.getenv("STORAGE_URL", "http://localhost:8083").rstrip("/"),
         http_timeout=float(os.getenv("CONTINUUM_HTTP_TIMEOUT", "60")),
         var_dir=os.getenv("CONTINUUM_VAR_DIR", _default_var_dir()),
         recipe_path=os.getenv("CONTINUUM_RECIPE", _default_recipe_path()),
         mock_gate=_choice("MOCK_GATE", os.getenv("MOCK_GATE", "auto"),
                           ("auto", "fail"), "auto"),
+        morpheus=_morpheus_settings(),
     )
