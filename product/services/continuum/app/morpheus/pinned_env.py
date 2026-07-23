@@ -74,10 +74,28 @@ class PinnedEnv:
         return {**os.environ, **self.env}
 
 
+def device_index(device: str) -> str:
+    """'cuda:6' -> '6'. The physical card, for masking."""
+    return device.rsplit(":", 1)[-1] if ":" in device else device or "0"
+
+
+def visible_device(settings) -> str:
+    """The torch device string to use INSIDE a pinned process.
+
+    A pinned process is masked to one physical GPU via CUDA_VISIBLE_DEVICES, so
+    within it the chosen card is always index 0 — code that still said "cuda:6"
+    there would address a device that is not visible and fail. When nothing has
+    masked us (a direct run), the configured physical index is correct as-is.
+    Getting this wrong is silent until it isn't: it either crashes or, worse,
+    lands the job on somebody else's card.
+    """
+    return "cuda:0" if os.environ.get("CUDA_VISIBLE_DEVICES") else settings.device
+
+
 def train_env(settings) -> PinnedEnv:
     """CUDA visibility is set by DEVICE INDEX here rather than assumed: the node's
     GPUs are shared, and hardcoding GPU 0 is how nightly jobs collide."""
-    index = settings.device.rsplit(":", 1)[-1] if ":" in settings.device else "0"
+    index = device_index(settings.device)
     return PinnedEnv(name="train", interpreter=settings.train_python,
                      requires=("torch", "transformers", "peft"),
                      env={"CUDA_VISIBLE_DEVICES": index,
@@ -88,7 +106,7 @@ def amplify_env(settings) -> PinnedEnv:
     """vLLM lives apart from the trainer — they pin incompatible transformers, so
     a single "the ML env" does not exist. Discovering that at the generator call
     wastes however long the day-log build took."""
-    index = settings.device.rsplit(":", 1)[-1] if ":" in settings.device else "0"
+    index = device_index(settings.device)
     return PinnedEnv(name="amplify", interpreter=settings.amplify_python,
                      requires=("vllm",) if settings.amplify_backend == "vllm" else ("torch",),
                      env={"CUDA_VISIBLE_DEVICES": index})
