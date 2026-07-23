@@ -18,6 +18,13 @@ from collections import defaultdict
 
 # Refusal/correction phrasings. A trap probe asks about something that never
 # happened; passing means the answer pushes back rather than confabulating.
+#
+# SEAM NOTE: two entries ("only 35", "35 days") are horizon-specific — they catch
+# "that is outside the 35 days I know about", which is the most common way this
+# domain's traps get refused. They are kept because this list is a frozen metric
+# contract and every historical trap number was computed with it. A profile whose
+# life has a different horizon (or none) will want to CONTRIBUTE markers rather
+# than inherit these; that hook belongs with the lifestream profile, not before it.
 TRAP_MARKERS = (
     "didn't", "did not", "never", "wasn't", "was not", "no record", "not part",
     "doesn't appear", "does not appear", "not visit", "only 35", "35 days",

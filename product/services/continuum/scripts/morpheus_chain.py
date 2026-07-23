@@ -41,9 +41,9 @@ from app.morpheus import MORPHEUS_VERSION, SOURCE_COMMIT               # noqa: E
 from app.morpheus.eval import (HELDOUT_LIMIT, PROBES_PER_DAY, TRAP_ANSWER_TOKENS,  # noqa: E402
                                TRAPS_LIMIT, Predictions, answer_suite, base_floor,
                                day_suite, readout, traps_suite)
-from app.morpheus.pinned_env import judge_env                          # noqa: E402
+from app.morpheus.pinned_env import judge_env, train_env                # noqa: E402
 from app.morpheus.probes import (HELDOUT_SUITE, QA_SUITE, TRAPS_SUITE,  # noqa: E402
-                                 day_pool, load_suite)
+                                 assert_independent_generators, day_pool, load_suite)
 from app.morpheus.replay import sample_replay                          # noqa: E402
 from app.morpheus.train import CptConfig, LifeAdapter, LoraSpec, matched_compute_budget  # noqa: E402
 from app.recipe import load_recipe                                     # noqa: E402
@@ -88,9 +88,15 @@ def main() -> int:
     out = Path(args.out).expanduser()
     out.mkdir(parents=True, exist_ok=True)
 
+    # A score is only evidence if the questions were not written by the model that
+    # wrote the training prose. Checked before anything expensive happens.
+    assert_independent_generators(probe_generator=morpheus.probe_generator,
+                                  corpus_generator=base_model)
     judge = judge_env(morpheus)
     if not args.skip_judge:
         judge.preflight()      # fail in one second, not after three GPU-hours
+    # The environment that produced this run, stored with it.
+    (out / "env.lock.txt").write_text(train_env(morpheus).freeze())
 
     corpora = {d: Path(args.corpus_pattern.format(day=d)).expanduser().read_text()
                for d in days}

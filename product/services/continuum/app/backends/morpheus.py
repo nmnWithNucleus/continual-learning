@@ -115,6 +115,10 @@ class MorpheusBackend:
         blocks a confabulating adapter from serving."""
         settings = get_settings().morpheus
         profile = get_profile(settings.profile)
+        # A score is only evidence if the questions were not written by the model
+        # that wrote the training prose. Checked before any generation.
+        probe_kernel.assert_independent_generators(
+            probe_generator=settings.probe_generator, corpus_generator=settings.base_model)
         days = sorted({b.anchors["day"] for b in _blocks(blocks, profile)})
         qa = probe_kernel.load_suite(settings.probes_dir, probe_kernel.QA_SUITE)
         traps = probe_kernel.load_suite(settings.probes_dir,

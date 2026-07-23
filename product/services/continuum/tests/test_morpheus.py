@@ -71,9 +71,11 @@ def test_kernels_read_anchors_only_through_the_profile(profile):
     import inspect
 
     from app.morpheus import amplify as amplify_module
+    from app.morpheus import blocks as blocks_module
+    from app.morpheus import eval as eval_module
     from app.morpheus import replay as replay_module
     from app.morpheus import train as train_module
-    for module in (amplify_module, replay_module, train_module):
+    for module in (amplify_module, blocks_module, eval_module, replay_module, train_module):
         source = inspect.getsource(module)
         assert "anchors[" not in source, f"{module.__name__} reaches into anchors directly"
         assert "profiles" not in source, f"{module.__name__} imports a concrete profile"
@@ -319,3 +321,12 @@ def test_preflight_catches_a_missing_module():
 def test_preflight_passes_on_a_usable_interpreter():
     import sys
     PinnedEnv(name="train", interpreter=sys.executable, requires=("json",)).preflight()
+
+
+def test_configured_probe_generator_is_independent_of_the_base_model():
+    """The shipped defaults must satisfy the rule they declare — a contamination
+    check nobody can pass is a comment, not a check."""
+    from app.config import get_settings
+    settings = get_settings().morpheus
+    assert_independent_generators(probe_generator=settings.probe_generator,
+                                  corpus_generator=settings.base_model)
