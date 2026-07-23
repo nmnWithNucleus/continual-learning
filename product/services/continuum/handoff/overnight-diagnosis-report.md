@@ -43,7 +43,32 @@ Same pinned start (`repro_replay_f30/adapter_s4_d17`), same night 5, **only the 
 varies**. Anchors: the reference reached **0.45** on day 21 from this exact state; our full seed-0
 chain reached **0.15**.
 
-*(table filled at completion — see `var/diag/sweep_report.json`)*
+| rehearsal seed | day 21 (just written) | day 5 (retention canary) | loss_last |
+|---|---|---|---|
+| 103 | 0.2167 | 0.0833 | 0.272 |
+| 106 | 0.3333 | 0.1000 | 0.254 |
+| 107 | 0.3333 | 0.1667 | 0.275 |
+| 105 | 0.3667 | 0.1500 | 0.251 |
+| 104 | 0.4000 | 0.1667 | 0.272 |
+| 109 | 0.4000 | 0.0833 | 0.271 |
+| 108 | 0.4500 | 0.2500 | 0.287 |
+| 102 | 0.4667 | 0.1833 | 0.270 |
+
+| | n | mean | sd | range |
+|---|---|---|---|---|
+| day 21 | 8 | **0.3708** | 0.0740 | 0.2167–0.4667 |
+| day 21 (+2 earlier same-config runs) | 10 | 0.3733 | 0.0727 | 0.2167–0.4667 |
+| day 5 | 8 | 0.1479 | 0.0537 | 0.0833–0.2500 |
+
+**Verdict.** The reference's 0.45 sits at the **70th percentile of our own single-night draws** —
+an ordinary result from our distribution, not a level we fail to reach. Seed 0's chain values are
+**below everything a single night produces**: day 21 at 0.15 against our minimum of 0.2167,
+day 5 at 0.05 against our minimum of 0.0833.
+
+**Seed 0's deficit is therefore ACCUMULATED across the six nights, not made in any one of them.**
+Together with §1 (the rehearsal text is byte-identical) this rules out the sampler and the
+single-night trainer, and localises the remaining question to what compounds over a chain —
+which is exactly what P1/P3 would have measured, and what capacity did not allow.
 
 ## 3. Gate recalibration — proposal only
 
@@ -62,7 +87,40 @@ Full analysis in [gate-threshold-proposal.md](gate-threshold-proposal.md). Headl
 
 ## 4. 32B M0 dry run
 
-*(filled at completion — `var/diag/m0/m0_report.json` + `vllm_load.json`)*
+M0 asks a mechanical question: does an adapter we trained publish through C5 and load in the
+server that will serve it. It is now answered — in two halves, because a hard limit forced the
+split.
+
+**32B cannot train on a single H100, at any batch size.** Measured, not assumed: bsz 2 OOM'd at
+79.15/79.18 GiB, bsz 1 at 79.16/79.18. The failure is at the FIRST forward pass, so no step count
+or corpus size changes it. The reference chain's `--shard 2` was not optional. `LifeAdapter`
+already supports sharding but hardcoded 76 GiB per card; that is now
+`MORPHEUS_SHARD_MAX_MEMORY`, because on a shared node we do not own the whole card.
+
+**Half A — the full mechanic, with an adapter we trained (8B):**
+
+| step | result |
+|---|---|
+| one night, recipe settings | 4203 steps, loss 1.814 → 0.285, 0.62 h |
+| judged new-day recall | **0.2167** (reference night-0: 0.183–0.25) |
+| judged heldout | **0.0000** |
+| gate | ran **report-only**, verdict recorded, publish NOT blocked |
+| C5 publish | `entries.jsonl` + `active.json` written |
+| **vLLM load** | **OK** — answered *"On Day 5 of his 35-day US tour in Washington, DC at approximately 11:17 PM ET, IShowSpeed sleeps soundly shirtless on a grey tufted couch inside his RV…"* |
+
+**Half B — 32B serving:** 32B base + an r128/α256 LoRA of exactly our recipe shape **loads and
+serves** (util 0.97, max_model_len 2048), answering from the consolidated day. An earlier attempt
+at util 0.90 / len 4096 failed for want of 0.7 GiB of KV cache — a serving-config question, not a
+LoRA-compatibility one, and worth distinguishing.
+
+**What this does NOT establish:** a 32B adapter *we* trained end to end. That needs a second GPU.
+
+**Gate findings from the dry run**, feeding §3: the `min_probes` floor of 150 fails against the
+148 probes the harness actually supplies (60 + 60 + 28) — an off-by-two mis-sizing, not a quality
+signal. And a fresh single-night adapter scored **0.036 on traps** (1/28), matching our seed-0
+chain's night 0 exactly; calibration appears to accrue over nights rather than arriving with the
+first. The reference's night-0 traps were 0.250–0.393, so this is worth a look, but at n=28 the
+noise is ±0.18.
 
 ## 5. Capacity — what did not run, and why
 
@@ -94,3 +152,28 @@ the co-tenant alone. Judged against "leave the co-tenant headroom", this session
   permutation test on run-level seen-mean, **p = 0.514**.
 - The min–max "in band" criterion was miscalibrated and has been replaced; by leave-one-out the
   reference satisfies its own band only 2 times in 4.
+
+## 7. Harness defects found in this session's own tooling
+
+Recorded because the results below were carried by tooling less reliable than they are. None
+corrupted a measurement — every draw and the M0 run are verified by their own output files — but
+the monitoring was blind for stretches, and that is worth knowing before trusting the next
+unattended run.
+
+| defect | consequence | fix |
+|---|---|---|
+| `echo "EXIT $? $job"` — `$(date)` expanded first, resetting `$?` | **every job logged EXIT 0, including one that failed with 127** | capture `rc=$?` before any substitution |
+| `rm -f jobs/draw11*.sh` matched a script written seconds earlier | `draw110` silently never ran | explicit missing-script check, logged |
+| free-memory probe cannot see a sibling lane's job during startup | two lanes put jobs on one GPU, twice | per-GPU `flock` held for the whole job, plus an in-job idle-wait |
+| `flock` only binds lanes started after it | a pre-`flock` lane collided with a locked one; that 32B result was discarded | re-ran on a verified-idle card |
+| `pkill -f <pattern>` matched the shell running it | killed my own session twice | match by PID |
+
+## 8. What to decide
+
+1. **Ratify or amend the gate thresholds** (§3). Nothing is applied. Note `min_probes=150` also
+   needs to become 148 or the suites need to grow — the current value cannot pass.
+2. **Capacity policy.** P1/P3 need either the shared cards (~4 GB headroom above the co-tenant —
+   which is what caused tonight's OOMs) or a scheduled window when job 698 is not resident. This
+   session chose to leave the co-tenant alone.
+3. **2b prerequisite:** 32B training needs ≥2 GPUs. Worth confirming the node can reserve two
+   before 2b plans a 32B nightly.

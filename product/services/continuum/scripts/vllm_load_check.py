@@ -16,18 +16,23 @@ ap.add_argument("--base-model", required=True)
 ap.add_argument("--out", required=True)
 ap.add_argument("--rank", type=int, default=128)
 ap.add_argument("--gpu-mem-util", type=float, default=0.92)
+ap.add_argument("--max-model-len", type=int, default=4096)
 a = ap.parse_args()
 
 cfg = json.loads((Path(a.adapter) / "adapter_config.json").read_text())
 record = {"adapter": a.adapter, "base_model": a.base_model,
+          "gpu_memory_utilization": a.gpu_mem_util, "max_model_len": a.max_model_len,
           "adapter_r": cfg.get("r"), "adapter_alpha": cfg.get("lora_alpha"),
           "adapter_base": cfg.get("base_model_name_or_path"),
           "n_target_modules": len(cfg.get("target_modules") or [])}
 try:
     from vllm import LLM, SamplingParams
     from vllm.lora.request import LoRARequest
+    # A 32B base leaves little room for KV cache: at util 0.90 / len 4096 vLLM
+    # loads the weights AND the LoRA, then fails for want of 0.7 GiB of cache.
+    # That is a serving-config question, not a LoRA-compatibility one.
     llm = LLM(model=a.base_model, enable_lora=True, max_lora_rank=a.rank,
-              gpu_memory_utilization=a.gpu_mem_util, max_model_len=4096)
+              gpu_memory_utilization=a.gpu_mem_util, max_model_len=a.max_model_len)
     q = "On Day 5 of Speed's 35-day US tour, in Washington: What is Speed wearing?"
     outs = llm.generate([f"<|im_start|>user\n{q}<|im_end|>\n<|im_start|>assistant\n"],
                         SamplingParams(temperature=0, max_tokens=48),
