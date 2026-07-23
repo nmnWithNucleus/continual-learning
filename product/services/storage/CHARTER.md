@@ -4,7 +4,9 @@
 > per-user model directory. Stable doc — working state lives in [HANDOFF.md](HANDOFF.md);
 > system-wide architecture + contracts in [../../ARCHITECTURE.md](../../ARCHITECTURE.md).
 
-**Status:** chartered · **Last updated:** 2026-07-08
+**Status:** chartered · **Last updated:** 2026-07-23 (proposed scope **expansion** from the
+continuum/Morpheus design session — day-log materialization + recipe registry + reservoir custody;
+see § Scope note. **Pending founders'-board ratification.**)
 
 ## Mission
 
@@ -21,9 +23,24 @@ trains no models; it keeps what others produce safe, ordered, and fast to read.
 
 ## Scope — v0
 
+> **Proposed expansion (2026-07-23, pending board) — the "data jobs" for the learn loop.**
+> The continuum/Morpheus design settled that continuum stays a lean training engine and storage
+> owns the *data* work around it. Three new responsibilities (rows tagged **In+**):
+> **(1) Day-log materialization** — a scheduled job renders a user-day's `/context` (C2) records
+> into the segment/block **day-log** (incl. `render_block` anchored text); continuum fetches it via
+> C10 (which evolves from "raw record range read" to "day-log fetch"). **(2) Recipe registry** —
+> host versioned consolidation/serving recipes; continuum *and* inference pull the pinned recipe.
+> **(3) Reservoir custody** — store the amplified corpora continuum writes (audit/provenance);
+> replay itself re-reads prior day-logs. This keeps "storage produces no *faithful* data, trains
+> no models" intact: the day-log is a derived VIEW over C2, the reservoir holds training artifacts
+> others produced, and the registry holds config — none of it is new sensor data or model weights.
+
 | | Item | Notes / owning sibling |
 |---|---|---|
 | In | `/raw` store | raw capture blobs; recording writes via ingest, the C1 envelope carries the ref; custody split in ARCHITECTURE §Ownership splits |
+| In+ | **Day-log materialization** *(pending board)* | scheduled job: C2 records → segment/block day-log (+ `render_block` anchored text), a derived view over `/context`; served to continuum via the evolved C10. Recipe-versioned format |
+| In+ | **Recipe registry** *(pending board)* | versioned recipe/config hosting; fetch API for continuum (consolidation recipe) + inference (serving-side knobs) |
+| In+ | **Reservoir custody** *(pending board)* | per-user store of amplified corpora (continuum writes via API); audit/provenance — replay re-reads prior day-logs, not this |
 | In | `/context` store | processed life-stream records; storing side of C2 |
 | In | `/sessions` store | conversations → sessions → turns, incl. full mentor + tool traces; storing side of C4 |
 | In | Model directory | per-user adapter registry: version, base-model hash, training window, eval report, active/rolled-back; behind C5/C6 |
@@ -58,8 +75,9 @@ redefined.
 | C4 | inference → `/sessions` | serve the write path: persist turn records incl. mentor + tool traces, keyed conversation → session → turn |
 | C5 | continuum → model directory | host the registry: accept adapter version entries; one active adapter per user; rollback history kept |
 | C6 | inference ↔ model directory | serve the hot read path: resolve the active adapter for user_id per request, within a tight latency budget |
-| C10 | storage → continuum | serve the training-window read: time-ranged, watermarked export of `/context` + `/sessions` per user; watermark semantics (late-arriving/reprocessed records, pipeline-version bumps) are C10's core design work, pinned in ARCHITECTURE's C10 row as it lands |
+| C10 | storage → continuum | serve the training-window read. **Evolving (pending board):** from a raw `/context` range read to a **day-log fetch** — storage materializes the segment/block day-log for the window and serves that; watermark semantics (late/reprocessed records, pipeline-version bumps) remain C10's core design work, pinned in ARCHITECTURE's C10 row as it lands |
 | C11 | storage → input (QueryBuilder) | serve the recent-context read: recency/semantic retrieval over `/context` + `/sessions`; the index lives here, QueryBuilder decides what enters the UserPrompt |
+| *(new, pending board)* | storage → continuum / inference | **recipe registry** fetch (versioned) + **reservoir** write/read; contract IDs minted when the board ratifies the expansion |
 
 ### The time index (the load-bearing decision)
 - Every record carries device wall-clock `t_start`/`t_end` (from C2/C4) **and** a

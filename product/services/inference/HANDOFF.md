@@ -56,8 +56,11 @@
   day-log, surprise-gating, Vertex captioner) — that greenfield is DP + storage scope, not a
   research artifact to port.
 - Deferred until continuum's nightly loop closes. Details: continuum
-  [HANDOFF](../continuum/HANDOFF.md) § Kickoff decisions + [ws-engram-port](../continuum/handoff/ws-engram-port.md)
-  (the not-ported-here rows are this service's future scope).
+  [HANDOFF](../continuum/HANDOFF.md) § Architecture decisions + [ws-morpheus-port](../continuum/handoff/ws-morpheus-port.md)
+  (the "NOT NOW — inference" rows are this service's future scope).
+- **Recipe registry (incoming):** the consolidation/serving recipes will be storage-hosted +
+  versioned (2026-07-23 decision); this service can pull serving-side recipe knobs directly from
+  storage without consulting continuum.
 
 ## Next
 - ~~**Real model (M0 finish)**~~ **DONE 2026-07-09** — `serve_vllm.sh` ran on node-7 (TP=8);

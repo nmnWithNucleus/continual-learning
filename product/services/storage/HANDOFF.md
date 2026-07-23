@@ -75,6 +75,21 @@
 - Integrator: point inference's C4 writer + C6 resolve at `:8083` (see build conventions).
 - **Observability (D9, ratified 2026-07-09) — now on backlog:** expose `/metrics` (request rate/latency/errors + DB/query metrics: query latency, rows read/written, DB/file size, pool health) and own the Grafana dashboard JSON (`dashboards/*.json`); shared Prometheus/Grafana is Platform's. See [CHARTER.md](CHARTER.md) scope/M7 + [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability.
 
+## Incoming — scope expansion from the continuum/Morpheus design (2026-07-23, pending board)
+The continuum kickoff settled that storage owns the learn-loop **data jobs** (continuum stays a
+lean training engine). Three additions land here once the founders' board ratifies (they re-cut
+this charter) — details in [CHARTER.md](CHARTER.md) § Scope note + [../continuum/handoff/ws-morpheus-port.md](../continuum/handoff/ws-morpheus-port.md):
+- **Day-log materialization** — a scheduled job renders a user-day's `/context` (C2) into the
+  segment/block **day-log** (incl. `render_block` anchored text). This is where **C10 evolves**:
+  from a raw record range read to a **day-log fetch**. The day-log format is recipe-versioned.
+  (continuum has a working reference builder — `daylog.py`/`window.py`/`renderer.py` in the scaffold —
+  to lift from; render_block must stay byte-parity with the research @ `b3c58e1`.)
+- **Recipe registry** — versioned recipe/config hosting; fetch API for continuum + inference.
+- **Reservoir custody** — amplified-corpus store (continuum writes via API); replay re-reads prior
+  day-logs, so this is audit/provenance, not the replay hot path.
+- **C10 watermark semantics** (charter OQ, still open) get decided at the same C10-evolution session
+  jointly with continuum; new contract IDs for recipe-registry + reservoir minted at ratification.
+
 ## Gotchas
 - **Contracts are the source of truth.** Schema validation uses a `referencing` registry so
   C4's `$ref: "c3_userprompt.v0.json"` resolves — do not inline/fork the C3 shape.
