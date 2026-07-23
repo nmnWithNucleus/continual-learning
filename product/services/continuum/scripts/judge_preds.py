@@ -23,6 +23,9 @@ def main() -> int:
     ap.add_argument("--preds", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--label", default="")
+    ap.add_argument("--max-unjudged", type=float, default=0.05,
+                    help="fail if more than this fraction went unjudged — an outage is "
+                         "not a low score, and must not reach the gate as one")
     args = ap.parse_args()
 
     settings = get_settings().morpheus
@@ -37,12 +40,18 @@ def main() -> int:
     write_scored(args.out + ".scored.jsonl", items, verdicts)
     Path(args.out).write_text(json.dumps(summary, indent=1))
 
-    if summary["n_unjudged"]:
-        # Loud, not fatal: unjudged items are excluded from the aggregate rather
-        # than scored zero, but a large count means the number is thin.
+    print(json.dumps({k: v for k, v in summary.items() if not isinstance(v, dict)}, indent=1))
+    unjudged = summary["n_unjudged"] / max(1, summary["n"])
+    if unjudged:
+        # Unjudged items are EXCLUDED from the aggregate rather than scored zero:
+        # scoring an API failure as a miss reads exactly like forgetting. But past
+        # a threshold the remaining sample is not the eval that was asked for.
         print(f"WARNING: {summary['n_unjudged']}/{summary['n']} items went unjudged",
               file=sys.stderr)
-    print(json.dumps({k: v for k, v in summary.items() if not isinstance(v, dict)}, indent=1))
+    if unjudged > args.max_unjudged:
+        print(f"FATAL: {unjudged:.1%} unjudged exceeds {args.max_unjudged:.0%} — reporting "
+              "this as a recall number would turn an outage into a verdict", file=sys.stderr)
+        return 2
     return 0
 
 

@@ -71,6 +71,7 @@ class MorpheusSettings:
     base_model: str            # HF id / local path of the base the adapter must match
     profile: str               # domain Profile id (§6 seam) — "speed" is the only one in 2a
     probes_dir: str            # eval probe suites (storage-hosted once WS4 lands)
+    probe_generator: str       # who WROTE the probes — must not be the corpus generator
     device: str                # torch device for train/eval, e.g. "cuda:3" (no GPU-0 hardcoding)
     gpu_memory_utilization: float   # vLLM amplification backend's share of the device
     amplify_backend: str       # "vllm" | "hf" | "stub" (stub = tests, no GPU)
@@ -89,6 +90,10 @@ def _morpheus_settings() -> MorpheusSettings:
         base_model=os.getenv("MORPHEUS_BASE_MODEL", "Qwen/Qwen3-VL-32B-Instruct"),
         profile=os.getenv("MORPHEUS_PROFILE", "speed"),
         probes_dir=os.getenv("MORPHEUS_PROBES_DIR", "/home/ubuntu/engram/data/probes_merged"),
+        # The describer that produced the source records the probes were written
+        # from. Recorded, not guessed: it is stamped in every description record's
+        # `model` field. Empty fails the independence check CLOSED.
+        probe_generator=os.getenv("MORPHEUS_PROBE_GENERATOR", "gemini-3.1-pro-preview"),
         device=os.getenv("MORPHEUS_DEVICE", "cuda:0"),
         gpu_memory_utilization=float(os.getenv("MORPHEUS_GPU_MEM_UTIL", "0.90")),
         amplify_backend=_choice("MORPHEUS_AMPLIFY_BACKEND",

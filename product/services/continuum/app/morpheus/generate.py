@@ -65,7 +65,14 @@ def vllm_generator(cfg: GenerationConfig) -> Generator:
 
 
 def hf_generator(cfg: GenerationConfig) -> Generator:
-    """Fallback for when vLLM cannot hold the device (shared GPU, odd base)."""
+    """Fallback for when vLLM cannot hold the device (shared GPU, odd base).
+
+    Pads on the LEFT. A decoder-only model continues from the last position, so
+    right-padding a batch makes every short prompt generate from pad tokens —
+    which does not crash, it just quietly returns worse text. That is exactly the
+    silent degradation the ok-rate gate exists to catch, and it should not be
+    coming from our own batching.
+    """
     state = {}
 
     def generate(prompts: Sequence[str]) -> list[str]:
@@ -75,7 +82,10 @@ def hf_generator(cfg: GenerationConfig) -> Generator:
             import torch
             from transformers import AutoModelForImageTextToText, AutoTokenizer
             state["torch"] = torch
-            state["tok"] = AutoTokenizer.from_pretrained(cfg.model)
+            tokenizer = AutoTokenizer.from_pretrained(cfg.model, padding_side="left")
+            if tokenizer.pad_token_id is None:
+                tokenizer.pad_token = tokenizer.eos_token
+            state["tok"] = tokenizer
             state["model"] = AutoModelForImageTextToText.from_pretrained(
                 cfg.model, dtype=torch.bfloat16, device_map=cfg.device).eval()
         torch, tok, model = state["torch"], state["tok"], state["model"]
