@@ -37,6 +37,57 @@ def load_run(path: Path):
     return readout(judged, days, label=path.name, predictions=predictions), report
 
 
+def training_dynamics(reports: dict[str, dict]) -> dict:
+    """Compare each night's shape and loss curve to the reference runs.
+
+    A metric can land in-band for the wrong reasons — a chain that trained on the
+    wrong text, for the wrong number of steps, can still score plausibly on a
+    60-probe suite. The per-night (chunks, chunks_per_epoch, steps) triple is
+    exact arithmetic and must match. The loss curve is not exact (LoRA init
+    varies with the seed) but a run whose loss lands outside the reference spread
+    is optimizing something different, whatever its recall says.
+    """
+    reference = {run: goldens.train_report(run)["train"]
+                 for run in (*goldens.SEED_ENSEMBLE, goldens.REPRODUCTION)}
+    nights = sorted({night for r in reference.values() for night in r},
+                    key=lambda k: int(k.split("_")[0][1:]))
+    rows = []
+    for night in nights:
+        theirs = [r[night] for r in reference.values() if night in r]
+        row = {"night": night,
+               "shape": {k: sorted({t[k] for t in theirs}) for k in
+                         ("chunks", "chunks_per_epoch", "steps")},
+               "loss_last_reference": [min(t["loss_last"] for t in theirs),
+                                       max(t["loss_last"] for t in theirs)],
+               "ours": {}}
+        for label, report in reports.items():
+            mine = report.get("train", {}).get(night)
+            if not mine:
+                continue
+            row["ours"][label] = {
+                "shape_exact": all(mine[k] in row["shape"][k]
+                                   for k in ("chunks", "chunks_per_epoch", "steps")),
+                "steps": mine["steps"], "loss_first": mine["loss_first"],
+                "loss_last": mine["loss_last"]}
+        rows.append(row)
+    return {"nights": rows,
+            "all_shapes_exact": all(o["shape_exact"] for r in rows for o in r["ours"].values())}
+
+
+def print_dynamics(dynamics: dict) -> None:
+    print("\nTRAINING DYNAMICS (per night: exact shape, loss curve vs reference spread)")
+    header = f"{'night':<10}{'steps':>7}{'shape':>8}{'loss_last':>11}   reference loss_last"
+    print(header)
+    print("-" * len(header))
+    for row in dynamics["nights"]:
+        low, high = row["loss_last_reference"]
+        for label, ours in row["ours"].items():
+            mark = "exact" if ours["shape_exact"] else "DIFFERS"
+            print(f"{row['night']:<10}{ours['steps']:>7}{mark:>8}"
+                  f"{ours['loss_last']:>11.3f}   {low:.3f}..{high:.3f}   [{label}]")
+    print(f"\nAll per-night shapes exact: {dynamics['all_shapes_exact']}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -87,6 +138,10 @@ def main() -> int:
         failed = [k for k, ok in checks.items() if not ok]
         print(f"  {run.label:<24}{'IN BAND' if not failed else 'OUT OF BAND: ' + ','.join(failed)}")
 
+    dynamics = training_dynamics(reports)
+    print_dynamics(dynamics)
+    verdict["training_dynamics"] = dynamics
+
     ensemble_mean = mean(r.seen_mean for r in ours)
     ensemble_sep = [r.separation for r in ours if r.separation is not None]
     our_spread = max(ensemble_sep) - min(ensemble_sep) if len(ensemble_sep) > 1 else None
@@ -96,16 +151,20 @@ def main() -> int:
         "separation_mean": round(mean(ensemble_sep), 4) if ensemble_sep else None,
         "separation_spread": round(our_spread, 4) if our_spread is not None else None,
         "reference_separation_spread": round(their_spread, 4),
+        "shapes_exact": dynamics["all_shapes_exact"],
         "all_in_band": all(all(band.check(r).values()) for r in ours)}
     print(f"\nENSEMBLE  n={len(ours)}  seen_mean {ensemble_mean:.4f}  "
           f"separation {verdict['ensemble']['separation_mean']}  "
           f"spread {verdict['ensemble']['separation_spread']} "
           f"(reference {their_spread:.4f})")
-    print(f"VERDICT: {'PARITY' if verdict['ensemble']['all_in_band'] else 'NOT IN BAND'}")
+    passed = verdict["ensemble"]["all_in_band"] and dynamics["all_shapes_exact"]
+    print(f"VERDICT: {'PARITY' if passed else 'NOT IN PARITY'}"
+          f"  (in-band: {verdict['ensemble']['all_in_band']}, "
+          f"shapes exact: {dynamics['all_shapes_exact']})")
 
     if args.out:
         Path(args.out).write_text(json.dumps(verdict, indent=1))
-    return 0 if verdict["ensemble"]["all_in_band"] else 1
+    return 0 if passed else 1
 
 
 if __name__ == "__main__":
