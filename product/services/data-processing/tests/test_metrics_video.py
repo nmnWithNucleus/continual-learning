@@ -488,6 +488,25 @@ def test_circuit_half_open_failure_reopens_and_restarts_cooldown():
     assert cb.allow() is True                           # eligible again
 
 
+def test_circuit_half_open_stale_probe_self_heals():
+    """A probe whose outcome is never recorded (a caller that forgot its try/finally, or
+    died) must not wedge the breaker HALF_OPEN forever. A probe older than one cooldown
+    is stale, and a fresh probe is re-admitted — so a broken caller can't permanently
+    fast-fail a recovered endpoint."""
+    from app.vision.circuit import CircuitBreaker, HALF_OPEN
+    clk = _Clock()
+    cb = CircuitBreaker(threshold=1, cooldown_s=10.0, clock=clk)
+    cb.record_failure()
+    clk.advance(10.1)
+    assert cb.allow() is True                           # probe admitted, never reported
+    assert cb.state == HALF_OPEN
+    assert cb.allow() is False                          # in-flight probe still fresh
+    clk.advance(9.9)
+    assert cb.allow() is False                          # not yet stale (< cooldown)
+    clk.advance(0.2)                                    # 10.1s since admission
+    assert cb.allow() is True                           # stale probe → re-admit (self-heal)
+
+
 def test_breaker_for_shares_one_instance_per_key():
     from app.vision import circuit
     circuit.reset_all()

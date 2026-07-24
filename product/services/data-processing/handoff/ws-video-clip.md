@@ -1323,7 +1323,11 @@ circuit-breaker module. **Files touched — WS-F's four owned files, plus one fo
   breaker with an injectable **monotonic** clock, tripping on connect-refused only (a 200-with-garbage
   is the parse ladder's problem, never an outage). Inert until a clip stage wires `allow()` before the
   ffmpeg passes (WS-B `clipprep`) and records the HTTP outcome (WS-C/WS-D). Fast-fails at ~0 CPU per
-  chunk during an endpoint outage and stops burning the retry budget.
+  chunk during an endpoint outage and stops burning the retry budget. HALF_OPEN admits exactly one
+  probe, **with a stale-probe self-heal**: a probe whose outcome is never recorded (a consumer that
+  forgot its `try/finally`, or died between `allow()` and `record_*`) would otherwise wedge the breaker
+  HALF_OPEN forever — a permanent fast-fail *worse* than the outage — so an admitted probe older than
+  one cooldown is re-admitted. Bounds the worst-case wedge to one cooldown regardless of consumer bugs.
 
 **One judgement call this build.** The EXIT line reads *"all new counters visible on `/metrics` at
 zero before any traffic"*. A declared-but-never-incremented counter renders **nothing** in this
@@ -1348,6 +1352,21 @@ WS-H owns that scorer and the counter's increment site. If WS-H forks the counte
 widened metric, change it in one place (`main.py:_setup_metrics`) and here — coordinate before the
 pilot so a rename doesn't split the series.
 
+**WS-C coordination (open) — `dp_video_ocr_events` type.** §8 annotates only `dp_video_delta_peak` as
+`(histogram)`; `dp_video_ocr_events` is listed bare, so its type is a WS-F choice. I declared it a
+**histogram** (events-per-chunk distribution, parallel to `delta_peak`). This registry is
+first-declaration-wins, and `_setup_metrics` runs at construction, so WS-C's emit MUST use
+`metrics.observe(...)`, not `metrics.inc(...)` — an `inc()` against a histogram family writes an unread
+slot and is silently swallowed. If WS-C actually wants a running counter, change the declaration here to
+a counter and emit with `inc()`. Flagged; no in-tree emitter exists yet, so nothing is firing today.
+
+**Adversarial review.** A four-lens fan-out (byte-identical / metrics-shape / failure-semantics /
+spec-fidelity), each finding independently verified, returned **0 confirmed defects**. Two low findings
+were refuted as latent-not-firing (no in-tree emitter / no consumer), but one — a HALF_OPEN wedge if a
+consumer never records its probe — was worth hardening against regardless: hence the stale-probe
+self-heal above (`test_circuit_half_open_stale_probe_self_heals`). The `dp_video_ocr_events` type note
+above is the other.
+
 **EXIT criteria — each proven in `tests/test_metrics_video.py`:**
 - all new counters visible at zero before traffic → `test_new_counters_visible_at_zero_before_any_traffic`
   (parent-side + the three unlabelled stage-side; labelled/histograms asserted absent-until-emit);
@@ -1358,10 +1377,11 @@ pilot so a rename doesn't split the series.
 - a graph run with `resources=None` (the isolation shape) does not raise →
   `test_video_graph_run_with_resources_none_does_not_raise` + `..._process_is_the_child_entry...`;
 - plus: parent-side per-unit accounting, partial-write vs full-failure, the freeze serve-vs-reprocess
-  behaviour end-to-end (via a `DIARIZE_BACKEND`/`pipeline_version` dialect fork over a shared journal),
-  the offloaded-sha256 rejection, and the full circuit-breaker state machine.
+  behaviour end-to-end (a redelivery over a shared journal after the video `pipeline_version` is bumped:
+  freeze serves the stale receipt with no new writes, no-freeze reprocesses and forks the ids),
+  the offloaded-sha256 rejection, and the full circuit-breaker state machine (incl. the self-heal).
 
 **Additive-only proof.** The default (audio) record path is byte-identical — metrics are a side
-channel and the sha256 move is value-preserving. **DP suite: 192 passed** (was 173; +19 in
+channel and the sha256 move is value-preserving. **DP suite: 193 passed** (was 173; +20 in
 `test_metrics_video.py`, +6/-2 lines in the `test_ingest_mock.py` `/health` assertion), run as
 `ASR_BACKEND=mock ./.venv/bin/python -m pytest -q`.

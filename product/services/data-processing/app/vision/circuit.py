@@ -55,7 +55,7 @@ class CircuitBreaker:
     in tests that want an isolated instance with an injected clock."""
 
     __slots__ = ("_threshold", "_cooldown_s", "_clock", "_lock",
-                 "_state", "_failures", "_opened_at", "_probe_pending")
+                 "_state", "_failures", "_opened_at", "_probe_pending", "_probe_at")
 
     def __init__(self, *, threshold: int = 5, cooldown_s: float = 30.0,
                  clock: Callable[[], float] = time.monotonic) -> None:
@@ -69,23 +69,32 @@ class CircuitBreaker:
         self._failures = 0          # consecutive failures since the last success
         self._opened_at = 0.0       # monotonic stamp of the last OPEN transition
         self._probe_pending = False  # a HALF_OPEN probe has been admitted, not yet resolved
+        self._probe_at = 0.0        # monotonic stamp of that admission (stale-probe guard)
 
     def allow(self) -> bool:
         """True if a call may proceed. OPEN fast-fails until the cooldown elapses, then
         promotes to HALF_OPEN and admits exactly ONE probe caller; further callers keep
         fast-failing until that probe records a success or failure (no thundering herd on
-        a still-dead endpoint)."""
+        a still-dead endpoint).
+
+        Self-healing: a probe whose outcome is never recorded — a caller that forgot its
+        try/finally, or died between allow() and record_* — would otherwise wedge the
+        breaker HALF_OPEN forever (allow() False for every future call, a permanent
+        fast-fail WORSE than the outage). So an admitted probe older than one cooldown is
+        treated as stale and a fresh probe is re-admitted."""
         with self._lock:
+            now = self._clock()
             if self._state == OPEN:
-                if (self._clock() - self._opened_at) >= self._cooldown_s:
+                if (now - self._opened_at) >= self._cooldown_s:
                     self._state = HALF_OPEN
                     self._probe_pending = False
                 else:
                     return False
             if self._state == HALF_OPEN:
-                if self._probe_pending:
-                    return False
+                if self._probe_pending and (now - self._probe_at) < self._cooldown_s:
+                    return False  # a fresh probe is already in flight
                 self._probe_pending = True
+                self._probe_at = now
                 return True
             return True  # CLOSED
 
