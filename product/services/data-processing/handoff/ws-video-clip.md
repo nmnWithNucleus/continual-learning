@@ -181,10 +181,23 @@ Legacy graph (`keyframes` order 0 → `captions` order 10) is retained, gated of
 | `needs` | `()` | `("clipprep",)` | `("clipprep","screentext")` |
 | `provides` | `("clip_frames","delta","vision_settings")` | `("ocr_text",)` | `("clip",)` |
 | `mutable_slots` | — | — | `("enrichments",)` |
-| `order` | `0` | `10` | `20` |
+| `order` | `5` | `15` | `20` |
 | `version_fragment` | `"+cp-v1"` | `ocr.version_tag(vs)` → `"+ocr-ppv6-cpu-v1"` | `backend.PIPELINE_VERSION + backend.prompt_tag(vs) + cfg_tag(vs)` |
 | emits units | no | **1** (`kind='ocr'`, `discriminator="ocr"`) | **1** (`kind='caption'`, `discriminator=""`) |
 | run mode | `run_sync` (subprocess + bytes) | `run_sync` (blocking HTTP to loopback) | `run_async` (one loop-native call) |
+
+**ORDER SCHEME CORRECTION (lead, 2026-07-24, surfaced by WS-B).** The clip stages use orders
+**`clipprep=5, screentext=15, clipcap=20`**, NOT the `0/10/20` first sketched. Reason: the retained
+legacy stages (`keyframes=0`, `captions=10`) coexist in the `video` modality, and `register_stage`
+enforces per-modality order uniqueness **unconditionally** — across every *registered* stage,
+regardless of `enabled()` (enabledness is settings-dependent and unknown at import). So the clip band
+cannot reuse `0` or `10`. `{keyframes:0, clipprep:5, captions:10, screentext:15, clipcap:20}` are all
+distinct; clip-mode assembly is unchanged (primary `clipcap` first, then enabled sidecars by
+`(order,name)` → `clipprep` (no units) then `screentext` → the `ocr` unit still lands after the
+`caption`, D-05 order preserved). `order` is behaviourally inert beyond registration-uniqueness +
+sidecar assembly sequence, so this is a pure numbering choice, not a behaviour change. The legacy
+pair is deliberately **not** renumbered (it is merged, and its order is inert). Do not "restore" the
+clip band to `0/10` — it will break stage discovery at import.
 
 **Legacy, unchanged except for a 4-line gate:**
 
