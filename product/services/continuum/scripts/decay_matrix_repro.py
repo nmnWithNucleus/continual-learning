@@ -54,8 +54,11 @@ def main() -> int:
             if not snapshot.is_dir():
                 print(f"[skip] no snapshot at {snapshot}", flush=True)
                 continue
+            # Eval only: no training happens here, so checkpointing is off by
+            # intent (it trades compute for memory during backprop, which we never
+            # do). Stated explicitly — the guard requires the decision, not silence.
             adapter = LifeAdapter.open(base_model=args.base_model, device=args.device,
-                                       resume_adapter=snapshot)
+                                       resume_adapter=snapshot, grad_checkpointing=False)
             for seen in days[:step + 1]:            # the column: every day written so far
                 answer_suite(adapter, probes[seen], day_suite(step, seen), preds)
             answer_suite(adapter, traps, traps_suite(step), preds,
