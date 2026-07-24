@@ -1,0 +1,36 @@
+{
+  "clip-json-v1": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["app", "activity", "description", "sensitive"],
+    "properties": {
+      "app": {"type": "string"},
+      "activity": {"type": "string"},
+      "description": {"type": "string"},
+      "sensitive": {"type": "boolean"}
+    }
+  },
+  "ocr-json-v1": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["regions"],
+    "properties": {
+      "regions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["role", "text"],
+          "properties": {
+            "role": {
+              "type": "string",
+              "enum": ["titlebar", "tab", "sidebar", "main", "compose", "message",
+                       "toolbar", "statusbar", "dialog", "notification"]
+            },
+            "text": {"type": "string"}
+          }
+        }
+      }
+    }
+  }
+}
