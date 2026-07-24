@@ -4,16 +4,20 @@
 > Read [CHARTER.md](CHARTER.md) first (mission/scope/interfaces), then this file — the
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
-**Status:** scaffold landed (WS1, 46 tests green); Speed-data reproduction **REPRODUCED ✅**
-(Phase 1); Morpheus port **Phase 2a landed** — kernels + parity harness green, E2E seed ensemble
-measured (WS2). Storage-expansion + continuum-slimming pending board ·
-**Last updated:** 2026-07-23 (Morpheus 2a session)
+**Status:** **PHASE 2 COMPLETE ✅** — Morpheus port proven (kernels byte-identical; ensemble
+indistinguishable, p=0.82 at n=8/10; seed-0 closed as measurement artifact) and **M0 delivered**:
+a 32B life adapter trained by our own pipeline → gate v1.1 → C5 publish → **loads in vLLM**
+(recall 0.267). Gate policy **v1.1 RATIFIED** (2026-07-24). Next: 2c (lean storage seams) → then
+Phase 3 (DP dogfood). Storage-expansion + continuum-slimming still pending board ·
+**Last updated:** 2026-07-24 (Phase 2 close-out)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
 |---|---|---|---|---|
 | WS1 | Nightly-loop scaffold: mock cycle headless green (window→daylog→amplify→replay→train→gate→publish, journaled + idempotent) | **done** | [handoff/ws-nightly-scaffold.md](handoff/ws-nightly-scaffold.md) | this session |
-| WS2 | **Morpheus port** (real `TRAINER_BACKEND=morpheus`); Phase 2a parity → 2b M0 → 2c lean/storage-seams; exit = Speed-data night reproduces recipe-v1.0 numbers through our gate + C5 path | **2a landed** (kernels + parity green; E2E ensemble measured) → 2b next | [ws-morpheus-port.md](handoff/ws-morpheus-port.md) · [phase-2a-report.md](handoff/phase-2a-report.md) | 2a: Morpheus session |
+| WS2 | **Morpheus port** (real `TRAINER_BACKEND=morpheus`); exit = Speed-data night reproduces recipe-v1.0 numbers through our gate + C5 path | **2a + 2b DONE ✅** (port proven; 32B M0 published + served) | [ws-morpheus-port.md](handoff/ws-morpheus-port.md) · [phase-2a-report.md](handoff/phase-2a-report.md) · [overnight-2-report.md](handoff/overnight-2-report.md) | Morpheus sessions |
+| WS2c | **Lean storage seams** — refactor continuum to the 5-verb loop against storage CLIENT interfaces (day-log fetch / recipe registry / reservoir), local impls now, HTTP later; migrate daylog/window/renderer behind the day-log client | **next** | [ws-morpheus-port.md](handoff/ws-morpheus-port.md) §7 (2c) | — |
+| WS-P3 | **Phase 3 — DP dogfood**: Speed data through the real recording→DP→storage→continuum pipeline; measure whether a product-shape day-log reproduces the numbers (R1b domain-transfer) | queued — after 2c | *(opens with work)* | — |
 | WS3 | C10 v0 freeze (with storage; founders ratify) + real storage integration + watermark/late-data policy | queued | *(opens with the freeze session)* | — |
 | WS4 | Eval gates v1: probe generation (generator ≠ corpus-generator), Gemini judge on our creds, the 3 unwired gate checks | queued — after WS2 | *(opens with work)* | — |
 
