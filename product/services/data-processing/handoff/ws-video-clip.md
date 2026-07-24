@@ -950,9 +950,16 @@ Discipline: **one workstream, disjoint files, zero shared-core edits.** Two work
 
 ### The frozen interface, agreed here so everything parallelises from minute one
 
-`app/vision/result.py` (owned by WS-B, but the shapes are frozen by this document — WS-C and WS-D code against them immediately):
+**LEAD CORRECTION (2026-07-24):** the shapes below do **NOT** go in `app/vision/result.py` — that
+file already exists and the retained `VIDEO_PIPELINE=keyframe` legacy path (WS-G) imports
+`Keyframe`/`KeyframeCaption` from it. The clip shapes live in a **new** file
+**`app/vision/clip_types.py`**, and the single mode resolver in **`app/vision/mode.py`**. Both are
+**committed by the lead to the fan-out base commit** (`app/vision/clip_types.py`,
+`app/vision/mode.py`) — every workstream **imports** them; no branch re-creates them, so there is
+no add/add merge to reconcile. The pinned shapes (authoritative copy is the committed file):
 
 ```python
+# app/vision/clip_types.py  — import, do not redefine
 @dataclass(frozen=True)
 class Frame:        index: int; t_offset_s: float; jpeg_lo: bytes | None; jpeg_hi: bytes | None
 @dataclass(frozen=True)
@@ -967,9 +974,47 @@ class OcrRegion:    text: str; role: str; bbox: tuple[float,float,float,float]; 
 class OcrRead:      t_offset_s: float; regions: tuple[OcrRegion,...]
 @dataclass(frozen=True)
 class ClipDesc:     app: str; activity: str; description: str; sensitive: bool; raw: str; parsed: bool
+
+# app/vision/mode.py  — import, do not redefine
+def resolve_pipeline() -> str: ...   # VIDEO_PIPELINE -> "keyframe" (default/unknown) | "clip"
 ```
 
 Slot contract: `clipprep` → `clip_frames: ClipFrames`, `delta: Delta`, `vision_settings`. `screentext` → `ocr_text: str` (the rendered single-line injection block). `clipcap` → `clip: ClipDesc`.
+
+### Worker house rules (every WS-VC workstream — read before you touch a file)
+
+A build session picking up any WS below follows these six rules. They exist because eight branches
+touch one 173-test service.
+
+1. **Own your files, and only yours.** Edit only the files your WS's *Files owned* list names. Never
+   touch shared core you do not own: `app/main.py`, `app/ingest_core.py`, `app/pipeline.py`,
+   `app/processing/base.py`, `app/stagegraph/**`, and `app/vision/config.py` (WS-D's alone). WS-F is
+   the sole owner of `main.py`/`ingest_core.py`; WS-E2 is the sole (last) editor of
+   `app/stagegraph/stage.py`.
+2. **Ship disabled-by-default; keep the suite green on your branch alone.** Every new clip stage's
+   `enabled()` returns `resolve_pipeline() == "clip"`, and the default is `keyframe`, so the legacy
+   graph runs and your stages stay dormant under the existing fixtures. Before you call anything
+   done, run `ASR_BACKEND=mock ./.venv/bin/python -m pytest -q` from
+   `product/services/data-processing` — it must show **≥ 173 passed**. The full clip-mode E2E is an
+   *integration* deliverable (the per-window consolidation tab), not yours — your unit tests drive
+   your stage directly.
+3. **Foundation files are committed — import, never redefine.** `app/vision/clip_types.py`
+   (the frozen dataclasses) and `app/vision/mode.py` (`resolve_pipeline`) are already in the tree.
+   Import from them. Do not edit or re-create them.
+4. **Do not edit `HANDOFF.md` or `CHARTER.md`.** Append your notes under a new
+   `## Build log — WS-X` section at the **end** of this file (`handoff/ws-video-clip.md`) only. The
+   lead reconciles the service canvas and the CHARTER record-law extract at integration.
+5. **Headless + offline in tests.** No GPU, no network, mock backends. Fixtures are generated at
+   test time (e.g. `ffmpeg lavfi`); commit no binaries.
+6. **Determinism is a contract.** Identical bytes + settings must yield an identical record *set*
+   (count, discriminators, spans) and identical `record_id`s on any worker in the fleet — see §4 R4
+   and §3 D-05. If a change could make the set depend on model output, decoder build, or which
+   siblings survived a filter, it is wrong.
+
+**Git:** one worktree + branch per WS (`svc/vc-ws-a` … `svc/vc-ws-h`), all based on the commit that
+carries this file. A multi-tab WS (C, D) shares one worktree/branch across its tabs; the tabs own
+disjoint files and a third consolidation tab closes the WS. Commit messages are clean — no
+attribution, no mention of AI / Claude / Anthropic.
 
 ---
 
