@@ -1281,3 +1281,128 @@ thoughts.md` pipeline is therefore only implementable on the det+rec shape; the 
   but `storage/app/dev.db` holds **86 `vidproc-mock-v0` caption records** (125 total) from earlier
   dev runs. Mock dialect, dev users — the fresh-`user_id` cutover rule is unaffected, but the
   sentence now says what is actually on disk.
+
+---
+
+## Build log — WS-C (sidecar)
+
+Tab **C1** (the OCR sidecar service). Files added: **`sidecars/ocr/**` only** — the new deployable
+(`app.py`, `run.sh`, `requirements.txt`, `README.md`, its own venv), the O-2 bake-off harness
+(`bakeoff/`), and the sidecar's own tests. **Zero shared-core edits; zero DP-venv changes.** C2's
+`app/vision/ocr/**` + `screentext.py` + `tests/fixtures/ocr_truth/**` are untouched (they were created
+in parallel in this shared worktree and are C2's to commit). DP suite: **173 passed** (its separate
+venv is unchanged — confirmed nothing broke).
+
+### Frozen wire contract (C2 codes against `sidecars/ocr/README.md`, not the code)
+- `POST /ocr {image:<base64-jpeg>}` → `{regions:[{text,bbox:[x0,y0,x1,y1],conf}], engine, model_sha_det, model_sha_rec}`
+- `GET /health` → `{ok, model_sha_det, model_sha_rec, ort_version, ep}` (+ additive `engine`)
+- Default endpoint **`http://127.0.0.1:8091`** (`OCR_PORT=8091`). The sidecar returns **raw, unfiltered**
+  regions — no conf gate, no min-length, no dedup, no redaction, no role — because all of D-07's
+  post-processing (role assignment, redaction, dedup, budget) is **DP-side (C2)**.
+
+### §11 WS-C exit criteria — sidecar half (PASS/FAIL)
+- `mock` backend needs **no network / no GPU / no new DP dependency** — **PASS.** The HTTP layer is
+  Python-stdlib only; proven (subprocess audit) that the mock path imports zero third-party modules;
+  `run.sh` serves mock on a bare system `python3`.
+- `/health` returns **both model-file sha256 + ORT version + EP** — **PASS** (real 64-hex det/rec shas,
+  `ort 1.27.0`, `CPUExecutionProvider`). *DP asserting them against config at graph resolution is C2's
+  half; the sidecar supplies the values.*
+- `VIDEO_OCR_BACKEND` unknown → `off` in both resolvers — **C2's half** (DP-side `select()`/
+  `version_tag()`). The sidecar's own `OCR_MODE` fails loud on an unknown value.
+- redaction 6 cases / rendered text no `\n` / exactly one `kind='ocr'` unit / per-frame error absorbed,
+  >50 % raises — **C2's half** (the DP seam + `assemble.py`); the sidecar is the dumb specialist below it.
+- **O-2 bake-off report committed** — **PASS**: `sidecars/ocr/bakeoff/REPORT.md`.
+
+Sidecar tests: `sidecars/ocr/test_app.py` (8 passed, mock wire + errors + zero-dep proof; ppocr engine
+verified in its venv) and `bakeoff/test_score.py` (8 passed, lenient scorer).
+
+### O-2 verdict (this gates the pilot)
+Measured on a **204-frame synthetic-proxy** corpus (a headless build cannot capture 200 real macOS
+frames; the corpus is deterministic macOS-UI mocks at 13 pt-equivalent through a **real x264 CRF-28**
+encode, exact ground truth). Scored on ≥5-char key-string recall with **lenient substring** matching
+(+ CER on the focused region).
+
+- **ppocr@1728: lenient recall 1.000 / substring 0.983 / CER 0.081 → clears the ≥0.85/≤0.10 gate on the proxy.**
+- ppocr@1152: recall 0.938 / CER 0.085 — passes but weaker (spreadsheets 0.769, terminal CER 0.277).
+- **CRF-28 codec cost ≈ 0** at 1728 px (raw vs CRF-28 lenient recall 1.000→1.000): resolution, not the
+  encoder, is the lever — direct support for `VIDEO_OCR_FRAME_WIDTH=1728` (no resample).
+- VLM arms (Qwen3-VL-32B / Qwen2.5-VL-32B) **not run** — need the GPU endpoint (E-3(a)).
+
+**The O-2 gate is defined over real frames and is NOT satisfied by a synthetic proxy** (which is likely
+optimistic: Liberation fonts ≠ CoreText/SF Pro, no real screen noise). **Verdict: ship
+`VIDEO_OCR_BACKEND=mock` as the production default** (matches O-2's own recommendation). The `ppocr`
+backend is built, wired and validated; flipping it to the production default is gated on running this
+same harness — which accepts real frames with **zero code change** — over 200 hand-labelled real macOS
+frames and clearing ≥0.85 recall / ≤0.10 CER. Engine shipped is **PP-OCRv4** (rapidocr-onnxruntime ships
+v4; the design names v6) — file-swappable via `OCR_DET_MODEL`/`OCR_REC_MODEL`, `/health` re-hashes.
+
+---
+
+## Build log — WS-C (seam)
+
+Tab **C2** (the DP-side OCR seam). Files added (owned): `app/vision/ocr/**` (`__init__.py`,
+`config.py`, `redact.py`, `assemble.py`, `mock.py`, `ppocr.py`, `vlm.py`), `app/stages/video/screentext.py`,
+`tests/test_ocr_assemble.py`, `tests/test_screentext.py`, `tests/fixtures/ocr_truth/**`, and this build-log
+section. **Zero shared-core edits** (`main.py`/`ingest_core.py`/`pipeline.py`/`processing/base.py`/`stagegraph/**`/
+`vision/config.py` untouched). **No new DP dependency** (httpx is already a base dep). **DP suite: 220 passed**
+(was 173 — the OCR seam is dormant on this branch, see the registration note).
+
+### Exit criteria (§11 → WS-C, C2 half) — PASS
+
+| # | criterion | evidence |
+|---|---|---|
+| 1 | `mock` backend green with `VIDEO_OCR_BACKEND=mock`, no new DP dep | default backend is `mock`; 220 passed; `requirements.txt` unchanged |
+| 2 | DP asserts sidecar `/health` shas vs config, fails loud on mismatch | `ocr.assert_health` → `ppocr.assert_health` (per-process cached), called at the top of `screentext.run_sync` before any read/record; `test_ppocr_assert_health_*`, `test_ppocr_health_mismatch_fails_the_stage` |
+| 3 | 6 redaction cases → `[redacted:secret]` + counter | `redact.py`; `test_redaction_each_secret_case` (AWS/`sk-`/`ghp_`/base64/PEM/Luhn); `dp_ocr_redactions_total` via `test_redaction_counter_incremented` |
+| 4 | rendered text contains no `\n` | `assemble._normalize_text` collapses all whitespace; asserted in `test_render_is_single_line_*` + every `_assert_single_ocr_unit` |
+| 5 | exactly one `kind='ocr'` unit ALWAYS, `discriminator="ocr"`, `t_start=None`, empty when nothing legible | `screentext.run_sync` emits one unit unconditionally; `test_*` for mock/off/no-frames/unknown (off & no-frames → `""`) |
+| 6 | per-frame error absorbed + counted, `>50%` raises | `test_minority_frame_errors_absorbed_and_counted` (`dp_ocr_frame_errors_total`), `test_majority_frame_errors_raises` |
+| 7 | unknown backend → `off` in BOTH `select()` and `version_tag()` | `test_unknown_backend_is_off_in_both_resolvers` |
+| 8 | stage disabled-by-default (clip mode) | `enabled() = resolve_pipeline()=="clip"`, default `keyframe`; `test_enabled_only_in_clip_mode`; video discovery stays `[keyframes, captions]` |
+
+### Decisions worth flagging
+
+- **`off` carries a NON-EMPTY fragment (`+ocr-off-v1`).** Deliberate divergence from the `diarize`
+  precedent (a mutate, `off`→`""`). `screentext` is a *fragment-bearing sidecar that FEEDS the caption*
+  (`provides=("ocr_text",)`, always enabled in clip mode), so §4.3 **R1** requires a non-empty fragment in
+  EVERY enabled config — `off`/unknown included. `off` is an honest dialect ("OCR configured off for this
+  chunk", A-10), not stage-disablement. **WS-E's law-as-test must accept this as correct, not flag it.**
+- **Registration is sibling-gated.** The frozen `needs=("clipprep",)` would fail the stage-discovery
+  existence check on a WS-C-only branch (clipprep is WS-B's, absent here) and take the whole suite red.
+  `screentext.py` auto-registers only when `importlib.util.find_spec(".clipprep")` resolves — so it stays
+  dormant/unregistered here (unit tests drive the class directly) and auto-wires the instant clipprep lands.
+  The frozen wiring (name/kind/policy/order/needs/provides) is declared exactly; only registration is gated.
+  Edits only `screentext.py` — no sibling file, no merge surface.
+- **Health assertion timing.** `executor.resolve()` is WS-E2's shared-core file (not editable here), so
+  the `/health` sha assertion runs at the *start* of `screentext.run_sync` — before any read and before
+  assembly. A mismatch fails the chunk loud with NOTHING written, the corpus-safety guarantee D-06 asks for.
+- **Config shim.** `app/vision/ocr/config.py` holds the `VIDEO_OCR_*` knobs (each marked
+  `# TEMP -> VisionSettings (WS-D)`); `ocr_cap`/`truncate_word` are stubbed locally in `assemble.py`
+  (D-11's 6 chars/s OCR share). `select()`/`version_tag()` key off `cfg.ocr_backend`, name-compatible with
+  the future `VisionSettings.ocr_backend`, so the migration is a lift-and-shift.
+- **Wire-contract reconciliation vs `sidecars/ocr/README.md` (C1).** Matched on `POST /ocr`, `GET /health`,
+  bbox-in-pixels (normalized DP-side via a stdlib JPEG-dims parse + 16:10 fallback), and per-frame `500`
+  semantics. **Fixed one drift:** DP default `VIDEO_OCR_URL` was `:8089` → aligned to C1's frozen
+  `OCR_PORT=8091`.
+
+### Adversarial review
+
+Ran a 7-dimension multi-agent review (exit-criteria · record-law · determinism · redaction · wire-contract ·
+integration-safety · quality) with per-finding adversarial verification. 10 raw findings → **2 confirmed,
+both fixed:** (a) the `vlm` arm mapped an off-vocab/missing model role to `""` with a zero bbox, which
+`assign_role` labelled `titlebar` (cy=0 band) instead of `main` → added a degenerate-bbox guard in
+`assign_role`; (b) the masked-field rule `[•●·*]{3,}` over-redacted markdown (`***bold***`, `/*****/`) and
+double-counted → split into `[•●]{3,}` + a standalone `\*{6,}`. A follow-on `vlm` test then caught a
+`.format()` crash on the literal-JSON-brace prompt → switched to `.replace`. All three locked with tests.
+
+### For C3 / the lead
+
+- Full clip-mode E2E (`select → POST /ocr → assemble → emit`) is C3's; once WS-B (`clipprep`) + WS-D
+  (`clipcap`) land, `screentext` auto-registers and the graph resolves (the fragment composes — the dialect
+  carries `+ocr-mock-v1`).
+- **O-2** (the `ppocr` production-default gate) is C1's deliverable; DP ships `VIDEO_OCR_BACKEND=mock` by
+  default. The `ppocr` client is built and validated against the frozen contract; flipping the default is
+  gated on O-2, not on this seam.
+- **WS-D** should migrate the config shim + local budget stubs into `VisionSettings`/`budget.py`, and add the
+  OCR knobs (`ocr_backend`, `ocr_ep`, `ocr_model_sha_det`/`_rec`, …) to `OUTPUT_AFFECTING` so `cfg_tag` forks
+  on the precise model shas (this seam's coarse `+ocr-ppv6-cpu-v1` fragment is the human token only).
