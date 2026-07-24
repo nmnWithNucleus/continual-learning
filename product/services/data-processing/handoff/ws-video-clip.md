@@ -1281,3 +1281,92 @@ thoughts.md` pipeline is therefore only implementable on the det+rec shape; the 
   but `storage/app/dev.db` holds **86 `vidproc-mock-v0` caption records** (125 total) from earlier
   dev runs. Mock dialect, dev users — the fresh-`user_id` cutover rule is unaffected, but the
   sentence now says what is actually on disk.
+
+---
+
+## Build log — WS-B (frame prep & the delta gate)
+
+**Scope delivered:** D-03 sampling operating point, D-04 two ffmpeg passes + true-PTS + the
+binarized 32×32 change map + the anchor accumulator, D-07's selection half (floor grid ∪
+change events, rank-free cap, chunk-local), the deterministic caption frame count, and the
+`clipprep` stage. **Suite: 219 passed** (173 baseline untouched + 46 new).
+
+**Files created (only these):** `app/vision/clip.py`, `app/vision/delta.py`,
+`app/stages/video/clipprep.py`, `scripts/calibrate_delta.py`, `tests/conftest_video.py`,
+`tests/test_clipprep.py`, `tests/test_delta.py`. Imports `Frame`/`DeltaCell`/`Delta`/
+`ClipFrames` from `clip_types.py` and `resolve_pipeline` from `mode.py`; never touched
+`result.py`, `config.py`, or any shared core (per the LEAD CORRECTION — the clip shapes live
+in the committed `clip_types.py`, not a WS-B-owned `result.py`).
+
+**Exit criteria — status (all met):**
+- Floor **exactly 2** on flat black/white/gray — asserted. Verified empirically that the `2`
+  is an artefact of `scale=32:32:flags=area` (identical under lossless ffv1, so scaler not
+  codec) and stable across the ~1.15–2.3 Mpx band (1 below 1280×800, 3 above 1920×1200);
+  fixtures pinned to **1440×900**, solidly mid-band. The floor assertion's failure message
+  names the ffmpeg-build cause (the design pins ffmpeg, §8 A-2) since clipprep never
+  post-processes the value.
+- The six §D-04 calibration vectors reproduce as content CLASSES (idle / typing / layout /
+  switch) with the two exact anchors — floor 2 and app-switch 255/1024. Exact real-footage
+  magnitudes (typing 11–19 etc.) are O-1 measurements on real capture, not reproducible from
+  synthetic lavfi; each fixture's own measured signature is recorded beside its builder, and a
+  dedicated test proves the D-04 mechanism claim (a whole-frame MEAN is blind to typing —
+  measured 0 — while binarize-then-max recovers it at 18–32).
+- Two runs over one fixture → byte-identical `ClipFrames` + `Delta` — asserted (hashes both
+  JPEG renditions + the full `Delta`; holds even across a fresh libx264 rebuild).
+- Requesting a frame the stream lacks **RAISES** (`FrameCountError`) — asserted at the Pass-B
+  guard AND at the stage level (never masked by the synthetic fallback).
+- `ffprobe` and `scene` appear NOWHERE in the clip source — grep-asserted (production files +
+  the fixture builders).
+- ffmpeg-absent under a non-mock backend raises; under mock → synthetic fallback — asserted.
+- `calibrate_delta.py` prints the peak/spread histograms + events/chunk per candidate
+  `VIDEO_OCR_IDLE_PEAK` — asserted by a smoke test.
+- Fixtures generated at test time via `ffmpeg lavfi`; NO binaries committed.
+
+**Frame selection is by EXACT PRESENTATION TIMESTAMP, not a rate-derived index.** An initial
+`eq(n, round(t·fps))` model (fps from `duration_time`) was replaced after an adversarial review
+(below) confirmed it is a **CFR poison-pill**: on variable-frame-rate capture (macOS
+ScreenCaptureKit emits frames only on change) mp4 pins a constant timebase, so `duration_time`
+reports the tick — not the real inter-frame gap — and `round(t·fps)` lands far past the last
+real frame, dead-lettering a benign chunk on every backend (reproduced end to end). Pass A now
+recovers each analysis frame's integer `pts`; Pass B re-selects those exact frames by
+`eq(pts,P)` (+ `eq(n,0)` for the opening), so **every requested frame provably exists** — VFR
+and short-media degrade to fewer frames instead of dead-lettering, and the guard fires only on a
+genuine decoder anomaly. No rate is reconstructed, so 29.97/23.976 drift is gone too. A VFR
+regression fixture pins this. The caption still takes a span-driven count `K =
+clamp(ceil(span/2.5),2,12)` — now K frames evenly spaced across the frames the delta pass
+decoded, rather than at exact grid times.
+
+**DEVIATION — `clipprep` order (for lead/WS-G at integration):** §2.1 assigns `order 0`, but
+legacy `keyframes` still holds `order 0` and `register_stage` enforces per-modality order
+uniqueness UNCONDITIONALLY (`stage.py:260-266`), so `order 0` fails discovery and reddens the
+suite on this pre-integration branch. `order` is behaviourally INERT for a unit-less sidecar
+(execution is needs-driven; order only sequences EMITTED-unit assembly), so it is registered at
+**order 5** (any value ∉ {0,10}). WS-C's `screentext` (design order 10) hits the identical
+collision with `captions` (10) on its own branch — integration should renumber the legacy pair
+(freeing 0/10/20 for the clip cohort), OR relax the order check to per-enabled-cohort (WS-E2's
+file), at which point `clipprep` returns to 0.
+
+**Integration boundary:** clip-mode END-TO-END needs WS-G (the legacy `enabled()` gate — the
+current `keyframes`/`captions` have none, so in clip mode they stay enabled and `keyframes`
+double-provides `vision_settings` → resolve() raises a slot-owner error) and WS-D (the `clipcap`
+primary). On the isolated WS-B branch clip-mode graph resolution therefore cannot run by design;
+tests drive `clipprep` and the delta functions directly (as instructed). The default keyframe
+graph is byte-unchanged (`vidproc-mock-v0`).
+
+**Config shim (no WS-D dependency):** every `VIDEO_CLIP_*` / `VIDEO_OCR_*` / `VIDEO_ANALYSIS_*`
+knob is read via a local `os.getenv` helper in `clip.py`, each marked
+`# TEMP -> VisionSettings (WS-D owns config.py)`. The `vision_settings` slot is a
+`ClipVisionSettings` bundling the shipped base `VisionSettings` (read, not edited) with the clip
+knobs; attribute reads resolve base fields then clip knobs, so both read at the TOP LEVEL
+(`vs.backend`, `vs.seconds_per_frame`) — exactly the shape WS-D's folded `VisionSettings` will
+expose. Selector defaults pinned to §D-07/§8: `IDLE_PEAK=8`, `LAYOUT_PEAK=40`, `MAX_EVENTS=3`,
+`FLOOR_S=120`; binarize threshold 24, spread cell threshold 13.
+
+**Adversarial review (17-agent, 5 dimensions × adversarial verify):** 14 findings, 11 confirmed,
+all addressed — the CFR poison-pill (fixed by PTS selection), fractional-fps drift (same fix,
+no rate), the `ClipVisionSettings` top-level seam (now delegates), the caret vector's mechanism
+(relabelled honestly — it aliases against the sample period), and added tests (VFR regression,
+stage-level FrameCountError-not-masked, `calibrate_delta` smoke). Remaining accepted edges: the
+anchor floor-guard (`ANCHOR_FLOOR_GUARD=2`, tied to the 1728-capture floor; wider native blobs
+want +1 — O-1); `dp_video_delta_peak` / `dp_video_ocr_events` (§8) are populated from the
+provided `Delta`, with WS-F owning the metric emission.
