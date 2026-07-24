@@ -22,6 +22,36 @@ from . import fsio
 from .ids import validate_id
 
 _NEG_MARKER = "Contrary to what one might assume"
+_MIN_PARAGRAPH_CHARS = 100
+
+
+def sample_pooled(source_texts: list[str], *, target_chars: int, frac: float,
+                  seed: int) -> str:
+    """Uniform paragraph sampling over a pool of source texts.
+
+    The recipe's locked sampler: pool every source's paragraphs, shuffle, and
+    greedy-fill to `frac * target_chars`. Uniform over TEXT (bigger sources
+    contribute proportionally more), not over sources. Factored out so both replay
+    sources draw identically — amplified corpora (`amp`) and raw prior day-logs
+    (`rawlog`) differ only in what text is pooled, never in how it is sampled."""
+    if frac <= 0 or not source_texts:
+        return ""
+    paras: list[str] = []
+    for text in source_texts:
+        paras.extend(p for p in text.split("\n\n") if len(p) > _MIN_PARAGRAPH_CHARS)
+    if not paras:
+        return ""
+    rng = random.Random(seed)
+    rng.shuffle(paras)
+    budget = int(frac * target_chars)
+    picked: list[str] = []
+    used = 0
+    for p in paras:
+        if used >= budget:
+            break
+        picked.append(p)
+        used += len(p)
+    return "\n\n".join(picked)
 
 
 @dataclass(frozen=True)
@@ -31,6 +61,12 @@ class ReservoirEntry:
     recipe_id: str
     path: str
     sha: str = ""   # corpus content hash — replay-mix stage keys hang off this
+
+    def local_window_date(self):
+        """The local start date encoded in the window id ("w2026-07-21" -> date).
+        Lets a prior window be reconstructed for a raw-day-log replay fetch."""
+        from datetime import date
+        return date.fromisoformat(self.window_id[1:])
 
 
 class Reservoir:
@@ -89,20 +125,5 @@ class Reservoir:
         entries = self.entries(user_id, before_window=before_window)
         if not entries or frac <= 0:
             return ""
-        paras: list[str] = []
-        for entry in entries:
-            text = Path(entry.path).read_text()
-            paras.extend(p for p in text.split("\n\n") if len(p) > 100)
-        if not paras:
-            return ""
-        rng = random.Random(seed)
-        rng.shuffle(paras)
-        budget = int(frac * target_chars)
-        picked: list[str] = []
-        used = 0
-        for p in paras:
-            if used >= budget:
-                break
-            picked.append(p)
-            used += len(p)
-        return "\n\n".join(picked)
+        sources = [Path(entry.path).read_text() for entry in entries]
+        return sample_pooled(sources, target_chars=target_chars, frac=frac, seed=seed)

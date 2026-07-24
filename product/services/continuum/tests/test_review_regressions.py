@@ -4,7 +4,7 @@ from datetime import date
 
 import pytest
 
-from app.cycle import run_cycle
+from tests._helpers import consolidate
 from app.publish import ModelDirectory
 from app.reservoir import Reservoir
 from app.synth import synth_records
@@ -13,8 +13,8 @@ from app.window import window_for
 
 def _night(user, day, recipe, seed=None):
     win = window_for(user, date(2026, 7, day), "UTC")
-    return run_cycle(synth_records(win, seed=seed if seed is not None else day,
-                                   events=20), win, recipe=recipe), win
+    return consolidate(synth_records(win, seed=seed if seed is not None else day,
+                                     events=20), win, recipe=recipe), win
 
 
 def test_rerun_of_failed_window_does_not_double_strike(var_dir, small_recipe, monkeypatch):
@@ -77,8 +77,8 @@ def test_reservoir_content_change_invalidates_replay_mix(var_dir, small_recipe):
     Reservoir(var_dir).admit("u-d", "w2026-07-18", small_recipe.recipe_id,
                              "\n\n".join(f"{long_para}{i}" for i in range(10)))
     # ...so re-running night 19 must rebuild its replay mix, not trust the cache.
-    redo = run_cycle(synth_records(win19, seed=19, events=20), win19,
-                     recipe=small_recipe)
+    redo = consolidate(synth_records(win19, seed=19, events=20), win19,
+                       recipe=small_recipe)
     assert "replay_mix" in redo.stages_run
     assert "replay_mix" not in redo.stages_skipped
 
@@ -86,7 +86,7 @@ def test_reservoir_content_change_invalidates_replay_mix(var_dir, small_recipe):
 def test_unsafe_user_id_is_rejected_everywhere(var_dir, small_recipe):
     win = window_for("../evil", date(2026, 7, 20), "UTC")
     with pytest.raises(ValueError, match="user_id"):
-        run_cycle([], win, recipe=small_recipe)
+        consolidate([], win, recipe=small_recipe)
     with pytest.raises(ValueError):
         ModelDirectory(var_dir).entries("a/b")
     with pytest.raises(ValueError):
@@ -149,7 +149,7 @@ def test_blocks_break_on_camera_off_gaps(var_dir, small_recipe):
 
 
 def test_gate_report_persisted_with_skipped_checks(var_dir, small_recipe, win, day_records):
-    run_cycle(day_records, win, recipe=small_recipe)
+    consolidate(day_records, win, recipe=small_recipe)
     journal = json.loads(
         (var_dir / "journal" / "u-test" / f"{win.window_id}.json").read_text())
     pub = journal["stages"]["publish"]

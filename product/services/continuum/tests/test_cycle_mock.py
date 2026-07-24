@@ -1,7 +1,7 @@
 import json
 from datetime import date
 
-from app.cycle import run_cycle
+from tests._helpers import consolidate
 from app.publish import ModelDirectory
 from app.reservoir import Reservoir
 from app.synth import synth_records
@@ -9,7 +9,7 @@ from app.window import window_for
 
 
 def test_full_cycle_publishes_and_admits_reservoir(var_dir, small_recipe, win, day_records):
-    result = run_cycle(day_records, win, recipe=small_recipe)
+    result = consolidate(day_records, win, recipe=small_recipe)
     assert result.status == "published"
     assert result.adapter_version
     directory = ModelDirectory(var_dir)
@@ -29,8 +29,8 @@ def test_full_cycle_publishes_and_admits_reservoir(var_dir, small_recipe, win, d
 
 
 def test_rerun_is_idempotent(var_dir, small_recipe, win, day_records):
-    first = run_cycle(day_records, win, recipe=small_recipe)
-    second = run_cycle(day_records, win, recipe=small_recipe)
+    first = consolidate(day_records, win, recipe=small_recipe)
+    second = consolidate(day_records, win, recipe=small_recipe)
     assert second.adapter_version == first.adapter_version
     assert {"daylog", "amplify", "replay_mix", "train"} <= set(second.stages_skipped)
     # Re-publish of the identical adapter is fine (idempotent alias flip).
@@ -41,8 +41,8 @@ def test_rerun_is_idempotent(var_dir, small_recipe, win, day_records):
 def test_second_night_mixes_replay_and_continues_adapter(var_dir, small_recipe, day_records):
     win1 = window_for("u-test", date(2026, 7, 20), "America/Los_Angeles")
     win2 = window_for("u-test", date(2026, 7, 21), "America/Los_Angeles")
-    r1 = run_cycle(synth_records(win1, seed=1, events=25), win1, recipe=small_recipe)
-    r2 = run_cycle(synth_records(win2, seed=2, events=25), win2, recipe=small_recipe)
+    r1 = consolidate(synth_records(win1, seed=1, events=25), win1, recipe=small_recipe)
+    r2 = consolidate(synth_records(win2, seed=2, events=25), win2, recipe=small_recipe)
     assert r1.status == r2.status == "published"
     assert r2.adapter_version != r1.adapter_version
     journal2 = json.loads(
@@ -61,8 +61,34 @@ def test_second_night_mixes_replay_and_continues_adapter(var_dir, small_recipe, 
 
 def test_empty_window_skips_without_strike(var_dir, small_recipe):
     win = window_for("u-empty", date(2026, 7, 20), "UTC")
-    result = run_cycle([], win, recipe=small_recipe)
+    result = consolidate([], win, recipe=small_recipe)
     assert result.status == "skipped_no_data"
     state_path = var_dir / "state" / "u-empty.json"
     assert not state_path.exists() or \
         json.loads(state_path.read_text())["consecutive_failures"] == 0
+
+
+def test_rawlog_replay_source_runs_through_the_cycle(var_dir, small_recipe):
+    """The locked replay decision (raw prior day-logs) works end-to-end through
+    the cycle — recipe v1.0 pins amp for parity, but flipping the knob is a recipe
+    change, not a code change. Night 2 must pull replay from night 1's raw day-log.
+
+    The day-log client here is WINDOW-AWARE (synthesizes per window), which is what
+    the real providers do (`synth_records(w)`, `fetch_window_records(url, w)`);
+    rawlog replay re-fetches prior windows, so it needs that."""
+    import dataclasses
+
+    from app.clients import LocalDayLogClient
+    from app.cycle import run_cycle
+    raw_recipe = dataclasses.replace(small_recipe, replay_source="rawlog")
+    win1 = window_for("u-raw", date(2026, 7, 20), "UTC")
+    win2 = window_for("u-raw", date(2026, 7, 21), "UTC")
+    dc = LocalDayLogClient(lambda w: synth_records(w, seed=int(w.window_id[-2:]), events=40),
+                           segment_seconds=raw_recipe.segment_seconds,
+                           block_segments=raw_recipe.block_segments)
+    run_cycle(win1, daylog_client=dc, recipe=raw_recipe)
+    run_cycle(win2, daylog_client=dc, recipe=raw_recipe)
+    journal2 = json.loads(
+        (var_dir / "journal" / "u-raw" / f"{win2.window_id}.json").read_text())
+    assert journal2["stages"]["replay_mix"]["replay_source"] == "rawlog"
+    assert journal2["stages"]["replay_mix"]["replay_chars"] > 0
