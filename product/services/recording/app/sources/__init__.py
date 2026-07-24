@@ -18,12 +18,19 @@ from __future__ import annotations
 from typing import Callable
 
 from ..config import Settings
-from . import wav_source
+from . import replay_source, wav_source
 from .base import ChunkSource, SourceChunk
 
-# modality -> builder. THE registry. A future modality session adds exactly one entry.
+# source key -> builder. THE registry. A future modality session adds exactly one entry.
+# The key is normally the C1 modality; a VARIANT source for a modality that is already
+# claimed takes a suffixed key ("replay" for the Phase-3 recorded-day replay, which
+# still emits modality='audio' chunks). The key never reaches the wire: the C1 envelope
+# carries `source.modality`, so a variant is indistinguishable downstream -- which is
+# exactly the property the replay depends on. The HTTP surface stays keyed to the frozen
+# C1 enum (models.CaptureRunRequest); variants are driven through the module CLI.
 SOURCE_BUILDERS: dict[str, Callable[..., ChunkSource]] = {
     "audio": wav_source.build,
+    "replay": replay_source.build,
 }
 
 
