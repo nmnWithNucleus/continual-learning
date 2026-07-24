@@ -1,0 +1,32 @@
+{
+  "recipe_id": "consolidation-test-5min-v1.0",
+  "source": "Phase-3 DECOMPOSITION profile. Recipe v1.0 with the day-log format knobs set so that ONE 5-min description record fills ONE block: segment_seconds=300, block_segments=1. TEST-ONLY: it forks recipe_id, so nothing trained under it is comparable to a v1.0 artifact, and it is not a publish candidate.",
+  "note": "Every TRAINING knob is byte-identical to consolidation-v1.0 and to consolidation-test-1min-v1.0 (48x amplification, 15% deny-then-correct, LoRA r128/a256 CPT 3ep, 30% replay from amp). Only the day-log FORMAT differs. Against the 1-min profile this changes two things at once, deliberately: it restores the parity amplification dose (one description per block instead of five, so 48 retellings cover ~1.4k chars again rather than ~5.7k) AND it removes the multi-record concatenation (block_segments=1 means build_daylog never joins two caption records under one 'Scene:' label). The question it answers is not which of those mattered - it is whether the REAL pipeline can carry parity block content to parity numbers.",
+  "amplify": {
+    "variants": 48,
+    "neg_frac": 0.15,
+    "ok_rate_min": 0.85
+  },
+  "replay": {
+    "frac": 0.3,
+    "source": "amp",
+    "neg_boost": 0.0
+  },
+  "train": {
+    "lora_r": 128,
+    "lora_alpha": 256,
+    "lr": 0.0001,
+    "epochs": 3,
+    "batch_size": 2,
+    "chunk_tokens": 1024,
+    "objective": "next-token CPT (never QA-SFT)"
+  },
+  "corpus": {
+    "quality_min": 0.5,
+    "block_segments": 1,
+    "segment_seconds": 300
+  },
+  "window": {
+    "boundary_local_time": "04:00"
+  }
+}
