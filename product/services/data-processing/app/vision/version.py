@@ -41,14 +41,21 @@ OUTPUT_AFFECTING: tuple[str, ...] = (
     "analysis_period_s", "pixel_threshold", "grid", "idle_peak", "layout_peak", "layout_spread",
     "ocr_backend", "ocr_ep", "ocr_model_sha_det", "ocr_model_sha_rec", "ocr_frame_width",
     "ocr_min_conf", "ocr_min_chars", "ocr_dedup_ratio", "ocr_floor_s", "ocr_max_events",
-    "ocr_max_tokens", "ocr_stamp", "privacy_filter", "scenario", "prompt_dir_fingerprint",
+    "ocr_max_tokens", "ocr_model", "ocr_stamp", "privacy_filter", "scenario", "prompt_dir_fingerprint",
+    # ocr_model — the vlm-OCR-arm served-model name. Folded in at D3 consolidation when WS-C's
+    # OCR seam shim (app/vision/ocr/config.py, marked "TEMP -> VisionSettings (WS-D)") migrated
+    # its VIDEO_OCR_MODEL knob home: a served-model swap changes OCR record bytes (and, injected,
+    # the caption), exactly the class vlm_model is OUTPUT_AFFECTING for. '' under mock/ppocr, so it
+    # forks nothing until the vlm OCR arm is used.
 )
 
 # --- knobs that CANNOT change a clip record's bytes (excluded from cfg_tag) ------------
 OPERATIONAL_ONLY: tuple[str, ...] = (
     # (a) wire / host — endpoint moves; forking on a DNS/host change is a double-count (D-13).
+    #     ocr_api_key folded in at D3 consolidation (WS-C shim migration): a bearer credential,
+    #     exactly the class vlm_api_key is OPERATIONAL_ONLY for — it cannot change a record's bytes.
     "vlm_url", "vlm_api_key", "vlm_timeout",
-    "ocr_url", "ocr_timeout", "ocr_threads",
+    "ocr_url", "ocr_api_key", "ocr_timeout", "ocr_threads",
     # (b) client-side decode/guard knobs. Design D-13 (line 450) ratifies both as
     #     OPERATIONAL_ONLY: `structured_mode` toggles guided decoding whose SCHEMA already
     #     forks via PACK_DIGEST, and the parse ladder is built so guided/unguided replies

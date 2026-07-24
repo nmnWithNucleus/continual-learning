@@ -148,6 +148,7 @@ class VisionSettings:
     ocr_floor_s: float        # floor-grid cadence: one guaranteed read every this many seconds
     ocr_max_events: int       # rank-free even-spaced cap on OCR reads per chunk (A-16 cost dial)
     ocr_max_tokens: int       # decode cap for the vlm OCR arm
+    ocr_model: str            # vlm-OCR-arm served-model name ('' = none) — OUTPUT_AFFECTING like vlm_model
     ocr_stamp: str            # rel (relative +Ns offsets, default) | utc (A-6, forks the dialect)
     privacy_filter: bool      # deterministic secret redaction (D-07 step 4) — an access control
 
@@ -163,6 +164,7 @@ class VisionSettings:
     # change would be a self-inflicted double-count — D-13). OPERATIONAL_ONLY.
     # =====================================================================
     ocr_url: str              # loopback OCR sidecar base URL
+    ocr_api_key: str          # vlm-OCR-arm bearer token ('' = none) — a credential, like vlm_api_key
     ocr_timeout: float        # per-request OCR sidecar timeout (seconds)
     ocr_threads: int          # PP-OCR CPU thread count
     structured_mode: str      # guided-decoding: auto (probe) | on | off
@@ -243,6 +245,7 @@ def get_vision_settings() -> VisionSettings:
         ocr_floor_s=_float("VIDEO_OCR_FLOOR_S", "120"),
         ocr_max_events=_int("VIDEO_OCR_MAX_EVENTS", "3"),
         ocr_max_tokens=_int("VIDEO_OCR_MAX_TOKENS", "900"),
+        ocr_model=os.getenv("VIDEO_OCR_MODEL", "").strip(),
         ocr_stamp=_norm("VIDEO_OCR_STAMP", "rel"),
         privacy_filter=_as_bool(os.getenv("VIDEO_PRIVACY_FILTER", "1")),
         # --- clip prompt selection ---
@@ -250,6 +253,7 @@ def get_vision_settings() -> VisionSettings:
         prompt_dir_fingerprint=_PROMPT_DIR_FINGERPRINT,
         # --- operational (never clip-output-affecting) ---
         ocr_url=os.getenv("VIDEO_OCR_URL", "http://127.0.0.1:8091").rstrip("/"),
+        ocr_api_key=os.getenv("VIDEO_OCR_API_KEY", ""),
         ocr_timeout=_float("VIDEO_OCR_TIMEOUT", "15"),
         ocr_threads=_int("VIDEO_OCR_THREADS", "4"),
         structured_mode=_norm("VIDEO_VLM_STRUCTURED", "auto"),
