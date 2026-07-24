@@ -1,0 +1,10 @@
+# sidecar's own venv (never committed; recreated from requirements.txt)
+.venv/
+__pycache__/
+*.pyc
+
+# O-2 bake-off generated corpus artifacts (deterministically regenerable via
+# bakeoff/gen_corpus.py + run_bakeoff.py; house rule: commit no binaries).
+bakeoff/frames_src/
+bakeoff/crf_cache/
+bakeoff/*.mp4

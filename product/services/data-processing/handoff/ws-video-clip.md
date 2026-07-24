@@ -1322,10 +1322,14 @@ frames; the corpus is deterministic macOS-UI mocks at 13 pt-equivalent through a
 encode, exact ground truth). Scored on ≥5-char key-string recall with **lenient substring** matching
 (+ CER on the focused region).
 
-- **ppocr@1728: lenient recall 1.000 / substring 0.983 / CER 0.081 → clears the ≥0.85/≤0.10 gate on the proxy.**
-- ppocr@1152: recall 0.938 / CER 0.085 — passes but weaker (spreadsheets 0.769, terminal CER 0.277).
-- **CRF-28 codec cost ≈ 0** at 1728 px (raw vs CRF-28 lenient recall 1.000→1.000): resolution, not the
-  encoder, is the lever — direct support for `VIDEO_OCR_FRAME_WIDTH=1728` (no resample).
+- **ppocr@1728: key-string recall 0.988 (micro/key-pooled substring — the gate metric) / 1.000 fuzzy /
+  CER 0.070 → clears the ≥0.85/≤0.10 gate on the proxy.**
+- ppocr@1152: recall 0.869 (micro) / CER 0.074 — passes but weaker (sheet recall 0.769, terminal CER
+  0.277). Note per-archetype at 1728, browser (CER 0.115) and slack (0.113) breach the CER half while
+  the aggregate (0.070) passes.
+- **CRF-28 codec cost ≈ 0** at 1728 px (raw vs CRF-28 substring recall 0.981→0.983): resolution, not the
+  encoder, is the lever — direct support for `VIDEO_OCR_FRAME_WIDTH=1728` (no resample). Measured OCR
+  cost ~0.93 s/frame (above the design's 0.6 s §7.1 assumption).
 - VLM arms (Qwen3-VL-32B / Qwen2.5-VL-32B) **not run** — need the GPU endpoint (E-3(a)).
 
 **The O-2 gate is defined over real frames and is NOT satisfied by a synthetic proxy** (which is likely
