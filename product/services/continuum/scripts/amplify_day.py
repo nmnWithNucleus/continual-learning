@@ -52,7 +52,8 @@ def main() -> int:
     args = ap.parse_args()
 
     settings = get_settings().morpheus
-    recipe = load_recipe(get_settings().recipe_path)
+    _s = get_settings()
+    recipe = load_recipe(Path(_s.recipes_dir) / f"{_s.recipe_id}.json")
     profile = get_profile(settings.profile)
     # Amplification's env is NOT the trainer's: vLLM pins its own transformers.
     # Fail here rather than after the day log is loaded and the plan is built.

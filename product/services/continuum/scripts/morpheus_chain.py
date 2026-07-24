@@ -83,7 +83,9 @@ def main() -> int:
     morpheus = settings.morpheus
     base_model = args.base_model or morpheus.base_model
     device = args.device or morpheus.device
-    recipe = load_recipe(args.recipe or settings.recipe_path)
+    # Registry moved recipes behind id+dir (2c); the CLI path override still wins.
+    recipe = load_recipe(args.recipe or
+                         str(Path(settings.recipes_dir) / f"{settings.recipe_id}.json"))
     days = [int(d) for d in args.days.split(",")]
     out = Path(args.out).expanduser()
     out.mkdir(parents=True, exist_ok=True)

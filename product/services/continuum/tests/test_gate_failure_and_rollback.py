@@ -1,7 +1,7 @@
 import json
 from datetime import date
 
-from app.cycle import run_cycle
+from tests._helpers import consolidate
 from app.publish import ModelDirectory
 from app.synth import synth_records
 from app.window import window_for
@@ -9,8 +9,8 @@ from app.window import window_for
 
 def _night(user, day, recipe, seed=1, policy=None):
     win = window_for(user, date(2026, 7, day), "UTC")
-    return run_cycle(synth_records(win, seed=seed, events=20), win,
-                     recipe=recipe, policy=policy), win
+    return consolidate(synth_records(win, seed=seed, events=20), win,
+                       recipe=recipe, policy=policy), win
 
 
 def test_failed_gate_never_activates_and_prior_adapter_survives(

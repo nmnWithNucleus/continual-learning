@@ -20,7 +20,6 @@ tracked as debt in the state file — wiring it is ws-morpheus-port scope.
 from __future__ import annotations
 
 import hashlib
-import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,16 +27,18 @@ from typing import Any
 
 from . import fsio
 from .backends import get_backend
+from .clients import DayLogClient, RecipeRegistry
+from .clients import day_log_client
+from .clients import recipe_registry as build_registry
+from .clients import reservoir_client as build_reservoir_client
 from .config import get_settings
-from .daylog import build_daylog, corpus_blocks
 from .gate import GateReport, run_gate
 from .ids import validate_id
-from .policy import GatePolicy, load_policy
+from .policy import GatePolicy
 from .publish import ModelDirectory, PublishResult
-from .recipe import Recipe, load_recipe
-from .renderer import blocks_text, render_corpus_file, render_daylog_files
-from .reservoir import Reservoir
-from .window import Window
+from .recipe import Recipe
+from .renderer import blocks_text, render_corpus_file
+from .window import Window, window_for
 
 BASE_MODEL_HASH = "qwen3-vl-32b-instruct"  # pinned for real once D6's exact variant lands
 
@@ -117,19 +118,27 @@ class _UserState:
         self.save()
 
 
-def run_cycle(records: list[dict[str, Any]], win: Window, *,
-              recipe: Recipe | None = None, policy: GatePolicy | None = None,
-              force: bool = False) -> CycleResult:
+def run_cycle(win: Window, *, daylog_client: DayLogClient | None = None,
+              registry: RecipeRegistry | None = None, recipe: Recipe | None = None,
+              policy: GatePolicy | None = None, force: bool = False) -> CycleResult:
+    """One night's consolidation as the lean 5-verb loop:
+    fetch recipe · fetch day-log · amplify · finetune · gate · publish.
+
+    Every data-shaped input arrives through a storage CLIENT (registry, day-log,
+    reservoir) — local today, HTTP-to-storage later, the cycle unchanged."""
     validate_id(win.user_id, "user_id")
     validate_id(win.window_id, "window_id")
     settings = get_settings()
-    recipe = recipe or load_recipe(settings.recipe_path)
-    # Publish policy is loaded separately and never reaches a stage key: a
-    # threshold change must not invalidate the amplify/train caches.
-    policy = policy or load_policy(settings.policy_path)
+    # ---- verb: fetch recipe (+ the separately-versioned gate policy) -------------
+    registry = registry or build_registry(settings)
+    recipe = recipe or registry.fetch_recipe(settings.recipe_id)
+    # Policy is a SEPARATE artifact and never reaches a stage key: a threshold
+    # change must not invalidate the amplify/train caches.
+    policy = policy or registry.fetch_policy(settings.policy_id)
     var_dir = Path(settings.var_dir)
     backend = get_backend(settings.trainer_backend)
-    reservoir = Reservoir(var_dir)
+    daylog_client = daylog_client or day_log_client(settings, recipe)
+    reservoir = build_reservoir_client(settings, daylog_client=daylog_client)
     directory = ModelDirectory(var_dir)
     state = _UserState(var_dir, win.user_id)
     journal = _Journal(var_dir, win.user_id, win.window_id)
@@ -144,21 +153,24 @@ def run_cycle(records: list[dict[str, Any]], win: Window, *,
                            [], ["ALL — user frozen after consecutive gate failures; "
                                 "clear state file or pass force to resume"])
 
-    # ---- stage: daylog -----------------------------------------------------------
-    records_key = _h(json.dumps(records, sort_keys=True, default=str),
+    # ---- verb: fetch day-log -----------------------------------------------------
+    # Continuum no longer builds the day-log inline: it asks the client for the
+    # day-log for this window. The stage key hashes the day-log's CONTENT (not raw
+    # records) — correct, and the only thing continuum will see once storage owns
+    # materialization.
+    daylog = daylog_client.fetch_daylog(win)
+    records_key = _h(daylog_client.fingerprint(daylog),
                      win.window_id, str(recipe.segment_seconds), str(recipe.block_segments))
     entry = journal.fresh("daylog", records_key)
-    daylog = build_daylog(records, win, segment_seconds=recipe.segment_seconds,
-                          block_segments=recipe.block_segments)
     if entry:
         skipped.append("daylog")
     else:
-        paths = render_daylog_files(daylog, work / "daylog")
+        paths = daylog_client.render(daylog, work / "daylog")
         journal.record("daylog", records_key, files=list(paths.values()),
                        n_segments=len(daylog.segments), n_blocks=len(daylog.blocks))
         run_stages.append("daylog")
 
-    eligible = corpus_blocks(daylog, recipe.quality_min)
+    eligible = daylog_client.eligible_blocks(daylog, recipe.quality_min)
     if not eligible:
         return CycleResult("skipped_no_data", win.window_id, win.user_id, None,
                            None, None, run_stages,
@@ -185,29 +197,33 @@ def run_cycle(records: list[dict[str, Any]], win: Window, *,
     amp_text = amp_path.read_text()
 
     # ---- stage: replay mix -------------------------------------------------------
-    if recipe.replay_source != "amp":
-        raise NotImplementedError(
-            f"replay_source={recipe.replay_source!r}: morpheus.replay implements it, "
-            "but rehearsing RAW prior day-logs needs the day-log-fetch client "
-            "(ws-morpheus-port 2c) — the reservoir only holds amplified corpora")
-    # Key includes each reservoir corpus's CONTENT hash: a re-consolidated past
-    # day (overwritten reservoir entry) must invalidate this night's mix.
-    reservoir_state = ";".join(
-        f"{e.window_id}:{e.sha}" for e in
-        reservoir.entries(win.user_id, before_window=win.window_id))
+    # Prior consolidated windows for this user, reconstructed from the reservoir's
+    # ledger (the amplified store is the record of WHICH nights ran, whichever
+    # source replay then reads). Key includes each entry's content sha: a
+    # re-consolidated past day must invalidate this night's mix.
+    prior = reservoir.entries(win.user_id, before_window=win.window_id)
+    reservoir_state = ";".join(f"{e.window_id}:{e.sha}" for e in prior)
     mix_key = _h(amp_key, reservoir_state, str(recipe.replay_frac), recipe.replay_source)
     mix_path = work / "train.corpus.txt"
     entry = journal.fresh("replay_mix", mix_key)
     if entry:
         skipped.append("replay_mix")
     else:
-        replay = reservoir.sample_replay(win.user_id, target_chars=len(amp_text),
-                                        frac=recipe.replay_frac, seed=seed,
-                                        before_window=win.window_id)
+        # The locked decision is raw prior day-logs; recipe v1.0 pins amp for
+        # parity. Both go through the reservoir client — amp reads the amplified
+        # store, rawlog re-reads prior day-logs via the day-log client.
+        prior_windows = None
+        if recipe.replay_source == "rawlog":
+            prior_windows = [window_for(win.user_id, e.local_window_date(), win.tz,
+                                        recipe.boundary_local_time) for e in prior]
+        replay = reservoir.sample_replay(
+            win.user_id, target_chars=len(amp_text), frac=recipe.replay_frac,
+            seed=seed, before_window=win.window_id,
+            source=recipe.replay_source, prior_windows=prior_windows)
         mixed = amp_text + ("\n\n" + replay if replay else "")
         render_corpus_file(mixed, work, name="train.corpus.txt")
         journal.record("replay_mix", mix_key, files=[str(mix_path)],
-                       replay_chars=len(replay))
+                       replay_chars=len(replay), replay_source=recipe.replay_source)
         run_stages.append("replay_mix")
 
     # ---- stage: train (continue the ONE life adapter) ----------------------------

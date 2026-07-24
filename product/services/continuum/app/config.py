@@ -37,13 +37,12 @@ def _default_var_dir() -> str:
     return str(Path(__file__).resolve().parents[1] / "var")
 
 
-def _default_recipe_path() -> str:
-    return str(Path(__file__).resolve().parents[1] / "recipes" / "consolidation-v1.0.json")
+def _default_recipes_dir() -> str:
+    return str(Path(__file__).resolve().parents[1] / "recipes")
 
 
-def _default_policy_path() -> str:
-    """The publish gate, versioned separately from the training recipe."""
-    return str(Path(__file__).resolve().parents[1] / "policies" / "gate-policy-v1.1.json")
+def _default_policies_dir() -> str:
+    return str(Path(__file__).resolve().parents[1] / "policies")
 
 
 @dataclass(frozen=True)
@@ -52,8 +51,13 @@ class Settings:
     storage_url: str       # /context range read (C10 proposal shape) lives here
     http_timeout: float    # inter-service httpx timeout (seconds)
     var_dir: str           # journals + reservoir + adapter artifacts + outbox
-    recipe_path: str       # pinned TRAINING recipe (enters stage keys)
-    policy_path: str       # pinned GATE POLICY (must NOT enter stage keys)
+    # Registry: continuum fetches the recipe + policy BY ID, not by a file path.
+    # The ids are what a run records; the dirs are the local registry's backing
+    # (storage-hosted later). recipe_id enters stage keys; policy_id never does.
+    recipe_id: str         # pinned TRAINING recipe id (enters stage keys)
+    policy_id: str         # pinned GATE POLICY id (must NOT enter stage keys)
+    recipes_dir: str       # local recipe-registry backing
+    policies_dir: str      # local policy-registry backing
     # Mock-backend gate override for drills: "auto" scores deterministically from
     # the corpus; "fail" forces a failing eval (gate/rollback tests + fire drills).
     mock_gate: str         # "auto" | "fail"
@@ -157,8 +161,10 @@ def get_settings() -> Settings:
         storage_url=os.getenv("STORAGE_URL", "http://localhost:8083").rstrip("/"),
         http_timeout=float(os.getenv("CONTINUUM_HTTP_TIMEOUT", "60")),
         var_dir=os.getenv("CONTINUUM_VAR_DIR", _default_var_dir()),
-        recipe_path=os.getenv("CONTINUUM_RECIPE", _default_recipe_path()),
-        policy_path=os.getenv("CONTINUUM_GATE_POLICY", _default_policy_path()),
+        recipe_id=os.getenv("CONTINUUM_RECIPE_ID", "consolidation-v1.0"),
+        policy_id=os.getenv("CONTINUUM_POLICY_ID", "gate-policy-v1.1"),
+        recipes_dir=os.getenv("CONTINUUM_RECIPES_DIR", _default_recipes_dir()),
+        policies_dir=os.getenv("CONTINUUM_POLICIES_DIR", _default_policies_dir()),
         mock_gate=_choice("MOCK_GATE", os.getenv("MOCK_GATE", "auto"),
                           ("auto", "fail"), "auto"),
         morpheus=_morpheus_settings(),
