@@ -157,13 +157,16 @@ Phases 2a–2c; do not build the lifestream profile yet, just keep the seam clea
   KV-cache budgeting at util 0.90/len 4096, not LoRA incompatibility). Still to establish: a 32B
   adapter *we* trained end to end. **2b's bar is M0 mechanics + in-band sanity, NOT strict parity** —
   there is no 32B golden at this probe set to diff against.
-- **2c — lean architecture + storage seams (client side).** Introduce the storage **client
-  interfaces** the lean shape needs — day-log fetch (C10-evolved), recipe-registry fetch,
-  reservoir write + replay-read — each with a **local implementation now, HTTP-to-storage later**
-  (same posture the scaffold already uses for reservoir/model-dir). Migrate `daylog/window/renderer`
-  behind the day-log-fetch client. Finalize the `Profile` seam + exec-model hardening.
-  **Exit:** continuum runs the 5-verb loop against the seam interfaces; storage-side
-  implementation is a separate storage workstream (this session does NOT block on it).
+- **2c — lean architecture + storage seams (client side). ✅ DONE (2026-07-24).** Three client
+  seams under `app/clients/` (day-log fetch / recipe registry / reservoir), each with a local
+  backend; factories pick the backend from settings so storage integration is an http branch
+  behind them. `cycle.py` fetches the day-log and keys on its content fingerprint (no inline
+  build); `daylog/window/renderer` reached only through the client, proven byte-identical
+  (segment/block equality + byte-equal rendered files + render_block 1427/1427). Raw-source replay
+  wired (v1.0 keeps `amp` for parity — flipping to raw is now a recipe change, not a code change).
+  185 tier-A + 83 tier-B green. Surfaced storage-contract requirements (day-log fetch must be
+  random-access by `(user, window_id)`; enumerate a user's consolidated windows; day-log carries
+  its recipe/format version) — logged in the storage handoff for the C10-evolution session.
 
 DP dogfood / product-shape day-log (records → day-log) is **Phase 3**, a later workstream — out
 of scope here. Keep DP and real storage OUT of the parity-critical path (2a) so a data-shape

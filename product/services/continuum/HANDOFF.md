@@ -7,9 +7,10 @@
 **Status:** **PHASE 2 COMPLETE ✅** — Morpheus port proven (kernels byte-identical; ensemble
 indistinguishable, p=0.82 at n=8/10; seed-0 closed as measurement artifact) and **M0 delivered**:
 a 32B life adapter trained by our own pipeline → gate v1.1 → C5 publish → **loads in vLLM**
-(recall 0.267). Gate policy **v1.1 RATIFIED** (2026-07-24). Next: 2c (lean storage seams) → then
-Phase 3 (DP dogfood). Storage-expansion + continuum-slimming still pending board ·
-**Last updated:** 2026-07-24 (Phase 2 close-out)
+(recall 0.267). Gate policy **v1.1 RATIFIED** (2026-07-24). **2c DONE ✅** — lean 5-verb loop over
+three storage client seams; day-log fetched + fingerprint-keyed; 185 tier-A + 83 tier-B green.
+**Next: Phase 3 (DP dogfood).** Storage-expansion + continuum-slimming still pending board ·
+**Last updated:** 2026-07-24 (2c close-out)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
