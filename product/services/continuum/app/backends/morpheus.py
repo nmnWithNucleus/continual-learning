@@ -124,8 +124,9 @@ class MorpheusBackend:
         qa = probe_kernel.load_suite(settings.probes_dir, probe_kernel.QA_SUITE)
         traps = probe_kernel.load_suite(settings.probes_dir,
                                         probe_kernel.TRAPS_SUITE)[:eval_kernel.TRAPS_LIMIT]
-        heldout = probe_kernel.load_suite(settings.probes_dir,
-                                          probe_kernel.HELDOUT_SUITE)[:eval_kernel.HELDOUT_LIMIT]
+        # All of them: the gate's contamination test is an exact test, and its power
+        # comes from n. The old 60-probe cap made it both weak and trigger-happy.
+        heldout = probe_kernel.load_suite(settings.probes_dir, probe_kernel.HELDOUT_SUITE)
         day_probes = [p for d in days
                       for p in probe_kernel.day_pool(qa, d, eval_kernel.PROBES_PER_DAY)]
 
@@ -139,17 +140,27 @@ class MorpheusBackend:
                        "pred": adapter.answer(p.question)} for p in heldout]
         trap_preds = [adapter.answer(p.question, max_new_tokens=eval_kernel.TRAP_ANSWER_TOKENS)
                       for p in traps]
+        # The BASE control on the same heldout probes — the contamination test is
+        # differential, so without it there is nothing to compare against.
+        with adapter.base_only():
+            base_preds = [{"suite": "base_heldout", "q": p.question, "gold": p.gold,
+                           "pred": adapter.answer(p.question)} for p in heldout]
 
-        judged = judge(day_preds + held_preds, JudgeConfig(
+        judged = judge(day_preds + held_preds + base_preds, JudgeConfig(
             model=settings.judge_model, project=settings.vertex_project,
             location=settings.vertex_location, workers=settings.judge_workers),
             label="gate")
         traps_pass = (sum(trap_score("", p) for p in trap_preds) / len(trap_preds)
                       if trap_preds else 0.0)
+        held_stat = judged.get("heldout", {})
+        base_stat = judged.get("base_heldout", {})
         return EvalScores(
             new_day_recall=judged.get("new_day", {}).get("judge_exact", 0.0),
             traps_pass=traps_pass,
-            heldout_recall=judged.get("heldout", {}).get("judge_exact", 0.0),
+            heldout_hits=round(held_stat.get("judge_exact", 0.0) * held_stat.get("n", 0)),
+            heldout_n=held_stat.get("n", 0),
+            base_heldout_hits=round(base_stat.get("judge_exact", 0.0) * base_stat.get("n", 0)),
+            base_heldout_n=base_stat.get("n", 0),
             n_probes=len(day_probes) + len(heldout) + len(traps),
             extras={"days": days, "n_unjudged": judged.get("n_unjudged", 0),
                     "judge_model": settings.judge_model,

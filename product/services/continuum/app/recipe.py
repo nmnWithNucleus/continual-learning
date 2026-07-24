@@ -6,6 +6,11 @@ thresholds). Whoever executes a stage reads the pinned recipe; tuning it is this
 service's job and every change forks `recipe_id` (same posture as DP's
 `pipeline_version`: an artifact trained under recipe A is never silently
 comparable to one trained under recipe B).
+
+WHAT WE TRAIN only. Publish-gate thresholds live in app/policy.py, on their own
+version: `recipe_id` is hashed into the amplify and train stage keys, so folding a
+gate threshold in here would make re-deciding what is shippable re-run a night of
+GPU work and imply the artifact had changed.
 """
 from __future__ import annotations
 
@@ -37,15 +42,6 @@ class Recipe:
     quality_min: float
     block_segments: int
     segment_seconds: int
-    # gate
-    new_day_recall_min: float
-    traps_pass_min: float
-    heldout_recall_max: float
-    decay_retention_min: float
-    min_probes: int
-    consecutive_fail_freeze: int
-    # publish
-    snapshot_retention: int
     # window
     boundary_local_time: str  # "HH:MM" user-local consolidation boundary
 
@@ -70,12 +66,5 @@ def load_recipe(path: str | Path) -> Recipe:
         quality_min=float(raw["corpus"]["quality_min"]),
         block_segments=int(raw["corpus"]["block_segments"]),
         segment_seconds=int(raw["corpus"]["segment_seconds"]),
-        new_day_recall_min=float(raw["gate"]["new_day_recall_min"]),
-        traps_pass_min=float(raw["gate"]["traps_pass_min"]),
-        heldout_recall_max=float(raw["gate"]["heldout_recall_max"]),
-        decay_retention_min=float(raw["gate"]["decay_retention_min"]),
-        min_probes=int(raw["gate"]["min_probes"]),
-        consecutive_fail_freeze=int(raw["gate"]["consecutive_fail_freeze"]),
-        snapshot_retention=int(raw["publish"]["snapshot_retention"]),
         boundary_local_time=str(raw["window"]["boundary_local_time"]),
     )

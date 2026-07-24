@@ -41,13 +41,19 @@ def _default_recipe_path() -> str:
     return str(Path(__file__).resolve().parents[1] / "recipes" / "consolidation-v1.0.json")
 
 
+def _default_policy_path() -> str:
+    """The publish gate, versioned separately from the training recipe."""
+    return str(Path(__file__).resolve().parents[1] / "policies" / "gate-policy-v1.1.json")
+
+
 @dataclass(frozen=True)
 class Settings:
     trainer_backend: str   # "mock" (default, no GPU) | "morpheus" (the real core)
     storage_url: str       # /context range read (C10 proposal shape) lives here
     http_timeout: float    # inter-service httpx timeout (seconds)
     var_dir: str           # journals + reservoir + adapter artifacts + outbox
-    recipe_path: str       # pinned recipe JSON for nightly consolidation
+    recipe_path: str       # pinned TRAINING recipe (enters stage keys)
+    policy_path: str       # pinned GATE POLICY (must NOT enter stage keys)
     # Mock-backend gate override for drills: "auto" scores deterministically from
     # the corpus; "fail" forces a failing eval (gate/rollback tests + fire drills).
     mock_gate: str         # "auto" | "fail"
@@ -89,6 +95,25 @@ class MorpheusSettings:
     grad_checkpointing: bool   # numerically identical, ~35% slower, required for 32B on one GPU
 
 
+def _allocated_device() -> str:
+    """The torch device to use, deferring to the scheduler.
+
+    Under SLURM the allocation is exposed by CUDA_VISIBLE_DEVICES, and the
+    allocated cards are renumbered from 0 inside the process. So an absolute node
+    index from MORPHEUS_DEVICE is not just redundant there — it is WRONG: with a
+    2-GPU allocation, "cuda:3" either fails or addresses a card the job was not
+    given. The scheduler wins; MORPHEUS_DEVICE only applies when nothing allocated
+    for us (a bare local run).
+    """
+    requested = os.getenv("MORPHEUS_DEVICE", "cuda:0")
+    if os.getenv("CUDA_VISIBLE_DEVICES") is not None and requested != "cuda:0":
+        logger.warning("MORPHEUS_DEVICE=%s ignored: CUDA_VISIBLE_DEVICES=%s is set, so the "
+                       "allocated cards are renumbered from 0 — using cuda:0",
+                       requested, os.getenv("CUDA_VISIBLE_DEVICES"))
+        return "cuda:0"
+    return requested
+
+
 def _morpheus_settings() -> MorpheusSettings:
     return MorpheusSettings(
         base_model=os.getenv("MORPHEUS_BASE_MODEL", "Qwen/Qwen3-VL-32B-Instruct"),
@@ -98,7 +123,7 @@ def _morpheus_settings() -> MorpheusSettings:
         # from. Recorded, not guessed: it is stamped in every description record's
         # `model` field. Empty fails the independence check CLOSED.
         probe_generator=os.getenv("MORPHEUS_PROBE_GENERATOR", "gemini-3.1-pro-preview"),
-        device=os.getenv("MORPHEUS_DEVICE", "cuda:0"),
+        device=_allocated_device(),
         gpu_memory_utilization=float(os.getenv("MORPHEUS_GPU_MEM_UTIL", "0.90")),
         amplify_backend=_choice("MORPHEUS_AMPLIFY_BACKEND",
                                 os.getenv("MORPHEUS_AMPLIFY_BACKEND", "vllm"),
@@ -133,6 +158,7 @@ def get_settings() -> Settings:
         http_timeout=float(os.getenv("CONTINUUM_HTTP_TIMEOUT", "60")),
         var_dir=os.getenv("CONTINUUM_VAR_DIR", _default_var_dir()),
         recipe_path=os.getenv("CONTINUUM_RECIPE", _default_recipe_path()),
+        policy_path=os.getenv("CONTINUUM_GATE_POLICY", _default_policy_path()),
         mock_gate=_choice("MOCK_GATE", os.getenv("MOCK_GATE", "auto"),
                           ("auto", "fail"), "auto"),
         morpheus=_morpheus_settings(),

@@ -47,11 +47,21 @@ class TrainResult:
 
 @dataclass(frozen=True)
 class EvalScores:
+    """Raw scores. COUNTS, not just rates, for heldout: the contamination check is
+    an exact test against the run's own base control, and a rate cannot express
+    2/60 vs 5/222 — the same 0.033 carries very different evidence."""
     new_day_recall: float
     traps_pass: float
-    heldout_recall: float
-    n_probes: int
+    heldout_hits: int = 0
+    heldout_n: int = 0
+    base_heldout_hits: int = 0
+    base_heldout_n: int = 0
+    n_probes: int = 0
     extras: dict = field(default_factory=dict)  # decay/general/read-skill land here
+
+    @property
+    def heldout_recall(self) -> float:
+        return self.heldout_hits / self.heldout_n if self.heldout_n else 0.0
 
 
 class TrainerBackend(Protocol):

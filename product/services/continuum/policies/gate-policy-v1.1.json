@@ -1,0 +1,29 @@
+{
+  "policy_id": "gate-policy-v1.1",
+  "ratified": "2026-07-24 (cofounders) — handoff/gate-threshold-proposal.md",
+  "supersedes": "the gate/publish block formerly inside recipes/consolidation-v1.0.json",
+  "note": "Publish policy, NOT a training knob. policy_id is recorded in every gate report and must never enter a cycle stage key: deciding what is good enough to ship must not re-train anything.",
+  "gate": {
+    "new_day_recall_min": 0.15,
+    "traps_pass_min": 0.15,
+    "traps_note": "was 0.40, which blocked 71% of the reference recipe's own nights. Reference night-to-night sd (0.090) equals binomial noise at n=28 (0.090), so at this suite size the metric measures only sampling. 0.15 => 0.9% false-block, 98.8% collapse detection. Raise to 0.25 when the suite reaches ~150 probes.",
+    "heldout": {
+      "alpha": 0.01,
+      "backstop": 0.15,
+      "probes": 222,
+      "note": "was a fixed 0.05 ceiling on 60 probes — 12% power against 2% contamination while sitting two probes from a false block. Now a one-sided exact test against the run's OWN base control over all 222 probes; the backstop covers a base model that is itself contaminated, where the differential test would see nothing."
+    },
+    "min_probes": 148,
+    "min_probes_note": "the harness supplies exactly 60 + 60 + 28; the old floor of 150 was unpassable by construction.",
+    "decay_retention_min": 0.5,
+    "consecutive_fail_freeze": 2
+  },
+  "publish": {
+    "snapshot_retention": 14
+  },
+  "unwired_checks": [
+    "decay_spot_check",
+    "general_canary",
+    "read_skill_canary"
+  ]
+}
