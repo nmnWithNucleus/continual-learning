@@ -225,3 +225,71 @@ recipe's 0.15 every night. **The ok-rate gate held everywhere** (0.939 worst vs 
 abort threshold) — the answer to the one thing the anchor-free caption text put at risk:
 the day number reaches the prose from the amplify prompt alone. Paragraphs run ~11% longer
 than the reference's, which is the 4×-denser source showing through a fixed token cap.
+
+### 3.3 Before the number: are the probe answers even in there?
+
+The probes were written from the **5-min** descriptions; the product path trains on the
+**1-min** ones. If a recall drop were just the answers going missing, the whole comparison
+would be uninterpretable — so it was checked first, per day, over all 900 day-probes
+(fraction of a gold answer's content words present anywhere in that day's block text):
+
+| day | probes | 5-min baseline | product (1-min) | Δ | day chars 5-min → 1-min |
+|---|---|---|---|---|---|
+| 5  | 150 | 0.940 | **0.970** | +0.030 | 338,568 → 1,377,916 |
+| 9  | 150 | 0.952 | **0.980** | +0.028 | 338,525 → 1,409,549 |
+| 12 | 150 | 0.932 | **0.955** | +0.023 | 314,812 → 1,312,728 |
+| 13 | 150 | 0.934 | **0.976** | +0.043 | 339,904 → 1,427,881 |
+| 17 | 150 | 0.957 | **0.961** | +0.004 | 376,288 → 1,397,284 |
+| 21 | 150 | 0.949 | **0.968** | +0.018 | 287,627 → 1,161,245 |
+| | | **0.944** | **0.968** | +0.024 | **4.1× the text** |
+
+**The product path's day-log contains MORE of what the probes ask about, not less.** So a
+weaker number cannot be read as "the facts fell out of the pipeline" — they are more
+present than in the corpus the baseline was measured on. What changed is how they are
+PRESENTED: the same 48 retellings per block now have to cover 4.1× as much material, and
+40% of blocks lose their tail to the 6000-char excerpt cap. That is the mechanism to reach
+for first if the number moves, and it is a *cadence* mechanism, which is exactly the
+variable Phase 3 set out to change.
+
+---
+
+## 5. Cross-service friction the dogfood surfaced (NOTES for the storage / C10 session — not pinned here)
+
+Every one of these is a real thing the product path wanted and did not have. None was
+worked around in a way that hides it.
+
+1. **C10 has no `kind` filter.** Arm 1 is descriptions-only, so continuum fetches every
+   record in the window and discards the transcripts client-side — day 13 pulls 1,480
+   records to keep 1,237. At fleet scale the transcript half is the larger half by bytes.
+   A `kind=caption` (or `kind in [...]`) parameter on the range read would make the
+   caption-only day-log a server-side projection instead of a client-side filter.
+2. **A range read cannot express "this consolidation window's records".** Consecutive tour
+   days in different timezones give overlapping 04:00-local windows (day 12 Chicago / day
+   13 New York overlap by an hour), so `(user, from, to)` legitimately returns a
+   neighbour's records. Today the caller resolves it. If storage ever owns day-log
+   materialization (the lean-architecture plan), the *window* — not a time range — is the
+   unit it should be addressed by.
+3. **No by-reference blob registration (OQ8).** 23 GB of audio was re-PUT into `/raw` that
+   already existed in GCS, purely to satisfy the mandatory `blob_ref` sha-check. The
+   bridge's whole I/O cost was that copy. A registration that carries a URI + sha would
+   have made this leg free.
+4. **The range read has no cursor and no cap.** One day is ~1,480 records / ~57 MB of JSON
+   in a single response. Fine at pilot volume, not a shape that survives a real fleet.
+5. **There is no way to retract a window.** A replay mints fresh ULID `chunk_id`s, so a
+   re-run writes a disjoint record set into the same window and the day-log double-counts
+   it (observed on a 2-chunk smoke: 40 captions in 20 segments). The bridge now wipes the
+   store per run; a real service needs delete-by-(user, window) or an idempotency key that
+   survives re-delivery.
+6. **Dev sqlite on NFS does not take concurrent writers.** Measured before the run: 8-way
+   concurrent C2 writes on the NFS home take the lock ~2% of the time (HTTP 500) and run
+   27× slower than on local disk. The bridge puts `STORAGE_DB_PATH`/`STORAGE_RAW_DIR` on
+   the node SSD and copies the DB back. Neither knob exists in `platform/deploy/learn.env`.
+
+## 6. What was deliberately NOT done (spec boundaries, held)
+
+No contract change (C1/C2 untouched — the caption record needed none). No recipe or kernel
+tuning: `EXCERPT_CHARS` binds on 40% of blocks and was left alone; the day-log renderer's
+caption concatenation was left alone. No real VLM keyframe captioning. No Arm 3
+(descriptions+ASR) — the transcripts are on disk and the filter is one line, so it stays a
+later flip. No C8 per-request profiles. No GCS by-reference blobs. No serve-time harness.
+One core-file edit in total: the single `SOURCE_BUILDERS` registry line.

@@ -1,6 +1,7 @@
 # WS-P3 — Phase 3: the DP dogfood (Speed data through the real pipeline)
 
-**Status:** ready to build — design locked (cofounders, 2026-07-24) · **Spans:** recording + DP +
+**Status:** BUILT + RUN — 3a landed, 3b measured (see [phase-3-report.md](phase-3-report.md))
+· design locked (cofounders, 2026-07-24) · **Spans:** recording + DP +
 storage + continuum · **Driven by:** continuum (learn-loop validation) · Prereq: Phase 2 (2a/2b/2c)
 DONE on main.
 
@@ -75,11 +76,19 @@ blob in GCS) and yields it as chunk(s); driven through the existing `POST /captu
 
 ## Staging
 
-- **3a — the bridge:** replay `ChunkSource` + injected-caption sidecar + test recipe + DP env profile
+- **3a — the bridge. ✅ DONE (2026-07-24, job 756).** 629 chunks / 209.7 h of real Speed
+  audio through recording → DP → storage in 1 h 44 m on 8 H100s; 12,221 caption + 621
+  transcript C2 records queryable by (user, window), zero missing, zero segment collisions,
+  one dialect (`asr-fw-v1+diar-pyannote-v1`). Arm 2's ASR + diarization ran on every chunk
+  and spot-checks sane.
+  ORIGINAL SCOPE: replay `ChunkSource` + injected-caption sidecar + test recipe + DP env profile
   → Speed's 6 train days (5,9,12,13,17,21) + heldout (6,16,28) land in `/context` as rule-bent C2 for
   `user_id="replay-speed"`, via **real recording→DP→storage**. Arm 2's real ASR runs here.
   **Exit:** real C2 (caption + transcript) queryable by `(user, window)`; ASR spot-checked sane.
-- **3b — the measurement:** continuum fetches (caption-only filter) → Morpheus over the 6 days →
+- **3b — the measurement. ✅ DONE (2026-07-24, job 767).** See the report for the Arm-1
+  table and the verdict. The rule-bent day-log reproduces the 5-min baseline's block count
+  exactly on 5 of 6 train days.
+  ORIGINAL SCOPE: continuum fetches (caption-only filter) → Morpheus over the 6 days →
   Arm-1 verdict. **Exit:** the separation-survives table + one-line verdict.
 
 **Deferred (do NOT start):** real VLM keyframe captioning (the true caption-shape test), Arm 3,
