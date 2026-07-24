@@ -20,8 +20,12 @@ def test_health_reports_mock_backend(client):
     resp = client.get("/health")
     assert resp.status_code == 200
     # /health is a liveness probe (not a frozen contract); it additively reports the
-    # effective ASR backend + the ingest mode (inline by default).
-    assert resp.json() == {"ok": True, "asr_backend": "mock", "ingest_mode": "inline"}
+    # effective ASR backend + the ingest mode (inline by default) + the WS-VC dialect
+    # visibility fields (current video dialect + the flip-window freeze flag).
+    assert resp.json() == {
+        "ok": True, "asr_backend": "mock", "ingest_mode": "inline",
+        "video_pipeline_version": "vidproc-mock-v0", "dialect_frozen": False,
+    }
 
 
 # ---- C1 validation on ingest -------------------------------------------------

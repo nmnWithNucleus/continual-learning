@@ -1281,3 +1281,87 @@ thoughts.md` pipeline is therefore only implementable on the det+rec shape; the 
   but `storage/app/dev.db` holds **86 `vidproc-mock-v0` caption records** (125 total) from earlier
   dev runs. Mock dialect, dev users — the fresh-`user_id` cutover rule is unaffected, but the
   sentence now says what is actually on disk.
+
+---
+
+## Build log — WS-F
+
+**Branch** `svc/vc-ws-f`. **Scope delivered** (§8 + §11 WS-F): the observability metric families,
+the failure semantics, dialect visibility, `DP_DIALECT_FREEZE`, the blob-sha256 move, and the VLM
+circuit-breaker module. **Files touched — WS-F's four owned files, plus one forced test edit:**
+`app/main.py`, `app/ingest_core.py`, `app/vision/circuit.py` (new), `tests/test_metrics_video.py`
+(new), and `tests/test_ingest_mock.py` (one assertion — see below). No edit to `config.py`,
+`pipeline.py`, `processing/base.py`, `stagegraph/**`, or `vision/config.py`.
+
+**What shipped**
+
+- **Parent-side per-unit families** (`ingest_core.py`, in the write loop ~205-216, where `metrics`
+  is in scope and null-guarded so they survive `INGEST_ISOLATION=subprocess` — finding #15):
+  `dp_units_total{modality,kind}`, `dp_content_chars{modality,kind}` (histogram, bucket edges
+  short-caption→full-budget-OCR), `dp_empty_output_total{modality,kind}` (the `modality=="audio"`
+  guard is **not** reproduced — it fires for any modality's empty `content.text`; the legacy
+  audio-only `dp_vad_empty_total` is left untouched, a distinct signal). They count **durably-written**
+  units: a unit whose `/context` POST failed never reaches the accounting. `dp_partial_write_total{modality}`
+  fires when a sibling was already durable and a later unit's write blips (caveat A-4).
+- **Stage-side families declared at the single site** (`main.py:_setup_metrics`) so WS-B/C/D emit
+  against frozen names/labels from day one: `dp_video_parse_fallback_total{pack,step}`,
+  `dp_video_truncated_total{pass}`, `dp_video_delta_peak` (hist, edges pinned to the D-04/D-07 class
+  thresholds 2/8/40), `dp_video_ocr_events` (hist), `dp_caption_ungrounded_quote_total`,
+  `dp_ocr_redactions_total`, `dp_video_scenario_mismatch_total{expected,seen}`, `dp_ocr_frame_errors_total`.
+- **Dialect visibility:** `video_pipeline_version` + `dialect_frozen` in `/health`; the pull-time
+  gauge `dp_pipeline_dialect{modality,pipeline_version}=1` via `add_gauge_source`; alert
+  `count by (modality) (dp_pipeline_dialect) > 1` (the replica-robust form
+  `count(count by (modality,pipeline_version) (...)) by (modality) > 1` is what the test evaluates).
+- **`DP_DIALECT_FREEZE`:** `_dialect_frozen()` reads env fresh per call (arm/disarm on a live process,
+  no redeploy); when set, `_current_pv` returns `None`, so the journal backstop *serves* the stale
+  receipt (`journal.processed_record_ids` skips the dialect compare on a `None` current) instead of
+  reprocessing under a just-flipped dialect during the drain-and-replace window (D-14).
+- **sha256 off the event loop:** `hashlib.sha256(blob)` → `run_in_threadpool(_sha256_hex, blob)`;
+  value + terminal-mismatch (502, non-transient) semantics byte-identical (proven by
+  `test_blob_integrity` + the corrupt-blob test).
+- **VLM circuit breaker** (`app/vision/circuit.py`, new): a shared-per-endpoint CLOSED→OPEN→HALF_OPEN
+  breaker with an injectable **monotonic** clock, tripping on connect-refused only (a 200-with-garbage
+  is the parse ladder's problem, never an outage). Inert until a clip stage wires `allow()` before the
+  ffmpeg passes (WS-B `clipprep`) and records the HTTP outcome (WS-C/WS-D). Fast-fails at ~0 CPU per
+  chunk during an endpoint outage and stops burning the retry budget.
+
+**One judgement call this build.** The EXIT line reads *"all new counters visible on `/metrics` at
+zero before any traffic"*. A declared-but-never-incremented counter renders **nothing** in this
+registry (`metrics.py:180`; `test_metrics.test_empty_histogram_and_counter_emit_nothing`), so
+"visible at zero" = "seeded". I seed all four parent-side series per registered modality **and** the
+three **unlabelled** stage-side counters (`dp_caption_ungrounded_quote_total`, `dp_ocr_redactions_total`,
+`dp_ocr_frame_errors_total`) — a single series each, no label values to guess. The **labelled**
+stage-side families and the histograms genuinely cannot be pre-seeded and correctly surface on first
+emit. Caveat: under `INGEST_ISOLATION=subprocess` the stage-side increments land in the child and are
+blind to the parent, so a seeded stage-side counter reads a permanent parent-side `0` in that mode —
+documented at the seed site; on the default in-process path it increments correctly.
+
+**One forced cross-file edit.** Adding `video_pipeline_version`/`dialect_frozen` to `/health` breaks
+the exact-`==` dict assertion in `tests/test_ingest_mock.py::test_health_reports_mock_backend`. There
+is no additive way around an exact-dict check; the assertion was updated to the new shape. No other
+workstream edits that file, so this creates no merge surface. `/health` is a liveness probe, not a
+frozen contract.
+
+**WS-H coordination (open).** `dp_caption_ungrounded_quote_total` is declared here with the name from
+§8. The Decision addendum widens the *scorer* from double-quoted spans to all named ≥4-char strings;
+WS-H owns that scorer and the counter's increment site. If WS-H forks the counter **name** for the
+widened metric, change it in one place (`main.py:_setup_metrics`) and here — coordinate before the
+pilot so a rename doesn't split the series.
+
+**EXIT criteria — each proven in `tests/test_metrics_video.py`:**
+- all new counters visible at zero before traffic → `test_new_counters_visible_at_zero_before_any_traffic`
+  (parent-side + the three unlabelled stage-side; labelled/histograms asserted absent-until-emit);
+- `/health` reports the dialect → `test_health_reports_video_dialect_and_freeze_off_by_default`,
+  `test_health_reflects_dialect_freeze_flag`;
+- a two-dialect fixture trips the alert → `test_two_dialect_fleet_trips_the_alert_expression`
+  (+ `test_single_replica_never_fires_the_alert`);
+- a graph run with `resources=None` (the isolation shape) does not raise →
+  `test_video_graph_run_with_resources_none_does_not_raise` + `..._process_is_the_child_entry...`;
+- plus: parent-side per-unit accounting, partial-write vs full-failure, the freeze serve-vs-reprocess
+  behaviour end-to-end (via a `DIARIZE_BACKEND`/`pipeline_version` dialect fork over a shared journal),
+  the offloaded-sha256 rejection, and the full circuit-breaker state machine.
+
+**Additive-only proof.** The default (audio) record path is byte-identical — metrics are a side
+channel and the sha256 move is value-preserving. **DP suite: 192 passed** (was 173; +19 in
+`test_metrics_video.py`, +6/-2 lines in the `test_ingest_mock.py` `/health` assertion), run as
+`ASR_BACKEND=mock ./.venv/bin/python -m pytest -q`.
