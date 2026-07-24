@@ -57,6 +57,13 @@ def _observe(metrics, name: str, value: float, labels: Optional[dict] = None) ->
         metrics.observe(name, value, labels)
 
 
+def _sha256_hex(data: bytes) -> str:
+    """Hex sha256 of a blob — a module-level function so it can be handed to a
+    threadpool (see ``process_chunk``). Hashing a whole video blob is CPU-heavy and
+    MUST NOT run on the event loop."""
+    return hashlib.sha256(data).hexdigest()
+
+
 async def process_chunk(
     *,
     c1: dict[str, Any],
@@ -103,7 +110,10 @@ async def process_chunk(
 
     # ---- End-to-end integrity check against /raw ----------------------------------
     if settings.verify_blob_sha256:
-        actual = hashlib.sha256(blob_bytes).hexdigest()
+        # OFF the event loop: a whole-video-blob sha256 would otherwise stall every
+        # other in-flight request while it runs (design §8, VERIFY_BLOB_SHA256=1). The
+        # value + the terminal-mismatch semantics are byte-identical to the inline hash.
+        actual = await run_in_threadpool(_sha256_hex, blob_bytes)
         if actual != c1["blob_sha256"]:
             # Corrupt bytes are terminal: a retry pulls the same bad bytes.
             raise ProcessingError(
@@ -177,6 +187,12 @@ async def process_chunk(
         try:
             resp = await storage.post_record(c2)
         except httpx.HTTPError as exc:  # storage blip — transient
+            # Partial-write window (caveat A-4): units 0..k-1 are already durably in
+            # /context, but this chunk now retries and re-posts ALL of them (idempotent
+            # upsert — no data loss). Until the retry lands, a caption can sit in
+            # /context without its sibling OCR record; this counter is the only signal.
+            if metrics is not None and record_ids:
+                metrics.inc("dp_partial_write_total", {"modality": modality})
             raise ProcessingError(
                 {"error": f"context write failed: {exc}"},
                 http_status=502,
@@ -185,6 +201,19 @@ async def process_chunk(
         _observe(metrics, "dp_stage_seconds", perf_counter() - t0,
                  {"modality": modality, "stage": "context_write"})
         record_ids.append((resp or {}).get("record_id") or c2["record_id"])
+
+        # Parent-side unit accounting — emitted HERE (not in the Processor, and NOT in the
+        # child under INGEST_ISOLATION=subprocess), where ``metrics`` is in scope and
+        # null-guarded, so these survive subprocess isolation (design §8 finding #15).
+        # Counts DURABLY-written units: a unit whose post failed above never reaches here.
+        if metrics is not None:
+            kind = unit.content.kind
+            text = unit.content.text or ""
+            metrics.inc("dp_units_total", {"modality": modality, "kind": kind})
+            metrics.observe("dp_content_chars", float(len(text)),
+                            {"modality": modality, "kind": kind})
+            if not text.strip():
+                metrics.inc("dp_empty_output_total", {"modality": modality, "kind": kind})
 
     if journal is not None:
         await run_in_threadpool(
