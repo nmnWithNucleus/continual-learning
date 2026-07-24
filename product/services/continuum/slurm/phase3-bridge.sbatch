@@ -48,8 +48,11 @@ if [ "${PHASE3_RESET:-1}" = "1" ]; then
 fi
 mkdir -p $LOCAL/storage/raw
 
-# Slots: one data-processing instance per GPU, with a fixed day list behind it. The two
-# smallest days share slot 0 so the longest slot is the 79-chunk day, not 79+58.
+# Slots: one data-processing instance per GPU, with a fixed day list behind it. Nine days
+# over eight cards means one slot carries two, and that slot sets the wall clock: measured
+# on job 756, slot 0 (58+66 = 124 chunks) ran 1 h 44 m while the others finished in ~1 h 10.
+# A per-day work queue would recover ~35 min; the fixed split is kept because it is
+# deterministic and the run is short enough that the imbalance is not worth the machinery.
 SLOT_DAYS=${PHASE3_SLOT_DAYS:-"21,12|5|16|9|6|13|28|17"}
 [ -n "${PHASE3_DAYS:-}" ] && SLOT_DAYS="$PHASE3_DAYS"
 
@@ -141,13 +144,18 @@ wait "${REPLAY_PIDS[@]}"
 echo "== REPLAY DRAINED $(date -u +%FT%TZ)"; grep -h TASK-EXIT $LOGS/*.log
 
 # --- exit criterion: real C2 queryable by (user, window) ---------------------------
+LANES_FAILED=$(grep -h TASK-EXIT $LOGS/replay-slot*.log | grep -cv "TASK-EXIT 0 ")
 cd $SVC
 DAYS_CSV=$(echo "$SLOT_DAYS" | tr '|' ',')
 $PY scripts/phase3_verify.py --plan $PLAN/plan.json --days "$DAYS_CSV" \
     --out $KEEP/reports/bridge-$SLURM_JOB_ID.json | tee $LOGS/verify.log
-VERIFY=$?
+VERIFY=${PIPESTATUS[0]}
 
-# 3b reads /context and nothing else, so only the DB travels back to NFS.
-cp $LOCAL/storage/context.db $KEEP/context.db && echo "== context.db -> $KEEP/context.db"
-du -sh $LOCAL/storage/raw
-echo "== DONE $SLURM_JOB_NAME verify=$VERIFY $(date -u +%FT%TZ)"
+# Storage stops BEFORE the copy: sqlite copied out from under a live writer is a torn
+# database, and this one is 3b's only input.
+shutdown; trap - EXIT
+cp $LOCAL/storage/context.db $KEEP/context.db || { echo "== context.db copy FAILED"; exit 1; }
+echo "== context.db -> $KEEP/context.db"; du -sh $LOCAL/storage/raw
+echo "== DONE $SLURM_JOB_NAME verify=$VERIFY lanes_failed=$LANES_FAILED $(date -u +%FT%TZ)"
+# The exit code carries the verdict, so --dependency=afterok means what it says.
+[ "$VERIFY" = "0" ] && [ "$LANES_FAILED" = "0" ]

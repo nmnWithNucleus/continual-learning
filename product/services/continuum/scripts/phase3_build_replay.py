@@ -220,6 +220,22 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
             "replay_file": str(replay_path),
         }
 
+    # Consecutive tour days in DIFFERENT timezones have overlapping 04:00-local windows
+    # (day 12 is Chicago, day 13 is New York -> one hour), so one day's range read returns
+    # some of its neighbour's records. The CHUNK spine never overlaps; only the window
+    # bounds do. Recorded here rather than clamped: the 24 h window is the recipe's, and a
+    # day-keyed read filter is the right place to resolve it. phase3_verify counts the
+    # bleed as `captions_foreign` and phase3_daylog drops it.
+    ordered = sorted(plan["days"].items(), key=lambda kv: kv[1]["window_start_utc"])
+    plan["window_overlaps"] = [
+        {"day": a[0], "next_day": b[0],
+         "minutes": round((datetime.fromisoformat(a[1]["window_end_utc"].replace("Z", "+00:00"))
+                           - datetime.fromisoformat(b[1]["window_start_utc"].replace("Z", "+00:00"))
+                           ).total_seconds() / 60)}
+        for a, b in zip(ordered, ordered[1:])
+        if a[1]["window_end_utc"] > b[1]["window_start_utc"]
+    ]
+
     captions_path = out / "captions.jsonl"
     captions_path.write_text("".join(json.dumps(r) + "\n" for r in caption_rows))
     plan["captions_file"] = str(captions_path)
