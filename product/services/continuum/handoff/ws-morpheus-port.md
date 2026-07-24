@@ -190,6 +190,22 @@ against a measured distribution. Adopt [gate-threshold-proposal.md](gate-thresho
 | heldout | ≤0.05 on 60 probes | **all 222 probes + one-sided exact test vs each run's OWN base control (α=0.01 → blocks above 5/222), 0.15 absolute backstop** | No systematic leak exists (base 0/60 on all seven runs; seed 0 also 0/60). But n=60 has 12% power against 2% contamination while sitting two probes from a false block. The suite already holds 222 probes and the harness was using 60 |
 | min_probes | ≥150 | **148** (or grow the suites) | The harness supplies exactly 148 (60+60+28) — the floor was **unpassable by construction** |
 
+**Shipped 2026-07-24** as `app/policy.py` + `policies/gate-policy-v1.1.json`, split from the
+training recipe (`recipe_id` unchanged, so no training cache was invalidated). Re-scored: the
+reference now passes **4/4** (was 71% of its nights blocked); the **lobotomy control is blocked**.
+
+Two follow-ups the re-scoring surfaced:
+- **The lobotomy passes the traps check at 0.393** — it *denies its way* to a mid-reference
+  calibration score — and is caught **only by the recall floor**. Design principle to keep:
+  **calibration checks cannot be the primary safety net; a lobotomized model scores well on them.**
+  Never let the gate degrade to traps-only.
+- **The heldout policy is not yet fully exercised:** it specifies all **222** probes, but the
+  re-scoring ran on **60** (seed 2's p=0.029 pass is a 60-probe result). Generating predictions for
+  the full 222-probe heldout suite is outstanding before the policy is truly in force.
+- Honest limit: at n=28 traps, **0.15 is the smallest floor with any teeth**, and it still blocks
+  one of 24 reference nights (its own minimum, 4/28 = 0.143). The floor gets meaningful only when
+  the trap suite grows to ~150.
+
 **Structural fix, required with the above.** Gate thresholds currently live inside
 `recipes/consolidation-v1.0.json`, and `cycle.py` hashes `recipe_id` into the **amplify and train**
 stage keys. So editing a *publish-policy* threshold forks `recipe_id` → invalidates the amplify and
@@ -205,18 +221,48 @@ Cleared: the rehearsal sampler (byte-identical, 5 nights × 14 seeds) and the si
 single-night training is the same distribution). Seed 0's values sit *below everything a single
 night produces*, so the deficit **accumulates across the chain**.
 
-Sharper framing than either report states: seed 0 **acquired day 5 fine (0.25) and then failed to
-retain it (0.05)**, while the reference held 0.23 → 0.23. This is a *forgetting* failure, and
-replay is precisely the anti-forgetting mechanism. The sampler is the same **function**, but the
-**draw** is seed-dependent — so the live hypothesis is that seed 0's draws under-sampled day-5
-paragraphs across nights 2–5. That is now **measurable for zero GPU**, because rehearsal dumps are
-generatable: count per-source-day paragraphs in each night's rehearsal, ours vs reference. Test
-this before spending chain-hours.
+Framing that survives: seed 0 **acquired day 5 fine (0.25) and then failed to retain it (0.05)**,
+while the reference held 0.23 → 0.23. It is a *forgetting* failure.
 
-Variance context: per-night draw noise sd 0.074 over 6 averaged days predicts a chain sd of
-≈0.030 — the reference's actual chain sd is **0.033**, so the reference's whole chain-to-chain
-spread is explained by ordinary draw noise. Ours is 0.072 (≈2.4×), driven entirely by seed 0; at
-n=3 that is suggestive, not conclusive (the inference chains through two noisy estimates).
+**Two cofounder hypotheses were tested and BOTH FALSIFIED (2026-07-24) — recorded so nobody
+re-derives them:**
+
+1. *"Seed 0's draws under-sampled day 5."* **Impossible — the rehearsal draw is not seed-dependent
+   at all.** The rehearsal RNG is a separate `Random` instance on a constant seed (the reference
+   hardcodes `random.Random(7)`, `phase_d_driver.py:313`); `transformers.set_seed()` touches the
+   *global* `random` and cannot reach an independent instance. `--seed` fixes **LoRA init only**.
+   Verified empirically: all three of our chains trained on **byte-identical rehearsal text**, and
+   seeds 1/2 saw exactly what seed 0 saw and landed in-band. Draw variance is excluded.
+2. *"Per-night draw noise (sd 0.074) ÷ √6 ≈ 0.030 ≈ the reference's chain sd 0.033, so their
+   spread is explained by draw noise."* **A coincidence, comparing different variance sources.**
+   The draw sweep varied the *rehearsal seed*; real chains hold it fixed at 7. So 0.074 measures
+   rehearsal-draw sensitivity, which real chains do not exercise. We have **no calibrated model**
+   for how much chain variance LoRA-init + GPU non-determinism should produce.
+
+**What that leaves:** the only differences between chains — ours or the reference's — are **LoRA-A
+initialization and non-deterministic GPU reductions**. So either the recipe has an init-sensitive
+failure mode, or seed 0 is a tail draw. Only more chains settle it (ref n→8, ours n→10, in flight).
+
+**The metric to watch is the GATE PASS RATE, not just seen-mean.** Under the ratified policy the
+reference passes 4/4 and we pass 1/3 (s0 blocked on recall, s1 on traps). A nightly loop that ships
+one night in three is a different product from one that ships every night — this is the
+production-relevant readout of the chain wave.
+
+## 10b. Recipe finding — uniform pooling has no per-day floor (quantified 2026-07-24)
+
+Not the cause of seed 0 (the reference dilutes identically and retains fine), but a real property
+of recipe v1.0, measured: day 5's share of each night's rehearsal falls **100% → 51% → 35% → 25%
+→ 20%**, a **6× absolute drop** (3467 → 565 paragraphs) over five nights.
+
+**Why this matters beyond the 6-day testbed:** our product consolidates nightly *forever*. Under
+uniform pooling a given day's share decays as ~1/N, so after a year any single day receives
+essentially zero rehearsal — and this service's inherited law is that forgetting is *access decay*.
+That plausibly links to the trap-erosion-at-horizon seen at 12 nights. Validated horizons are 6
+nights (fine) and 12 (erosion); nobody has measured 30+.
+**Candidates if long-horizon retention degrades:** the reference's abandoned `--replay-floor`
+(per-day dose floor), spaced-repetition scheduling (decaying but non-zero per-day dose), or
+periodic re-consolidation. **Take to Gnandeep as a finding** — it is upstream research, not a port
+gap, and v1.0 stays the parity target regardless.
 
 ## 9. Divergence log (record every deliberate departure from `b3c58e1` behavior)
 
