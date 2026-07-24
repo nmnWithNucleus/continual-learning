@@ -33,10 +33,15 @@ from .config import OcrConfig
 # (version_tag). A backend not in this map resolves to 'off' everywhere. Every value is
 # non-empty (incl. 'off'): screentext feeds the caption, so R1 forbids an empty fragment
 # for any enabled configuration (see the module docstring).
+# The ppocr tag names the ACTUALLY-bundled engine for provenance honesty: the sidecar
+# ships PP-OCRv4 (rapidocr-onnxruntime's default det+rec), NOT the PP-OCRv6 the design
+# names as the eventual target. This coarse human token is the engine family only; the
+# PRECISE model-file shas fork the corpus via WS-D's cfg_tag (ocr_model_sha_det/rec are in
+# OUTPUT_AFFECTING), so a file-swap to a real v6 pair re-keys regardless of this label.
 _TAGS = {
     "off": "+ocr-off-v1",
     "mock": "+ocr-mock-v1",
-    "ppocr": "+ocr-ppv6-cpu-v1",
+    "ppocr": "+ocr-ppv4-cpu-v1",
     "vlm": "+ocr-vlm-v1",
 }
 

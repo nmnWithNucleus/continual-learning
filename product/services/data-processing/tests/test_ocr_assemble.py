@@ -228,7 +228,7 @@ def test_version_tags_are_all_nonempty_and_distinct():
     tags = {b: version_tag(_cfg(ocr_backend=b)) for b in ("off", "mock", "ppocr", "vlm")}
     assert all(tags.values())                       # none empty (R1)
     assert len(set(tags.values())) == 4             # distinct dialects
-    assert tags["ppocr"] == "+ocr-ppv6-cpu-v1"      # the ratified production token
+    assert tags["ppocr"] == "+ocr-ppv4-cpu-v1"      # names the actually-bundled engine (v4)
 
 
 def test_select_returns_modules():

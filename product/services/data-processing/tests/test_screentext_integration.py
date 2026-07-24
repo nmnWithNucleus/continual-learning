@@ -246,7 +246,9 @@ def test_ppocr_over_real_sidecar_through_the_executor(ocr_sidecar, monkeypatch):
 
     stages = [FakePrimary(), FakeClipprep(), ScreentextStage()]
     resolved = resolve("video", stages, None)
-    assert "+ocr-ppv6-cpu-v1" in resolved.pipeline_version
+    # Names the actually-bundled engine (PP-OCRv4); reconciled from the design's aspirational
+    # ppv6 token per the lead's provenance-honesty fix (see this file's own build-log note).
+    assert "+ocr-ppv4-cpu-v1" in resolved.pipeline_version
 
     ctx = _ctx(None)
     ctx.slots.clear()  # clip_frames comes from FakeClipprep over the graph

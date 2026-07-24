@@ -11,24 +11,27 @@ self-anchored single line, then:
     ``build_c2`` carries the C1 span verbatim (D-05) — ALWAYS, with ``content.text == ""``
     when nothing legible was found (record PRESENCE is the coverage signal, §4 R3(e)).
 
-WIRING (Architecture A, ratified): ``kind='sidecar'``, ``policy='required'``, ``order 10``,
-``needs=("clipprep",)``, ``provides=("ocr_text",)``. It FEEDS the caption, so by §4.3 R1 its
+WIRING (Architecture A, ratified): ``kind='sidecar'``, ``policy='required'``, ``order 15``,
+``needs=("clipprep",)``, ``provides=("ocr_text",)``. The locked clip band is
+``clipprep=5``, ``screentext=15``, ``clipcap=20`` — all distinct from the retained legacy
+``keyframes=0`` / ``captions=10`` (order is unique per modality, so ``order 10`` would COLLIDE
+with the legacy ``captions`` stage at registration). It FEEDS the caption, so by §4.3 R1 its
 ``version_fragment`` is non-empty in every enabled configuration (``ocr.version_tag`` — even
 ``off`` carries ``+ocr-off-v1``). ``required`` (not ``best_effort``): a skipped OCR silently
 changes the caption (its input), the "a lost mutation would be a silent lie" class that
 R3(b)/R4 forbid for a fragment-bearing stage; the honest escape from an outage is
 ``VIDEO_OCR_BACKEND=off`` (which says so in the dialect), never a policy flip.
 
-REGISTRATION is gated on the ``clipprep`` sibling (WS-B) being present in the tree. The
-frozen ``needs=("clipprep",)`` would fail the stage-discovery existence check on a
-WS-C-only branch (clipprep absent) and take the whole suite red; the stage is dormant there
-regardless (``enabled()`` is clip-mode-only, default ``keyframe``), unit tests drive the
-class directly, and it auto-wires the moment clipprep lands. This edits only this file — no
-sibling file, no merge surface.
+REGISTRATION is standard and unconditional (``@register_stage``), so the stage is statically
+discoverable and any order collision or dangling need surfaces loudly at discovery. It is
+dormant unless clip mode is on (``enabled()`` is clip-mode-only, default ``keyframe``). On the
+integration base ``clipprep`` (WS-B) is a permanent sibling, so ``needs=("clipprep",)``
+closes; on a WS-C-only branch where clipprep is absent, ``_discover()`` raises
+``needs unknown stage 'clipprep'`` — expected, and correct against the integration base. Unit
+tests drive the class directly (they do not require the registry).
 """
 from __future__ import annotations
 
-import importlib.util
 import logging
 
 from ...processing.base import ProcessedContent, ProcessedUnit, empty_enrichments
@@ -68,6 +71,7 @@ def _match_frame(frames: tuple[Frame, ...], t: float) -> Frame | None:
     return best
 
 
+@register_stage
 class ScreentextStage(Stage):
     name = "screentext"
     modality = "video"
@@ -75,7 +79,7 @@ class ScreentextStage(Stage):
     policy = "required"
     needs = ("clipprep",)
     provides = ("ocr_text",)
-    order = 10
+    order = 15  # locked clip band: clipprep=5, screentext=15, clipcap=20 (10 is legacy captions)
 
     def enabled(self, settings) -> bool:
         return resolve_pipeline() == "clip"
@@ -144,18 +148,3 @@ class ScreentextStage(Stage):
             t_end=None,
         )
         return StageResult(slots={"ocr_text": text}, units=[unit])
-
-
-def _sibling_present(name: str) -> bool:
-    """True if a sibling stage module (e.g. ``clipprep``) exists in the tree, checked
-    WITHOUT importing it and independent of discovery import order."""
-    try:
-        return importlib.util.find_spec(f"{__package__}.{name}") is not None
-    except (ImportError, AttributeError, ValueError):
-        return False
-
-
-# Frozen wiring above; auto-register only once clipprep (WS-B) is in the tree (see the
-# module docstring).
-if _sibling_present("clipprep"):
-    register_stage(ScreentextStage)

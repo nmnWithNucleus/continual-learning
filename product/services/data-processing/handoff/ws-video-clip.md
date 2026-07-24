@@ -1409,7 +1409,7 @@ double-counted → split into `[•●]{3,}` + a standalone `\*{6,}`. A follow-o
   gated on O-2, not on this seam.
 - **WS-D** should migrate the config shim + local budget stubs into `VisionSettings`/`budget.py`, and add the
   OCR knobs (`ocr_backend`, `ocr_ep`, `ocr_model_sha_det`/`_rec`, …) to `OUTPUT_AFFECTING` so `cfg_tag` forks
-  on the precise model shas (this seam's coarse `+ocr-ppv6-cpu-v1` fragment is the human token only).
+  on the precise model shas (this seam's coarse `+ocr-ppv4-cpu-v1` fragment is the human token only).
 
 ---
 
@@ -1538,3 +1538,40 @@ capture, and the proxy is likely optimistic (Liberation fonts ≠ SF Pro/CoreTex
   `VisionSettings`/`app/vision/budget.py`. WS‑E2's registration-time R1 raise must **accept** `screentext`'s
   non-empty `off` fragment (`+ocr-off-v1`) as correct (a fragment-bearing sidecar that feeds the caption),
   not flag it. Both are downstream-workstream tasks, not WS‑C defects.
+
+---
+
+## Build log — WS-C (seam) — post-review fixes (lead review, 2026-07-24)
+
+The lead's review found a **masked wiring bug** the consolidation missed (its E2E test hand-lists the
+stages, bypassing the registry). Four fixes, all in `app/stages/video/screentext.py` + tests (plus the
+provenance rename in `app/vision/ocr/__init__.py`):
+
+1. **`screentext` order `10 → 15`.** Order 10 **collided** with the retained legacy `captions` stage
+   (also order 10). The locked clip band is `clipprep=5`, `screentext=15`, `clipcap=20`.
+2. **Standard unconditional `@register_stage`** — deleted the `_sibling_present("clipprep")` guard and
+   helper. The guard *masked* the order-10 collision: screentext never registered on a clipprep-absent
+   branch, so the collision never fired. Unconditional registration makes the stage statically
+   discoverable and surfaces any order/needs error loudly.
+3. **Real-registry discovery test** (`test_screentext_registered_and_wired_in_real_registry`) — asserts,
+   over `_discover()` + `stages_for("video")` (NOT a hand-built list), that `screentext` is registered at
+   order 15 with no duplicate orders, and (when the clip graph is coherent) that clip-mode `resolve()`
+   wires it under one primary. Gated to skip when `clipprep` is absent.
+4. **`version_tag` ppocr `+ocr-ppv6-cpu-v1 → +ocr-ppv4-cpu-v1`** — provenance honesty: the sidecar ships
+   PP-OCRv4 (rapidocr default), not the design's aspirational v6. This is the rename the consolidation
+   section above already flagged as needed. Updated the three asserting tests, incl. the consolidation's
+   `test_screentext_integration.py` (one line). The design-doc §2.1/§2 tokens (v6 = target) are the lead's
+   design-of-record and are left untouched; a real v6 file-swap re-keys via the precise shas in `cfg_tag`.
+
+**Suite state (honest):**
+- **Integration base** (clipprep + clipcap present — verified this session with throwaway WS-B/WS-D stubs,
+  and the clip-mode resolve additionally verified with WS-G's `captions`/`keyframes` gate simulated):
+  **226 passed, 0 failed**; discovery lists `keyframes(0), clipprep(5), captions(10), screentext(15),
+  clipcap(20)` — screentext at 15, no collision; clip-mode resolve → one primary (`clipcap`) + screentext
+  wired, dialect carries `+ocr-mock-v1`.
+- **This isolated branch** (clipprep absent): unconditional registration makes `_discover()` raise
+  `needs unknown stage 'clipprep'`, so **3 discovery-triggering tests fail** (subprocess-isolation +
+  first-ingest) — **expected per the lead's note, and correct against the integration base.** Every WS-C
+  unit test passes (the real-discovery test skips; 47 seam tests green). This trades the previous
+  green-on-isolated-branch (which the sibling-gate bought by *hiding* the stage) for a statically-correct,
+  collision-free registration on the integration base — the lead's explicit call.

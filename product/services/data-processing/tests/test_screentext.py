@@ -62,7 +62,7 @@ def test_frozen_wiring():
     assert s.policy == "required"
     assert s.needs == ("clipprep",)
     assert s.provides == ("ocr_text",)
-    assert s.order == 10
+    assert s.order == 15   # locked clip band; 10 is the legacy captions stage
     # run_sync (blocking HTTP to loopback), not run_async.
     assert type(s)._defines("run_sync") and not type(s)._defines("run_async")
 
@@ -84,7 +84,7 @@ def test_version_fragment_tracks_backend(monkeypatch):
     monkeypatch.setenv("VIDEO_OCR_BACKEND", "off")
     assert s.version_fragment(None) == "+ocr-off-v1"
     monkeypatch.setenv("VIDEO_OCR_BACKEND", "ppocr")
-    assert s.version_fragment(None) == "+ocr-ppv6-cpu-v1"
+    assert s.version_fragment(None) == "+ocr-ppv4-cpu-v1"
     monkeypatch.setenv("VIDEO_OCR_BACKEND", "typo")   # unknown -> off, still non-empty (R1)
     assert s.version_fragment(None) == "+ocr-off-v1"
 
@@ -209,6 +209,48 @@ def test_match_frame_nearest_within_tolerance():
     )
     assert _match_frame(frames, 5.0).index == 1     # within tol
     assert _match_frame(frames, 9.9) is None        # no frame near a selected time
+
+
+# ============================ real-registry discovery (integration base) =======
+
+def test_screentext_registered_and_wired_in_real_registry(monkeypatch):
+    """Integration-base check — SKIPPED when clipprep (WS-B) is absent (e.g. a WS-C-only
+    branch, where unconditional registration makes _discover() raise on the dangling need).
+
+    Unlike the hand-built executor test below, this drives the REAL stage registry, so it is
+    the only test that catches a registration / order bug: screentext must be discoverable at
+    order 15 with NO duplicate orders (order 10 would collide with the legacy `captions`
+    stage), and clip-mode resolve() must wire it under exactly one primary with its fragment
+    composed into pipeline_version (R1). run_graph emission of the ocr unit is covered by
+    test_screentext_through_the_executor; the full clip-mode E2E is C3's integration deliverable.
+    """
+    import importlib.util
+    if importlib.util.find_spec("app.stages.video.clipprep") is None:
+        pytest.skip("clipprep (WS-B) absent — this is an integration-base test")
+
+    from app.stagegraph.stage import stages_for
+
+    video = stages_for("video")                 # triggers the real _discover()
+    by_name = {s.name: s for s in video}
+    # (1) THE masked-bug catcher: real-registry registration + order 15 + no collision.
+    assert "screentext" in by_name, "screentext must be statically discoverable"
+    assert by_name["screentext"].order == 15
+    orders = [s.order for s in video]
+    assert len(orders) == len(set(orders)), f"duplicate video stage orders: {sorted(orders)}"
+
+    # (2) clip-mode wiring — asserted only once the clip graph is coherent: it also needs
+    # the legacy `captions` primary gated to keyframe mode (WS-G) and a real clip primary
+    # (WS-D). On a partial integration base those are absent, so guard on exactly one
+    # enabled clip primary rather than assuming the full graph; the registration/order
+    # check above is the load-bearing assertion either way.
+    monkeypatch.setenv("VIDEO_PIPELINE", "clip")
+    monkeypatch.setenv("VIDEO_OCR_BACKEND", "mock")
+    clip_primaries = [s for s in video if s.kind == "primary" and s.is_enabled(None)]
+    if len(clip_primaries) == 1:
+        resolved = resolve("video", video, None)
+        assert "screentext" in {s.name for s in resolved.enabled}      # wired in clip mode
+        assert resolved.primary.name == clip_primaries[0].name         # the single clip primary
+        assert "+ocr-mock-v1" in resolved.pipeline_version             # fragment composed in (R1)
 
 
 # ============================ real executor path (with a fake clipprep) ========
