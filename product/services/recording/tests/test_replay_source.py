@@ -134,6 +134,19 @@ def test_absent_audio_with_no_media_raises_rather_than_yielding_silence(tmp_path
         list(src.chunks())
 
 
+def test_extraction_fails_when_the_reader_dies(tmp_path):
+    """ffmpeg encodes a truncated stream and exits 0, so a reader that died mid-transfer
+    would otherwise cache a SHORT wav — a silently shorter day, not a loud failure."""
+    audio = tmp_path / "cold.wav"
+    plan = write_plan(tmp_path, [{"chunk_key": "vid_c000", "t_start": "2025-09-02T08:00:00Z",
+                                  "t_end": "2025-09-02T08:20:00Z", "audio": str(audio),
+                                  "media": str(tmp_path / "absent.mkv")}])
+    src = build_replay(get_settings(), source=plan)
+    with pytest.raises(RuntimeError):
+        list(src.chunks())
+    assert not audio.exists()
+
+
 def test_extraction_fills_the_cache_from_media(tmp_path, monkeypatch):
     """A cold cache extracts from the source media and caches the result atomically."""
     audio = tmp_path / "cold.wav"

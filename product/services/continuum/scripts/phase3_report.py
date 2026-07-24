@@ -87,7 +87,9 @@ def main() -> int:
                     default=["var/parity/morpheus_f30_s*", "var/diag/ourchains/morpheus_s*"],
                     help="the 5-min parity chains this is read against")
     ap.add_argument("--control", nargs="+",
-                    default=["var/parity/seq", "var/parity/seq_s1", "var/parity/seq_s2"],
+                    default=["/home/ubuntu/engram/results/phased/seq",
+                             "/home/ubuntu/engram/results/phased/seq_s1",
+                             "/home/ubuntu/engram/results/phased/seq_s2"],
                     help="rehearsal-off chains: what a broken consolidation scores")
     ap.add_argument("--days", default="5,9,12,13,17,21")
     ap.add_argument("--out", default="~/phase3/reports/arm1.json")
@@ -112,13 +114,18 @@ def main() -> int:
     ours_sep, base_sep = spread(ours, "separation"), spread(baseline, "separation")
     control_sep = spread(control, "separation")
     ceiling = control_sep.get("max")
-    verdict = "INDETERMINATE"
+    verdict = "INDETERMINATE (no control runs found)"
     if ceiling is not None:
-        if ours_sep["mean"] > ceiling:
-            inside = base_sep and base_sep["min"] <= ours_sep["mean"] <= base_sep["max"]
-            verdict = "SURVIVED" if inside else "SURVIVED (weakened)"
-        else:
+        if ours_sep["mean"] <= ceiling:
             verdict = "COLLAPSED"
+        elif not base_sep:
+            verdict = "SURVIVED (no baseline to compare)"
+        elif ours_sep["mean"] < base_sep["min"]:
+            verdict = "SURVIVED (weakened)"
+        elif ours_sep["mean"] > base_sep["max"]:
+            verdict = "SURVIVED (stronger)"
+        else:
+            verdict = "SURVIVED"
 
     summary = {
         "verdict": verdict,

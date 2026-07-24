@@ -71,6 +71,8 @@ def load_index(path: str) -> tuple[list[float], list[dict[str, Any]]]:
     is only enabled when an operator asked for injection, and silently producing zero
     captions would look exactly like a day with no descriptions.
     """
+    if not path:
+        raise ValueError("INJECT_CAPTION_BACKEND=index but INJECT_CAPTION_INDEX is unset")
     stat = Path(path).stat()
     key = (path, stat.st_mtime_ns, stat.st_size)
     cached = _CACHE.get(key)
@@ -95,7 +97,10 @@ class InjectedCaptionStage(Stage):
     order = 40          # after acoustic (30); assembly order only
 
     def enabled(self, settings) -> bool:
-        return _backend() == "index" and bool(_index_path())
+        # Deliberately NOT also requiring the path: an operator who selected the backend
+        # and mistyped the path gets a loud failure from load_index, not a caption-less day
+        # that reads exactly like a day nobody described.
+        return _backend() == "index"
 
     def run_sync(self, ctx: StageContext) -> StageResult:
         starts, rows = load_index(_index_path())

@@ -129,8 +129,11 @@ def caption_text(profile, record: dict[str, Any], *, with_anchor: bool) -> str:
     rendered = profile.render_block(record)
     if with_anchor:
         return rendered
+    # Anchor line dropped; a description with no populated fields leaves NOTHING, and the
+    # caller skips it. Falling back to the anchor would smuggle the tour metadata back in
+    # exactly where the record has no content to anchor.
     _, _, body = rendered.partition("\n")
-    return body or rendered
+    return body
 
 
 def build(args: argparse.Namespace) -> dict[str, Any]:

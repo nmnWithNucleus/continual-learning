@@ -93,6 +93,11 @@ class ReplayPlanSource:
                 stdin=src.stdout, capture_output=True)
             if src.stdout:
                 src.stdout.close()
+        # BOTH ends are checked. ffmpeg happily encodes a truncated stream and exits 0, so
+        # a reader that died mid-transfer would otherwise cache a short WAV -- and a short
+        # WAV is a silently shorter day, not a loud failure.
+        if src.returncode != 0:
+            raise RuntimeError(f"reading {media} failed (rc={src.returncode})")
         if out.returncode != 0 or len(out.stdout) <= 44:
             raise RuntimeError(
                 f"audio extraction failed for {media} (rc={out.returncode}): "

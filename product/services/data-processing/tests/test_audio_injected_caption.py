@@ -61,11 +61,14 @@ def test_off_by_default(client, monkeypatch, tmp_path):
     assert len(client.post("/ingest", json=c1).json()["record_ids"]) == 1
 
 
-def test_backend_set_but_no_index_stays_off(client, monkeypatch):
+def test_backend_set_but_no_index_fails_loudly(client, monkeypatch):
+    """Selecting the backend and forgetting the path must not look like a quiet day."""
+    injected_caption._CACHE.clear()
     monkeypatch.setenv("INJECT_CAPTION_BACKEND", "index")
     monkeypatch.delenv("INJECT_CAPTION_INDEX", raising=False)
     c1 = make_c1(client.fake_storage, chunk_id="cap-noindex")
-    assert len(client.post("/ingest", json=c1).json()["record_ids"]) == 1
+    with pytest.raises(ValueError, match="INJECT_CAPTION_INDEX"):
+        client.post("/ingest", json=c1)
 
 
 # ---- the join ----------------------------------------------------------------
