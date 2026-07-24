@@ -6,7 +6,11 @@
 > **The one question:** with Speed's data flowing through recording → data-processing →
 > storage → continuum, does **seen-vs-heldout separation SURVIVE**?
 >
-> **VERDICT: _(3b)_**
+> **VERDICT: separation did NOT survive.** Phase-3 chains are statistically
+> indistinguishable from a rehearsal-off control (p = 0.80) and significantly below the
+> 5-min baseline (p = 0.0067). The break is in ACQUISITION, not forgetting, and it tracks
+> the amplification dose per fact almost 1:1 (3.7x less dose -> 3.2x less acquisition).
+> The pipeline itself is exact. See §3.4-3.6.
 
 ---
 
@@ -293,3 +297,119 @@ caption concatenation was left alone. No real VLM keyframe captioning. No Arm 3
 (descriptions+ASR) — the transcripts are on disk and the filter is one line, so it stays a
 later flip. No C8 per-request profiles. No GCS by-reference blobs. No serve-time harness.
 One core-file edit in total: the single `SOURCE_BUILDERS` registry line.
+
+### 3.4 THE ARM-1 TABLE (SLURM job 767, 5 seeds, Qwen3-VL-8B, 4 h 36 m)
+
+| run | seen | **separation** | micro | heldout | base |
+|---|---|---|---|---|---|
+| arm1_s0 | 0.1667 | 0.1000 | 0.1001 | 0.0667 | 0.0111 |
+| arm1_s1 | 0.0500 | 0.0333 | 0.0844 | 0.0167 | 0.0111 |
+| arm1_s2 | 0.0972 | 0.0972 | 0.0844 | 0.0000 | 0.0111 |
+| arm1_s3 | 0.1333 | 0.1167 | 0.0849 | 0.0167 | 0.0111 |
+| arm1_s4 | 0.0556 | 0.0389 | 0.0650 | 0.0167 | 0.0139 |
+
+| set | n | separation mean | sd | range |
+|---|---|---|---|---|
+| **Phase 3 (1-min product path)** | 5 | **0.0772** | 0.0383 | 0.0333 – 0.1167 |
+| 5-min parity baseline | 10 | 0.1786 | 0.0584 | 0.0805 – 0.2333 |
+| rehearsal-off negative control | 3 | 0.0648 | 0.0397 | 0.0306 – 0.1083 |
+
+Exact permutation tests on run-level separation:
+* **vs the 5-min baseline: p = 0.0067** — a different distribution, and lower.
+* **vs the rehearsal-off control: p = 0.804** — statistically indistinguishable.
+
+## VERDICT
+
+> **Separation did NOT survive.** Through the real pipeline at 1-min caption cadence, the
+> chains are indistinguishable from a control that never rehearsed at all (p = 0.80) and
+> significantly below the 5-min baseline (p = 0.0067) — seen-recall 0.101 vs 0.217,
+> separation 0.077 vs 0.179.
+
+Heldout stayed clean (0.023 vs the baseline's 0.038) and the base floor is unmoved
+(0.0111), so this is not contamination and not a broken eval — the signal simply is not
+being written.
+
+### 3.5 Where it broke: ACQUISITION, not forgetting
+
+The decay matrix says it in one line — recall of each day on **the night it was written**,
+and at the end of the chain:
+
+| day | Phase 3 written → final | 5-min baseline written → final |
+|---|---|---|
+| 5  | 0.047 → 0.113 | 0.225 → 0.162 |
+| 9  | 0.123 → 0.163 | 0.318 → 0.213 |
+| 12 | 0.050 → 0.060 | 0.138 → 0.178 |
+| 13 | 0.027 → 0.077 | 0.205 → 0.178 |
+| 17 | 0.060 → 0.023 | 0.243 → 0.205 |
+| 21 | 0.167 → 0.167 | 0.365 → 0.365 |
+| **mean acquisition** | **0.079** | **0.249** |
+
+**Acquisition is 3.2× weaker; retention is fine** (several days even rise after the night
+they were written, which is what a near-zero initial write plus rehearsal looks like).
+Nothing is being forgotten — the facts never land hard enough in the first place.
+
+That matches the dilution arithmetic almost exactly. Retelling-per-source-fact:
+
+| | source chars per block | 48 retellings | ratio |
+|---|---|---|---|
+| 5-min baseline | 1,410 | 45,216 chars | **32×** |
+| Phase 3 (5×1-min) | 5,740 | 49,632 chars | **8.6×** |
+
+**A 3.7× cut in amplification dose per fact produced a 3.2× cut in acquisition.** The
+recipe is locked at 48 retellings *per block*, and the rule-bend quadrupled what a block
+contains — so every fact got about a quarter of the write it used to. Recall being a
+function of that dose is the research line's central result; this is that result showing
+up in the product path.
+
+Three things this is NOT, each checked rather than assumed:
+* **Not lost facts.** The 1-min day text carries MORE of the probes' gold answers than the
+  5-min text (0.968 vs 0.944, §3.3).
+* **Not the excerpt cap.** Only 3.2% of block characters (259,761 of 8.1 M) fall past
+  `EXCERPT_CHARS`, spread over 40% of blocks.
+* **Not the pipeline.** 3a is exact: every expected caption present, one per 60 s segment,
+  block counts equal to the baseline's on 5 of 6 days.
+
+### 3.6 The FIRST decomposition step (one experiment, config only)
+
+**Inject the 5-min descriptions as the caption records and set
+`segment_seconds=300, block_segments=1`.** That reproduces the parity block *content*
+through the real recording → DP → storage → continuum path, holding everything else — same
+services, same spine, same provider filter, same recipe knobs, same probes.
+
+It splits the two candidate causes cleanly:
+* separation returns → the product path is sound and the loss is entirely **description
+  cadence / block density**, i.e. a recipe question (dose per block) for the research line,
+  not a port defect;
+* separation stays down → something in the **pipeline** costs recall that the 3a checks do
+  not see, and the next cut is block-shape (the `Scene:`-concatenated renderer) against
+  block-content.
+
+Cost: a second caption index + a second recipe file (no code), ~40 min amplify + ~3.9 h
+chain. **Do not start the follow-on until that one lands** — it is the only fork that
+distinguishes a recipe finding from a pipeline finding, and everything downstream of it
+depends on which one is true.
+
+The likely follow-on, for the record but NOT to be run first: at 1-min cadence the dose is
+restored by `block_segments=1` (one caption per block, ~1,150-char blocks, ~32× ratio) at
+5× the blocks and 5× the amplification cost. That is a **recipe change** — it forks
+`recipe_id` and it is tuning, so it belongs to Gnandeep and the consolidation line, not to
+this workstream.
+
+---
+
+## 4. Cost + provenance
+
+| job | what | elapsed | GPUs | GPU-h (held / worked) |
+|---|---|---|---|---|
+| 755 | bridge smoke, 3 chunks | 0:04 | 8 excl. | 0.5 / 0.1 |
+| **756** | **3a bridge — 629 chunks, 9 days** | **1:44:23** | 8 excl. | **13.9 / 13.9** |
+| 759 | ok-rate probe (8 blocks) | 0:03:08 | 8 excl. | 0.4 / 0.05 |
+| **767** | **3b Arm 1 — day-log, amplify, 5 chains, judge** | **4:36:14** | 8 excl. | **36.8 / 20.2** |
+| | | **6:28** | | **51.6 held / 34.3 worked** |
+
+(753 and 760 were cancelled before doing work — a `wait`-on-services bug and a superseded
+Arm-1 submission.) Chains: 3.82–3.85 h each, `Qwen/Qwen3-VL-8B-Instruct` (the base every
+baseline number is on), `consolidation-test-1min-v1.0`, replay `amp` 0.30, days
+5,9,12,13,17,21, rehearsal seed 7. Judge: `vertex_ai/gemini-2.5-flash`, 0 GPU.
+Artifacts: `~/phase3/{plan,daylog,corpus,reports}`, `~/phase3/context.db` (63 MB, the
+bridge's /context), chains in `continuum/var/phase3/arm1_s{0..4}`.

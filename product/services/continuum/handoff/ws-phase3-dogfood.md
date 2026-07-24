@@ -85,9 +85,16 @@ blob in GCS) and yields it as chunk(s); driven through the existing `POST /captu
   → Speed's 6 train days (5,9,12,13,17,21) + heldout (6,16,28) land in `/context` as rule-bent C2 for
   `user_id="replay-speed"`, via **real recording→DP→storage**. Arm 2's real ASR runs here.
   **Exit:** real C2 (caption + transcript) queryable by `(user, window)`; ASR spot-checked sane.
-- **3b — the measurement. ✅ DONE (2026-07-24, job 767).** See the report for the Arm-1
-  table and the verdict. The rule-bent day-log reproduces the 5-min baseline's block count
-  exactly on 5 of 6 train days.
+- **3b — the measurement. ✅ DONE (2026-07-24, job 767). VERDICT: separation did NOT
+  survive.** 5 seeds: separation 0.077 vs the 5-min baseline's 0.179 (p = 0.0067) and
+  statistically indistinguishable from the rehearsal-off control (p = 0.80). The rule-bent
+  day-log reproduces the baseline's block count exactly on 5 of 6 train days and the bridge
+  is exact, so this is NOT a pipeline defect: acquisition is 3.2x weaker (0.079 vs 0.249 on
+  the night a day is written) while retention is fine, tracking a 3.7x cut in amplification
+  dose per fact (48 retellings now cover 4.1x the block content). FIRST DECOMPOSITION STEP,
+  config only: inject the 5-min descriptions with segment_seconds=300, block_segments=1 —
+  same services, same spine, parity block content. Full write-up:
+  [phase-3-report.md](phase-3-report.md).
   ORIGINAL SCOPE: continuum fetches (caption-only filter) → Morpheus over the 6 days →
   Arm-1 verdict. **Exit:** the separation-survives table + one-line verdict.
 
