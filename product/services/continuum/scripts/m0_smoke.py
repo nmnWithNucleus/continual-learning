@@ -23,7 +23,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.config import get_settings                                  # noqa: E402
-from app.gate import run_gate                                        # noqa: E402
+from app.gate import run_gate
+from app.policy import load_policy                                        # noqa: E402
 from app.morpheus.blocks import load_blocks                          # noqa: E402
 from app.morpheus.eval import TRAP_ANSWER_TOKENS, PROBES_PER_DAY     # noqa: E402
 from app.morpheus.probes import (HELDOUT_SUITE, QA_SUITE, TRAPS_SUITE,  # noqa: E402
@@ -48,6 +49,8 @@ def main() -> int:
     ap.add_argument("--batch-size", type=int, default=0, help="0 = the recipe's value; "
                     "1 halves activation memory if 32B will not fit one card")
     ap.add_argument("--skip-vllm", action="store_true")
+    ap.add_argument("--resume", action="store_true",
+                    help="reuse a saved adapter and re-run only the eval/publish/serve tail")
     args = ap.parse_args()
 
     out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
@@ -60,26 +63,36 @@ def main() -> int:
                     "gate_mode": "REPORT-ONLY (thresholds under review; never for real runs)"}
 
     # ---- train one night ------------------------------------------------------
-    started = time.time()
     # 32B does not fit ONE card for CPT at any batch size (measured), so sharding is
     # not optional here — it comes from config so the scheduler's allocation decides.
     exec_cfg = get_settings().morpheus
-    adapter = LifeAdapter.open(base_model=args.base_model, device=args.device, seed=0,
-                               lora=LoraSpec(r=recipe.lora_r, alpha=recipe.lora_alpha),
-                               shard_gpus=exec_cfg.shard_gpus,
-                               shard_max_memory=exec_cfg.shard_max_memory,
-                               grad_checkpointing=True)
-    budget = matched_compute_budget(adapter.tokenizer, corpus, recipe.chunk_tokens)
-    stats = adapter.train_on(corpus, CptConfig(
-        epochs=args.epochs or recipe.epochs, seq_len=recipe.chunk_tokens,
-        batch_size=args.batch_size or recipe.batch_size, lr=recipe.lr,
-        max_chunks=budget), tag="m0")
-    record["train"] = stats.__dict__ | {"hours": round((time.time() - started) / 3600, 2),
-                                        "batch_size": args.batch_size or recipe.batch_size,
-                                        "shard_gpus": exec_cfg.shard_gpus,
-                                        "shard_max_memory": exec_cfg.shard_max_memory}
     adapter_dir = out / "adapter"
-    adapter.save(adapter_dir)
+    started = time.time()
+    if args.resume and (adapter_dir / "adapter_config.json").exists():
+        # A 32B night is ~2h; when only the (cheap) eval/publish/serve tail failed,
+        # re-running it must not re-train. Resume the saved adapter and continue.
+        adapter = LifeAdapter.open(base_model=args.base_model, device=args.device,
+                                   resume_adapter=adapter_dir,
+                                   shard_gpus=exec_cfg.shard_gpus,
+                                   shard_max_memory=exec_cfg.shard_max_memory)
+        record["train"] = {"resumed_from": str(adapter_dir), "retrained": False}
+        print(f"resumed saved adapter {adapter_dir} (no re-training)", flush=True)
+    else:
+        adapter = LifeAdapter.open(base_model=args.base_model, device=args.device, seed=0,
+                                   lora=LoraSpec(r=recipe.lora_r, alpha=recipe.lora_alpha),
+                                   shard_gpus=exec_cfg.shard_gpus,
+                                   shard_max_memory=exec_cfg.shard_max_memory,
+                                   grad_checkpointing=True)
+        budget = matched_compute_budget(adapter.tokenizer, corpus, recipe.chunk_tokens)
+        stats = adapter.train_on(corpus, CptConfig(
+            epochs=args.epochs or recipe.epochs, seq_len=recipe.chunk_tokens,
+            batch_size=args.batch_size or recipe.batch_size, lr=recipe.lr,
+            max_chunks=budget), tag="m0")
+        record["train"] = stats.__dict__ | {"hours": round((time.time() - started) / 3600, 2),
+                                            "batch_size": args.batch_size or recipe.batch_size,
+                                            "shard_gpus": exec_cfg.shard_gpus,
+                                            "shard_max_memory": exec_cfg.shard_max_memory}
+        adapter.save(adapter_dir)
     print(json.dumps(record["train"]), flush=True)
 
     # ---- eval -> gate verdict, recorded but NOT enforced -----------------------
@@ -96,10 +109,12 @@ def main() -> int:
     traps_pass = sum(trap_score("", p) for p in trap_preds) / max(1, len(trap_preds))
     # Judged recall needs the judge env; the dry run records the offline signal it
     # can compute here and leaves judging to the reporting step.
-    scores = EvalScores(new_day_recall=0.0, traps_pass=traps_pass, heldout_recall=0.0,
+    scores = EvalScores(new_day_recall=0.0, traps_pass=traps_pass,
+                        heldout_n=len(held), base_heldout_n=len(held),
                         n_probes=len(qa) + len(held) + len(traps),
                         extras={"note": "recall judged separately; traps are offline"})
-    gate = run_gate(scores, recipe)
+    policy = load_policy(Path(__file__).resolve().parents[1] / 'policies' / 'gate-policy-v1.1.json')
+    gate = run_gate(scores, policy)
     record["gate"] = {"passed": gate.passed, "checks": gate.checks, "reasons": gate.reasons,
                       "skipped": list(gate.skipped), "traps_pass": round(traps_pass, 4),
                       "enforced": False}
