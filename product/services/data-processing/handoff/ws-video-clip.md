@@ -1281,3 +1281,67 @@ thoughts.md` pipeline is therefore only implementable on the det+rec shape; the 
   but `storage/app/dev.db` holds **86 `vidproc-mock-v0` caption records** (125 total) from earlier
   dev runs. Mock dialect, dev users — the fresh-`user_id` cutover rule is unaffected, but the
   sentence now says what is actually on disk.
+
+---
+
+## Build log — WS-A (wire probe & serving prerequisites)
+
+**Branch `svc/vc-ws-a`. Delivered:** `scripts/vlm_probe.py`, `scripts/ocr_probe.py`,
+`handoff/ws-video-clip-probe.md` (the full capability report). No `app/` files touched. DP suite
+**173 passed** (`ASR_BACKEND=mock`), unchanged — the deliverables are scripts + a handoff doc,
+imported by nothing in the suite.
+
+**How verified.** No VL endpoint is served on this box by default (`:8000` → connection refused), so
+the four curls were **not run live** — stated plainly, not fabricated. Instead every assumption was
+read from the installed serving stack on this node (`vllm-cu13` = **vLLM 0.24.0**, transformers
+5.13.0, the Qwen3-VL-32B `config.json` / `preprocessor_config.json` in the HF cache) — the §12.1
+method — and the two load-bearing claims were **adversarially re-checked** by skeptic agents. The
+probe scripts speak the exact `app/vision/vlm.py` wire and are the ~60 s live confirmation for when
+E-3(b) stands up the captioner endpoint. Each claim in the report carries installed-source `file:line`.
+
+**Findings (all four probes PASS on source evidence; zero *mandatory* launch-flag changes):**
+
+1. **`--limit-mm-per-prompt` — DESIGN ASSUMPTION CORRECTED.** The premise "default is commonly
+   `image=1`, so the multi-image call 400s unless raised" is **false for vLLM 0.24.0**: the image cap
+   **defaults to 999** (`config/multimodal.py:80,84,320-322`) and Qwen3-VL's model-side supported
+   limit is `None`/unlimited (`qwen2_vl.py:868-869`, inherited by `qwen3_vl.py`). **K≤12 images in one
+   message already validate on the current, unmodified `serve_vllm.sh`.** ⇒ **WS-D ships
+   `screen-clip-v1` (multi-image) as the default; `screen-clip-single-v1` (K=1) is the documented
+   degraded/interactive profile, NOT a forced fallback.** The D-02/§11-WS-A fallback branch does not
+   activate. *(Adversarial verdict: "flag IS required" → REFUTED, high confidence.)*
+2. **Guided decoding — available, ON by default.** `response_format:{"type":"json_schema",
+   "json_schema":{"name","schema":{…}}}` is accepted, backend `auto` (xgrammar-first), no flag needed
+   (`engine/protocol.py:123-164`, `config/structured_outputs.py:21-25`; xgrammar 0.2.3 / llguidance /
+   outlines_core all installed). Recommend pinning `backend=xgrammar` for reproducibility (the `auto`
+   default is documented as changing across releases).
+3. **768×480 → exactly 360 tokens (factor 32), no clamp.** patch 16 × merge 2 = 32
+   (`config.json`; smart_resize `factor=32` overrides the legacy 28, `image_processing_qwen2_vl.py:174`
+   / `qwen3_vl.py:929`). `preprocessor_config` `size={65536,16777216}` are AREA min/max_pixels; a
+   768×480 frame (368,640 px) sits ~45× under the cap ⇒ not downscaled. The factor-28 (≈470) and
+   "materially lower/clamping" branches do **not** fire. *(Adversarial verdict: UPHELD, high
+   confidence — survives even the video-path cap.)* `1280×800` = **1000 tok** (2.78× of 768 — A-16's
+   cost-blowup, quantified).
+4. **`video_url` data-URI — supported & first-class** (`chat_utils.py:179-190`, `media/video.py`);
+   0.24.0 is post the Qwen3-VL timestamp-AssertionError fix (`qwen3_vl.py:1451-1454`; 0.24.0 > 0.19.1).
+   Informational (O-4). DP still chooses K-stills because `video_url` cedes frame selection to the
+   server's OpenCV decode — non-deterministic/non-auditable, the exact hazard D-02/§12.1 rejects.
+
+**Exact flags for E-3(a) (precise, updated ask).** *Strictly required for the image path on vLLM
+0.24.0: none.* Recommended as determinism / version-drift guards on the multimodal launch:
+```
+--limit-mm-per-prompt '{"image":16}'                                    # JSON string only; image=16 is rejected. Pins ≥K=12 (tightens 999→16, safe).
+--mm-processor-kwargs '{"size":{"shortest_edge":65536,"longest_edge":16777216}}'   # pins the pixel cap at today's default; image path also accepts {"max_pixels":…,"min_pixels":…}
+--structured-outputs-config '{"backend":"xgrammar"}'                    # pin guided-decoding backend (confirm exact CLI spelling on the box)
+```
+The genuine remaining serving ask is **E-3(b)** — a captioner endpoint distinct from `:8000` — which
+this report leaves fully intact (the GPU-contention argument is unchanged).
+
+**OCR probe (for WS-C) — honest SKIP.** No OCR runtime exists on this box (no `paddleocr`/`rapidocr`
+in any conda env), and `sidecars/ocr/` is WS-C's to build. `ocr_probe.py` SKIPs cleanly and states the
+`/health` model-pin + `/ocr` contract it will check and the §7.1 "0.6 s/1728×1080 frame" assumption it
+will time — via a **separate** interpreter (never importing paddle into the numpy-2.5.1 DP venv, §12.3).
+Gated on O-2 (WS-C's own deliverable); WS-A ships the instrument, not the verdict.
+
+**Exit criteria met:** the report exists, is committed, names the exact flags, and feeds E-3(a) without
+being blocked by it — the probe's job was to make the ask precise, and it did: the ask is now *lighter*
+(the multi-image call needs no serving change to be admitted) and *sharper* (E-3(b) is the real one).
