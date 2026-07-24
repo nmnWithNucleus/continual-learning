@@ -94,7 +94,24 @@ A kernel is "ported" only when its parity test is green. No green, no merge.
 - **Config knobs** (`config.py`): `MORPHEUS_DEVICE` (GPU index — GPU 0 hardcoding is gone),
   `gpu_memory_utilization`, interpreter/container path, model paths from config not
   `/home/ubuntu/engram`.
-- Job submission = our scheduler/SLURM wrapper, chained by dependency, **not** background pollers.
+- **ALL GPU work goes through SLURM — mandatory, no hand-placed jobs.** `sbatch` with explicit
+  `--gres=gpu:N` (32B needs `:2`), `--job-name`, `--output`, `--time`; nights chained with
+  `--dependency=afterok:`, never background pollers. Rationale, learned the hard way on
+  2026-07-23: the co-tenant's job 698 *was* a SLURM job and therefore visible in `squeue`, while
+  our work was hand-placed and invisible — unscheduled work racing scheduled work. Manual
+  placement also produced four of that night's five tooling defects (a `flock` that only bound
+  lanes started after it, a free-memory probe blind to a sibling lane's startup, two lanes landing
+  on one GPU twice, and `pkill -f` matching its own shell). **SLURM's allocator replaces all of
+  that tooling — delete it, don't fix it.** Use `scancel <jobid>`, never `pkill`.
+- **SLURM interaction gotchas:** (a) SLURM sets `CUDA_VISIBLE_DEVICES` for the allocation, so jobs
+  must use the *allocated* device (relative index 0 within the job), **not** an absolute node index
+  — `MORPHEUS_DEVICE` must not override a SLURM allocation or the job writes to the wrong card;
+  (b) SLURM hides GPUs without `--gpus-per-node=N`, even on the exclusive partition;
+  (c) `sbatch --export=NAME=a,b` **splits on commas** and silently truncates a list to its first
+  element (this cost the research chain a 12-day run that became 1-day) — pass dot-separated or
+  `--export=ALL`; (d) never deploy over an sbatch file a running job is executing from NFS.
+- Job names must be readable to co-tenants in `squeue` (`morpheus-chain-s3`, `morpheus-32b-m0`) —
+  the node is shared and our usage should be legible to whoever looks.
 
 ## 6. The `Profile` seam (the single de-Speed lever)
 
