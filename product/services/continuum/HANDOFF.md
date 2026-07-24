@@ -58,7 +58,26 @@ C2 records).
    E2E seed ensemble run on the node. → 2b full cycle + M0 (adapter loads in vLLM) → 2c lean
    architecture + storage-client seams. Spec:
    [handoff/ws-morpheus-port.md](handoff/ws-morpheus-port.md) · results:
-   [handoff/phase-2a-report.md](handoff/phase-2a-report.md).
+   [handoff/phase-2a-report.md](handoff/phase-2a-report.md),
+   [handoff/overnight-diagnosis-report.md](handoff/overnight-diagnosis-report.md).
+   **2a signed off by the cofounders 2026-07-24** — the overnight run closed the last unverified
+   kernel surface (rehearsal sampler **byte-identical, 5 nights × 14 seeds**) and cleared the
+   single-night trainer (reference's 0.45 = the **70th percentile of our own 8 draws**).
+   - **Gate policy RATIFIED:** traps ≥0.15 interim / ≥0.25 at ~150 probes; heldout over all 222
+     probes via a one-sided exact test against each run's own base control (α=0.01), 0.15 backstop;
+     `min_probes` 150→**148**. All three prior values blocked ~everything *including the validated
+     recipe's own output* — the traps floor alone blocked 71% of reference nights, and its
+     night-to-night sd equals binomial noise at n=28 to three decimals.
+   - **Structural (do with the ratification):** split **gate policy** from the **training recipe**.
+     `cycle.py` hashes `recipe_id` into the amplify/train stage keys, so editing a publish-policy
+     threshold would fork `recipe_id`, invalidate hours of GPU cache, and falsely imply the trained
+     artifact changed. Only the training recipe may enter a stage key.
+   - **2b prerequisite (measured):** 32B training needs **≥2 GPUs** — a 32B forward OOMs on one
+     H100 at any batch size. 32B *serving* (base + our recipe-shaped LoRA) already proven.
+   - **Open, non-blocking:** seed 0 under-performs via **retention, not acquisition**; next test is
+     a zero-GPU rehearsal-composition count (did its draws under-sample day-5 paragraphs?).
+   - **Capacity unblocked 2026-07-24:** node-7's GPUs are all free (confirmed with Gnandeep) — the
+     co-tenant constraint that limited the overnight run is gone.
 4. **Phase 3 — DP dogfood (later):** records → storage day-log view → continuum; measures the
    shape-gap vs Phase 2 (the R1b domain-transfer result).
 

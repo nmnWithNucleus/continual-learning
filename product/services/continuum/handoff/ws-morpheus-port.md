@@ -111,7 +111,16 @@ Phases 2a–2c; do not build the lifestream profile yet, just keep the seam clea
   existing day-log blocks (`~/engram/data/corpus/day{D}.blocks.jsonl`). Green the §4 parity
   harness. **Exit:** every kernel's parity test green; E2E seed-ensemble in-band vs the goldens.
   → **kernels + harness landed** on `svc/continuum-morpheus-2a`; every kernel parity test green;
-  E2E seed ensemble measured. Full write-up: [phase-2a-report.md](phase-2a-report.md).
+  E2E seed ensemble measured. **✅ 2a COMPLETE (cofounders, 2026-07-24)** — the rehearsal sampler
+  is now proven **byte-identical on 5 nights × 14 seeds**, closing the last unverified kernel
+  surface; the ensemble is statistically indistinguishable from the reference (exact permutation
+  test, p = 0.514); the eval path is independently validated (the *reference's* adapter scores
+  0.45 through our eval code — its exact golden value). Write-ups:
+  [phase-2a-report.md](phase-2a-report.md), [overnight-diagnosis-report.md](overnight-diagnosis-report.md).
+  **Residual open item (tracked, NOT a blocker):** seed 0 under-performs — localised to
+  *accumulation across nights*, specifically **retention, not acquisition** (it wrote day 5 at
+  0.25 then decayed to 0.05 while the reference held 0.23 → 0.23). Sampler and single-night
+  trainer both cleared, so this is a variance question — see §10.
   *Golden-path corrections found on the node:* the seed-0 reference run is
   `results/phased/replay_f30` (no `_s0` suffix), and the ref-eval set is
   `results/phased/_refeval/`, not `results/refeval/`. "Separation" in §2 is
@@ -121,6 +130,15 @@ Phases 2a–2c; do not build the lifestream profile yet, just keep the seam clea
   (`TRAINER_BACKEND=morpheus` replacing `mock`/`engram`), producing a real 32B life adapter that
   **publishes via C5 and loads in vLLM**. Uses the scaffold's local storage stand-ins for now.
   **Exit:** charter M0 — one Speed day → adapter → loads in vLLM, through our gate + publish.
+  **PREREQUISITE (measured 2026-07-23): 32B training requires ≥2 GPUs.** A 32B forward OOMs on a
+  single H100 at *any* batch size (79.15/79.18 GiB at bsz 2, 79.16 at bsz 1 — it fails at the first
+  forward, so no step/corpus change helps). `--shard 2` was never optional; `MORPHEUS_SHARD_MAX_MEMORY`
+  now controls per-card budget. Already proven: the **full mechanic end-to-end on 8B** (train →
+  report-only gate → C5 `entries.jsonl`+`active.json` → **vLLM load OK**, answering from Day 5), and
+  **32B base + an r128/α256 LoRA of our recipe shape loads and serves** (the earlier failure was
+  KV-cache budgeting at util 0.90/len 4096, not LoRA incompatibility). Still to establish: a 32B
+  adapter *we* trained end to end. **2b's bar is M0 mechanics + in-band sanity, NOT strict parity** —
+  there is no 32B golden at this probe set to diff against.
 - **2c — lean architecture + storage seams (client side).** Introduce the storage **client
   interfaces** the lean shape needs — day-log fetch (C10-evolved), recipe-registry fetch,
   reservoir write + replay-read — each with a **local implementation now, HTTP-to-storage later**
@@ -142,6 +160,46 @@ change never confounds a port bug.
 - Report per phase: parity-harness results (kernel diffs + E2E seed-ensemble table), M0
   evidence (adapter loads in vLLM), env lockfiles captured, wall-clock/GPU-h, and any deviation
   from the goldens with a root-cause. Cofounders review before the next phase.
+
+## 8b. Gate policy — RATIFIED (cofounders, 2026-07-24)
+
+All three publish-gate checks were mis-calibrated: each blocked ~everything, **including the
+validated recipe's own output**. They were written from the design doc's numbers and never tested
+against a measured distribution. Adopt [gate-threshold-proposal.md](gate-threshold-proposal.md):
+
+| check | was | now | why |
+|---|---|---|---|
+| traps | ≥0.40 | **≥0.15 interim; ≥0.25 once the suite reaches ~150 probes** | 0.40 blocks **71% of the reference recipe's own nights**. Decisive: reference night-to-night sd (0.090) **equals binomial noise at n=28 (0.090) to three decimals — the metric currently measures nothing but sampling.** 0.15 gives 0.9% false-block, 98.8% collapse detection |
+| heldout | ≤0.05 on 60 probes | **all 222 probes + one-sided exact test vs each run's OWN base control (α=0.01 → blocks above 5/222), 0.15 absolute backstop** | No systematic leak exists (base 0/60 on all seven runs; seed 0 also 0/60). But n=60 has 12% power against 2% contamination while sitting two probes from a false block. The suite already holds 222 probes and the harness was using 60 |
+| min_probes | ≥150 | **148** (or grow the suites) | The harness supplies exactly 148 (60+60+28) — the floor was **unpassable by construction** |
+
+**Structural fix, required with the above.** Gate thresholds currently live inside
+`recipes/consolidation-v1.0.json`, and `cycle.py` hashes `recipe_id` into the **amplify and train**
+stage keys. So editing a *publish-policy* threshold forks `recipe_id` → invalidates the amplify and
+train caches → re-runs hours of GPU work, and falsely implies the trained artifact changed.
+**Split them:** the training recipe (parity-critical, frozen) and the **gate policy** (tunable,
+separately versioned) become two artifacts, both storage-hosted per the lean architecture. Only the
+training recipe may enter a stage key. Ratifying these thresholds must not fork `recipe_id`.
+
+## 10. Open item — seed 0 (tracked; does not block 2b)
+
+Cleared: the rehearsal sampler (byte-identical, 5 nights × 14 seeds) and the single-night trainer
+(the reference's 0.45 is the **70th percentile of our own 8 draws**, mean 0.3708 sd 0.074 — our
+single-night training is the same distribution). Seed 0's values sit *below everything a single
+night produces*, so the deficit **accumulates across the chain**.
+
+Sharper framing than either report states: seed 0 **acquired day 5 fine (0.25) and then failed to
+retain it (0.05)**, while the reference held 0.23 → 0.23. This is a *forgetting* failure, and
+replay is precisely the anti-forgetting mechanism. The sampler is the same **function**, but the
+**draw** is seed-dependent — so the live hypothesis is that seed 0's draws under-sampled day-5
+paragraphs across nights 2–5. That is now **measurable for zero GPU**, because rehearsal dumps are
+generatable: count per-source-day paragraphs in each night's rehearsal, ours vs reference. Test
+this before spending chain-hours.
+
+Variance context: per-night draw noise sd 0.074 over 6 averaged days predicts a chain sd of
+≈0.030 — the reference's actual chain sd is **0.033**, so the reference's whole chain-to-chain
+spread is explained by ordinary draw noise. Ours is 0.072 (≈2.4×), driven entirely by seed 0; at
+n=3 that is suggestive, not conclusive (the inference chains through two noisy estimates).
 
 ## 9. Divergence log (record every deliberate departure from `b3c58e1` behavior)
 
