@@ -134,20 +134,21 @@ Phases 2a–2c; do not build the lifestream profile yet, just keep the seam clea
   test, p = 0.514); the eval path is independently validated (the *reference's* adapter scores
   0.45 through our eval code — its exact golden value). Write-ups:
   [phase-2a-report.md](phase-2a-report.md), [overnight-diagnosis-report.md](overnight-diagnosis-report.md).
-  **Residual open item (tracked, NOT a blocker):** seed 0 under-performs — localised to
-  *accumulation across nights*, specifically **retention, not acquisition** (it wrote day 5 at
-  0.25 then decayed to 0.05 while the reference held 0.23 → 0.23). Sampler and single-night
-  trainer both cleared, so this is a variance question — see §10.
+  **Seed 0 — CLOSED (2026-07-24): a measurement artifact, not a defect.** At matched depth
+  (reference n=8, ours n=10) the ensembles are statistically indistinguishable (permutation
+  **p=0.82**) and the reference's own low tail holds a **0.042 chain, lower than any of our ten**.
+  The "2× variance" was the reference under-sampled at n=4. No action. (Kept in §10 for the two
+  falsified hypotheses, so nobody re-derives them.)
   *Golden-path corrections found on the node:* the seed-0 reference run is
   `results/phased/replay_f30` (no `_s0` suffix), and the ref-eval set is
   `results/phased/_refeval/`, not `results/refeval/`. "Separation" in §2 is
   **seen-mean − final heldout** (0.2694 / 0.1778 / 0.2028 across the three seeds), which is what
   reproduces the quoted +0.178…+0.269 spread.
-- **2b — full nightly cycle + M0.** Wire the real Morpheus backend into `cycle.py`
-  (`TRAINER_BACKEND=morpheus` replacing `mock`/`engram`), producing a real 32B life adapter that
-  **publishes via C5 and loads in vLLM**. Uses the scaffold's local storage stand-ins for now.
-  **Exit:** charter M0 — one Speed day → adapter → loads in vLLM, through our gate + publish.
-  **PREREQUISITE (measured 2026-07-23): 32B training requires ≥2 GPUs.** A 32B forward OOMs on a
+- **2b — full nightly cycle + M0. ✅ DONE (2026-07-24).** A 32B life adapter trained by our own
+  pipeline (sharded 2-GPU, 4203 steps, loss 1.718→0.263, 1.97h) → **gate v1.1 → C5 publish →
+  loaded in vLLM and answered** (recall 0.267). M0 met on the production base model. Bar was M0
+  mechanics + in-band sanity (no 32B golden exists at this probe set), and it cleared.
+  **PREREQUISITE confirmed real: 32B training requires ≥2 GPUs.** A 32B forward OOMs on a
   single H100 at *any* batch size (79.15/79.18 GiB at bsz 2, 79.16 at bsz 1 — it fails at the first
   forward, so no step/corpus change helps). `--shard 2` was never optional; `MORPHEUS_SHARD_MAX_MEMORY`
   now controls per-card budget. Already proven: the **full mechanic end-to-end on 8B** (train →
@@ -178,10 +179,11 @@ change never confounds a port bug.
   evidence (adapter loads in vLLM), env lockfiles captured, wall-clock/GPU-h, and any deviation
   from the goldens with a root-cause. Cofounders review before the next phase.
 
-## 8b. Gate policy — RATIFIED (cofounders, 2026-07-24)
+## 8b. Gate policy — RATIFIED + ADOPTED as the default gate (cofounders, 2026-07-24)
 
-All three publish-gate checks were mis-calibrated: each blocked ~everything, **including the
-validated recipe's own output**. They were written from the design doc's numbers and never tested
+`gate-policy-v1.1.json` is the live default (low risk — no production users yet; the old
+thresholds were provably unshippable). All three publish-gate checks were mis-calibrated: each
+blocked ~everything, **including the validated recipe's own output**. They were written from the design doc's numbers and never tested
 against a measured distribution. Adopt [gate-threshold-proposal.md](gate-threshold-proposal.md):
 
 | check | was | now | why |
