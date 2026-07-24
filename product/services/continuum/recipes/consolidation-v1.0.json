@@ -1,14 +1,14 @@
 {
   "recipe_id": "consolidation-v1.0",
   "source": "nucleus-research consolidation line @ b3c58e1 (provenance only). Knobs confirmed against the Phase-1 goldens: replay frac 0.30, source amp, neg_boost 0. Flipping source to rawlog is a validated tie but needs the day-log fetch client and forks recipe_id to v1.1.",
-  "note": "Provenance/commit re-pin only — no knob changed, so recipe_id stands and artifacts trained under it remain comparable.",
+  "note": "Provenance/commit re-pin only \u2014 no TRAINING knob changed, so recipe_id stands and artifacts trained under it remain comparable. Gate/publish thresholds moved OUT to policies/gate-policy-v1.1.json (ratified 2026-07-24): they are publish policy, and recipe_id enters the amplify/train stage keys.",
   "amplify": {
     "variants": 48,
     "neg_frac": 0.15,
     "ok_rate_min": 0.85
   },
   "replay": {
-    "frac": 0.30,
+    "frac": 0.3,
     "source": "amp",
     "neg_boost": 0.0
   },
@@ -25,17 +25,6 @@
     "quality_min": 0.5,
     "block_segments": 12,
     "segment_seconds": 10
-  },
-  "gate": {
-    "new_day_recall_min": 0.15,
-    "traps_pass_min": 0.40,
-    "heldout_recall_max": 0.05,
-    "decay_retention_min": 0.5,
-    "min_probes": 150,
-    "consecutive_fail_freeze": 2
-  },
-  "publish": {
-    "snapshot_retention": 14
   },
   "window": {
     "boundary_local_time": "04:00"

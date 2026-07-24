@@ -7,9 +7,10 @@ from app.synth import synth_records
 from app.window import window_for
 
 
-def _night(user, day, recipe, seed=1):
+def _night(user, day, recipe, seed=1, policy=None):
     win = window_for(user, date(2026, 7, day), "UTC")
-    return run_cycle(synth_records(win, seed=seed, events=20), win, recipe=recipe), win
+    return run_cycle(synth_records(win, seed=seed, events=20), win,
+                     recipe=recipe, policy=policy), win
 
 
 def test_failed_gate_never_activates_and_prior_adapter_survives(
@@ -59,10 +60,10 @@ def test_rollback_restores_prior_version(var_dir, small_recipe):
     assert directory.active("u-rb")["adapter_version"] == first.adapter_version
 
 
-def test_snapshot_retention_prunes_old_never_active(var_dir, small_recipe):
+def test_snapshot_retention_prunes_old_never_active(var_dir, small_recipe, small_policy):
     versions = []
     for day in (15, 16, 17, 18, 19):
-        r, _ = _night("u-p", day, small_recipe, seed=day)
+        r, _ = _night("u-p", day, small_recipe, seed=day, policy=small_policy)
         versions.append(r.adapter_version)
     directory = ModelDirectory(var_dir)
     entries = directory.entries("u-p")

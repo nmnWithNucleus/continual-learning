@@ -83,12 +83,14 @@ class MockBackend:
     def evaluate(self, adapter_dir: str, blocks: list[Block], recipe: Recipe) -> EvalScores:
         if get_settings().mock_gate == "fail":
             return EvalScores(new_day_recall=0.02, traps_pass=0.10,
-                              heldout_recall=0.30, n_probes=recipe.min_probes,
-                              extras={"forced": "MOCK_GATE=fail"})
+                              heldout_hits=18, heldout_n=60,       # 0.30, way over backstop
+                              base_heldout_hits=0, base_heldout_n=60,
+                              n_probes=148, extras={"forced": "MOCK_GATE=fail"})
         # Deterministic passing scores, mildly version-dependent so different
         # nights are distinguishable in journals/dashboards (basename, not the
         # absolute path — scores must survive a var_dir move).
         jitter = int(_h(Path(adapter_dir).name)[:2], 16) / 255.0 * 0.05
         return EvalScores(new_day_recall=0.26 + jitter, traps_pass=0.50,
-                          heldout_recall=0.02, n_probes=max(recipe.min_probes, 150),
-                          extras={})
+                          heldout_hits=1, heldout_n=222,           # indistinguishable from base
+                          base_heldout_hits=0, base_heldout_n=222,
+                          n_probes=310, extras={})

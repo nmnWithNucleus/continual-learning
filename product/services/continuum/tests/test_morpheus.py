@@ -428,3 +428,14 @@ def test_shard_budget_is_configurable_not_assumed(monkeypatch):
     assert 'max_memory={i: "' not in source, "per-card shard budget hardcoded in the loader"
     monkeypatch.setenv("MORPHEUS_SHARD_MAX_MEMORY", "38GiB")
     assert get_settings().morpheus.shard_max_memory == "38GiB"
+
+
+def test_scheduler_allocation_beats_morpheus_device(monkeypatch):
+    """Under SLURM the allocated cards are renumbered from 0, so an absolute node
+    index would address a card we were not given. The scheduler must win."""
+    from app.config import get_settings
+    monkeypatch.setenv("MORPHEUS_DEVICE", "cuda:3")
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    assert get_settings().morpheus.device == "cuda:3"          # bare local run
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "5,6")
+    assert get_settings().morpheus.device == "cuda:0"          # allocated run

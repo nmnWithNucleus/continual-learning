@@ -22,6 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from app.config import get_settings                                  # noqa: E402
 from app.gate import run_gate                                        # noqa: E402
 from app.morpheus.blocks import load_blocks                          # noqa: E402
 from app.morpheus.eval import TRAP_ANSWER_TOKENS, PROBES_PER_DAY     # noqa: E402
@@ -60,16 +61,23 @@ def main() -> int:
 
     # ---- train one night ------------------------------------------------------
     started = time.time()
+    # 32B does not fit ONE card for CPT at any batch size (measured), so sharding is
+    # not optional here — it comes from config so the scheduler's allocation decides.
+    exec_cfg = get_settings().morpheus
     adapter = LifeAdapter.open(base_model=args.base_model, device=args.device, seed=0,
                                lora=LoraSpec(r=recipe.lora_r, alpha=recipe.lora_alpha),
-                               grad_checkpointing=True)   # 32B does not fit one card without it
+                               shard_gpus=exec_cfg.shard_gpus,
+                               shard_max_memory=exec_cfg.shard_max_memory,
+                               grad_checkpointing=True)
     budget = matched_compute_budget(adapter.tokenizer, corpus, recipe.chunk_tokens)
     stats = adapter.train_on(corpus, CptConfig(
         epochs=args.epochs or recipe.epochs, seq_len=recipe.chunk_tokens,
         batch_size=args.batch_size or recipe.batch_size, lr=recipe.lr,
         max_chunks=budget), tag="m0")
     record["train"] = stats.__dict__ | {"hours": round((time.time() - started) / 3600, 2),
-                                        "batch_size": args.batch_size or recipe.batch_size}
+                                        "batch_size": args.batch_size or recipe.batch_size,
+                                        "shard_gpus": exec_cfg.shard_gpus,
+                                        "shard_max_memory": exec_cfg.shard_max_memory}
     adapter_dir = out / "adapter"
     adapter.save(adapter_dir)
     print(json.dumps(record["train"]), flush=True)

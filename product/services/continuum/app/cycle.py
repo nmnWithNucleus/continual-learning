@@ -32,6 +32,7 @@ from .config import get_settings
 from .daylog import build_daylog, corpus_blocks
 from .gate import GateReport, run_gate
 from .ids import validate_id
+from .policy import GatePolicy, load_policy
 from .publish import ModelDirectory, PublishResult
 from .recipe import Recipe, load_recipe
 from .renderer import blocks_text, render_corpus_file, render_daylog_files
@@ -117,11 +118,15 @@ class _UserState:
 
 
 def run_cycle(records: list[dict[str, Any]], win: Window, *,
-              recipe: Recipe | None = None, force: bool = False) -> CycleResult:
+              recipe: Recipe | None = None, policy: GatePolicy | None = None,
+              force: bool = False) -> CycleResult:
     validate_id(win.user_id, "user_id")
     validate_id(win.window_id, "window_id")
     settings = get_settings()
     recipe = recipe or load_recipe(settings.recipe_path)
+    # Publish policy is loaded separately and never reaches a stage key: a
+    # threshold change must not invalidate the amplify/train caches.
+    policy = policy or load_policy(settings.policy_path)
     var_dir = Path(settings.var_dir)
     backend = get_backend(settings.trainer_backend)
     reservoir = Reservoir(var_dir)
@@ -238,13 +243,13 @@ def run_cycle(records: list[dict[str, Any]], win: Window, *,
 
     # ---- stage: gate -------------------------------------------------------------
     scores = backend.evaluate(adapter_dir, eligible, recipe)
-    gate = run_gate(scores, recipe)
+    gate = run_gate(scores, policy)
     journal.record("gate", _h(train_key), passed=gate.passed, checks=gate.checks,
                    reasons=gate.reasons, scores=gate.scores,
                    skipped_checks=list(gate.skipped))
     run_stages.append("gate")
     eval_report = {**(gate.scores or {}), "checks": gate.checks,
-                   "skipped_checks": list(gate.skipped)}
+                   "skipped_checks": list(gate.skipped), "policy_id": gate.policy_id}
 
     # ---- stage: publish / record + reservoir admission ---------------------------
     if gate.passed:
@@ -253,7 +258,7 @@ def run_cycle(records: list[dict[str, Any]], win: Window, *,
             adapter_dir=adapter_dir, base_model_hash=BASE_MODEL_HASH,
             training_window=win.window_id, recipe_id=recipe.recipe_id,
             eval_report=eval_report,
-            snapshot_retention=recipe.snapshot_retention)
+            snapshot_retention=policy.snapshot_retention)
         state.record_pass(win.window_id)
         # A passed night admits the corpus to the permanent reservoir.
         reservoir.admit(win.user_id, win.window_id, recipe.recipe_id, amp_text)
@@ -263,7 +268,7 @@ def run_cycle(records: list[dict[str, Any]], win: Window, *,
             user_id=win.user_id, adapter_version=adapter_version,
             training_window=win.window_id, recipe_id=recipe.recipe_id,
             eval_report={"reasons": gate.reasons, **eval_report})
-        state.strike(win.window_id, recipe.consecutive_fail_freeze)
+        state.strike(win.window_id, policy.consecutive_fail_freeze)
         status = "gate_failed"
 
     journal.record("publish", terminal_key, status=status,

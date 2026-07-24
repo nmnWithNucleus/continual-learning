@@ -1,0 +1,31 @@
+{
+  "recipe_id": "consolidation-seq-v1.0",
+  "source": "The SEQ arm: recipe v1.0 with rehearsal OFF. Not a candidate for production \u2014 it is the reference's own negative control, and reproducing its FAILURE is what shows the harness detects regressions rather than merely agreeing with good runs.",
+  "amplify": {
+    "variants": 48,
+    "neg_frac": 0.15,
+    "ok_rate_min": 0.85
+  },
+  "replay": {
+    "frac": 0.0,
+    "source": "amp",
+    "neg_boost": 0.0
+  },
+  "train": {
+    "lora_r": 128,
+    "lora_alpha": 256,
+    "lr": 0.0001,
+    "epochs": 3,
+    "batch_size": 2,
+    "chunk_tokens": 1024,
+    "objective": "next-token CPT (never QA-SFT)"
+  },
+  "corpus": {
+    "quality_min": 0.5,
+    "block_segments": 12,
+    "segment_seconds": 10
+  },
+  "window": {
+    "boundary_local_time": "04:00"
+  }
+}
