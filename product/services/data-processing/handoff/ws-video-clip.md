@@ -7,6 +7,73 @@
 
 ---
 
+## Decision addendum — OCR↔caption coupling RATIFIED (2026-07-24)
+
+A second design pass (17-agent fan-out: 4 grounds · 4 advocates A/B/C/D · 3 priority-split judges ·
+5 adversarial lenses · decision) settled the founder's question — *"why not a separate OCR record,
+woven only at consolidation?"* The separate `kind='ocr'` record already exists (D-08); the live
+question was whether the captioner **sees** the OCR text as input (Architecture **A**, injection,
+D-09) or is produced blind with fusion deferred to consolidation (**B** juxtapose / **C** fuse-at-
+consolidation / **D** minimal-hint).
+
+**VERDICT: keep A (injection), exactly as the stage graph is written — `clipcap.needs =
+("clipprep","screentext")`, injection per D-09.** The stage graph does **not** change. Reasons,
+each verified against source:
+- **"Fuse at consolidation" asks the one model there to do what it is forbidden to do.** The day-log
+  renderer is dumb string concatenation (`daylog.py:152-164`); the only model in the nightly loop is
+  the amplifier, whose prompt says *"keep every … name and on-screen/world text verbatim. Do not
+  invent"* (`speed.py:63-64`) — it must **not** manufacture the string→action binding, and it
+  restates whatever it is given ~48×/block. So *"at 13:04 the user wrote to Sarah about the Q3 deck"*
+  is **never written as text** under defer-fusion; injection binds it once, as prose, where the
+  pixels + PTS + region roles + OCR confidences live. *(This corrects my own earlier finding: the
+  amplifier is a model, but it is a model instructed NOT to fuse — so it cannot stand in for
+  injection.)*
+- **Failure isolation — the intuitive win — is illegal, three ways.** It needs `screentext` to be
+  `best_effort`, which the executor's best-effort cone forbids (`executor.py:207-219`), R3(b)
+  forbids (fragment + best_effort), and which would silently rewrite the OCR record under a stable
+  `record_id`. B-required / C / D **all** dead-letter 100 % of video chunks on an OCR outage,
+  identical to A. Decoupling buys **zero** on failure.
+- **Version isolation is illusory.** `record_id` hashes one flat `pipeline_version` per chunk
+  (`pipeline.py:33-46`); a decoupled OCR stage either keeps its fragment (caption re-keys anyway) or
+  drops it (silent overwrite). Same fork under A and B alike.
+- **B pays all of A's costs and delivers none of its benefit**, so the fallback if A fails its gate
+  is **D**, not B. C is unbuilt, unscheduled, blocked on M4, and breaks `build_daylog` purity.
+
+**Accepted costs of A (now in §8 caveats, not "fixed"):** +0.36 s @10 s / +1.8 s @60 s serialised
+OCR latency; a jointly-sourced pair the amplifier can reinforce 48× (bounded by new R2 Corollary 2);
+an OCR knob honestly re-keys the day's captions (OCR is a real caption input).
+
+**The one thing the design got wrong: it argued the grounding premise instead of measuring it.**
+So A's cutover is **gated on O-8** (below): a $15 / ~40 s blind-vs-injected A/B, pre-registered rule
+— ship A iff `named_entity_recall(A) − named_entity_recall(B) > 0.25` **and**
+`propagation_rate < 0.10` on a 30 %-corrupted-OCR arm; else ship **D**.
+
+**Six ratified edits (this addendum IS the record; fold into the numbered sections at integration):**
+1. **§9 O-8** — the blind-vs-injected gate above. WS-H adds one pack file `screen-clip-blind-v1`
+   (+ `screen-clip-hint-v1` for the D fallback) to `prompt_ab.py`; arms fork `pipeline_version` by
+   pack digest so they cannot collide.
+2. **D-09 / §8 counter** — widen `dp_caption_ungrounded_quote_total` from double-quoted spans to all
+   named ≥4-char strings (measured 32.6 % of OCR-derived strings enter the caption unquoted and
+   escape the current check). One regex in the WS-H scorer. This is what makes A's headline safety
+   property actually hold.
+3. **§4.3 R2 Corollary 2** — added inline above.
+4. **§4.3 R4 `stage outcome`** — added inline above.
+5. **§8 finding #3** — reclassify "OCR fork is correct" from *Fixed* to *Accepted caveat* (it is a
+   re-classification, not a fix; the re-key cost is real — A-15).
+6. **§11 WS-E2** — **promoted from tail item to a prerequisite of the clip cutover.** Verified hole:
+   `register_stage` binds `enabled()`↔`version_fragment()` only for `mutate` (`stage.py:221-230`); a
+   **sidecar** with non-empty `provides` — which `screentext` is, under A — has two independent
+   resolvers, re-opening the diarize silent-overwrite class for the *caption*. A is the only
+   architecture whose R1 correctness depends on WS-E2's registration-time raise, so WS-E2 ships
+   **before** `VIDEO_PIPELINE=clip` is flipped on.
+
+**Consequence for the fan-out:** WS-C's `screentext` and WS-D's `clipcap` wiring is **confirmed = the
+current design (A)** — no pending decision remains; build them as written. **No new cross-service
+escalation** is created (choosing A actively *declines* the fusion ask C/B would have filed on
+continuum). WS-H gains the O-8 arm + the widened scorer. Everything else in §11 is unchanged.
+
+---
+
 ## 1. Today's flow — the honest current state
 
 ### 1.1 The graph
@@ -455,11 +522,11 @@ Apply to any signal **S** derived from one C1 chunk.
 
 **R1 — FORK RIDER (mechanised).** *Any enabled stage whose configuration can change the bytes of a record it does not itself emit MUST contribute a non-empty `version_fragment`.* Mechanised as: **a sidecar declaring a non-empty `provides` must return a non-empty fragment when enabled** — a provided slot exists only to be consumed, i.e. to change someone else's bytes. One frozen exemption (`keyframes`, legacy reproduction only). Conversely, a sidecar that only **adds** records and feeds nothing declares **no** fragment (`translate/__init__.py:4-7`, `injected_caption.py:25-28`), because forking the whole chunk's dialect on an additive toggle re-keys the primary for a change that did not touch it.
 
-**R2 — INDEPENDENCE RIDER.** Two records may describe the same second only if a consumer can use either **without** the other. If B is meaningless or misleading without A, B is a mutation, an enrichment, or a field of A's text. Corollary: every sidecar record must be **self-anchored** — it carries its own context (app, region, time offsets) inside its own `content.text`.
+**R2 — INDEPENDENCE RIDER.** Two records may describe the same second only if a consumer can use either **without** the other. If B is meaningless or misleading without A, B is a mutation, an enrichment, or a field of A's text. Corollary: every sidecar record must be **self-anchored** — it carries its own context (app, region, time offsets) inside its own `content.text`. **Corollary 2 (added 2026-07-24, coupling ratification):** where record B's specific strings are *grounded in* record A's (the OCR record's strings are injected into the caption under D-09), the pair is **one witness rendered on two channels** — no consumer may treat their agreement as corroboration. This bounds the amplifier's 48×-per-block restatement of a jointly-sourced pair. (The broader "R2 is judged only at consumption, R1's fragment discharges the derivation" reading was considered and **rejected**: R1 forces only a `version_fragment`; it cannot discharge R2's "misleading without A" clause.)
 
 **R3 — DIALECT-HONESTY RIDER.** `pipeline_version` states the **attempted** dialect, never what succeeded. It is resolved before any stage runs (`executor.py:228-237`), so it cannot vary with outcome — which is what preserves determinism. Therefore: (a) `best_effort` ⇒ additive-only, never a mutate (structural, `stage.py:221-225`), and never upstream of a required stage (`executor.py:202-219`); (b) **never `best_effort` + a non-empty fragment** — that stamps a dialect claiming a property the record set may not have; (c) **never use the `discriminator` as a back-door dialect carrier** — two records under one `pipeline_version` with different producers is exactly the lie the consistent-dialect promise forbids; (d) absence is diagnosed by **record presence + a metric**, never by the dialect string, and **never by fabricating a placeholder claim about the user's life**; (e) the cross-service invariant that follows: *continuum must never infer "no on-screen text" from an absent OCR record.*
 
-**R4 — SET-STABILITY RIDER.** The record **set** — count, discriminators, spans — must be a pure function of `(chunk bytes, settings)` and must not depend on model output, decoder build, or which siblings survived a filter. Prefer fixed discriminators and chunk-span records. Where the set must vary, discriminators are quantised from a grid that is itself a pure function of the **declared C1 span** — never a survivor ordinal, never a raw decoder frame index, never a hash of model output — and every unit gets a distinct `t_start`.
+**R4 — SET-STABILITY RIDER.** The record **set** — count, discriminators, spans — must be a pure function of `(chunk bytes, settings)` and must not depend on model output, decoder build, **stage outcome** (added 2026-07-24: this makes `best_effort`'s illegality for a fragment-bearing stage enforceable from R4 as well as R3(b)), or which siblings survived a filter. Prefer fixed discriminators and chunk-span records. Where the set must vary, discriminators are quantised from a grid that is itself a pure function of the **declared C1 span** — never a survivor ordinal, never a raw decoder frame index, never a hash of model output — and every unit gets a distinct `t_start`.
 
 **R5 — BUDGET RIDER.** Every new record class must name (i) its consumer today, and (ii) its characters-per-second-of-life budget against the day-log block. A class that cannot answer both does not ship. Block characters are the training currency: acquisition was measured falling **3.2× for a 3.7× rise** in chars/block.
 
