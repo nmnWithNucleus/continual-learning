@@ -90,6 +90,17 @@ this charter) — details in [CHARTER.md](CHARTER.md) § Scope note + [../contin
 - **C10 watermark semantics** (charter OQ, still open) get decided at the same C10-evolution session
   jointly with continuum; new contract IDs for recipe-registry + reservoir minted at ratification.
 
+**Sharpened by continuum's 2c build (2026-07-24) — concrete requirements the seam surfaced:**
+- **Day-log fetch must serve ANY prior window on demand, by `(user_id, window_id)`** — not just the
+  latest training window. Raw-source replay re-reads *prior* day-logs, so C10-evolved is random-access
+  over a user's history, not a single forward cursor. (Surfaced concretely: the local rawlog replay
+  test needed window-addressable fetch to work.)
+- **Storage must expose "which windows has this user consolidated?"** — continuum today infers the set
+  from the reservoir ledger; once the reservoir is pure audit/provenance, that enumeration needs a home
+  in storage (a small list/index endpoint alongside the day-log fetch).
+- **The materialized day-log must carry its recipe/format version** — the day-log shape is
+  recipe-versioned, and continuum keys its cache on the day-log content fingerprint.
+
 ## Gotchas
 - **Contracts are the source of truth.** Schema validation uses a `referencing` registry so
   C4's `$ref: "c3_userprompt.v0.json"` resolves — do not inline/fork the C3 shape.
