@@ -6,7 +6,7 @@
 > [ARCHITECTURE.md](ARCHITECTURE.md) · [ORG.md](ORG.md) · [PROMPTS.md](PROMPTS.md).
 > Service-level state lives in each service's own HANDOFF.md — this board links, not restates.
 
-**Last updated:** 2026-07-21 · maintained across founders' sessions.
+**Last updated:** 2026-07-24 · maintained across founders' sessions.
 
 ---
 
@@ -15,7 +15,7 @@
 | Service | Status | Lead session | Canvas |
 |---|---|---|---|
 | Recording | **capture M1 + computer surfaces — ALPHA COMPLETE** (checked gap-detection + VAD-cut chunking + 3 capture clients: phone web / Chrome-MV3 extension / mac CLI, all verified `clean` on real hardware — 2026-07-19; 110 tests) **+ async seam (D16: `dp_state` ledger + `/redrive`) + D9 `/metrics`+dashboard (M6 emission) — 120 tests** | computer-capture → **M6 emission DONE (merged 2026-07-19)** | [canvas](services/recording/HANDOFF.md) |
-| Data Processing | **v1 + HARDENING done: durable ingest journal (kill-recovery; restart-amnesia/false-`gaps` CLOSED) · stage-graph pipeline (every step a drop-in file) · all 3 v1 review findings closed by construction (SlotView slot-ownership · mutate-overlap chaining · permit-at-dispatch fairness) · opt-in subprocess isolation (poison chunk → 1 chunk, not the service)** — on async `/ingest` (D16 wire, off-by-default) + D9 `/metrics`; audio/video byte-identical, real backends re-validated on node-7 (merged `5350f7a`, pushed 2026-07-21; suites re-verified by founders; **163 tests**) | DP deep session → **merged; M7 substantially done** | [canvas](services/data-processing/HANDOFF.md) |
+| Data Processing | **v1 + HARDENING done: durable ingest journal (kill-recovery; restart-amnesia/false-`gaps` CLOSED) · stage-graph pipeline (every step a drop-in file) · all 3 v1 review findings closed by construction (SlotView slot-ownership · mutate-overlap chaining · permit-at-dispatch fairness) · opt-in subprocess isolation (poison chunk → 1 chunk, not the service)** — on async `/ingest` (D16 wire, off-by-default) + D9 `/metrics`; audio/video byte-identical, real backends re-validated on node-7 (merged `5350f7a`, pushed 2026-07-21; suites re-verified by founders; **173 tests**) **+ SCREEN-VIDEO PATH REDESIGNED (WS-VC, 2026-07-24, design only): clip-level captioning replaces per-keyframe VLM calls, a dedicated OCR channel, a versioned prompt pack whose digest IS the dialect, and the record-vs-mutation law — 8 build workstreams all startable day one; 4 escalations opened (see below)** | DP deep session → **merged; M7 substantially done** · screen-video design session → **WS-VC ready to build** | [canvas](services/data-processing/HANDOFF.md) |
 | Storage | **v0.0 + capture M0 built + integrated E2E** (serve loop + `/raw`/`/context` mock capture loop 2026-07-09) | serve + learn | [canvas](services/storage/HANDOFF.md) |
 | Input | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-A | [canvas](services/input/HANDOFF.md) |
 | Inference | **v0.0 live on real Qwen3-VL-32B** (vLLM TP=8 on node-7, verified E2E 2026-07-09) | serve-loop WS-B | [canvas](services/inference/HANDOFF.md) |
@@ -34,8 +34,22 @@
 
 ## Escalations (open items needing a founders' decision)
 
-*None open.* Resolved items move to the Decisions log below. *(The async `/ingest` reply shape
-was proposed + ratified in-session 2026-07-19 → **D16**.)*
+**Opened 2026-07-24 by the data-processing screen-video design session (WS-VC).** Full write-ups,
+with the measured numbers behind each, in
+[services/data-processing/handoff/ws-video-clip.md](services/data-processing/handoff/ws-video-clip.md)
+§10. **None of these blocks DP's build** — all 8 build workstreams start immediately. Two block the
+*cutover*; one is a founders' allocation call; one is a contract edit that is deliberately **not
+being taken yet**.
+
+| # | Ask | Owner(s) | Blocks | Founders' call? |
+|---|---|---|---|---|
+| **E-3(b)** | A **captioner VL endpoint distinct from the user-facing `:8000`**. Today DP's `VIDEO_VLM_URL` and inference's `VLLM_URL` both default to the *same* Qwen3-VL-32B TP=8 instance on node-7 at `gpu_memory_utilization=0.90`. DP's prefill bursts would land in the same continuous batch as the assistant's decode steps; the failure mode is assistant TTFT, which no GPU-percent figure surfaces. During a 4 h nightly training window DP would dead-letter ~240 chunks = **4 h of a user's screen life**, after paying full ffmpeg prep on each. A 7B-class VL on 1–2 GPUs carries this load and isolates DP from both tenants. | platform + inference | scale-up (not the build) | **YES** — it closes DP CHARTER OQ3 (GPU placement/contention), which `platform/CHARTER.md:73,83` still lists as an unresolved *proposal* |
+| **E-5** | The **parked additive C2 edit**: `enrichments.text_regions[]` (OCR bbox geometry, CHARTER OQ14b) + a root `quality{}` (CHARTER risk row). **The ask today is to NOT take it.** `grep -rn enrichments continuum/app/` returns exactly one hit — the synthetic-record generator — so both fields would have **zero readers**. The exact diff, its four edit sites, and the asymmetric-mirror footgun are written up so that when the first real geometry or quality-gating consumer lands, the ratification session gets a decision, not a project. Cash OQ14b and the quality risk together, in one freeze-additive commit. | founders' session → then storage + data-processing rows | nothing | **YES, when triggered** — edit `ARCHITECTURE.md` §Contracts first, per `ORG.md:44-45` |
+| **E-2** | Storage: a **kind-aware** `DELETE /context/records?user_id=&from=&to=&pipeline_version=&kind=` retraction primitive. `record_id` forks by design on a dialect bump, old records persist, and `daylog.py` filters on neither `kind` nor `pipeline_version` — so any day re-consolidated across a cutover renders **both** dialects and double-counts. **Must key on `content.kind`**: the Phase-3 replay proved captions and transcripts can share one `pipeline_version` (`injected_caption` declares no fragment), so a kind-blind delete would remove transcripts to remove captions. Also the primitive right-to-be-forgotten and version-forward reprocess both already promise. | storage | **the cutover** | service-level, but flagged here because it is the one thing standing between a built path and a live one |
+| **E-1 · E-4 · E-6** | Sibling-service asks with no contract surface, routed service→service per `ORG.md`: **recording** `--segment-seconds 10→60` (the single largest cost lever, 5.8×; moves the audio leg too, so it is a joint call with DP-audio) · **continuum** per-fragment local timestamps in `_render_block` (**without this, "at 13:04 the user was writing an email about X" is structurally unreachable no matter what DP emits — DP cannot do it, C1 carries no timezone**) + OCR dedup + renderer ordering + a recipe fork · **recording** auto-retry of `failed` segments (a 503 is recoverable but becomes terminal in 1.5 s). | recording · continuum | cost figure / the RWT-granularity goal | no — noted for visibility |
+
+*Resolved items move to the Decisions log below. (The async `/ingest` reply shape was proposed +
+ratified in-session 2026-07-19 → **D16**.)*
 
 ## Decisions log (founders)
 
