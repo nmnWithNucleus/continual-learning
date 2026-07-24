@@ -121,14 +121,19 @@ def main() -> int:
     print(f"GATE (report-only): passed={gate.passed} reasons={gate.reasons}", flush=True)
 
     # ---- C5 publish -----------------------------------------------------------
+    # Version from the adapter's own weight hash, not a training stat — the resume
+    # path has no `stats`, and content-derived is the right identity regardless.
+    import hashlib
+    weight_hash = hashlib.sha256(
+        (adapter_dir / "adapter_model.safetensors").read_bytes()).hexdigest()[:12]
     directory = ModelDirectory(out / "var")
     published = directory.publish(
-        user_id=args.user, adapter_version="m0-32b-" + stats.__dict__["loss_last"].__str__().replace(".", ""),
+        user_id=args.user, adapter_version=f"m0-32b-{weight_hash}",
         adapter_dir=str(adapter_dir), base_model_hash=args.base_model,
         training_window=f"w-day{args.day}", recipe_id=recipe.recipe_id,
         eval_report={"traps_pass": traps_pass, "gate_passed": gate.passed,
                      "gate_enforced": False},
-        snapshot_retention=recipe.snapshot_retention)
+        snapshot_retention=policy.snapshot_retention)
     record["publish"] = {"adapter_version": published.adapter_version,
                          "entries": str(out / "var" / "model_directory"),
                          "active_alias_written": True}
