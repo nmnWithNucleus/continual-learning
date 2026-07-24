@@ -10,4 +10,4 @@ export VERTEX_PROJECT=poetic-avenue-438401-a7
 SVC=/home/ubuntu/nmn/continual_learning/product/services/continuum
 TRAIN_PY=/home/ubuntu/miniconda3/envs/speedlora/bin/python
 JUDGE_PY=/home/ubuntu/miniconda3/envs/vllm23/bin/python
-echo "== $SLURM_JOB_NAME job=$SLURM_JOB_ID node=$SLURMD_NODENAME gpus=$CUDA_VISIBLE_DEVICES $(date -u +%FT%TZ)"
+echo "== $SLURM_JOB_NAME job=$SLURM_JOB_ID node=$SLURMD_NODENAME gpus=${CUDA_VISIBLE_DEVICES:-unset} $(date -u +%FT%TZ)"
