@@ -31,6 +31,7 @@ from ...timeutil import abs_time, parse_rfc3339
 from ...vision import select as select_captioner
 from ...vision import vlm
 from ...vision.config import get_vision_settings
+from ...vision.mode import resolve_pipeline
 from ...vision.result import Keyframe, KeyframeCaption
 
 
@@ -74,6 +75,13 @@ class CaptionsStage(Stage):
     needs = ("keyframes",)
     provides = ("captions",)   # slot commits are declared (ownership is reviewable)
     order = 10
+
+    def enabled(self, settings) -> bool:
+        # D-14 gate: the legacy caption primary runs iff the resolved mode is "keyframe"
+        # (same resolver as `keyframes`). `version_fragment` below is UNCHANGED, so the
+        # legacy dialect stays vidproc-{mock,vlm}-v0 byte-for-byte — the gate touches
+        # enabledness only, never the fragment.
+        return resolve_pipeline() == "keyframe"
 
     def version_fragment(self, settings) -> str:
         # Base video dialect from the selected captioner (vidproc-mock-v0 | vidproc-vlm-v0).

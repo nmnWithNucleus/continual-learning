@@ -1345,3 +1345,195 @@ Gated on O-2 (WS-C's own deliverable); WS-A ships the instrument, not the verdic
 **Exit criteria met:** the report exists, is committed, names the exact flags, and feeds E-3(a) without
 being blocked by it — the probe's job was to make the ask precise, and it did: the ask is now *lighter*
 (the multi-image call needs no serving change to be admitted) and *sharper* (E-3(b) is the real one).
+## Runbook — legacy freeze, migration & rollback (WS-G)
+
+*Operator-facing. This is the WS-G block; edit only here. Implements D-14. The whole cutover
+is one environment variable, `VIDEO_PIPELINE`, resolved by the single `resolve_pipeline()`
+(`app/vision/mode.py`): `keyframe` (the shipped default, unknown/mistyped → here) | `clip`.*
+
+### 0. The one thing to internalise first
+
+The one law: **rollback restores behaviour, not the corpus.** Flipping `VIDEO_PIPELINE` back to `keyframe`
+makes the *next* chunk process under the legacy dialect again — instantly and safely — but every
+`clip`-dialect record already written to `/context` **stays written**. `record_id` forks by
+design (`pipeline.py:12-14`), old records persist across a receipt change (`journal.py:296-298`),
+and `/context` has no delete. There is **no operation in the system that removes a
+`vidclip-*` record until storage ships E-2** (§10 E-2 · A-3). Plan the cutover as a one-way door
+on the corpus even though it is a two-way door on behaviour.
+
+### 1. What the gate guarantees (so you can flip it without fear)
+
+- **Legacy is byte-frozen.** In `keyframe` mode the video graph resolves to the literal
+  `pipeline_version` `vidproc-vlm-v0` / `vidproc-mock-v0`, byte-for-byte (asserted in
+  `tests/test_legacy_dialect.py`). `keyframes` is the single frozen R1 exemption — a sidecar with
+  a non-empty `provides` but an **empty `version_fragment`** — so it contributes nothing to the
+  dialect and the pre-migration `record_id`s reproduce exactly. Re-running the legacy path over an
+  already-processed chunk is therefore an idempotent upsert, never a second disjoint record set.
+- **A typo cannot 500 you.** An unknown / mistyped `VIDEO_PIPELINE` (`clipp`, `keyframes`, ``,
+  whitespace, wrong case that doesn't normalise) resolves to `keyframe`, so the graph always has
+  exactly one enabled primary. It never lands in the "zero enabled primaries →
+  `GraphResolutionError` → 500 on every video ingest" hole (§8 finding #1).
+- **The two legacy stages flip as a pair.** `keyframes` and `captions` gate on the *same*
+  resolver, so a mistype can never disable exactly one and orphan the other.
+
+### 2. Prerequisites before `VIDEO_PIPELINE=clip` may be flipped on
+
+The gate itself ships **now** (this workstream). Turning it *on* in production is blocked until
+all of the following are true — none of them is WS-G's to land, they are listed so the operator
+does not flip early:
+
+1. **The clip stages are in the image** — `clipprep` (WS-B), `screentext` (WS-C), `clipcap`
+   (WS-D). On a branch without them, `VIDEO_PIPELINE=clip` disables the legacy pair and finds
+   **zero** primaries → `GraphResolutionError`. That is correct and intended (it is how
+   `tests/test_legacy_dialect.py::test_clip_mode_disables_the_legacy_pair` proves the gate is
+   real), but it means **clip mode must never be flipped on until the clip primary exists**.
+2. **WS-E2 has landed** — the registration-time raise that binds `enabled()`↔`version_fragment()`
+   for a sidecar with non-empty `provides` (`app/stagegraph/stage.py`). Architecture A's R1
+   correctness for the *caption* depends on it (Decision addendum edit #6), so it ships **before**
+   the flip, not after.
+3. **Serving is ready (real backend)** — E-3(a): `--limit-mm-per-prompt '{"image":16}'` + an
+   explicit `max_pixels`, or the multi-image call 400s on the first chunk. Until then the mock
+   backend runs headless.
+4. **OCR default is settled** — production `VIDEO_OCR_BACKEND=ppocr` is gated on O-2; ship
+   `VIDEO_OCR_BACKEND=mock` until it passes. `off` is the honest degrade, not a `best_effort`
+   flip (A-10).
+5. **The target is a fresh `user_id`** — see §4.
+
+### 3. Deploy discipline — **drain-and-replace, never rolling**
+
+Do **drain-and-replace, never rolling.** `daylog.py` filters on neither `kind` nor
+`pipeline_version` (`db.py:344-351`; `context_reader.py:7`: filters exist only *"when they're
+ratified"*). During a rolling restart two replicas resolve two dialects simultaneously, and a
+single 2-min day-log block then contains records from **both** `vidproc-*-v0` and `vidclip-*` —
+double-counting the same span at consolidation. So:
+
+1. Stop admitting new work (let recording's queue absorb it; `INGEST_QUEUE_MAX=4096` is the buffer).
+2. **Drain** in-flight chunks to completion (`INGEST_DRAIN_TIMEOUT=120`).
+3. Replace the *entire* replica set with the new `VIDEO_PIPELINE` value — no replica of the old
+   dialect may be serving alongside a replica of the new one.
+4. Resume admission.
+
+The tripwire that catches a violation: the `dp_pipeline_dialect{modality,pipeline_version}=1` gauge
+(WS-F), with **alert on `count by (modality) (dp_pipeline_dialect) > 1`**. If that alert fires
+during a deploy, a rolling restart leaked two dialects — roll the deploy, do not proceed.
+
+### 4. Forward cutover procedure (`keyframe` → `clip`)
+
+The rule is a **forward-only cutover at a UTC day boundary on a fresh `user_id` until E-2 lands**.
+Never backfill; never re-cut an existing `user_id`'s history.
+
+Why each clause:
+- **forward-only / never backfill** — old chunks stay under the old dialect; re-processing them
+  under `clip` mints a *second*, disjoint record set for spans that already have one (`record_id`
+  forks by design), and nothing can retract the loser until E-2.
+- **at a UTC day boundary** — consolidation buckets a day at a time; splitting a single day across
+  two dialects double-counts that day's blocks. A UTC-midnight cut keeps every rendered day
+  single-dialect. (DP emits **relative** offsets and `daylog.py` anchors blocks in `win.tz`
+  (A-6/E-4a); the boundary that matters for *record placement* and re-consolidation is the UTC day,
+  which is what `t_start` sorts on.)
+- **on a fresh `user_id`** — the clean guarantee that no span this user owns already carries a
+  legacy record, so there is nothing to double-count and nothing to retract. This is affordable
+  **right now**: the Phase-3 replay corpus carries **zero** `vidproc-*` records, and the only
+  `vidproc-mock-v0` records on disk are **86** dev-store rows (`storage/app/dev.db`, 125 total)
+  under dev users — mock dialect, not pilot corpus. **This is the last moment that is true**; once
+  the pilot writes real video records, E-2 becomes a hard prerequisite for any re-cutover.
+
+Steps:
+1. Confirm §2 prerequisites.
+2. Provision (or select) a **fresh `user_id`** with no prior video records.
+3. Wait for a **UTC day boundary**.
+4. Set `DP_DIALECT_FREEZE=1` for the flip window (WS-F): `_current_pv` returns `None`, so a
+   redelivered chunk is served from its stale-dialect receipt rather than mass-reprocessed under
+   the new dialect during the transition — a DP-local mitigation for the reprocess-on-redelivery
+   hazard.
+5. **Drain-and-replace** (§3) the replica set with `VIDEO_PIPELINE=clip` (+ the settled
+   `VIDEO_OCR_BACKEND`, and the real captioner backend/flags per §2).
+6. **Verify** (§6). Once the dialect gauge shows a single `vidclip-*` value and the first blocks
+   render clean, clear `DP_DIALECT_FREEZE`.
+
+### 5. Rollback procedure (`clip` → `keyframe`)
+
+Behaviourally instant and safe; corpus-wise a one-way door.
+
+1. **Drain-and-replace** (§3) back to `VIDEO_PIPELINE=keyframe`. Do **not** rolling-restart the
+   rollback either — the same two-dialects-in-one-block hazard applies in reverse.
+2. The next chunk processes under `vidproc-*-v0` again, byte-for-byte identical to pre-migration
+   (§1) — reprocessing a legacy chunk idempotently upserts its original `record_id`.
+3. **What rollback does NOT undo:** every `vidclip-*` record written during the clip window
+   remains in `/context`. Any day that was consolidated (or gets re-consolidated) across the clip
+   window still renders those records. Because the cutover was **forward-only on a fresh
+   `user_id`**, that blast radius is confined to the one pilot user's clip-window days — which is
+   the entire reason for those clauses. Full corpus cleanup waits on **E-2**
+   (`DELETE /context/records?user_id=&from=&to=&pipeline_version=&kind=`, kind-aware — §10 E-2).
+4. If you rolled back because clip mode was *misconfigured* rather than *wrong*, do not re-cut the
+   same `user_id`; move forward on another fresh `user_id` once fixed.
+
+### 6. Verification checklist
+
+- `GET /health` → `video_pipeline_version` is the single expected dialect for the whole fleet.
+- `dp_pipeline_dialect` gauge shows **exactly one** value per modality
+  (`count by (modality) (dp_pipeline_dialect) == 1`). More than one ⇒ a rolling deploy leaked
+  dialects (§3) — remediate before trusting any block from the window.
+- No spike in `dp_graph_stage_failures_total` / dead-letters (a zero-primary resolve or a serving
+  400 shows up here).
+- First rendered day-log blocks for the cutover user are single-dialect and not double-counted.
+- Tests: `ASR_BACKEND=mock VIDEO_PIPELINE=keyframe ./.venv/bin/python -m pytest -q` stays green,
+  and `tests/test_legacy_dialect.py` pins the frozen dialect + the unknown-value safety.
+
+### 7. Environment reference (WS-G-relevant knobs only)
+
+| var | values | default | effect |
+|---|---|---|---|
+| `VIDEO_PIPELINE` | `keyframe` \| `clip` | `keyframe` | the graph selector; unknown → `keyframe` (safe) |
+| `VIDEO_BACKEND` | `mock` \| `vlm` | `mock` | legacy captioner → `vidproc-mock-v0` / `vidproc-vlm-v0` |
+| `DP_DIALECT_FREEZE` | `0` \| `1` | `0` | `1` → `_current_pv` returns `None`; serve stale-dialect receipts during the flip window (WS-F) |
+
+Read fresh from the environment per call — a flip takes effect at the next graph build, no
+re-import (`app/vision/mode.py`, `app/config.py`).
+
+---
+
+## Build log — WS-G
+
+**Scope delivered (D-14 · §11 WS-G):** froze the legacy keyframe path behind the `VIDEO_PIPELINE`
+gate and wrote the migration/rollback runbook above.
+
+**Changes**
+- `app/stages/video/keyframes.py` — added `enabled(self, settings) -> resolve_pipeline() ==
+  "keyframe"` (imports `resolve_pipeline` from `app/vision/mode.py`, the committed Foundation
+  file). Documented the frozen R1 exemption in place: `keyframes` keeps **no** `version_fragment`
+  (inherits `""`) so the legacy dialect reproduces byte-for-byte. Nothing else in the body.
+- `app/stages/video/captions.py` — added the same `enabled()` gate to the primary. `version_fragment`
+  is **unchanged** (`select_captioner(vs).PIPELINE_VERSION`), so the gate touches enabledness only,
+  never the dialect. `_weave_ocr` and the `VIDEO_OCR_RECORDS` branch are untouched — simply not
+  reached in clip mode.
+- `app/processing/processors/video.py` — reviewed; the compat shim needs no change (the gate lives
+  in the stage files). Left as-is.
+- `tests/test_legacy_dialect.py` — new, 36 tests: literal `vidproc-{mock,vlm}-v0` dialect
+  (byte-for-byte); `keyframes` is the single empty-fragment exemption and the composed dialect is
+  the primary's base alone; unknown/mistyped values resolve to `keyframe` (parametrised) and the
+  graph resolves (never zero-primary → 500); case/whitespace normalisation; the two legacy stages
+  flip together; `clip` disables the pair (zero-primary raise on this branch, by design); and two
+  E2E `/ingest` checks (unknown mode still 200 under the frozen dialect; explicit `keyframe` ==
+  default, byte-identical record ids). Headless + offline; the E2E rides the mock synthetic-keyframe
+  fallback, so no decoder is required.
+
+**Exit criteria — met**
+- `pipeline_version` in legacy mode is the literal `"vidproc-vlm-v0"` / `"vidproc-mock-v0"` —
+  byte-for-byte, asserted. ✅
+- All existing video tests in `tests/test_video_pipeline.py` stay green **unmodified** under
+  `VIDEO_PIPELINE=keyframe` (15 tests: `ASR_BACKEND=mock VIDEO_PIPELINE=keyframe pytest
+  tests/test_video_pipeline.py` → 15 passed). ✅
+- An unknown `VIDEO_PIPELINE` resolves to `keyframe` and the graph resolves — asserted at unit and
+  E2E level. ✅
+- Runbook states, verbatim, each on one line: *rollback restores behaviour, not the corpus*
+  (§0/§5); *drain-and-replace, never rolling* (§3); and
+  *forward-only cutover at a UTC day boundary on a fresh `user_id` until E-2 lands* (§4). ✅
+
+**Suite:** `ASR_BACKEND=mock ./.venv/bin/python -m pytest -q` → **209 passed** (173 baseline + 36
+new); identical under `VIDEO_PIPELINE=keyframe`.
+
+**Not done here (by design):** the flip to `VIDEO_PIPELINE=clip` is gated on WS-B/C/D (the clip
+stages must exist), WS-E2 (the registration raise), E-3(a) (serving flags), O-2 (the `ppocr`
+default), and — for any `user_id` with existing video records — E-2 (storage retraction). Per the
+house rules, `HANDOFF.md` and `CHARTER.md` are untouched; this block is the only edit to this file.
