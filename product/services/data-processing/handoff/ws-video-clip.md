@@ -2415,3 +2415,91 @@ is the only shared-core file WS-E touched, as chartered.
 exemption, and row 15's named latent hole. It is written to CHARTER standard and is meant to be
 folded into `CHARTER.md` and then deleted or left as the working copy — WS-E did not edit
 `CHARTER.md` or `HANDOFF.md`.
+## Build log — WS-H (eval harness & the quality gates)
+
+Full detail, run instructions, results and caveats live in **`handoff/ws-video-clip-eval.md`**.
+This section is the summary and the two things the lead must reconcile.
+
+**Delivered.** `scripts/capture_chunkset.py` (chunkset builder: `synth` / `headless` / `slice` /
+`wrap`, plus `ocr-truth`, the O-2 bridge), `scripts/prompt_ab.py` (the A/B driver, the arm worker,
+every scorer, the O-8 gate, the pre-push `--check` gates), `scripts/oracle_gemini.py` (blind pairwise
+judge + frontier oracle), the two experimental packs, `tests/fixtures/chunksets/smoke-v1/` (12 chunks,
+JSON only), `tests/test_eval_scorers.py` (41 tests), and the one-line `DP_OFFLINE_EVAL` boot guard in
+`app/main.py`. **Suite: 506 passed** (baseline 465 + 41), `ASR_BACKEND=mock`.
+
+**Structurally cannot write to `/context`**, three ways: the harness enters below the only writer
+(`resolve`/`run_graph`/`build_c2`, never FastAPI, never `StorageClient`); the arm worker *poisons*
+`StorageClient.__init__` and `ingest_core.process_chunk` before importing a stage, so the property is
+enforced rather than asserted; and `DP_OFFLINE_EVAL=1` — which the harness requires — makes
+`create_app()` raise. The flag that enables experiments is the flag that prevents serving.
+
+**Arms cannot collide.** Each arm gets its own complete registry in a temp dir (packaged packs + its
+experimental pack + a rewritten `routes.json` + an `arm.json`) and its own subprocess with
+`VIDEO_PROMPT_DIR` set. `prompt_dir_fingerprint` is OUTPUT_AFFECTING, so the dir's contents fork
+`cfg_tag` under *every* backend including mock; `arm.json` is what makes two arms with byte-identical
+pack text (`injected` vs `injected-corrupt`) fork anyway. Measured: 4 distinct `pipeline_version` over
+4 arms; `--check` fails the run on any collision.
+
+### Two items for the lead to reconcile in §11
+
+1. **The experimental packs live in `app/vision/prompts/experimental/`, not the flat pack dir.**
+   §11 → WS-H names them at `app/vision/prompts/<id>.prompt.md` on the reasoning that "new paths ⇒ no
+   conflict with D's production packs". That reasoning does not survive contact with WS-D's registry:
+   `PACK_DIGEST` is a digest over **every loaded pack** and `load_registry` globs the flat dir, so two
+   extra files there fork `record_id` for **every production caption** (for an experiment that never
+   ran) and redden `tests/test_prompt_pack.py` (a WS-D file). Both globs are non-recursive, so the
+   subdirectory is completely inert to the packaged registry and to every WS-D test while staying a
+   committed git path. Guarded by a regression test that states what moving them costs. **No WS-D file
+   was edited.**
+2. **§11's "≈$0.02 per 200-chunk run" is ~7× low.** §7.3's own arithmetic — 200 × (1,517 prefill + 60
+   output) at 12k/2k tok/s and $16/node-hour, i.e. `$0.250/screen-hour ÷ 360 × 200` — gives **$0.139**.
+   The ~40 s wall target is met (chunks run concurrently, `--concurrency 8`). The conclusion is
+   unchanged (14 cents is pre-push cheap); the number should read ~$0.14, or the pre-push corpus should
+   be ~30 chunks. The harness prints the reconciliation on every run.
+
+### Gates: built, and what actually ran
+
+* **The widened grounding scorer (addendum edit #2) is implemented and tested**: all named ≥4-char
+  strings (quoted spans, digit+letter tokens, internal caps, path/dot/@ shapes, capitalised
+  non-stopwords), maximal adjacent runs merged, runs broken at punctuation, lenient substring
+  grounding. Measured side-effect worth recording: across every run performed here the corpora
+  contained **zero double-quoted spans** and 5–24 named strings per arm — a quote-only counter had
+  nothing to measure. `dp_caption_ungrounded_quote_total` (declared by WS-F, unwired, with a note
+  deferring the definition to WS-H) should be fed by
+  `prompt_ab.grounding(caption, ocr_text)["named_ungrounded"]`; the wiring is a WS-D/WS-F edit.
+* **O-8 is built, pre-registered, and UNRUN against a real model.** The rule (`ship A iff
+  recall_lift > 0.25 AND propagation_rate < 0.10, else ship D`) is asserted at all four corners of its
+  decision table, is strict at the boundary, and returns **UNDECIDED** — never a verdict — under a mock
+  captioner or an unlabelled corpus. Validated end to end against a local stub endpoint whose reply is
+  a function of its rendered prompt: both halves of the rule bit, in opposite directions, on one run
+  (`recall injected 0.236 / blind 0.000`, `propagation 0.600` → SHIP D). **Those numbers are a harness
+  validation and say nothing about Qwen3-VL.** Running it for real needs one served captioner (E-3(a))
+  plus `capture_chunkset.py synth --count 200` (~10 min, no capture, no binaries).
+* **O-4**: the mechanical half runs today via `--arms keyframe,injected` — the legacy per-frame graph
+  vs the clip primary through the same executor, which is the A/B the design notes exists nowhere in
+  the repo. The blind-judge half is built and unrun (no Vertex credential).
+* **O-2**: unchanged — WS-C's synthetic-proxy verdict stands, gate unsatisfied, `mock` is the
+  production default. `capture_chunkset.py ocr-truth` is the bridge that makes it **one labelling pass,
+  two gates**: it exports a labelled chunkset as the bake-off's exact `ground_truth.json` + the
+  high-resolution frames `screentext` would actually have read (`focus_bbox_2x` in the 3456-wide canvas
+  `run_bakeoff.py` hard-codes). No real macOS capture exists in this build.
+* **The ~$70 Gemini oracle**: built (blind pairwise judge with deterministic hash-based presentation
+  order + a frontier-model upper bound), gated behind `--yes` and a printed cost projection, and
+  **unrun** — no credential here. Wire shape, tolerant parse and blinding are unit-tested offline. The
+  mechanical scorers stand alone; they are the gate, the oracle is corroboration.
+
+### Also measured
+
+The D-11 budget claim, through continuum's **own** `build_daylog` (imported, never reimplemented):
+at `segment_seconds=60, block_segments=2` the projected block is 1,960 chars against
+`EXCERPT_CHARS=6,000` — **67 % headroom, zero blocks over budget**, so the OCR line (rendered last,
+truncated first) survives. `--check` fails the run if any block ever exceeds it.
+
+Seven caveats (H-1 … H-7) are recorded in `handoff/ws-video-clip-eval.md` §9 — most importantly that a
+`headless` chunkset leaves the OCR channel dark (`clipprep`'s fallback yields `ocr_times=()`), that
+`synth` is not real capture, and that architecture D is realised at the prompt level because splitting
+the injected block from the `kind='ocr'` record would mean editing a WS-C file.
+
+Clean commit on `svc/vc-ws-h`. Did not touch `HANDOFF.md` / `CHARTER.md`, any WS-D prompt-registry
+file, or any other workstream's owned file; the only shared-core edit is the sanctioned one-line
+`DP_OFFLINE_EVAL` guard in `app/main.py`.
