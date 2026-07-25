@@ -44,8 +44,9 @@ from app.vision.clip_types import ClipFrames, Frame
 from app.vision.ocr import ppocr
 from app.stages.video.screentext import ScreentextStage
 
-# sidecars/ocr/app.py lives at the monorepo root, 4 parents above tests/.
-_SIDECAR_APP = Path(__file__).resolve().parents[4] / "sidecars" / "ocr" / "app.py"
+# sidecars/ocr/app.py lives under the DP service (product/services/data-processing/),
+# 1 parent above tests/ (tests/ -> data-processing/).
+_SIDECAR_APP = Path(__file__).resolve().parents[1] / "sidecars" / "ocr" / "app.py"
 
 
 # --------------------------------------------------------------------------- fixtures

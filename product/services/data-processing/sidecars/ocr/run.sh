@@ -14,7 +14,7 @@
 #                                 network, no new DP dependency. This is the
 #                                 headless-CI backend. `./run.sh` just works.
 #     OCR_MODE=ppocr           -- PP-OCR det+rec ONNX on CPU. Needs the sidecar
-#                                 venv (sidecars/ocr/.venv). Set it up once:
+#                                 venv (.venv, in this sidecar dir). Set it up once:
 #                                   python3 -m venv .venv
 #                                   ./.venv/bin/pip install -r requirements.txt
 #

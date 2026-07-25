@@ -6,7 +6,7 @@
 #   run under any interpreter -- proving the headless-CI promise. The ppocr tests
 #   skip unless the sidecar venv's engine is importable.
 #
-#   Run:  python3 -m pytest sidecars/ocr/test_app.py -q
+#   Run:  python3 -m pytest test_app.py -q   (from this sidecar dir)
 # =============================================================================
 from __future__ import annotations
 

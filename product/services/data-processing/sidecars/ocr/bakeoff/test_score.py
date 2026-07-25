@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # =============================================================================
 # test_score.py -- unit tests for the O-2 scorer (lenient recall + focus CER).
-#   Run:  python3 -m pytest sidecars/ocr/bakeoff/test_score.py -q
+#   Run:  python3 -m pytest bakeoff/test_score.py -q   (from the sidecar dir)
 # =============================================================================
 from __future__ import annotations
 
