@@ -321,9 +321,28 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
     )
 
 
+def _assert_not_offline_eval() -> None:
+    """``DP_OFFLINE_EVAL=1`` ⇒ this process MUST NOT serve (WS-H, §11).
+
+    The offline A/B harness (``scripts/prompt_ab.py``) unlocks prompt-pack overrides —
+    experimental packs, a fault-injected OCR arm — under this one flag, and it drives
+    ``resolve()`` / ``run_graph()`` / ``build_c2`` directly, never FastAPI and never
+    ``StorageClient``, so it is structurally incapable of reaching ``/context``. This guard
+    closes the mirror hazard: **the flag that enables experiments is the flag that prevents
+    serving**, so an eval env leaking into a deployment fails at boot — loudly, before one
+    experimental caption can be written to a real corpus under a real dialect."""
+    if os.getenv("DP_OFFLINE_EVAL", "").strip().lower() not in ("", "0", "false", "no", "off"):
+        raise RuntimeError(
+            "DP_OFFLINE_EVAL is set — refusing to build the serving app. This flag unlocks "
+            "offline-eval prompt-pack overrides (scripts/prompt_ab.py) and must never be set "
+            "on a process that writes to /context. Unset it to serve."
+        )
+
+
 def create_app() -> FastAPI:
     """App factory. Reads env at call time so tests can point STORAGE_URL / flip
     ASR_BACKEND before construction and inject a mock storage transport after."""
+    _assert_not_offline_eval()
     settings = get_settings()
 
     async def _redrive_pending(app: FastAPI, queue: IngestQueue, rows: list) -> None:
