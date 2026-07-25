@@ -6,7 +6,7 @@
 > [ARCHITECTURE.md](ARCHITECTURE.md) · [ORG.md](ORG.md) · [PROMPTS.md](PROMPTS.md).
 > Service-level state lives in each service's own HANDOFF.md — this board links, not restates.
 
-**Last updated:** 2026-07-24 · maintained across founders' sessions.
+**Last updated:** 2026-07-25 · maintained across founders' sessions.
 
 ---
 
@@ -15,7 +15,7 @@
 | Service | Status | Lead session | Canvas |
 |---|---|---|---|
 | Recording | **capture M1 + computer surfaces — ALPHA COMPLETE** (checked gap-detection + VAD-cut chunking + 3 capture clients: phone web / Chrome-MV3 extension / mac CLI, all verified `clean` on real hardware — 2026-07-19; 110 tests) **+ async seam (D16: `dp_state` ledger + `/redrive`) + D9 `/metrics`+dashboard (M6 emission) — 120 tests** | computer-capture → **M6 emission DONE (merged 2026-07-19)** | [canvas](services/recording/HANDOFF.md) |
-| Data Processing | **v1 + HARDENING done: durable ingest journal (kill-recovery; restart-amnesia/false-`gaps` CLOSED) · stage-graph pipeline (every step a drop-in file) · all 3 v1 review findings closed by construction (SlotView slot-ownership · mutate-overlap chaining · permit-at-dispatch fairness) · opt-in subprocess isolation (poison chunk → 1 chunk, not the service)** — on async `/ingest` (D16 wire, off-by-default) + D9 `/metrics`; audio/video byte-identical, real backends re-validated on node-7 (merged `5350f7a`, pushed 2026-07-21; suites re-verified by founders; **173 tests**) **+ SCREEN-VIDEO PATH REDESIGNED (WS-VC, 2026-07-24, design only): clip-level captioning replaces per-keyframe VLM calls, a dedicated OCR channel, a versioned prompt pack whose digest IS the dialect, and the record-vs-mutation law — 8 build workstreams all startable day one; 4 escalations opened (see below)** | DP deep session → **merged; M7 substantially done** · screen-video design session → **WS-VC ready to build** | [canvas](services/data-processing/HANDOFF.md) |
+| Data Processing | **v1 + HARDENING done: durable ingest journal (kill-recovery; restart-amnesia/false-`gaps` CLOSED) · stage-graph pipeline (every step a drop-in file) · all 3 v1 review findings closed by construction (SlotView slot-ownership · mutate-overlap chaining · permit-at-dispatch fairness) · opt-in subprocess isolation (poison chunk → 1 chunk, not the service)** — on async `/ingest` (D16 wire, off-by-default) + D9 `/metrics`; audio/video byte-identical, real backends re-validated on node-7 (merged `5350f7a`, pushed 2026-07-21; suites re-verified by founders) **+ SCREEN-VIDEO CLIP PATH BUILT + INTEGRATED (WS-VC, 2026-07-25): 8 workstreams landed + merged to trunk — clip-level captioning (one multi-image VLM call/chunk) replaces per-keyframe calls; a dedicated CPU **OCR channel** (`kind='ocr'` record); a **versioned prompt pack whose digest IS the dialect**; the **record-vs-mutation law** enforced in CI + at registration; an offline eval harness that cannot write `/context` by construction — behind `VIDEO_PIPELINE=clip` (default `keyframe` = shipped legacy, byte-identical). DP suite **765**; lead-verified each WS (mutation-tested the law; caught + returned a masked order/registration bug before merge). Cutover gates (O-2 real-frame OCR bar · O-8 blind-vs-injected A/B vs a real VLM · E-2 or fresh user_id · E-3(b)) + follow-ups remain, none blocking** | DP deep session → **merged; M7 substantially done** · screen-video WS-VC → **BUILT + integrated 2026-07-25** | [canvas](services/data-processing/HANDOFF.md) |
 | Storage | **v0.0 + capture M0 built + integrated E2E** (serve loop + `/raw`/`/context` mock capture loop 2026-07-09) | serve + learn | [canvas](services/storage/HANDOFF.md) |
 | Input | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-A | [canvas](services/input/HANDOFF.md) |
 | Inference | **v0.0 live on real Qwen3-VL-32B** (vLLM TP=8 on node-7, verified E2E 2026-07-09) | serve-loop WS-B | [canvas](services/inference/HANDOFF.md) |
@@ -34,12 +34,16 @@
 
 ## Escalations (open items needing a founders' decision)
 
-**Opened 2026-07-24 by the data-processing screen-video design session (WS-VC).** Full write-ups,
-with the measured numbers behind each, in
+**Opened 2026-07-24 by the data-processing screen-video design session (WS-VC); the build is now
+DONE + integrated (2026-07-25), so these are the CUTOVER gates + founders' calls, not build
+blockers.** Full write-ups, with the measured numbers behind each, in
 [services/data-processing/handoff/ws-video-clip.md](services/data-processing/handoff/ws-video-clip.md)
-§10. **None of these blocks DP's build** — all 8 build workstreams start immediately. Two block the
-*cutover*; one is a founders' allocation call; one is a contract edit that is deliberately **not
-being taken yet**.
+§10. Two block the *cutover* (E-2 storage retraction; a real-VLM O-8 run needs E-3(b)); one is a
+founders' allocation call (E-3(b)); one is a contract edit deliberately **not taken yet** (E-5).
+**Resolved during the build: E-3(a)** (the `--limit-mm-per-prompt` serving-flag ask) — WS-A's probe
+verified vLLM 0.24.0 defaults the image cap to 999 and clamps nothing at 768×480, so the multi-image
+call validates on the *unmodified* `serve_vllm.sh`; the flags are determinism pins, not a
+prerequisite.
 
 | # | Ask | Owner(s) | Blocks | Founders' call? |
 |---|---|---|---|---|
