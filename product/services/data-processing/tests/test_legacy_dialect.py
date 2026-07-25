@@ -11,9 +11,9 @@ byte-for-byte. These tests pin the four WS-G exit criteria:
   * an unknown / mistyped ``VIDEO_PIPELINE`` resolves to ``keyframe`` and the graph
     resolves — never zero enabled primaries → ``GraphResolutionError`` → a 500 on ingest;
   * the two legacy stages flip TOGETHER off the one resolver (a typo can never disable
-    exactly one graph), and ``clip`` disables both — proving the gate is real (on this
-    branch no clip primary exists yet, so ``clip`` surfaces the zero-primary error, by
-    design: the clip stages land in WS-B/C/D).
+    exactly one graph), and ``clip`` disables both — proving the gate is real. With the clip
+    cohort integrated (WS-B/C/D), ``clip`` now resolves to the ``clipcap`` primary rather
+    than surfacing the pre-integration zero-primary error.
 
 Headless + offline: mock backend, no GPU, no network. The E2E "never 500" check rides the
 mock captioner's synthetic-keyframe fallback, so it needs no decoder.
@@ -27,7 +27,6 @@ import pytest
 
 from app.pipeline import compute_record_id
 from app.processing.processors import video as video_proc
-from app.stagegraph import GraphResolutionError
 from app.stagegraph.executor import resolve
 from app.stagegraph.stage import stages_for
 from app.vision.mode import MODES, resolve_pipeline
@@ -154,14 +153,18 @@ def test_both_legacy_stages_flip_together(monkeypatch, mode):
 
 
 def test_clip_mode_disables_the_legacy_pair(monkeypatch):
-    """`clip` disables both legacy stages — proof the gate is real. On this branch no clip
-    primary is registered yet, so resolution surfaces the zero-primary error (by design:
-    the clip stages ship in WS-B/C/D, and the cutover is gated on E-2)."""
+    """`clip` disables both legacy stages — proof the gate is real. With the clip stages now
+    integrated (WS-B/C/D), clip mode resolves to the clip primary `clipcap` (not the
+    zero-primary error this asserted pre-integration), and the legacy pair is absent from the
+    resolved graph."""
     monkeypatch.setenv("VIDEO_PIPELINE", "clip")
+    monkeypatch.setenv("VIDEO_BACKEND", "mock")
     assert _video_stage("keyframes").is_enabled(None) is False
     assert _video_stage("captions").is_enabled(None) is False
-    with pytest.raises(GraphResolutionError, match="exactly one enabled primary"):
-        resolve("video", stages_for("video"), None)
+    resolved = resolve("video", stages_for("video"), None)
+    assert resolved.primary.name == "clipcap"
+    enabled = {s.name for s in resolved.enabled}
+    assert "keyframes" not in enabled and "captions" not in enabled
 
 
 # ---- E2E: an unknown VIDEO_PIPELINE ingests (200), never 500 -----------------

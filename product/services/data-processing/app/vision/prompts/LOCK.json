@@ -1,0 +1,13 @@
+{
+  "note": "pack_version is the hand-bumped human token in the dialect (@pN.DIGEST); pack_digest is recomputed live at import, so editing a .prompt.md forks the dialect automatically. Written by `python -m app.vision.prompts relock`.",
+  "pack_digest": "565066a0",
+  "pack_version": "1",
+  "packs": {
+    "camera-clip-v1": "17c99a24",
+    "per-frame-v0": "a9fefb17",
+    "screen-clip-idle-v1": "c9d06914",
+    "screen-clip-single-v1": "89aacc3b",
+    "screen-clip-v1": "c8e220e2",
+    "screen-ocr-v1": "b9f07786"
+  }
+}

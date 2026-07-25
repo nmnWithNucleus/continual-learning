@@ -1,0 +1,18 @@
+{
+  "scenarios": {
+    "screen-mac": "screen-clip-v1",
+    "screen-browser": "screen-clip-v1",
+    "screen-generic": "screen-clip-v1",
+    "camera": "camera-clip-v1"
+  },
+  "family_defaults": {
+    "clip": "screen-clip-v1",
+    "ocr": "screen-ocr-v1"
+  },
+  "scenario_labels": {
+    "screen-mac": "a macOS desktop",
+    "screen-browser": "a web browser",
+    "screen-generic": "a computer screen",
+    "camera": "a camera view"
+  }
+}
