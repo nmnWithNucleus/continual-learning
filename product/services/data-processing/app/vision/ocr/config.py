@@ -86,7 +86,17 @@ def get_ocr_config() -> OcrConfig:
         min_conf=_float("VIDEO_OCR_MIN_CONF", "0.60"),
         min_chars=_int("VIDEO_OCR_MIN_CHARS", "4"),
         dedup_ratio=_float("VIDEO_OCR_DEDUP_RATIO", "0.92"),
-        ocr_chars_per_second=_float("VIDEO_OCR_CHARS_PER_SECOND", "6"),
+        # D-11: the OCR char rate is DERIVED (total − caption share), NOT an independent knob.
+        # Reconciled at WS-D integration to read the SAME canonical knobs VisionSettings carries
+        # (chars_per_second / caption_chars_share, both OUTPUT_AFFECTING) instead of a standalone
+        # VIDEO_OCR_CHARS_PER_SECOND — which, living only on OcrConfig, was invisible to cfg_tag
+        # and could rewrite the OCR record's bytes under an unchanged record_id (a silent
+        # /context overwrite, the exact class D-13 closes). Defaults 22−16=6 preserve behaviour;
+        # matches budget._ocr_rate. (Follow-up L-2: collapse assemble.ocr_cap to import
+        # app.vision.budget.ocr_cap(span, vs) once screentext threads vs — this file's own TODO.)
+        ocr_chars_per_second=max(
+            0.0, _float("VIDEO_CHARS_PER_SECOND", "22") - _float("VIDEO_CAPTION_CHARS_SHARE", "16")
+        ),
         max_events=_int("VIDEO_OCR_MAX_EVENTS", "3"),
         idle_peak=_int("VIDEO_OCR_IDLE_PEAK", "8"),
         layout_peak=_int("VIDEO_OCR_LAYOUT_PEAK", "40"),

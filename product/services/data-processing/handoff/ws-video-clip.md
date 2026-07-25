@@ -2235,3 +2235,72 @@ provenance rename in `app/vision/ocr/__init__.py`):
   unit test passes (the real-discovery test skips; 47 seam tests green). This trades the previous
   green-on-isolated-branch (which the sibling-gate bought by *hiding* the stage) for a statically-correct,
   collision-free registration on the integration base — the lead's explicit call.
+
+---
+
+## Build log — WS-D (integration · resync onto svc/video-clip)
+
+Tab **D3** again, after the lead put WS-A/B/C/F/G on `svc/video-clip`. Merged that into
+`svc/vc-ws-d`, reconciled the config seam, landed the HELD `clipcap` primary, and lit clip mode
+up end to end. **Suite: 465 passed** (was 304 WS-D-only; +155 from WS-A/B/C/F/G, +6 new clip-E2E).
+Clean code merge — WS-D touches none of clipprep/screentext/captions/keyframes/main; only
+`handoff/ws-video-clip.md` conflicted and was resolved by KEEPING ALL build-log blocks (WS-A…G).
+
+**1 — Merge.** `git merge svc/video-clip`. D1's `config.py`/`mode.py`/`clip_types.py` survive
+unchanged (that branch never touched them), so the real `VisionSettings` wins and WS-B/WS-C's local
+shims arrive on their own files, reconciled next.
+
+**2 — Config seam (I own `config.py`; one 1-line fix in WS-C's `ocr/config.py`).** Grepped every
+`VIDEO_*` read in `clipprep`/`screentext`/`clip.py`/`ocr/`. All output-affecting knobs already map to
+classified `VisionSettings` fields — including `ocr_model` (OUTPUT_AFFECTING) / `ocr_api_key`
+(OPERATIONAL_ONLY), folded in during the first D3 pass, which is exactly the OCR-vlm-arm gap. **One
+real hole found and closed:** WS-C's OCR assembler budgeted on its OWN `VIDEO_OCR_CHARS_PER_SECOND`
+(on `OcrConfig`, invisible to `cfg_tag`) — an output-affecting knob that could rewrite the `ocr`
+record's bytes under an unchanged `record_id` (the silent `/context` overwrite D-13 exists to close).
+Per D-11 the OCR rate is DERIVED (`total − caption_share`), not an independent dial, so `get_ocr_config`
+now reads the canonical `VIDEO_CHARS_PER_SECOND` / `VIDEO_CAPTION_CHARS_SHARE` (both OUTPUT_AFFECTING,
+so `cfg_tag` forks on them); defaults `22−16=6` preserve behaviour and match `budget._ocr_rate`. The
+`OUTPUT_AFFECTING | OPERATIONAL_ONLY == fields` completeness test still passes (49 fields). *Follow-up
+for the WS-C owner: collapse the local `assemble.ocr_cap` stub to `import app.vision.budget.ocr_cap`
+once `screentext` threads `vs` — the stub's own TODO; deferred to avoid re-plumbing a stage signature.*
+
+**3 — `clipcap` primary landed** (`app/stages/video/clipcap.py`, the locked declaration): `primary` /
+`required` / `order 20`, `needs=("clipprep","screentext")`, `provides=("clip",)`,
+`mutable_slots=("enrichments",)`, `enabled()==resolve_pipeline()=="clip"`,
+`version_fragment = backend.PIPELINE_VERSION + backend.prompt_tag(vs) + cfg_tag(vs)`, `run_async` (one
+loop-native VLM call), `assemble()` → exactly ONE `kind='caption'`, `discriminator=""`, `t_start=None`
+via `emit.caption_unit`. **Needs-closure now resolves** (clipprep + screentext are registered
+siblings). Reads config fresh via `get_vision_settings()` — NOT `clipprep`'s `vision_settings` slot,
+which in clip mode holds WS-B's `ClipVisionSettings` bundle, not D1's flat `VisionSettings` (the
+captioner/emit/cfg_tag path speaks the flat one). Both are pure functions of the same per-chunk env,
+so the accept-time dialect and the run-time read agree.
+
+**4 — Full clip resolution verified** (`tests/test_clip_pipeline_e2e.py`, 6 tests, REAL discovery +
+executor, not a hand-built stage list):
+- `stages_for("video")` lists all five at the locked band — `keyframes 0`, `clipprep 5`, `captions 10`,
+  `screentext 15`, `clipcap 20` — **no duplicate order**.
+- `VIDEO_PIPELINE=clip` → `resolve()` yields **exactly one primary (`clipcap`)** + `clipprep` +
+  `screentext`; legacy `captions`/`keyframes` gated off.
+- one fixture chunk through `run_graph` → **exactly TWO records**: `kind='caption'` (disc `""`) and
+  `kind='ocr'` (disc `"ocr"`), **both carrying the C1 span byte-for-byte** (`t_start`/`t_end` verbatim,
+  `abs_time` never called), both C2-schema-valid, distinct `record_id`s.
+- `pipeline_version` composes to **`vidclip-mock-v1#<cfg>+cp-v1+ocr-mock-v1`** (mock) and
+  **`vidclip-vlm-v1@screen-clip-v1.p<N>.<digest>#<cfg>+cp-v1+ocr-ppv4-cpu-v1`** (vlm) — base primary
+  fragment + sorted sidecar fragments, exactly the design's composed dialect.
+- determinism: two runs → identical record set + ids. Legacy `keyframe` mode still resolves
+  `captions`/`vidproc-mock-v0` byte-for-byte; an unknown `VIDEO_PIPELINE` still coerces to `keyframe`.
+
+  Updated `tests/test_legacy_dialect.py::test_clip_mode_disables_the_legacy_pair`: its
+  pre-integration premise ("no clip primary registered → zero-primary raise") is now obsolete — clip
+  mode resolves to `clipcap`. The gate proof (both legacy stages disabled) is retained; the raise
+  became a resolves-to-`clipcap` assertion.
+
+**5 — D3 exit checklist re-run against the integrated base: all PASS.** Every item from the earlier
+`## Build log — WS-D (consolidation · D3)` table holds unchanged (same green tests), now PLUS the live
+clip graph: the mock `clipcap` seam's one-frozen-caption criterion is proven a second way — through the
+REAL executor beside the real `screentext` OCR record — and criterion 6 (a `.prompt.md` byte forks
+`record_id`) now forks the *composed* clip dialect, whose `@<pack>.p<N>.<digest>` half is asserted in
+the E2E. Default keyframe suite green; clip-mode E2E green.
+
+Clean commit on `svc/vc-ws-d` (merge commit + this integration commit). Did not touch
+`HANDOFF.md` / `CHARTER.md`.
