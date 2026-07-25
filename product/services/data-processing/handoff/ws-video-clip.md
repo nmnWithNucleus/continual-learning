@@ -2304,3 +2304,114 @@ the E2E. Default keyframe suite green; clip-mode E2E green.
 
 Clean commit on `svc/vc-ws-d` (merge commit + this integration commit). Did not touch
 `HANDOFF.md` / `CHARTER.md`.
+
+---
+
+## Build log — WS-E
+
+**Branch:** `svc/vc-ws-e`, cut from the integrated `svc/video-clip` (WS-A/B/C/D/F/G; suite 465
+green). Two commits: WS-E (the law test + the CHARTER extract), then WS-E2 (the one sanctioned
+shared-core edit). **Suite: 724 passed, 21 skipped** — 465 baseline, unchanged and untouched, plus
+259 from this workstream. `HANDOFF.md` / `CHARTER.md` not touched.
+
+**Files owned and delivered:** `tests/test_emission_law.py` (new), `docs/record-emission-law.md`
+(new — the CHARTER extract for the lead to fold in), `app/stagegraph/stage.py` (WS-E2 only).
+
+### 1 — The finding first: the law holds, and it holds for a reason worth stating
+
+The design's claim was that §4 is compliant by construction on the current registry. It is: **zero
+real violations** across every configuration tested. The one thing worth flagging is not a violation
+but the shape of the exemption — `video/keyframes` really is a provides-bearing sidecar with an
+empty fragment, and the law test now runs *with the exemption set emptied* and asserts that pair is
+the **only** violation in any configuration. So the exemption is a named debt with a tripwire, not a
+category anyone else can slip into.
+
+### 2 — Why the test is a MATRIX, not a single default-env pass
+
+Every rider is conditioned on *enabledness*, and enabledness is read fresh from the environment
+(`resolve_pipeline()`, `get_ocr_config()`, `get_audio_config()`). A law asserted only under the
+default env would be silent about exactly the configuration a cutover flips to. `_MATRIX` covers 10
+rows: legacy default · legacy+vlm · legacy with every audio sidecar on · legacy with mistyped values
+· clip × {`off`, `mock`, `ppocr`, `vlm`, typo} · clip with every audio sidecar on. Every check below
+runs over all 10.
+
+Asserted over the **live registry** (`stages_for`, the real integrated stages — never a fixture):
+
+- **R1 fork rider** — an enabled `sidecar` with non-empty `provides` returns a non-empty
+  `version_fragment`; single frozen exemption `keyframes`. Plus the exemption-emptied run above.
+- **R3(b)/(a)** — no `best_effort` stage carries a fragment; `best_effort` is sidecar-only; no
+  `required` stage sits downstream of a `best_effort` one.
+- **mutate rules** — no mutate overrides `enabled()`; every enabled mutate's `writes ⊆` the
+  **enabled** primary's `mutable_slots` (video ships two primaries, so "the primary" is
+  configuration-dependent and the check resolves it per row).
+- **exactly one enabled primary per modality**, with a non-empty base dialect, in all 10 rows.
+- **R4 determinism** at the resolver level (`is_enabled` / `version_fragment` are pure), and
+  `resolve()` produces the same `pipeline_version` twice.
+- **a disabled stage's fragment never reaches the dialect.** This is the one place the checks are
+  deliberately *one-directional*. `screentext.version_fragment` is a pure function of the OCR config,
+  so it returns `+ocr-mock-v1` even in keyframe mode where the stage is disabled. That is harmless
+  only because `resolve()` composes from the enabled set alone — so the test asserts *that*, plus the
+  observable form (keyframe mode's video dialect is the bare `vidproc-*-v0` literal), rather than
+  forcing every resolver to gate itself on enabledness. An earlier draft asserted the bidirectional
+  binding `enabled() ⇔ fragment != ''` and reddened on `screentext`; that draft was wrong, not the
+  stage — R1 is one-directional by design and the addendum's `off`-carries-a-fragment argument
+  depends on it.
+
+### 3 — The 18-row worked table
+
+Rows **1, 2, 3, 9, 11, 13, 14/15, 4/17, 18** are encoded as assertions (clip primary = one
+`discriminator=""` caption unit with `t_start=None`, driven through the real `emit.caption_unit`;
+per-keyframe records retired = the clip-mode enabled set is exactly `{clipprep, screentext,
+clipcap}`; OCR = exactly one `kind='ocr'` unit **always**, driven through the real
+`ScreentextStage.run_sync` with nothing legible to read, proving R3(e)'s presence-is-the-signal and
+R4's outcome-independence; row 13 generalised to *no mutate may be permanently unrunnable*, checked
+by quantifying over the whole matrix). The remaining rows carry the **reason** they are not
+mechanically checkable at this layer (mostly: "an absence cannot be asserted over a registry"), and
+`TABLE_ROWS` — the coverage map itself — is asserted complete, so a 19th row cannot be added without
+deciding which it is.
+
+Row 15's latent hole is pinned rather than fixed: `acoustic.provides == ()` is asserted, so the day a
+real acoustic backend starts providing a slot, R1 applies and CI goes red. Audio owner's call, as §4.4
+says.
+
+### 4 — Exit criterion: the law FAILS on a violator
+
+The checkers (`r1_violations`, `r3b_violations`, `mutate_violations`, `writes_violations`) take a
+stage **list**, not the registry — so the code that vets the live registry is the code the negative
+tests point at a bad stage. A hypothetical violator is caught both as a bare instance and once
+**registered** into a throwaway modality and read back through `stages_for`. Verified by mutation
+beyond that: breaking `screentext.version_fragment` to return `''` reddens **24** tests across the
+matrix (reverted).
+
+### 5 — WS-E2 landed. **It is a clip-cutover gate.**
+
+`register_stage` bound `enabled()` ↔ `version_fragment()` only for `mutate` (`stage.py:226-230`). A
+**sidecar** with non-empty `provides` — which `screentext` is under the ratified Architecture A — had
+two independent resolvers, re-opening the diarize silent-overwrite class **for the caption record**.
+Now: a provides-bearing sidecar that never declares `version_fragment()` fails at **import**, with
+`R1_EXEMPT_SIDECARS = {("video","keyframes")}` as the single frozen exemption — named in `stage.py`
+and in the law test, and asserted equal so the two cannot drift.
+
+- Scope is exactly `provides`: additive sidecars (`translate`, `acoustic`, `injected_caption`) declare
+  neither and stay legal.
+- All **5 video + 5 audio** shipped stages register unchanged; verified additionally by dropping a
+  synthetic bad stage file into `app/stages/video/` and confirming it raises during **real
+  discovery**, not merely via a direct decorator call.
+- **Honest limit, asserted rather than glossed:** settings do not exist at import, so the raise is the
+  *structural* half only. A stage that declares a resolver returning `''` for the configuration it is
+  enabled in still registers — that case is caught by the matrix in `tests/test_emission_law.py` and
+  nowhere else. The three layers (registration raise · CI matrix · graph resolution) are documented in
+  the CHARTER extract, with the gap between them made explicit.
+
+**Consequence for the fan-out:** the §11 addendum item 6 prerequisite is **satisfied** —
+`VIDEO_PIPELINE=clip` may now be turned on for a real user as far as the dual-resolver hole is
+concerned (WS-G's E-2 / fresh-`user_id` rule is a separate, still-standing gate). `app/stagegraph/stage.py`
+is the only shared-core file WS-E touched, as chartered.
+
+### 6 — For the lead at reconciliation
+
+`docs/record-emission-law.md` is the CHARTER extract: the invariant, T1–T5, R1–R5 (with R2 Corollary
+2 and R4's `stage outcome` clause folded in), the three-enforcement-layer table, the frozen
+exemption, and row 15's named latent hole. It is written to CHARTER standard and is meant to be
+folded into `CHARTER.md` and then deleted or left as the working copy — WS-E did not edit
+`CHARTER.md` or `HANDOFF.md`.
