@@ -18,6 +18,7 @@ from __future__ import annotations
 from ...processing.processors import video as video_proc
 from ...stagegraph import Stage, StageContext, StageResult, register_stage
 from ...vision.config import get_vision_settings
+from ...vision.mode import resolve_pipeline
 from ...vision.result import Keyframe
 
 
@@ -28,6 +29,17 @@ class KeyframesStage(Stage):
     kind = "sidecar"          # emits no units; only provides a slot
     order = 0
     provides = ("keyframes", "vision_settings")
+
+    # D-14: no `version_fragment` here — this stage is the SINGLE frozen exemption to the
+    # R1 rule (a sidecar with non-empty `provides` normally carries a non-empty fragment).
+    # It stays "" (inherited) solely to reproduce the pre-migration `vidproc-*-v0`
+    # record_ids byte-for-byte; no new stage may join this exemption.
+
+    def enabled(self, settings) -> bool:
+        # D-14 gate: the legacy keyframe path runs iff the single mode resolver says so.
+        # Unknown/mistyped VIDEO_PIPELINE resolves to "keyframe" (the shipped safe
+        # default), so a typo never disables BOTH graphs → zero primaries → 500.
+        return resolve_pipeline() == "keyframe"
 
     def run_sync(self, ctx: StageContext) -> StageResult:
         vs = get_vision_settings()

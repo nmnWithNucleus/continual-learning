@@ -1,0 +1,13 @@
+{
+  "name": "gmail-compose",
+  "frame": {"t_offset_s": 0.0, "width": 1728, "height": 1080},
+  "regions": [
+    {"text": "Inbox (12) - Gmail",   "bbox": [0.00, 0.00, 0.40, 0.03], "conf": 0.98, "expect_role": "titlebar", "keep": true},
+    {"text": "Compose",              "bbox": [0.02, 0.08, 0.12, 0.11], "conf": 0.95, "expect_role": "tab",       "keep": true},
+    {"text": "Inbox",                "bbox": [0.02, 0.30, 0.15, 0.33], "conf": 0.94, "expect_role": "sidebar",   "keep": true},
+    {"text": "Re: Q3 deck review",   "bbox": [0.30, 0.35, 0.80, 0.40], "conf": 0.93, "expect_role": "main",      "keep": true},
+    {"text": "ok",                   "bbox": [0.30, 0.50, 0.35, 0.52], "conf": 0.99, "expect_role": "main",      "keep": false, "why": "dropped by min_chars (< 4)"},
+    {"text": "faint watermark text", "bbox": [0.30, 0.60, 0.60, 0.63], "conf": 0.30, "expect_role": "main",      "keep": false, "why": "dropped by conf < 0.60"},
+    {"text": "Send later",           "bbox": [0.30, 0.88, 0.45, 0.91], "conf": 0.90, "expect_role": "compose",   "keep": true}
+  ]
+}

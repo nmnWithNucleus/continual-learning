@@ -21,7 +21,13 @@ from tests.fake_storage import FakeStorage
 from tests.conftest import make_c1
 
 
-def _wait(pred, timeout: float = 5.0, interval: float = 0.01) -> bool:
+def _wait(pred, timeout: float = 20.0, interval: float = 0.01) -> bool:
+    # Patience, not a backoff race: the fixture pins INGEST_RETRY_BACKOFF=0, so a
+    # test only waits for the background worker THREAD to be scheduled. On a busy
+    # box (e.g. many parallel test suites) that thread can be CPU-starved for
+    # several seconds, so a 5 s deadline flaked (`test_transient_blob_failure_
+    # retries_then_succeeds`). 20 s is load-tolerant without slowing the happy path
+    # (the poll returns the instant the predicate holds). Never gate product timing on this.
     deadline = time.time() + timeout
     while time.time() < deadline:
         if pred():
