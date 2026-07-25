@@ -5,11 +5,11 @@
 > state lives in [HANDOFF.md](HANDOFF.md); system-wide architecture + contracts in
 > [../../ARCHITECTURE.md](../../ARCHITECTURE.md).
 
-**Status:** chartered; kicked off · **Last updated:** 2026-07-23 (Morpheus core = our
-nightly-consolidation engine, per [handoff/ws-morpheus-port.md](handoff/ws-morpheus-port.md);
-serve-time memory harness → inference; **day-log build + recipe registry + reservoir → storage**;
-continuum slimmed to a 5-verb loop — see [HANDOFF.md](HANDOFF.md) § Architecture decisions.
-Storage re-cut pending founders'-board ratification.)
+**Status:** chartered; kicked off; **learn-loop integration PROVEN end-to-end (M0 met; Phase-3 DP
+dogfood PIPELINE SOUND)** · **Last updated:** 2026-07-25 (Morpheus core = our nightly-consolidation
+engine, per [handoff/ws-morpheus-port.md](handoff/ws-morpheus-port.md); serve-time memory harness →
+inference; **day-log build + recipe registry + reservoir → storage**; continuum slimmed to a 5-verb
+loop — see [HANDOFF.md](HANDOFF.md). Storage re-cut + C10 evolution pending founders'-board ratification.)
 
 ## Mission
 

@@ -4,13 +4,18 @@
 > Read [CHARTER.md](CHARTER.md) first (mission/scope/interfaces), then this file — the
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
-**Status:** **PHASE 2 COMPLETE ✅** — Morpheus port proven (kernels byte-identical; ensemble
-indistinguishable, p=0.82 at n=8/10; seed-0 closed as measurement artifact) and **M0 delivered**:
-a 32B life adapter trained by our own pipeline → gate v1.1 → C5 publish → **loads in vLLM**
-(recall 0.267). Gate policy **v1.1 RATIFIED** (2026-07-24). **2c DONE ✅** — lean 5-verb loop over
-three storage client seams; day-log fetched + fingerprint-keyed; 185 tier-A + 83 tier-B green.
-**Next: Phase 3 (DP dogfood).** Storage-expansion + continuum-slimming still pending board ·
-**Last updated:** 2026-07-24 (2c close-out)
+**Status:** ✅ **LEARN-LOOP INTEGRATION COMPLETE.** Phase 2 (Morpheus port: kernels byte-identical;
+ensemble indistinguishable p=0.82; **M0** — a 32B adapter our pipeline trained → gate v1.1 → C5 →
+**vLLM**; gate **v1.1 RATIFIED**) · Phase 2c (lean 5-verb loop over storage client seams) · **Phase 3
+(DP dogfood): PIPELINE SOUND** — parity content through the **real** recording→DP→storage→continuum
+services reproduces the baseline separation (0.137 vs 0.179, p=0.148 same distribution). Our real
+services carry the learn loop without losing learnability.
+**Open (NOT integration defects):** (1) recipe/dose — amplification must scale with block-text at our
+native cadence → **Gnandeep's knob** (cofounder to raise); (2) storage-expansion + C10-evolution →
+**founders' board** (see below + storage handoff); (3) storage server-side (day-log materialization /
+recipe registry / reservoir) → storage workstream; (4) serve-time memory harness → inference, a
+separate future phase. ·
+**Last updated:** 2026-07-25 (learn-loop close-out)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
@@ -18,7 +23,7 @@ three storage client seams; day-log fetched + fingerprint-keyed; 185 tier-A + 83
 | WS1 | Nightly-loop scaffold: mock cycle headless green (window→daylog→amplify→replay→train→gate→publish, journaled + idempotent) | **done** | [handoff/ws-nightly-scaffold.md](handoff/ws-nightly-scaffold.md) | this session |
 | WS2 | **Morpheus port** (real `TRAINER_BACKEND=morpheus`); exit = Speed-data night reproduces recipe-v1.0 numbers through our gate + C5 path | **2a + 2b DONE ✅** (port proven; 32B M0 published + served) | [ws-morpheus-port.md](handoff/ws-morpheus-port.md) · [phase-2a-report.md](handoff/phase-2a-report.md) · [overnight-2-report.md](handoff/overnight-2-report.md) | Morpheus sessions |
 | WS2c | **Lean storage seams** — 5-verb loop over three storage CLIENT interfaces (day-log fetch / recipe registry / reservoir), local impls; daylog/window/renderer migrated behind the day-log client (byte-identical); raw-source replay wired | **done ✅** (185 tier-A + 83 tier-B green; cycle.py fetches + keys on the day-log fingerprint) | [ws-morpheus-port.md](handoff/ws-morpheus-port.md) §7 (2c) | 2c: Morpheus session |
-| WS-P3 | **Phase 3 — DP dogfood**: Speed data through the real recording→DP→storage→continuum pipeline (test-type = config profile + `replay-speed` naming, NOT a contract field; chunk/block rule-bent to 1-min/5-min by a test recipe; ASR/diarize run real but kept out of the recall day-log). Measures: does seen-vs-heldout separation SURVIVE the product path | **ready to build** (design locked 2026-07-24; feasibility verified — ~2 net-new files, rest config) | [handoff/ws-phase3-dogfood.md](handoff/ws-phase3-dogfood.md) | — |
+| WS-P3 | **Phase 3 — DP dogfood**: Speed data through the real recording→DP→storage→continuum pipeline. 3a bridged 209.7 h of real audio; 3b's 1-min rule-bend collapsed on **dose**; the **decomp (parity content) reproduced the baseline separation** → **PIPELINE SOUND** | **done ✅** — learn-loop integration proven end-to-end | [handoff/ws-phase3-dogfood.md](handoff/ws-phase3-dogfood.md) · [phase-3-decomp-report.md](handoff/phase-3-decomp-report.md) | Phase-3 sessions |
 | WS3 | C10 v0 freeze (with storage; founders ratify) + real storage integration + watermark/late-data policy | queued | *(opens with the freeze session)* | — |
 | WS4 | Eval gates v1: probe generation (generator ≠ corpus-generator), Gemini judge on our creds, the 3 unwired gate checks | queued — after WS2 | *(opens with work)* | — |
 

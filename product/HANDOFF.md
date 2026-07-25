@@ -20,14 +20,14 @@
 | Input | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-A | [canvas](services/input/HANDOFF.md) |
 | Inference | **v0.0 live on real Qwen3-VL-32B** (vLLM TP=8 on node-7, verified E2E 2026-07-09) | serve-loop WS-B | [canvas](services/inference/HANDOFF.md) |
 | Output | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-C | [canvas](services/output/HANDOFF.md) |
-| Continuum | chartered — **kickoff queued NEXT after the deep session (D15 2026-07-19); gate: C10 v0 freeze** | — | [canvas](services/continuum/HANDOFF.md) |
+| Continuum | ✅ **LEARN-LOOP INTEGRATION PROVEN END-TO-END (2026-07-25).** Kickoff → **Morpheus** nightly-consolidation core reimplemented from the research line (`b3c58e1`), parity-proven; **M0** — a 32B life adapter our own pipeline trained → gate → C5 → **served in vLLM**; lean 5-verb loop over storage client seams; **Phase-3 DP dogfood: real Speed data through recording→DP→storage→continuum reproduces the baseline separation (PIPELINE SOUND).** Gate policy **v1.1** adopted. Now-pending (board): storage charter expansion + C10 evolution (below) | Morpheus + Phase-3 sessions | [canvas](services/continuum/HANDOFF.md) |
 | Platform | **v0.0 serve bring-up + learn-loop bring-up** (`run_all.sh` + `run_learn.sh`, both run E2E 2026-07-09) | serve + learn | [canvas](services/platform/HANDOFF.md) |
 
 ## Founders' aspect threads
 
 | Aspect | File | State |
 |---|---|---|
-| Engineering | [handoff/engineering.md](handoff/engineering.md) | active — serve-loop v0.0 **closed on real Qwen3-VL-32B**; capture M0 + modality seams done; **recording-led capture M1 + computer capture surfaces DONE (alpha complete 2026-07-19)**; **DP v1 + HARDENING merged + verified 2026-07-21** (163/120/26; all 3 v1 findings closed by construction, subprocess isolation, M7 substantially done); now: **D15 — continuum kickoff (C10 freeze gate) closes the learn loop + platform D9 backbone** |
+| Engineering | [handoff/engineering.md](handoff/engineering.md) | active — serve-loop v0.0 **closed on real Qwen3-VL-32B**; capture M1 + computer surfaces DONE; DP v1 + HARDENING merged; **D15 continuum kickoff → LEARN LOOP CLOSED (2026-07-25): Morpheus port parity-proven, M0 (32B adapter → C5 → vLLM), Phase-3 dogfood proves the real recording→DP→storage→continuum path carries it (PIPELINE SOUND).** Next founder acts: **storage/C10 board session** (expansion + C10 evolution) |
 | Research | [handoff/research.md](handoff/research.md) | seeded — first agenda: POC→continuum bridge, research agenda v1 |
 | Design / UX | [handoff/design.md](handoff/design.md) | seeded |
 | Hiring / Ops | [handoff/hiring-ops.md](handoff/hiring-ops.md) | seeded |
@@ -237,6 +237,35 @@ ratified in-session 2026-07-19 → **D16**.)*
   inline** — it's the C8/M6 skeleton and the byte-identical verification baseline; flipping
   the async production default stays a founders' call after the **D16 re-drive drill** (still
   the one open gate). Detail: [ws-dp-hardening](services/data-processing/handoff/ws-dp-hardening.md).
+
+- 2026-07-25 (continuum — **THE LEARN LOOP IS CLOSED**): the D15 continuum kickoff ran to
+  completion. The nightly-consolidation core (**"Morpheus"**, our nomenclature; methods
+  reimplemented cleanly from the research consolidation line `b3c58e1`, parity-proven by a
+  differential harness — `render_block` byte-identical, LoRA targets 252/252, judge exact,
+  ensemble indistinguishable at n=8/10, p=0.82) sits behind a `TRAINER_BACKEND` seam (mock
+  default). **M0 met:** a 32B life adapter *our* pipeline trained → publish-gate v1.1 → C5 →
+  **served in vLLM** (32B training needs ≥2 GPUs — a measured hard limit). Continuum was slimmed
+  to a lean **5-verb loop** (fetch recipe · fetch day-log · amplify · finetune · gate · publish)
+  over three storage **client seams** (local now, HTTP-to-storage later). Then the **Phase-3 DP
+  dogfood** routed real Speed data (209.7 h of audio, 629 chunks) through the **actual
+  recording→DP→storage→continuum services** — a replay `ChunkSource` + an injected-caption DP
+  sidecar (~2 net-new files, no contract changes; test-type = config profile + `replay-speed`
+  naming, NOT a contract field). The 1-min rule-bend collapsed recall on **dose** (fixed 48
+  retellings now spread over 4.1× the block text); the **decomposition run with parity block
+  content reproduced the baseline separation** (0.137 vs 0.179, permutation p=0.148 — same
+  distribution; p=0.018 above the no-consolidation control). **Verdict: PIPELINE SOUND — our real
+  services carry the learn loop without losing learnability.** Suites green: continuum 185 ·
+  storage 26 · recording 133 · DP 173. Detail: continuum canvas + [ws-morpheus-port](services/continuum/handoff/ws-morpheus-port.md) · [ws-phase3-dogfood](services/continuum/handoff/ws-phase3-dogfood.md).
+  **Two founder-level follow-ups, neither an integration defect:** (a) a **recipe/dose finding for
+  Gnandeep** — amplification dose is fixed *per block* but recall depends on retellings *per unit
+  of text*, so at our native cadence dose must scale with block-text volume (cofounder to raise);
+  (b) a **storage/C10 board session** — ratify the storage charter expansion (day-log
+  materialization + recipe registry + reservoir custody) and the **C10 evolution** from a raw
+  range-read to a **day-log fetch, random-access by `(user, window_id)`** (six cross-service
+  friction notes captured in the Phase-3 report; new recipe-registry + reservoir contract IDs
+  minted at ratification). **Gate policy v1.1** (traps ≥0.15/0.25, heldout exact-test vs each run's
+  own base control, `min_probes` 148) was split from the training recipe so a threshold change
+  never forks `recipe_id`.
 
 ## Next
 

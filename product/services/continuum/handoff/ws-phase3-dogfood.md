@@ -1,9 +1,20 @@
 # WS-P3 — Phase 3: the DP dogfood (Speed data through the real pipeline)
 
-**Status:** BUILT + RUN — 3a landed, 3b measured (see [phase-3-report.md](phase-3-report.md))
-· design locked (cofounders, 2026-07-24) · **Spans:** recording + DP +
-storage + continuum · **Driven by:** continuum (learn-loop validation) · Prereq: Phase 2 (2a/2b/2c)
-DONE on main.
+**Status:** ✅ **COMPLETE — LEARN-LOOP INTEGRATION PROVEN END-TO-END.** 3a bridged real Speed
+audio through recording→DP→storage; 3b (1-min rule-bend) collapsed on **dose**, not the pipeline;
+the **decomposition run (parity content, `segment_seconds=300 block_segments=1`) reproduced the
+baseline separation** — 0.137 vs baseline 0.179, permutation **p=0.148 (same distribution)**,
+p=0.018 above the no-consolidation control, p=0.016 above the failed 1-min run. Verdict: **PIPELINE
+SOUND**. Reports: [phase-3-report.md](phase-3-report.md), [phase-3-decomp-report.md](phase-3-decomp-report.md).
+· design locked (cofounders, 2026-07-24) · **Spans:** recording + DP + storage + continuum ·
+**Driven by:** continuum (learn-loop validation) · Prereq: Phase 2 (2a/2b/2c) DONE on main.
+
+> **Bottom line:** our real product services carry the learn loop without losing the model's
+> ability to learn. The only residual is a **recipe/dose** property (amplification is fixed at
+> 48 retellings *per block*, but recall depends on retellings *per unit of text* — so dose must
+> scale with block-text volume at our native cadence) — Gnandeep's knob, NOT an integration defect.
+> A minor block-**wrapper** rendering residual (`On <date>… / Scene:` vs the reference's
+> `[Day N of 35 · City · …]` header) is a later block-shape question; it does not move the verdict.
 
 > **The one question Phase 3 answers:** when Speed's data flows through our REAL product pipeline
 > (recording → DP → storage → continuum), does **seen-vs-heldout separation SURVIVE**? Not "does it

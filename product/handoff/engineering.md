@@ -4,7 +4,7 @@
 > Cross-service build sequencing, integration plans, infra calls. Service-internal
 > engineering lives in each service's canvas, not here.
 
-**Status:** active · **Last updated:** 2026-07-21
+**Status:** active · **Last updated:** 2026-07-25 (learn-loop closed — see D15 close-out below)
 
 ---
 
@@ -484,7 +484,22 @@ re-run independently — **DP 98 · recording 120 · storage 26, green** — and
 OQ records verified in the diff. Detail:
 [ws-async-observability](../services/data-processing/handoff/ws-async-observability.md).
 
-**D15 — what comes after (decided this session).**
+**D15 — CLOSED (2026-07-25): the learn loop is proven end-to-end.** The continuum kickoff ran to
+completion. The consolidation core (**Morpheus**, reimplemented from the research line `b3c58e1`,
+parity-proven) trains a real 32B life adapter → gate v1.1 → C5 → **served in vLLM** (M0), behind a
+lean 5-verb loop over storage client seams. The **Phase-3 DP dogfood** then routed real Speed data
+through the **actual recording→DP→storage→continuum services** and — once block content matched
+parity (the 1-min rule-bend's collapse was **dose**, not the pipeline) — **reproduced the baseline
+separation (PIPELINE SOUND)**. The captured-days-are-inert-until-continuum-runs gap (below) is now
+mechanically closed. **Remaining founder acts, both scheduled not blocking:** the **C10 freeze
+becomes a C10 *evolution*** (raw range-read → **day-log fetch, random-access by `(user, window_id)`**)
+folded into a **storage/C10 board session** that also ratifies the storage charter expansion
+(day-log materialization + recipe registry + reservoir); and a **recipe/dose finding for Gnandeep**
+(dose must scale with block-text at our native cadence). The cluster-split + DP-OQ5 items below rode
+along: continuum's nightly window ran on node-7 via SLURM without disturbing Gnandeep's occupancy.
+Detail: [../services/continuum/HANDOFF.md](../services/continuum/HANDOFF.md).
+
+*Original D15 plan (for the record):*
 
 1. **Continuum kickoff is the next founders-led slice.** It is the last unstarted pillar and
    the thesis itself: every upstream leg now stands (serve loop proven on real Qwen3-VL-32B;
