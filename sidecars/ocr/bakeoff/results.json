@@ -1,0 +1,3852 @@
+{
+ "gate": {
+  "recall_min": 0.85,
+  "cer_max": 0.1,
+  "recall_metric": "key-string >=5 char, lenient"
+ },
+ "corpus": {
+  "kind": "synthetic-proxy",
+  "frames": 204,
+  "note": "deterministic macOS-UI mocks, 13pt-equivalent body text, real x264 CRF encode. NOT the 200 hand-labelled real frames O-2 requires."
+ },
+ "arms": [
+  {
+   "engine": "ppocr",
+   "width": 1728,
+   "model_sha_det": "d2a7720d45a54257208b1e13e36a8479894cb74155a5efe29462512d42f49da9",
+   "model_sha_rec": "48fc40f24f6d2a207a2b1091d3437eb3cc3eb6b676dc3ef9c37384005483683b",
+   "ort_version": "1.27.0",
+   "ep": "CPUExecutionProvider",
+   "crf": 28,
+   "wall_s": 189.2,
+   "overall": {
+    "n_frames": 204,
+    "n_keys": 3026,
+    "recall_substring": 0.983391382868937,
+    "recall_fuzzy": 0.9997420020639834,
+    "recall_substring_micro": 0.988433575677462,
+    "recall_fuzzy_micro": 0.9993390614672836,
+    "cer": 0.06975363857915198
+   },
+   "by_archetype": {
+    "browser-article": {
+     "n_frames": 34,
+     "n_keys": 238,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "recall_substring_micro": 1.0,
+     "recall_fuzzy_micro": 1.0,
+     "cer": 0.11468247776564207
+    },
+    "gmail-light": {
+     "n_frames": 34,
+     "n_keys": 544,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "recall_substring_micro": 1.0,
+     "recall_fuzzy_micro": 1.0,
+     "cer": 0.07312744208714461
+    },
+    "ide-dark": {
+     "n_frames": 34,
+     "n_keys": 238,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "recall_substring_micro": 1.0,
+     "recall_fuzzy_micro": 1.0,
+     "cer": 0.045203877005347594
+    },
+    "sheet-light": {
+     "n_frames": 34,
+     "n_keys": 1292,
+     "recall_substring": 0.9922600619195047,
+     "recall_fuzzy": 0.9984520123839009,
+     "recall_substring_micro": 0.9922600619195047,
+     "recall_fuzzy_micro": 0.9984520123839009,
+     "cer": 0.02226558427060682
+    },
+    "slack-dark": {
+     "n_frames": 34,
+     "n_keys": 442,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "recall_substring_micro": 1.0,
+     "recall_fuzzy_micro": 1.0,
+     "cer": 0.1129440701245169
+    },
+    "terminal-dark": {
+     "n_frames": 34,
+     "n_keys": 272,
+     "recall_substring": 0.9080882352941176,
+     "recall_fuzzy": 1.0,
+     "recall_substring_micro": 0.9080882352941176,
+     "recall_fuzzy_micro": 1.0,
+     "cer": 0.05029838022165388
+    }
+   },
+   "per_frame": [
+    {
+     "id": "ide-dark-000",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.048295454545454544,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-001",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04261363636363636,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-002",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04261363636363636,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-003",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.045454545454545456,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-004",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.045454545454545456,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-005",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.045454545454545456,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-006",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.045454545454545456,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-007",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.045454545454545456,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-008",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.045454545454545456,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-009",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.048295454545454544,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-010",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.048295454545454544,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-011",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.045454545454545456,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-012",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04261363636363636,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-013",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.048295454545454544,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-014",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.045454545454545456,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-015",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.045454545454545456,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-016",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.045454545454545456,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-017",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.045454545454545456,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-018",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04261363636363636,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-019",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.045454545454545456,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-020",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.048295454545454544,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-021",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04261363636363636,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-022",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04261363636363636,
+     "n_regions": 27
+    },
+    {
+     "id": "ide-dark-023",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.048295454545454544,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-024",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04261363636363636,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-025",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.045454545454545456,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-026",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.045454545454545456,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-027",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.045454545454545456,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-028",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04261363636363636,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-029",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.045454545454545456,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-030",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.048295454545454544,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-031",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04261363636363636,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-032",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04261363636363636,
+     "n_regions": 26
+    },
+    {
+     "id": "ide-dark-033",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.045454545454545456,
+     "n_regions": 26
+    },
+    {
+     "id": "gmail-light-000",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.06643356643356643,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-001",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.06734006734006734,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-002",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0711864406779661,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-003",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.08333333333333333,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-004",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.07457627118644068,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-005",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.07023411371237458,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-006",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.07590759075907591,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-007",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.06597222222222222,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-008",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0777027027027027,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-009",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.07216494845360824,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-010",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.06643356643356643,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-011",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.07407407407407407,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-012",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.07457627118644068,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-013",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.08333333333333333,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-014",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0711864406779661,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-015",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.07023411371237458,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-016",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.07590759075907591,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-017",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.06597222222222222,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-018",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0777027027027027,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-019",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.07216494845360824,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-020",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.06643356643356643,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-021",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0707070707070707,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-022",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0711864406779661,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-023",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.08666666666666667,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-024",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0711864406779661,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-025",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.07023411371237458,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-026",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.08250825082508251,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-027",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.06597222222222222,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-028",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0777027027027027,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-029",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.07216494845360824,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-030",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.06993006993006994,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-031",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.07407407407407407,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-032",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.06779661016949153,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-033",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.08333333333333333,
+     "n_regions": 33
+    },
+    {
+     "id": "slack-dark-000",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11538461538461539,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-001",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.1103202846975089,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-002",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11188811188811189,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-003",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11149825783972125,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-004",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.12014134275618374,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-005",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11228070175438597,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-006",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.10839160839160839,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-007",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11347517730496454,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-008",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.10638297872340426,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-009",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.1076388888888889,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-010",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11188811188811189,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-011",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.12099644128113879,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-012",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.1048951048951049,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-013",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.10801393728222997,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-014",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.1166077738515901,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-015",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.10877192982456141,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-016",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11188811188811189,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-017",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.12056737588652482,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-018",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11347517730496454,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-019",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.125,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-020",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11538461538461539,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-021",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.12099644128113879,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-022",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.10839160839160839,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-023",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.10801393728222997,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-024",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.1166077738515901,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-025",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11228070175438597,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-026",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11538461538461539,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-027",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.1099290780141844,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-028",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.1099290780141844,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-029",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11458333333333333,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-030",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11538461538461539,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-031",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.1103202846975089,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-032",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11188811188811189,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-033",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11149825783972125,
+     "n_regions": 25
+    },
+    {
+     "id": "terminal-dark-000",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.05434782608695652,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-001",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.057971014492753624,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-002",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04710144927536232,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-003",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.050724637681159424,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-004",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.050724637681159424,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-005",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.050724637681159424,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-006",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04710144927536232,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-007",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04710144927536232,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-008",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.043478260869565216,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-009",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04710144927536232,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-010",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04710144927536232,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-011",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.050724637681159424,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-012",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.050724637681159424,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-013",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.05434782608695652,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-014",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04710144927536232,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-015",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.050724637681159424,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-016",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.043478260869565216,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-017",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.050724637681159424,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-018",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.050724637681159424,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-019",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04710144927536232,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-020",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.050724637681159424,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-021",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04710144927536232,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-022",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.050724637681159424,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-023",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.050724637681159424,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-024",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.05434782608695652,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-025",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.050724637681159424,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-026",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.05434782608695652,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-027",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.057971014492753624,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-028",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04710144927536232,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-029",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.05434782608695652,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-030",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.050724637681159424,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-031",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.050724637681159424,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-032",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04710144927536232,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-033",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.05434782608695652,
+     "n_regions": 15
+    },
+    {
+     "id": "sheet-light-000",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.003215434083601286,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-001",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04854368932038835,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-002",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.006644518272425249,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-003",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.9736842105263158,
+     "recall_fuzzy": 1.0,
+     "cer": 0.016611295681063124,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-004",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.00980392156862745,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-005",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.9736842105263158,
+     "recall_fuzzy": 0.9736842105263158,
+     "cer": 0.00974025974025974,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-006",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.003215434083601286,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-007",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.009708737864077669,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-008",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0033222591362126247,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-009",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.9736842105263158,
+     "recall_fuzzy": 1.0,
+     "cer": 0.016611295681063124,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-010",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.9736842105263158,
+     "recall_fuzzy": 1.0,
+     "cer": 0.016339869281045753,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-011",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.045454545454545456,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-012",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04180064308681672,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-013",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.009708737864077669,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-014",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0033222591362126247,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-015",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.9736842105263158,
+     "recall_fuzzy": 1.0,
+     "cer": 0.013289036544850499,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-016",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.00980392156862745,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-017",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.006493506493506494,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-018",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04180064308681672,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-019",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04854368932038835,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-020",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.046511627906976744,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-021",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.9736842105263158,
+     "recall_fuzzy": 1.0,
+     "cer": 0.08305647840531562,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-022",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.9736842105263158,
+     "recall_fuzzy": 1.0,
+     "cer": 0.05555555555555555,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-023",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.9736842105263158,
+     "recall_fuzzy": 0.9736842105263158,
+     "cer": 0.048701298701298704,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-024",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04180064308681672,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-025",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.009708737864077669,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-026",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0033222591362126247,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-027",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.9736842105263158,
+     "recall_fuzzy": 1.0,
+     "cer": 0.016611295681063124,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-028",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0457516339869281,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-029",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.006493506493506494,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-030",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.003215434083601286,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-031",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.009708737864077669,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-032",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.006644518272425249,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-033",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.9736842105263158,
+     "recall_fuzzy": 1.0,
+     "cer": 0.01597444089456869,
+     "n_regions": 52
+    },
+    {
+     "id": "browser-article-000",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11140583554376658,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-001",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11671087533156499,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-002",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11405835543766578,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-003",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11671087533156499,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-004",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11140583554376658,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-005",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11671087533156499,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-006",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11405835543766578,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-007",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11671087533156499,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-008",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11140583554376658,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-009",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11671087533156499,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-010",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11405835543766578,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-011",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11671087533156499,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-012",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11140583554376658,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-013",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11671087533156499,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-014",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11405835543766578,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-015",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11671087533156499,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-016",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11140583554376658,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-017",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11671087533156499,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-018",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11405835543766578,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-019",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11671087533156499,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-020",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11140583554376658,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-021",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11671087533156499,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-022",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11405835543766578,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-023",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11671087533156499,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-024",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11140583554376658,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-025",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11671087533156499,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-026",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11405835543766578,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-027",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11671087533156499,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-028",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11140583554376658,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-029",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11671087533156499,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-030",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11405835543766578,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-031",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11671087533156499,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-032",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11140583554376658,
+     "n_regions": 14
+    },
+    {
+     "id": "browser-article-033",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.11671087533156499,
+     "n_regions": 14
+    }
+   ]
+  },
+  {
+   "engine": "ppocr",
+   "width": 1152,
+   "model_sha_det": "d2a7720d45a54257208b1e13e36a8479894cb74155a5efe29462512d42f49da9",
+   "model_sha_rec": "48fc40f24f6d2a207a2b1091d3437eb3cc3eb6b676dc3ef9c37384005483683b",
+   "ort_version": "1.27.0",
+   "ep": "CPUExecutionProvider",
+   "crf": 28,
+   "wall_s": 112.6,
+   "overall": {
+    "n_frames": 204,
+    "n_keys": 3026,
+    "recall_substring": 0.9122962950362332,
+    "recall_fuzzy": 0.9377487837240159,
+    "recall_substring_micro": 0.8694646397884996,
+    "recall_fuzzy_micro": 0.8902842035690681,
+    "cer": 0.07383395962388845
+   },
+   "by_archetype": {
+    "browser-article": {
+     "n_frames": 34,
+     "n_keys": 238,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "recall_substring_micro": 0.8571428571428571,
+     "recall_fuzzy_micro": 0.8571428571428571,
+     "cer": 0.0032766422218754873
+    },
+    "gmail-light": {
+     "n_frames": 34,
+     "n_keys": 544,
+     "recall_substring": 0.9705882352941176,
+     "recall_fuzzy": 1.0,
+     "recall_substring_micro": 0.9705882352941176,
+     "recall_fuzzy_micro": 1.0,
+     "cer": 0.0024850485086152685
+    },
+    "ide-dark": {
+     "n_frames": 34,
+     "n_keys": 238,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "recall_substring_micro": 1.0,
+     "recall_fuzzy_micro": 1.0,
+     "cer": 0.10511363636363635
+    },
+    "sheet-light": {
+     "n_frames": 34,
+     "n_keys": 1292,
+     "recall_substring": 0.7693498452012384,
+     "recall_fuzzy": 0.7693498452012384,
+     "recall_substring_micro": 0.7693498452012384,
+     "recall_fuzzy_micro": 0.7693498452012384,
+     "cer": 0.0462763321245998
+    },
+    "slack-dark": {
+     "n_frames": 34,
+     "n_keys": 442,
+     "recall_substring": 0.9208144796380091,
+     "recall_fuzzy": 1.0,
+     "recall_substring_micro": 0.920814479638009,
+     "recall_fuzzy_micro": 1.0,
+     "cer": 0.008358492386496294
+    },
+    "terminal-dark": {
+     "n_frames": 34,
+     "n_keys": 272,
+     "recall_substring": 0.9558823529411765,
+     "recall_fuzzy": 1.0,
+     "recall_substring_micro": 0.9558823529411765,
+     "recall_fuzzy_micro": 1.0,
+     "cer": 0.2774936061381074
+    }
+   },
+   "per_frame": [
+    {
+     "id": "ide-dark-000",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.17329545454545456,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-001",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04261363636363636,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-002",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.20738636363636365,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-003",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.03125,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-004",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.19602272727272727,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-005",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.03409090909090909,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-006",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.05397727272727273,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-007",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.03977272727272727,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-008",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04261363636363636,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-009",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.22443181818181818,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-010",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.17329545454545456,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-011",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.045454545454545456,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-012",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.20738636363636365,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-013",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.03125,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-014",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.19318181818181818,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-015",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.03409090909090909,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-016",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.048295454545454544,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-017",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.036931818181818184,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-018",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.03977272727272727,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-019",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2215909090909091,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-020",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.17045454545454544,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-021",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.045454545454545456,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-022",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.20738636363636365,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-023",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.03125,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-024",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.19602272727272727,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-025",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.03125,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-026",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.05113636363636364,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-027",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.03977272727272727,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-028",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.045454545454545456,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-029",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.22443181818181818,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-030",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.17329545454545456,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-031",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.04261363636363636,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-032",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.20738636363636365,
+     "n_regions": 23
+    },
+    {
+     "id": "ide-dark-033",
+     "archetype": "ide-dark",
+     "n_keys": 7,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.03125,
+     "n_regions": 23
+    },
+    {
+     "id": "gmail-light-000",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-001",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-002",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0,
+     "n_regions": 32
+    },
+    {
+     "id": "gmail-light-003",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 0.9375,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0033333333333333335,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-004",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0,
+     "n_regions": 32
+    },
+    {
+     "id": "gmail-light-005",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.006688963210702341,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-006",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 0.9375,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0033003300330033004,
+     "n_regions": 32
+    },
+    {
+     "id": "gmail-light-007",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 0.9375,
+     "recall_fuzzy": 1.0,
+     "cer": 0.003472222222222222,
+     "n_regions": 32
+    },
+    {
+     "id": "gmail-light-008",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 0.9375,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0033783783783783786,
+     "n_regions": 32
+    },
+    {
+     "id": "gmail-light-009",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.003436426116838488,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-010",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-011",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0,
+     "n_regions": 31
+    },
+    {
+     "id": "gmail-light-012",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-013",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 0.9375,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0033333333333333335,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-014",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0,
+     "n_regions": 32
+    },
+    {
+     "id": "gmail-light-015",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 0.9375,
+     "recall_fuzzy": 1.0,
+     "cer": 0.006688963210702341,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-016",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 0.9375,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0033003300330033004,
+     "n_regions": 32
+    },
+    {
+     "id": "gmail-light-017",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 0.9375,
+     "recall_fuzzy": 1.0,
+     "cer": 0.003472222222222222,
+     "n_regions": 32
+    },
+    {
+     "id": "gmail-light-018",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 0.9375,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0033783783783783786,
+     "n_regions": 32
+    },
+    {
+     "id": "gmail-light-019",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 0.9375,
+     "recall_fuzzy": 1.0,
+     "cer": 0.006872852233676976,
+     "n_regions": 32
+    },
+    {
+     "id": "gmail-light-020",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0,
+     "n_regions": 32
+    },
+    {
+     "id": "gmail-light-021",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.003367003367003367,
+     "n_regions": 34
+    },
+    {
+     "id": "gmail-light-022",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 0.9375,
+     "recall_fuzzy": 1.0,
+     "cer": 0.003389830508474576,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-023",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 0.9375,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0033333333333333335,
+     "n_regions": 31
+    },
+    {
+     "id": "gmail-light-024",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0,
+     "n_regions": 32
+    },
+    {
+     "id": "gmail-light-025",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.006688963210702341,
+     "n_regions": 32
+    },
+    {
+     "id": "gmail-light-026",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0,
+     "n_regions": 32
+    },
+    {
+     "id": "gmail-light-027",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 0.9375,
+     "recall_fuzzy": 1.0,
+     "cer": 0.003472222222222222,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-028",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 0.9375,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0033783783783783786,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-029",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 0.9375,
+     "recall_fuzzy": 1.0,
+     "cer": 0.006872852233676976,
+     "n_regions": 32
+    },
+    {
+     "id": "gmail-light-030",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0,
+     "n_regions": 32
+    },
+    {
+     "id": "gmail-light-031",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0,
+     "n_regions": 33
+    },
+    {
+     "id": "gmail-light-032",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0,
+     "n_regions": 32
+    },
+    {
+     "id": "gmail-light-033",
+     "archetype": "gmail-light",
+     "n_keys": 16,
+     "recall_substring": 0.9375,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0033333333333333335,
+     "n_regions": 34
+    },
+    {
+     "id": "slack-dark-000",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.013986013986013986,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-001",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0035587188612099642,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-002",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.013986013986013986,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-003",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.006968641114982578,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-004",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0035335689045936395,
+     "n_regions": 24
+    },
+    {
+     "id": "slack-dark-005",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0035087719298245615,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-006",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.013986013986013986,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-007",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0070921985815602835,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-008",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0070921985815602835,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-009",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.006944444444444444,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-010",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.006993006993006993,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-011",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0071174377224199285,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-012",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.013986013986013986,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-013",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.006968641114982578,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-014",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.007067137809187279,
+     "n_regions": 24
+    },
+    {
+     "id": "slack-dark-015",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0035087719298245615,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-016",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.01048951048951049,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-017",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0035460992907801418,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-018",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.010638297872340425,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-019",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.006944444444444444,
+     "n_regions": 24
+    },
+    {
+     "id": "slack-dark-020",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.01048951048951049,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-021",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0071174377224199285,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-022",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.013986013986013986,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-023",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.006968641114982578,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-024",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.8461538461538461,
+     "recall_fuzzy": 1.0,
+     "cer": 0.014134275618374558,
+     "n_regions": 24
+    },
+    {
+     "id": "slack-dark-025",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0035087719298245615,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-026",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.013986013986013986,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-027",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0070921985815602835,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-028",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0035460992907801418,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-029",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.006944444444444444,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-030",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.013986013986013986,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-031",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.0035587188612099642,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-032",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.013986013986013986,
+     "n_regions": 25
+    },
+    {
+     "id": "slack-dark-033",
+     "archetype": "slack-dark",
+     "n_keys": 13,
+     "recall_substring": 0.9230769230769231,
+     "recall_fuzzy": 1.0,
+     "cer": 0.006968641114982578,
+     "n_regions": 25
+    },
+    {
+     "id": "terminal-dark-000",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2753623188405797,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-001",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2826086956521739,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-002",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2753623188405797,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-003",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2753623188405797,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-004",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2753623188405797,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-005",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2753623188405797,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-006",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2753623188405797,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-007",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2753623188405797,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-008",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2753623188405797,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-009",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2753623188405797,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-010",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2753623188405797,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-011",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2753623188405797,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-012",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2753623188405797,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-013",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.27898550724637683,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-014",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2753623188405797,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-015",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.27898550724637683,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-016",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2753623188405797,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-017",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2753623188405797,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-018",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2753623188405797,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-019",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2753623188405797,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-020",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2826086956521739,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-021",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2753623188405797,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-022",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.27898550724637683,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-023",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2753623188405797,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-024",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.27898550724637683,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-025",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.27898550724637683,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-026",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.27898550724637683,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-027",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2826086956521739,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-028",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.27898550724637683,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-029",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.27898550724637683,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-030",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2826086956521739,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-031",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.286231884057971,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-032",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 1.0,
+     "recall_fuzzy": 1.0,
+     "cer": 0.2753623188405797,
+     "n_regions": 15
+    },
+    {
+     "id": "terminal-dark-033",
+     "archetype": "terminal-dark",
+     "n_keys": 8,
+     "recall_substring": 0.875,
+     "recall_fuzzy": 1.0,
+     "cer": 0.27898550724637683,
+     "n_regions": 15
+    },
+    {
+     "id": "sheet-light-000",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7894736842105263,
+     "recall_fuzzy": 0.7894736842105263,
+     "cer": 0.028938906752411574,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-001",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7105263157894737,
+     "recall_fuzzy": 0.7105263157894737,
+     "cer": 0.038834951456310676,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-002",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7105263157894737,
+     "recall_fuzzy": 0.7105263157894737,
+     "cer": 0.09302325581395349,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-003",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7105263157894737,
+     "recall_fuzzy": 0.7105263157894737,
+     "cer": 0.04983388704318937,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-004",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7894736842105263,
+     "recall_fuzzy": 0.7894736842105263,
+     "cer": 0.032679738562091505,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-005",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7631578947368421,
+     "recall_fuzzy": 0.7631578947368421,
+     "cer": 0.032467532467532464,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-006",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7368421052631579,
+     "recall_fuzzy": 0.7368421052631579,
+     "cer": 0.03536977491961415,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-007",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7105263157894737,
+     "recall_fuzzy": 0.7105263157894737,
+     "cer": 0.038834951456310676,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-008",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7105263157894737,
+     "recall_fuzzy": 0.7105263157894737,
+     "cer": 0.09302325581395349,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-009",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7105263157894737,
+     "recall_fuzzy": 0.7105263157894737,
+     "cer": 0.04983388704318937,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-010",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.8157894736842105,
+     "recall_fuzzy": 0.8157894736842105,
+     "cer": 0.032679738562091505,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-011",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.8947368421052632,
+     "recall_fuzzy": 0.8947368421052632,
+     "cer": 0.10064935064935066,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-012",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.868421052631579,
+     "recall_fuzzy": 0.868421052631579,
+     "cer": 0.01929260450160772,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-013",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.8421052631578947,
+     "recall_fuzzy": 0.8421052631578947,
+     "cer": 0.022653721682847898,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-014",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7894736842105263,
+     "recall_fuzzy": 0.7894736842105263,
+     "cer": 0.08305647840531562,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-015",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7894736842105263,
+     "recall_fuzzy": 0.7894736842105263,
+     "cer": 0.03986710963455149,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-016",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7631578947368421,
+     "recall_fuzzy": 0.7631578947368421,
+     "cer": 0.03594771241830065,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-017",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.8421052631578947,
+     "recall_fuzzy": 0.8421052631578947,
+     "cer": 0.022727272727272728,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-018",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7105263157894737,
+     "recall_fuzzy": 0.7105263157894737,
+     "cer": 0.03858520900321544,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-019",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7894736842105263,
+     "recall_fuzzy": 0.7894736842105263,
+     "cer": 0.02912621359223301,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-020",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7105263157894737,
+     "recall_fuzzy": 0.7105263157894737,
+     "cer": 0.09302325581395349,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-021",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7894736842105263,
+     "recall_fuzzy": 0.7894736842105263,
+     "cer": 0.03986710963455149,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-022",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7631578947368421,
+     "recall_fuzzy": 0.7631578947368421,
+     "cer": 0.0392156862745098,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-023",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.8157894736842105,
+     "recall_fuzzy": 0.8157894736842105,
+     "cer": 0.025974025974025976,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-024",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7894736842105263,
+     "recall_fuzzy": 0.7894736842105263,
+     "cer": 0.028938906752411574,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-025",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7894736842105263,
+     "recall_fuzzy": 0.7894736842105263,
+     "cer": 0.02912621359223301,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-026",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7894736842105263,
+     "recall_fuzzy": 0.7894736842105263,
+     "cer": 0.08305647840531562,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-027",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7894736842105263,
+     "recall_fuzzy": 0.7894736842105263,
+     "cer": 0.03986710963455149,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-028",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7894736842105263,
+     "recall_fuzzy": 0.7894736842105263,
+     "cer": 0.03594771241830065,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-029",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7631578947368421,
+     "recall_fuzzy": 0.7631578947368421,
+     "cer": 0.032467532467532464,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-030",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.6578947368421053,
+     "recall_fuzzy": 0.6578947368421053,
+     "cer": 0.04501607717041801,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-031",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7631578947368421,
+     "recall_fuzzy": 0.7631578947368421,
+     "cer": 0.032362459546925564,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-032",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7631578947368421,
+     "recall_fuzzy": 0.7631578947368421,
+     "cer": 0.08637873754152824,
+     "n_regions": 52
+    },
+    {
+     "id": "sheet-light-033",
+     "archetype": "sheet-light",
+     "n_keys": 38,
+     "recall_substring": 0.7368421052631579,
+     "recall_fuzzy": 0.7368421052631579,
+     "cer": 0.04472843450479233,
+     "n_regions": 52
+    },
+    {
+     "id": "browser-article-000",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-001",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-002",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-003",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.005305039787798408,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-004",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-005",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-006",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-007",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.005305039787798408,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-008",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-009",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-010",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-011",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.005305039787798408,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-012",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-013",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-014",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-015",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.005305039787798408,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-016",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-017",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-018",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-019",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.005305039787798408,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-020",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-021",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-022",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-023",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.005305039787798408,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-024",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-025",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-026",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-027",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.005305039787798408,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-028",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-029",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-030",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-031",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.005305039787798408,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-032",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    },
+    {
+     "id": "browser-article-033",
+     "archetype": "browser-article",
+     "n_keys": 7,
+     "recall_substring": 0.8571428571428571,
+     "recall_fuzzy": 0.8571428571428571,
+     "cer": 0.002652519893899204,
+     "n_regions": 13
+    }
+   ]
+  },
+  {
+   "engine": "Qwen3-VL-32B",
+   "width": 1536,
+   "status": "not_run",
+   "reason": "requires the GPU VLM serving endpoint (E-3(a)); serve_vllm.sh is text-only-MVP and often down in the learn loop."
+  },
+  {
+   "engine": "Qwen2.5-VL-32B",
+   "width": 1536,
+   "status": "not_run",
+   "reason": "requires the GPU VLM serving endpoint (E-3(a)); serve_vllm.sh is text-only-MVP and often down in the learn loop."
+  }
+ ]
+}
