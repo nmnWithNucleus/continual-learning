@@ -16,10 +16,13 @@ byte-identically, real backends re-validated through the graph on node-7)** + **
 (WS-H): all 3 tracked review findings closed (SlotView slot ownership · mutate overlap
 chaining · permit-at-dispatch fairness) + opt-in subprocess isolation (poison chunk kills
 one chunk, not the service; drain cancel SIGKILLs the ghost)** — capture alpha still green
-(3 real clients) — **+ SCREEN-VIDEO PATH REDESIGNED (WS-VC, design only, build not started):
-clip-level captioning replaces per-keyframe calls, a dedicated OCR channel, a versioned prompt
-pack, and the record-vs-mutation law — [handoff/ws-video-clip.md](handoff/ws-video-clip.md)** —
-**173 tests** · **Last updated:** 2026-07-24 (screen-video design session, branch `svc/continuum-phase3-decomp`)
+(3 real clients) — **+ SCREEN-VIDEO CLIP PATH BUILT + INTEGRATED (WS-VC, 8 workstreams, 2026-07-25):
+clip-level captioning (one multi-image VLM call/chunk) + a deterministic CPU **OCR channel**
+(`kind='ocr'` record) + a **versioned prompt pack whose digest IS the dialect** + the
+**record-vs-mutation law** enforced in CI and at registration; behind `VIDEO_PIPELINE=clip`
+(default `keyframe` = the shipped legacy path, byte-identical) —
+[handoff/ws-video-clip.md](handoff/ws-video-clip.md)** —
+**765 tests** (+21 skipped) · **Last updated:** 2026-07-25 (WS-VC integration, branch `svc/video-clip`)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
@@ -31,7 +34,7 @@ pack, and the record-vs-mutation law — [handoff/ws-video-clip.md](handoff/ws-v
 | V | **Real VIDEO pipeline** (M3): ffmpeg keyframes → caption (`VIDEO_BACKEND=mock\|vlm`) + **per-keyframe timing hook** (OQ14a) + OCR weave (D8) | built + verified + reviewed; real **Qwen3-VL-8B** E2E; suite **68 green** (+11 video). **Its §3 D8 caption/OCR weave + the keyframe-per-record shape are SUPERSEDED for screen content by WS-VC** (kept as the shipped, gated `VIDEO_PIPELINE=keyframe` legacy path) | [handoff/ws-video-pipeline.md](handoff/ws-video-pipeline.md) | video-pipeline lead |
 | AO | **Async `/ingest`** (M7-early, `INGEST_ASYNC` off by default) + **D9 `/metrics` + dashboard** (M8) + **node-7 smoke** of the 3 real audio backends | built + tested + reviewed; DP **98 green**; recording seam updated (120 green); +2 pyannote fixes | [handoff/ws-async-observability.md](handoff/ws-async-observability.md) | async-observability lead |
 | SG | **DP v1**: **durable ingest journal** (`app/journal.py` — kill-recovery + restart-amnesia closed, epochs, bounded re-drive) + **stage-graph pipeline** (`app/stagegraph/` + `app/stages/` — drop-in stage files; audio+video ported byte-identical; per-modality fairness) | built + tested + reviewed; DP **127 green**; real backends re-validated through the graph on node-7 | [handoff/ws-dp-stage-graph.md](handoff/ws-dp-stage-graph.md) | async-observability lead (v1) |
-| VC | **Screen-video path (mac-app) REDESIGN** — clip-level captioning (one multi-image VLM call/chunk, keyframes retired as record identity), a deterministic CPU **OCR channel** emitting its own `kind='ocr'` record, a **versioned prompt pack** whose content digest IS the dialect, and the **record-vs-mutation law**. **DESIGN ONLY — build not started**; 8 parallel workstreams specced, all startable day one | **design ratified in-session** (43-agent fan-out: 6 ground · 12 proposals · 4 judges · 20 adversarial verifiers · synthesis; lead re-verified vLLM/OCR/dep facts + corrected 2 figures) | [handoff/ws-video-clip.md](handoff/ws-video-clip.md) | screen-video design session |
+| VC | **Screen-video CLIP path (mac-app) — BUILT + INTEGRATED** behind `VIDEO_PIPELINE=clip` (default `keyframe`, byte-identical). Stages `clipprep(5)` (VFR-safe ffmpeg frame prep + delta gate) → `screentext(15)` (CPU OCR sidecar, own `kind='ocr'` record) → `clipcap(20)` (one multi-image VLM call, OCR injected per D-09, one `kind='caption'` record). Versioned **prompt pack** (`app/vision/prompts/`, digest → `pipeline_version`), **cfg_tag** (a knob change forks `record_id`), the **record-vs-mutation law** in CI (`tests/test_emission_law.py`) + at registration (`stage.py` R1 raise), an **offline eval harness** that cannot write `/context` by construction, and a co-located **OCR sidecar** (`sidecars/ocr/`, own venv) | **8 WS landed + merged to `svc/video-clip`, lead-verified each (mutation-tested the law; independently reran discovery/resolve/E2 raise; caught + returned a masked order/registration bug in the OCR seam before merge)**; DP suite **765** (+21 skip) | [handoff/ws-video-clip.md](handoff/ws-video-clip.md) | WS-VC lead + 8 build sessions |
 | P3 | **Phase-3 DP dogfood support** (continuum-led): `app/stages/audio/injected_caption.py` — replay-injected description captions as an audio sidecar, off unless `INJECT_CAPTION_BACKEND=index` | landed via continuum's Phase-3 build (`388ae32`); DP default byte-identical | [../continuum/handoff/ws-phase3-dogfood.md](../continuum/handoff/ws-phase3-dogfood.md) | continuum Phase-3 session |
 | H | **Hardening**: review findings #3/#6/#7 CLOSED (**SlotView** capability slot-ownership + mutate `writes`/overlap **chaining** with chain-order dialect; **permit-at-dispatch** fairness, HOL-block dead) + **`INGEST_ISOLATION=subprocess`** (killable per-chunk child: poison blast radius = 1 chunk; drain SIGKILL reclaims ghosts) + milestone eval + sync-retirement recommendation (KEEP inline for C8) | built + tested + workflow-reviewed; DP **163 green**; **MERGED to `main` (`5350f7a`) + pushed 2026-07-21** | [handoff/ws-dp-hardening.md](handoff/ws-dp-hardening.md) | DP hardening session |
 
@@ -114,29 +117,43 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
     which demuxes to the same C1 the phone already used). Suite unregressed at 38.
 
 ## Next
-- **BUILD THE SCREEN-VIDEO PATH (WS-VC) — [handoff/ws-video-clip.md](handoff/ws-video-clip.md).**
-  Design is ratified and decomposed into **8 workstreams (WS-A…WS-H), all startable on day one**,
-  with disjoint file ownership; only `WS-F` touches shared core (`main.py`, `ingest_core.py`,
-  exclusively) and `WS-E2` (the registration-time law raise, `stagegraph/stage.py`) is deliberately
-  sequenced last. Start with **WS-A (wire probe)** — it makes escalation E-3(a) precise and decides
-  whether the default prompt pack is multi-image or the `screen-clip-single-v1` fallback.
-  Headline shape: **exactly 2 C2 records per video chunk** (`caption` + `ocr`, fixed discriminators,
-  C1 span verbatim) instead of today's 4–8 per-keyframe records; **≈6× fewer records, 2.4× cheaper
-  at 10 s chunks / 5.8× at 60 s**; day-log dose **4.8× → 15.1×**. **Nothing in the build is blocked
-  on an escalation** — see the four that gate the *cutover* and the cost figure, below.
-- **ESCALATIONS opened by WS-VC (none block the build; two block the cutover).** Written up in
-  [handoff/ws-video-clip.md](handoff/ws-video-clip.md) §10, summarized here so siblings see them:
-  **E-1** recording — `--segment-seconds 10 → 60` (config, zero contract surface; the single largest
-  cost lever, and it moves the audio leg too, so it is a joint recording × DP-audio call);
-  **E-2** storage — a **kind-aware** `DELETE /context/records` retraction primitive (**blocks the
-  cutover**, and must key on `content.kind` or it would delete transcripts to remove captions);
-  **E-3** inference/platform — (a) serve with `--limit-mm-per-prompt` + explicit `max_pixels`, (b) a
-  captioner endpoint **distinct from the user-facing `:8000`** (founders' call; closes CHARTER OQ3);
-  **E-4** continuum — render per-fragment local timestamps in `_render_block` (**the goal of
-  "at 13:04 the user was writing…" is structurally unreachable without it — DP cannot do this
-  itself, C1 carries no timezone**), OCR-dedup, renderer ordering, and a recipe fork;
-  **E-5** founders — the parked additive C2 edit (`enrichments.text_regions[]` + root `quality{}`),
-  diff written, **not taken** (no consumer yet); **E-6** recording — auto-retry `failed` segments.
+- **SCREEN-VIDEO CLIP PATH (WS-VC) — BUILT + INTEGRATED (2026-07-25) — [handoff/ws-video-clip.md](handoff/ws-video-clip.md).**
+  All 8 workstreams landed and merged to `svc/video-clip`; DP suite **765** (+21 skip). Shape:
+  behind `VIDEO_PIPELINE=clip`, a video chunk yields **exactly 2 C2 records** (`caption` + `ocr`,
+  fixed discriminators, C1 span verbatim) instead of 4–8 per-keyframe records — `clipprep(5)` →
+  `screentext(15)` → `clipcap(20)`. The default (`keyframe`) stays byte-identical to the shipped
+  legacy path (`vidproc-*-v0`). Every lead-verified (mutation-tested the emission law; a masked
+  order/registration bug in the OCR seam was caught and returned before merge). **The build is done;
+  what remains are the cutover gates (below) and small follow-ups — none block the merge to main.**
+- **GATES before flipping `VIDEO_PIPELINE=clip` on for a real user** (all documented in
+  [handoff/ws-video-clip.md](handoff/ws-video-clip.md); the code ships `VIDEO_OCR_BACKEND=mock` +
+  `keyframe` default until these clear):
+  - **O-2** — ~200 hand-labelled real macOS frames clearing the OCR bar (≥0.85 recall / ≤0.10 CER)
+    before `VIDEO_OCR_BACKEND=ppocr`. The bake-off harness ships (`sidecars/ocr/bakeoff/`) and cleared
+    a *synthetic* proxy; the real capture doesn't exist in a headless build.
+  - **O-8** — the blind-vs-injected A/B against a real VLM (`scripts/prompt_ab.py`, pre-registered:
+    ship injection iff named-entity-recall lift > 0.25 ∧ propagation < 0.10, else the hint arm). Built
+    + stub-validated; returns UNDECIDED under a mock captioner (needs E-3(b)).
+  - **E-2** (storage retraction) **or** a fresh `user_id` — the dev store holds only mock-dialect
+    records, so a fresh-user cutover is free once; after the pilot runs, E-2 is a hard prerequisite.
+  - **E-3(b)** — a captioner endpoint off the user-facing `:8000` (founders' call, closes OQ3).
+- **ESCALATIONS (in [handoff/ws-video-clip.md](handoff/ws-video-clip.md) §10; the two `cutover`
+  ones are also on the founders' board):** **E-1** recording `--segment-seconds 10→60` (largest cost
+  lever; joint with DP-audio); **E-2** storage kind-aware `DELETE /context/records` (**cutover**);
+  **E-3(a)** — **DOWNGRADED to "recommended, not required":** WS-A's probe verified vLLM 0.24.0
+  defaults `--limit-mm-per-prompt` to 999 (not 1) and clamps nothing at 768×480, so the K≤12
+  multi-image call validates on the *unmodified* `serve_vllm.sh`; the flags are determinism pins now;
+  **E-3(b)** distinct captioner endpoint (**founders' call**, OQ3); **E-4** continuum per-fragment
+  local timestamps in `_render_block` (**"at 13:04 the user was writing…" is unreachable without it —
+  C1 carries no timezone**) + OCR-dedup + renderer ordering + recipe fork; **E-5** the parked additive
+  C2 edit (`enrichments.text_regions[]` + root `quality{}`), diff written, **not taken** (no
+  consumer); **E-6** recording auto-retry `failed` segments.
+- **Small follow-ups (non-blocking):** widen the production `dp_caption_ungrounded_quote_total`
+  counter from double-quoted spans to all named ≥4-char strings (WS-VC/H found mock captions carry
+  **zero** double-quotes, so the quote-only counter measures an empty set; the widened scorer already
+  lives in `scripts/prompt_ab.grounding`); collapse `app/vision/ocr/assemble.ocr_cap`'s local stub to
+  import `app/vision/budget.ocr_cap`; the `acoustic` R1 latent hole (retro-fit `+ac-*` when a real
+  backend provides a slot — audio owner's call, pinned red by the law test).
 - **Hardening slice (2026-07-21, WS-H, branch `svc/dp-hardening`) —
   [handoff/ws-dp-hardening.md](handoff/ws-dp-hardening.md):** all 3 tracked stage-graph
   review findings closed (slot ownership by construction; mutate overlap chaining;

@@ -1,6 +1,14 @@
 # ws-video-clip.md — the mac-app screen-recording VIDEO path
 
-**Status:** design ratified in-session; build not started.
+**Status:** **BUILT + INTEGRATED (2026-07-25).** All 8 workstreams (A–H) landed and merged to
+`svc/video-clip`; DP suite **765** (+21 skip). Clip pipeline live behind `VIDEO_PIPELINE=clip`
+(default `keyframe`, byte-identical legacy path). Each WS lead-verified (the emission law
+mutation-tested; discovery/resolve/E2-raise independently reran; a masked order/registration bug in
+the OCR seam caught + returned before merge). Remaining = the cutover gates (O-2, O-8, E-2, E-3(b))
+and small follow-ups, none blocking the merge to main. Per-WS Build logs are at the end of this file.
+*(Design history below is preserved as-written; where a build decision refined it — clip stage orders
+`5/15/20` not `0/10/20`; `+ocr-ppv4-cpu-v1` not `-ppv6`; E-3(a) downgraded to "recommended" — the
+correction is noted inline at that section or in the addendum.)*
 **Owner:** data-processing.
 **Supersedes:** `handoff/ws-video-pipeline.md` §3 (the D8 caption/OCR weave) and the keyframe-per-record shape.
 **Scope:** the `modality=video` stage graph, `app/vision/**`, `app/stages/video/**`, one new co-located OCR sidecar service. Audio is untouched. Browser and camera scenarios are named but not built.
