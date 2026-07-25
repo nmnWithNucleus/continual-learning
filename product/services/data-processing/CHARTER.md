@@ -88,6 +88,57 @@ Order is strict M0→M3 (modality coverage first); M4–M7 may interleave after 
 
 ---
 
+## Record-vs-mutation law (governance — when a signal earns a C2 record)
+
+> Ratified 2026-07-25 (WS-VC). Deep extract + reasoning: [handoff/ws-video-clip.md](handoff/ws-video-clip.md) §4
+> and [docs/record-emission-law.md](docs/record-emission-law.md). **It is executable**, not just
+> prose: `tests/test_emission_law.py` (the CI matrix) + `app/stagegraph/stage.py` (a registration-time
+> raise) are the source of truth; this section is its statement.
+
+**The invariant.** A C2 record is **one independently-placeable, independently-labelable,
+independently-losable claim about a span of the user's life** — placement is `t_start` alone, labeling
+is `content.kind` alone, identity is `record_id = sha256(chunk_id ␀ pipeline_version [␀ discriminator])`
+(a blind `/context` upsert), loss is per-stage. Therefore: **a signal deserves a record iff it needs
+its own place, its own label, or its own failure. A signal that makes an existing record's declared
+_structure_ more precise is a mutation. A signal about _how_ a claim was obtained is an enrichment —
+or nothing.**
+
+**The decision procedure — five ordered tests, first match wins** (apply to any signal S from one C1 chunk):
+
+| Test | Question | If it fires |
+|---|---|---|
+| **T1 DERIVABLE** | Pure function of *this* chunk's bytes + config? | **No → not a DP record** (cross-chunk work is continuum's). |
+| **T2 REACHABLE** | Reaches a consumer that exists **today**? (`enrichments` is read nowhere yet) | **No → do not emit.** Store nothing you cannot spend; re-apply when a consumer lands. |
+| **T3 SPINE** | The modality's answer to "what happened in these bytes"? | **PRIMARY** unit(s); its fragment is the base dialect. |
+| **T4 EDITS** | Changes bytes a record already claims? | **Structure-fill → MUTATE** (declares `writes`, mandatory fragment). **String-change → FORBIDDEN**: refine inside the stage before assembly, or fork `pipeline_version`. |
+| **T5 CHANNEL/SPAN** | Owns a frozen `kind`/day-log line or an independently addressable span? | **NEW RECORD** with its own discriminator. |
+
+Fallthrough → **enrichment** (subject to T2) or **stage input**.
+
+**The five riders** (full text in the extract): **R1 fork** — a stage whose config can change bytes it
+doesn't emit must contribute a `version_fragment` (mechanised: a sidecar with non-empty `provides`
+must fork; a purely-additive sidecar must not). **R2 independence** — two records on the same second
+must each be usable without the other; a *grounded* pair (OCR injected into the caption) is one
+witness on two channels, not corroboration. **R3 dialect-honesty** — `pipeline_version` states the
+*attempted* dialect; absence is diagnosed by record-presence + a metric, never by the dialect string
+or a fabricated placeholder (cross-service: continuum must never infer "no on-screen text" from an
+absent OCR record). **R4 set-stability** — the record *set* is a pure function of `(bytes, settings)`,
+never of model output or stage outcome. **R5 budget** — every record class names its consumer-today
+and its chars-per-second-of-life budget.
+
+**Enforced in three layers** (deliberately not one, because settings don't exist at import):
+registration raise (structural R1) → CI matrix (the configuration half, across legacy/clip/every
+backend) → graph resolution (per-chunk config errors). One frozen exemption, named in both code and
+test: `video/keyframes` (legacy `vidproc-*-v0` reproduction); the test runs with the exemption
+emptied and asserts it is the *only* violation, so no second stage can slide under it silently.
+
+**Worked precedents** (audio, shipped): ASR = primary; diarization = mutate (`+diar-*`); translation +
+acoustic + injected-caption = additive records (no fragment). **Video (WS-VC):** clip caption = primary;
+OCR = its own `kind='ocr'` record whose text is *also* injected into the caption (one witness, two
+channels, R2 Corollary 2); bbox geometry = **not emitted** (T2 — no reader; parked as E-5).
+
+---
+
 ## Open questions
 
 **Engineering**
@@ -102,11 +153,11 @@ Order is strict M0→M3 (modality coverage first); M4–M7 may interleave after 
 7. Captioning granularity for continuous life streams: the POC ran 20/10/5/1-min targets at ≈$7.8k for 753 h — which operating point (granularities × model tier) fits a per-user-day budget?
 8. Teacher vs self-hosted captioner: POC gold used a frontier API; acceptable for private life data, or self-host a VLM captioner? Privacy/cost/quality triangle — escalate to CTO.
 9. Real-world-time verification: with device clocks in the C1 envelope, is deterministic envelope time enough, or do we keep the POC's content-based RWT reconstruction as a cross-check?
-10. Screen capture is OCR-heavy: dense captioning at ~205-px effective frames drops small text (POC token-budget math). **Resolved (CTO, D8): decouple OCR from the base model.** A dedicated OCR-strong VLM transcribes legible text + its frame location as a pipeline pass; that text is woven into the description we write to /context (and returned via C8 for interactive turns → /sessions). The user model then learns on-screen text from the *description target*, not by reading pixels natively at inference — so BWM OCR quality (D6 caveat) stops gating anything. Residual engineering choices: which OCR model, keyframe cadence for video, cost per screen-hour, dedup of static text across frames.
+10. Screen capture is OCR-heavy: dense captioning at ~205-px effective frames drops small text (POC token-budget math). **Resolved (CTO, D8): decouple OCR from the base model.** A dedicated OCR-strong VLM transcribes legible text + its frame location as a pipeline pass; that text is woven into the description we write to /context (and returned via C8 for interactive turns → /sessions). The user model then learns on-screen text from the *description target*, not by reading pixels natively at inference — so BWM OCR quality (D6 caveat) stops gating anything. Residual engineering choices: which OCR model, keyframe cadence for video, cost per screen-hour, dedup of static text across frames. **RESOLVED for screen video (WS-VC, 2026-07-25):** a **dedicated CPU OCR sidecar** (`sidecars/ocr/`, PP-OCR-class det+rec, own venv, HTTP seam) reads text at native `VIDEO_OCR_FRAME_WIDTH=1728`; the captioner reads layout at 768 px and never reads text; **OCR is BOTH injected into the caption prompt (grounding, D-09) AND emitted as its own `kind='ocr'` record** (separable downstream — continuum renders a `World text (OCR):` line). Cadence is **event-driven** (a binarized-change delta gate, not a fixed clock); static-text dedup is within-chunk. Cost/frame-rate gates: **O-2** (real-macOS-frame OCR bar) before `ppocr` is the default (ships `mock`); the captioning window = the C1 chunk (span-parametric; 60 s is escalation E-1). **Not screen:** which OCR model for body-cam/browser is a later per-scenario call (the prompt pack + backend seam make it a config swap).
 11. Voice-to-person linking: diarization yields anonymous speaker labels; linking them to people-registry identities (known-vs-unknown speakers) rides the same registry, and the v0-vs-deferred call is ours ([ARCHITECTURE.md § Ownership splits](../../ARCHITECTURE.md#ownership-splits-pinned--cross-referenced-from-the-charters)). **Recorded: deferred — not in the M5 exit gate**; revisit if speaker embeddings already produced by the diarizer make matching cheap.
 12. Non-speech / silence audio. ASR transcribes **speech only**, and Whisper hallucinates on non-speech/silence — so a chunk of pure ambient sound (dishwasher, car, dog) yields nothing (or garbage) from ASR. **Decided (2026-07-09):** (a) a **VAD gate runs before ASR** — run ASR only on speech regions, and mark a no-speech chunk explicitly as *present-but-quiet* (this is NOT a transport gap / lost chunk — the raw bytes are safely in `/raw`); (b) non-speech audio that carries context is **captioned/tagged by an acoustic-event model** — the audio analogue of dense video captioning ("doing dishes", "driving", "dog nearby") — because ambient sound is life-context signal, not noise to drop. Lands in C2 **additively**: `content.kind` gains an audio `sound`/caption value, and a chunk with both speech and ambient sound may yield **two records** (via the `record_id` within-chunk discriminator) or carry ambient tags in `enrichments` — **no C2 break**. Residual: which VAD, which audio-tagging/captioning model, cost per audio-hour.
 13. Ingest processing mode. M0 `/ingest` processes **inline** (pull → ASR → C2 → store inside the request handler, returns `record_ids`), so recording's push blocks on ASR latency. **Prod:** `/ingest` should **ACK `202` immediately + enqueue**, processing on a worker pool decoupled from capture cadence; dedup-on-`chunk_id` + `record_id` determinism keep at-least-once safe. Backpressure / dead-letter land with M7. (Note: the modality seam already returns `{ok, record_ids:[…]}` — one C1 chunk may fan out to many C2 records, e.g. video keyframes.) **RESOLVED (2026-07-19, M7-early):** built behind `INGEST_ASYNC` (default off = inline, byte-identical). Async = ACK `202 {ok,accepted,chunk_id}` + a bounded worker pool; a redelivery of a DONE chunk still returns record_ids (200); an in-flight redelivery re-ACKs 202; a full queue is 503 backpressure. The reply shape is an **inter-service wire decided jointly with recording** and recorded in BOTH canvases (OQ4 precedent). Retry safety rides `chunk_id` dedup + `record_id` upserts; transient failures retry-then-dead-letter in the worker. The **"zero silent loss" invariant is preserved by a surgical recording change**: DP `/continuity` now additively reports `processed` + `dead_lettered` per stream, and recording confirms `dp_acked=1` only on `processed` — so an accepted-then-lost chunk reads `recording`/`gaps`, never a silent `clean`. **This slice guarantees never-falsely-`clean` (all loss visible); full durability (durable pending-journal + backfill, auto-recovery past a kill/drain-timeout) remains the M7 exit gate.** See [handoff/ws-async-observability.md](handoff/ws-async-observability.md).
-14. C2-additive gaps surfaced by the modality-seam pressure-test (2026-07-10) — both **DEFERRED, non-blocking, no version bump now**, each owned by the modality that needs it: (a) **Video per-keyframe timing** — N keyframe records from one chunk share the chunk `t_start/t_end`, so they collide on storage's `(user_id, t_start)` index. Fix = an **internal seam hook** (optional per-`ProcessedUnit` `t_start/t_end`; C2 already carries per-record timestamps) — **NO schema change**; own it in the **video** build. (b) **Image / keyframe OCR frame-location (bbox)** — `content` has no home for structured region geometry; OCR *text* survives (woven into the caption, or a `kind:'ocr'` record via the discriminator), only the bbox is lost. Fix = an **additive optional** field (`content.regions:[{text,bbox,confidence?}]` or `enrichments.text_regions`); **freeze-additive when a real OCR pass lands** (updates the C2 schema + ARCHITECTURE §Contracts, additive so old records still validate); own it in the **image** build.
+14. C2-additive gaps surfaced by the modality-seam pressure-test (2026-07-10) — both **DEFERRED, non-blocking, no version bump now**, each owned by the modality that needs it: (a) **Video per-keyframe timing** — N keyframe records from one chunk share the chunk `t_start/t_end`, so they collide on storage's `(user_id, t_start)` index. Fix = an **internal seam hook** (optional per-`ProcessedUnit` `t_start/t_end`; C2 already carries per-record timestamps) — **NO schema change**; own it in the **video** build. (b) **Image / keyframe OCR frame-location (bbox)** — `content` has no home for structured region geometry; OCR *text* survives (woven into the caption, or a `kind:'ocr'` record via the discriminator), only the bbox is lost. Fix = an **additive optional** field (`content.regions:[{text,bbox,confidence?}]` or `enrichments.text_regions`); **freeze-additive when a real OCR pass lands** (updates the C2 schema + ARCHITECTURE §Contracts, additive so old records still validate); own it in the **image** build. **Update (WS-VC, 2026-07-25):** (a) per-keyframe/sub-span timing **SHIPPED** — the optional `ProcessedUnit.t_start/t_end` hook is honored in `build_c2`, and the clip records carry the C1 span verbatim; no collision, no schema change. (b) A real OCR pass **landed**, and the decision was to **NOT emit bbox to C2** — the OCR sidecar uses region geometry internally (reading order + a coarse region *role* woven into the text) then discards it, because `enrichments` has **zero readers** in continuum today (the record-law T2). The additive edit (`enrichments.text_regions[]` + a root `quality{}`) is **written and parked as escalation E-5**, to be taken in one freeze-additive commit when the first geometry/quality consumer exists.
 
 ---
 

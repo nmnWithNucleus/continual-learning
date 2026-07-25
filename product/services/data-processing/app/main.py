@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
@@ -53,7 +54,7 @@ from .ingest_queue import IngestQueue, QueueFull
 from .journal import Journal
 from .metrics import MetricsASGIMiddleware, Metrics
 from .models import C1Envelope
-from .processing.registry import get_processor
+from .processing.registry import get_processor, registered_modalities
 from .storage_client import StorageClient
 from .timeutil import now_iso
 
@@ -61,6 +62,30 @@ logger = logging.getLogger("data-processing")
 
 # Prometheus text exposition content type (format version 0.0.4).
 _PROM_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
+
+
+def _dialect_frozen() -> bool:
+    """``DP_DIALECT_FREEZE=1`` — the drain-and-replace flip-window mitigation (design
+    D-14). Read fresh per call from the environment (the house posture, mirroring
+    ``vision/mode.resolve_pipeline``), NOT frozen at startup, so an operator can arm /
+    disarm the freeze on a live process during the cutover without a redeploy. When set,
+    ``_current_pv`` returns ``None`` so a stale-dialect receipt is SERVED rather than
+    reprocessed — capping the mass-reprocess-on-redelivery hazard while a two-dialect
+    fleet drains."""
+    return os.getenv("DP_DIALECT_FREEZE", "").strip().lower() not in ("", "0", "false", "no", "off")
+
+
+# content.text char-length distribution (dp_content_chars): captions land ~150-350,
+# an OCR digest 0-~1300, the whole-block budget caps ~1320 @60s — so bucket edges span
+# short caption → full-budget OCR.
+_CHAR_BUCKETS: tuple[float, ...] = (0, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096)
+# Per-chunk frame-delta peak (0..255): edges pinned to the design's class thresholds —
+# the deterministic floor (2), IDLE ceiling (8), LAYOUT floor (40) — so the histogram
+# directly validates the idle assumption from day one (design D-04 / D-07).
+_DELTA_BUCKETS: tuple[float, ...] = (2, 4, 8, 16, 24, 40, 64, 128, 255)
+# OCR read events selected per chunk — a small integer distribution (cap is
+# VIDEO_OCR_MAX_EVENTS, default 3).
+_OCR_EVENT_BUCKETS: tuple[float, ...] = (0, 1, 2, 3, 4, 6, 8, 12)
 
 
 def _dp_route_template(path: str) -> str:
@@ -101,6 +126,103 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
         "dp_graph_stage_failures_total", "Graph stage failures/skips.",
         ["modality", "stage", "reason"],
     )
+
+    # ---- WS-VC screen-video observability (§8) --------------------------------------
+    # The metric NAMES + label sets are frozen by §8 so WS-B/C/D emit against them from
+    # day one; this is the single declaration site (as it already is for the graph-stage
+    # families above). Two tiers:
+    #   * PARENT-side — emitted by ingest_core's per-unit loop, where `metrics` is in
+    #     scope even under INGEST_ISOLATION=subprocess (finding #15). Seeded to zero
+    #     below so rate() is well-defined from process start (no missing-series gap).
+    #   * STAGE-side — emitted from inside the clip stages; blind under subprocess
+    #     isolation by design. Declared here so the families exist from t=0; the labelled
+    #     ones surface on first emit (their label values are the stages' to choose).
+    metrics.declare_counter(
+        "dp_units_total", "C2 units durably written, by modality + content kind.",
+        ["modality", "kind"],
+    )
+    metrics.declare_histogram(
+        "dp_content_chars", "content.text length (chars) of each written unit.",
+        ["modality", "kind"], buckets=_CHAR_BUCKETS,
+    )
+    metrics.declare_counter(
+        "dp_empty_output_total",
+        "Units whose content.text was empty/whitespace — any modality (video idle "
+        "screens, VAD-silent audio, an OCR pass that found nothing legible).",
+        ["modality", "kind"],
+    )
+    metrics.declare_counter(
+        "dp_partial_write_total",
+        "Chunks that failed a /context write AFTER >=1 sibling unit was durably written "
+        "(a caption may sit without its OCR record until the retry lands — caveat A-4).",
+        ["modality"],
+    )
+    # Stage-side families (label sets verbatim from §8; bare where §8 lists them bare).
+    metrics.declare_counter(
+        "dp_video_parse_fallback_total",
+        "Clip / OCR reply parse-ladder fallbacks, by pack and ladder step.",
+        ["pack", "step"],
+    )
+    metrics.declare_counter(
+        "dp_video_truncated_total",
+        "Outputs truncated at the char/token budget, by pass (caption | ocr).", ["pass"],
+    )
+    metrics.declare_histogram(
+        "dp_video_delta_peak",
+        "Per-chunk frame-delta peak cell value (0..255) — validates the idle assumption.",
+        buckets=_DELTA_BUCKETS,
+    )
+    metrics.declare_histogram(
+        "dp_video_ocr_events", "OCR read events selected per chunk.",
+        buckets=_OCR_EVENT_BUCKETS,
+    )
+    metrics.declare_counter(
+        "dp_caption_ungrounded_quote_total",
+        "Caption named-string spans absent from the chunk's OCR text (the grounding "
+        "safety counter, D-09). NOTE: WS-H owns the scorer + the widening to all named "
+        ">=4-char strings — coordinate the name there before it forks.",
+    )
+    metrics.declare_counter(
+        "dp_ocr_redactions_total", "OCR spans deterministically redacted as secrets (D-07).",
+    )
+    metrics.declare_counter(
+        "dp_video_scenario_mismatch_total",
+        "device_id prefix disagreed with the configured VIDEO_SCENARIO (D-13).",
+        ["expected", "seen"],
+    )
+    metrics.declare_counter(
+        "dp_ocr_frame_errors_total",
+        "Per-frame OCR errors absorbed (>50% of a chunk's frames erroring raises).",
+    )
+
+    # Seed the PARENT-side counters to zero for every registered modality's primary
+    # content kind, so a scrape before any traffic already shows the series (a missing
+    # series reads as "never happened"; a 0 reads as "0 so far" — the honest state, and
+    # it keeps rate() gap-free at process start). Secondary kinds (e.g. video's 'ocr')
+    # surface on their first real emit.
+    for modality in registered_modalities():
+        try:
+            kind = get_processor(modality).content_kind
+        except Exception:  # a modality that can't be introspected right now — skip it
+            continue
+        if not kind:
+            continue
+        metrics.inc("dp_units_total", {"modality": modality, "kind": kind}, amount=0.0)
+        metrics.inc("dp_empty_output_total", {"modality": modality, "kind": kind}, amount=0.0)
+        metrics.inc("dp_partial_write_total", {"modality": modality}, amount=0.0)
+
+    # The UNLABELLED stage-side counters carry a single series each — no label values to
+    # guess — so they too can be shown at zero from t=0 (WS-F EXIT: "all new counters
+    # visible on /metrics at zero before any traffic"; a declared-but-never-inc'd counter
+    # renders NOTHING in this registry). Under INGEST_ISOLATION=subprocess the real
+    # increments happen in the child and are blind here, so the parent-side value stays
+    # 0 — documented, and still the honest parent view. The LABELLED stage-side families
+    # (parse_fallback{pack,step}, truncated{pass}, scenario_mismatch{expected,seen})
+    # genuinely cannot be pre-seeded and surface on their first real emit; the histograms
+    # (content_chars, delta_peak, ocr_events) render only once observed, by construction.
+    for name in ("dp_caption_ungrounded_quote_total", "dp_ocr_redactions_total",
+                 "dp_ocr_frame_errors_total"):
+        metrics.inc(name, amount=0.0)
 
     # ---- Pull-time gauges: live state owned by the queue + continuity tracker ------
     def _queue_depth():
@@ -162,10 +284,65 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
                              "Total sequence conflicts (one slot, two chunk_ids).",
                              lambda: _continuity_agg()["sequence_conflicts"])
 
+    # ---- Dialect visibility: the active pipeline_version per modality --------------
+    # A pull-time gauge (=1 per modality's CURRENT resolved dialect, read at scrape time
+    # from live config). Its purpose is fleet-level: a rolling deploy runs replicas
+    # resolving two dialects, and a single 2-min day-log block would then mix records
+    # from both (daylog.py filters on neither kind nor pipeline_version). One series per
+    # (modality, pipeline_version) is exactly the shape the mixed-dialect alert needs.
+    #
+    #   ALERT (replica-count robust):
+    #     count(count by (modality, pipeline_version) (dp_pipeline_dialect)) by (modality) > 1
+    #
+    # This refines §8's shorthand `count by (modality) (dp_pipeline_dialect) > 1`, which
+    # over-fires once there is >1 replica: Prometheus adds an `instance` label per target,
+    # so N replicas AGREEING on one dialect already yield N series and would trip the bare
+    # count. The inner `count by (modality, pipeline_version)` collapses replicas first, so
+    # the alert fires strictly on >1 DISTINCT dialect per modality — the drain-and-replace
+    # (never rolling) signal, D-14. Per-modality resolution is guarded: a modality that
+    # cannot resolve right now is simply absent, never hiding the others.
+    def _pipeline_dialects():
+        settings = get_settings()
+        out = []
+        for modality in registered_modalities():
+            try:
+                pv = get_processor(modality).pipeline_version(settings)
+            except Exception:
+                continue  # unresolvable right now (misconfig / half-built graph) — omit
+            out.append(((modality, pv), 1))
+        return out
+
+    metrics.add_gauge_source(
+        "dp_pipeline_dialect",
+        "Active pipeline dialect per modality (=1). Alert (replica-robust): "
+        "count(count by (modality,pipeline_version) (dp_pipeline_dialect)) by (modality) "
+        "> 1 — a rolling deploy mixing dialects in one training window (D-14).",
+        _pipeline_dialects, labelnames=["modality", "pipeline_version"],
+    )
+
+
+def _assert_not_offline_eval() -> None:
+    """``DP_OFFLINE_EVAL=1`` ⇒ this process MUST NOT serve (WS-H, §11).
+
+    The offline A/B harness (``scripts/prompt_ab.py``) unlocks prompt-pack overrides —
+    experimental packs, a fault-injected OCR arm — under this one flag, and it drives
+    ``resolve()`` / ``run_graph()`` / ``build_c2`` directly, never FastAPI and never
+    ``StorageClient``, so it is structurally incapable of reaching ``/context``. This guard
+    closes the mirror hazard: **the flag that enables experiments is the flag that prevents
+    serving**, so an eval env leaking into a deployment fails at boot — loudly, before one
+    experimental caption can be written to a real corpus under a real dialect."""
+    if os.getenv("DP_OFFLINE_EVAL", "").strip().lower() not in ("", "0", "false", "no", "off"):
+        raise RuntimeError(
+            "DP_OFFLINE_EVAL is set — refusing to build the serving app. This flag unlocks "
+            "offline-eval prompt-pack overrides (scripts/prompt_ab.py) and must never be set "
+            "on a process that writes to /context. Unset it to serve."
+        )
+
 
 def create_app() -> FastAPI:
     """App factory. Reads env at call time so tests can point STORAGE_URL / flip
     ASR_BACKEND before construction and inject a mock storage transport after."""
+    _assert_not_offline_eval()
     settings = get_settings()
 
     async def _redrive_pending(app: FastAPI, queue: IngestQueue, rows: list) -> None:
@@ -275,6 +452,12 @@ def create_app() -> FastAPI:
     # modality has since changed, in which case the receipt is stale and the honest
     # answer is a reprocess under the new version (version-forward; old records stay).
     def _current_pv(modality: str):
+        if _dialect_frozen():
+            # Flip window (D-14): DON'T judge the receipt's dialect against the current
+            # one — serve the stored record_ids so a redelivery is answered from the
+            # journal instead of reprocessing under the just-flipped version. Caps the
+            # mass-reprocess-on-redelivery hazard while a two-dialect fleet drains.
+            return None
         try:
             return get_processor(modality).pipeline_version(get_settings())
         except Exception:  # unknown modality / plugin gone — can't judge, serve the receipt
@@ -298,10 +481,22 @@ def create_app() -> FastAPI:
 
     @app.get("/health")
     def health() -> dict:
+        # /health is a liveness probe, not a frozen contract — it additively reports the
+        # effective config. WS-VC adds dialect visibility: the CURRENT video dialect (so
+        # a deploy can confirm which pipeline_version a replica serves before it takes
+        # traffic — the drain-and-replace check, D-14) and whether the flip-window
+        # DP_DIALECT_FREEZE is armed. Video pv resolution is guarded so a half-built /
+        # misconfigured video graph degrades /health to None, never 500s the probe.
+        try:
+            video_pv = get_processor("video").pipeline_version(get_settings())
+        except Exception:
+            video_pv = None
         return {
             "ok": True,
             "asr_backend": get_settings().asr_backend,
             "ingest_mode": "async" if app.state.ingest_async else "inline",
+            "video_pipeline_version": video_pv,
+            "dialect_frozen": _dialect_frozen(),
         }
 
     @app.get("/metrics")

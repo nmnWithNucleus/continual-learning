@@ -23,7 +23,14 @@ Kinds (who may touch what — enforced):
                    (never concurrent — see executor.resolve), and their fragments
                    compose in that same chain order, so the dialect encodes the sequence.
   * ``sidecar``  — returns ADDITIONAL units (own discriminators); never touches the
-                   primary. May be ``best_effort``.
+                   primary. May be ``best_effort``. A sidecar declaring a non-empty
+                   ``provides`` MUST declare ``version_fragment`` (the §4 R1 fork rider,
+                   enforced at registration): a provided slot exists only to be consumed,
+                   i.e. to change bytes of a record this stage does not itself emit, so
+                   its config must fork the dialect. A sidecar that only ADDS records and
+                   feeds nothing declares neither (forking the whole chunk's dialect on an
+                   additive toggle would re-key the primary for a change that never
+                   touched it).
 
 Slot ownership is CAPABILITY-SCOPED at runtime, not just declared: each stage's run
 receives a ``SlotView`` of the shared slots that (a) refuses writes to any key the stage
@@ -133,6 +140,13 @@ SKIPPED = object()
 _KINDS = ("primary", "mutate", "sidecar")
 _POLICIES = ("required", "best_effort")
 
+# The SINGLE frozen exemption to the R1 fork rider below (§4.3 R1 / D-14): the legacy
+# ``video/keyframes`` prep sidecar has a non-empty ``provides`` and no fragment, solely so
+# the retired ``vidproc-*-v0`` record_ids reproduce byte-for-byte. No new stage joins it —
+# ``tests/test_emission_law.py`` re-runs the whole law with this set EMPTIED and asserts
+# this pair is the only violation in any configuration.
+R1_EXEMPT_SIDECARS = frozenset({("video", "keyframes")})
+
 
 @dataclass
 class StageResult:
@@ -227,6 +241,22 @@ def register_stage(cls: type[Stage]) -> type[Stage]:
         raise StageRegistrationError(
             f"{cls.__name__}: mutate stages must NOT override enabled() — enabledness IS "
             "version_fragment(settings) != '' (single resolver)"
+        )
+    if (
+        stage.kind == "sidecar"
+        and stage.provides
+        and not cls._defines("version_fragment")
+        and (stage.modality, stage.name) not in R1_EXEMPT_SIDECARS
+    ):
+        raise StageRegistrationError(
+            f"{cls.__name__}: a sidecar declaring provides={tuple(stage.provides)} must "
+            "declare version_fragment() — §4 R1 (the fork rider). A provided slot exists "
+            "only to be consumed, i.e. to change bytes of a record this stage does not "
+            "itself emit; with no fragment that change lands under an UNCHANGED "
+            "pipeline_version and silently upserts over /context (the diarize "
+            "silent-overwrite class, re-opened for whoever reads the slot). This binds "
+            "for a sidecar what the mutate rule above binds for a mutate. A sidecar that "
+            "only ADDS records declares no `provides` and needs no fragment"
         )
     defines_sync, defines_async = cls._defines("run_sync"), cls._defines("run_async")
     if defines_sync == defines_async:
