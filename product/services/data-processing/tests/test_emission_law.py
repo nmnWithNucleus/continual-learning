@@ -38,7 +38,7 @@ from app.processing.base import ProcessedContent, ProcessedUnit, empty_enrichmen
 from app.stagegraph import stage as stage_mod
 from app.stagegraph.executor import resolve
 from app.stagegraph.stage import (
-    Stage, StageContext, StageResult, register_stage, stages_for,
+    Stage, StageContext, StageRegistrationError, StageResult, register_stage, stages_for,
 )
 from app.vision import emit, ocr
 from app.vision.clip_types import ClipDesc, ClipFrames
@@ -320,15 +320,80 @@ def test_r1_catches_a_hypothetical_violating_stage(config, bad):
 def test_r1_over_the_live_registry_catches_a_registered_violator(config):
     """Not just the checker — the *registry-driven* path. Register a violating stage into
     a throwaway modality, then run the same live-registry query the CI test above runs and
-    assert it goes red. Registration is done through the real decorator, so the day
-    WS-E2's raise lands this test proves it (see the WS-E2 test, which supersedes the
-    structural half)."""
+    assert it goes red. The stage used here is the one WS-E2's raise CANNOT catch (it
+    declares a resolver and returns `''`), which is precisely why this layer exists."""
     try:
         register_stage(_BadSidecarWithResolver)
         assert stages_for("zz")  # discovery ran; the throwaway modality is live
         assert r1_violations("zz", stages_for("zz"), config.settings) != []
     finally:
         stage_mod._REGISTRY.pop("zz", None)
+
+
+# --------------------------------------------------------------------------------------
+# WS-E2 — R1 promoted to a registration-time raise (the clip-cutover gate)
+# --------------------------------------------------------------------------------------
+
+def test_ws_e2_registration_rejects_the_structural_r1_violation():
+    """The cutover prerequisite. Before WS-E2, `register_stage` bound
+    `enabled()` ↔ `version_fragment()` only for `mutate` — so a SIDECAR with a non-empty
+    `provides` (which `screentext` is, under Architecture A) had two independent
+    resolvers, re-opening the diarize silent-overwrite class for the caption record. A
+    provides-bearing sidecar that never declares a fragment resolver at all now fails at
+    import, where a bad drop-in belongs."""
+    try:
+        with pytest.raises(StageRegistrationError, match="fork rider"):
+            register_stage(_BadSidecar)
+    finally:
+        stage_mod._REGISTRY.pop("zz", None)
+
+
+def test_ws_e2_registration_admits_what_only_the_config_layer_can_judge():
+    """The honest limit of the raise, asserted so nobody mistakes it for the whole law:
+    settings do not exist at import, so a stage that DECLARES a resolver registers fine
+    even when that resolver returns `''` for the configuration it is enabled in. That
+    case is the CI layer's (`test_r1_fork_rider_holds_over_the_live_registry`)."""
+    try:
+        register_stage(_BadSidecarWithResolver)  # must NOT raise
+        assert _BadSidecarWithResolver.name in stage_mod._REGISTRY["zz"]
+        assert r1_violations("zz", stages_for("zz"), get_settings()) != []
+    finally:
+        stage_mod._REGISTRY.pop("zz", None)
+
+
+def test_ws_e2_additive_sidecars_still_register():
+    """R1 is scoped to `provides`, not to sidecars in general: an additive sidecar (adds
+    records, feeds nothing) declares neither `provides` nor a fragment and must remain
+    legal — `translate`, `acoustic` and `injected_caption` are exactly this shape."""
+    try:
+        register_stage(type("Additive", (Stage,), {
+            "name": "additive", "modality": "zz", "kind": "sidecar", "order": 1,
+            "run_sync": lambda self, ctx: StageResult(),
+        }))
+        assert "additive" in stage_mod._REGISTRY["zz"]
+    finally:
+        stage_mod._REGISTRY.pop("zz", None)
+
+
+def test_ws_e2_exemption_set_is_the_same_single_pair_in_both_places():
+    """One frozen exemption, named identically in the raise and in the law. Two lists
+    that could drift is how an exemption quietly becomes a category."""
+    assert stage_mod.R1_EXEMPT_SIDECARS == FROZEN_R1_EXEMPTIONS
+    assert stage_mod.R1_EXEMPT_SIDECARS == frozenset({("video", "keyframes")})
+
+
+def test_ws_e2_did_not_break_the_shipped_stages():
+    """The whole integrated stage set still imports and registers under the new raise —
+    the five video and five audio stages by name. Discovery is import-time, so a
+    regression here is a service that cannot boot, not a failed assertion."""
+    assert {s.name for s in _live("video")} == {
+        "keyframes", "captions", "clipprep", "screentext", "clipcap"
+    }
+    assert {s.name for s in _live("audio")} == {
+        "asr", "diarize", "translate", "acoustic", "injected_caption"
+    }
+    # The exempt stage is among them: the raise must not have taken out the legacy path.
+    assert "keyframes" in {s.name for s in _live("video")}
 
 
 # --------------------------------------------------------------------------------------
