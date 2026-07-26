@@ -41,6 +41,10 @@ class C1Envelope(BaseModel):
     blob_ref: str = Field(min_length=1)
     blob_sha256: str
     blob_bytes: int = Field(ge=0)
+    # D17 civil-time context (optional-additive). extra="forbid" above means an
+    # envelope carrying these would be REJECTED if they weren't declared here.
+    device_tz: Optional[str] = Field(default=None, min_length=1)
+    device_utc_offset_minutes: Optional[int] = Field(default=None, ge=-1080, le=1080)
     device_location: Optional[DeviceLocation] = None
     device_clock: Optional[Literal["synced", "unsynced"]] = None
 
@@ -54,6 +58,11 @@ class C2Source(BaseModel):
     chunk_id: str = Field(min_length=1)
     blob_ref: str = Field(min_length=1)
     modality: Modality
+    # D17: carried verbatim from C1 (see pipeline.build_record). Omitted, never
+    # null, when the capturing device didn't report them.
+    device_tz: Optional[str] = Field(default=None, min_length=1)
+    device_utc_offset_minutes: Optional[int] = Field(default=None, ge=-1080, le=1080)
+    device_location: Optional[DeviceLocation] = None
 
 
 class C2Segment(BaseModel):

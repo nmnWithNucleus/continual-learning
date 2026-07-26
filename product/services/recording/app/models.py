@@ -42,6 +42,10 @@ class C1Envelope(_Strict):
     blob_ref: str = Field(min_length=1)
     blob_sha256: str
     blob_bytes: int = Field(ge=0)
+    # D17 civil-time context, both optional-additive. t_start/t_end stay the
+    # canonical instant; these say WHERE the capturing device was at it.
+    device_tz: str | None = Field(default=None, min_length=1)
+    device_utc_offset_minutes: int | None = Field(default=None, ge=-1080, le=1080)
     device_location: DeviceLocation | None = None
     device_clock: DeviceClock | None = None
 

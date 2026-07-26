@@ -4,7 +4,8 @@
 > Cross-service build sequencing, integration plans, infra calls. Service-internal
 > engineering lives in each service's canvas, not here.
 
-**Status:** active · **Last updated:** 2026-07-25 (learn-loop closed — see D15 close-out below)
+**Status:** active · **Last updated:** 2026-07-26 (**D17 — timezone ownership decided**, review
+item O-1 closed; see the dated entry at the end of the worklog)
 
 ---
 
@@ -704,3 +705,101 @@ Considered and passed, on the record so we don't re-litigate:
   scoped). **Open threads into the next session** (all in the handoff docs): D16 re-drive drill
   (gate to flip async default), M1 WER/DER exit measurement, M2 text/image as the next
   unstarted charter work, supervisor/deploy confirmation with platform.
+
+- 2026-07-26 — **Timezone: decided, then re-decided, then BUILT end to end (D17).** Review item
+  **O-1** closed. This entry replaces an earlier same-day write-up whose conclusion was wrong; the
+  reasoning is kept because the mistake is instructive.
+
+  **Verified first (all confirmed, cheaply):** `context_records` had no tz column
+  (`storage/app/db.py:78-88`; the only `timezone` token in `storage/app/*.py` was the UTC import);
+  the wearer's tz was `nightly.py:27` `--tz`, default `"UTC"`. Three consumers rode on it, not
+  two — the window boundary, `_render_block`, **and `cycle.py:217`**, which rebuilds *prior*
+  windows with *tonight's* tz under `replay_source="rawlog"`.
+
+  **The first D17 was wrong.** It gave storage a per-user `home_tz` *only*, banned tz from C1/C2,
+  and deferred travel. Two errors: (a) it applied the emission law's **T2 as a veto** on a field
+  whose consumer this very slice builds — T2's own text says it is "a gate on *when*, not a veto";
+  (b) it defended a `window_id`-total-order problem (dateline → one id for two windows) that only
+  exists because `window_for` derives bounds from a **local date** — and the watermark window
+  ARCHITECTURE's C10 row already specified dissolves it.
+
+  **The fact that settled it:** the capturing device already knows, and we were discarding it at
+  the first step — `new Date(seg.tStart).toISOString()` (`clients/web/app.js:262`,
+  `clients/extension/uploader.js:110`) computes the local instant and throws the zone away on the
+  same line. `Intl.DateTimeFormat().resolvedOptions().timeZone` is one line away. Meanwhile C1
+  collected `device_location` and **C2 dropped it**, and `device_location`/`device_clock` were
+  declared in both recording's and DP's `models.py` and read by neither — dead fields.
+
+  **D17 as ratified: the device owns the FACT, storage owns the POLICY.** Per-chunk `device_tz` +
+  `device_utc_offset_minutes` on C1 → verbatim through DP → C2 `source{}` → storage columns →
+  continuum's renderer. Per-user `home_tz` does **scheduling** (when does this user's night fire?)
+  and **fallback** only. UTC stays canonical and is the only ordering/range axis. Two standing
+  rules: never persist a derived local wall-clock (two sources of truth that will disagree), never
+  accept an abbreviation (`PST` is ambiguous + DST-sensitive).
+
+  **Why the offset is NOT redundant with the zone:** it records what the device *believed* at
+  capture. When a tzdata build is stale or wrong, the offset is the only independent witness — the
+  zone id alone would silently re-derive the wrong wall clock forever.
+
+  **Built, in ORG.md:44-45 order** (ARCHITECTURE §Contracts → `contracts/` → owning canvases):
+  | Hop | Change |
+  |---|---|
+  | Clients | web + extension `civilTime()`; mac `local_iana_zone()` + `civil_time_params()` (stdlib-only — `/etc/localtime` symlink, because `time.tzname` yields forbidden abbreviations). **Offset evaluated at the chunk's own instant**, so a chunk either side of a DST flip carries the true offset (tested: LA −480 in January, −420 in July) |
+  | Recording | `/capture/segments` accepts + **validates at the edge** (abbreviation → 400, unknown IANA id → 400, out-of-range offset → 422); ledger columns + additive migration; `_build_envelope` **omits** rather than nulls; carried on the **`/redrive`** path too (the query already joined `segments`) |
+  | DP | `build_c2` copies `device_tz`, `device_utc_offset_minutes` **and the long-dropped `device_location`** verbatim. Zero timezone logic. `C1Envelope`/`C2Source` are `extra="forbid"` — undeclared fields would have been **rejected**, so the models had to move with the schema |
+  | Storage | promoted columns beside the UTC instant (a civil-time query is a column read, not a JSON scan) + additive migration; `record_json` still served **byte-verbatim**. Its pydantic `Source` mirror is `_Strict` and **caught the omission in test** — schema and mirror must move together |
+  | Continuum | `Segment.tz` + `_block_zone()`: device zone wins, window `home_tz` falls back, an unresolvable id **degrades instead of sinking the night**. `--tz` now **required** |
+
+  **Deliberately no backfill on either migration.** A record captured before clients reported a
+  zone genuinely has none; inventing one (the server's, `"UTC"`) is precisely the silently-wrong
+  timezone failure this slice removes. NULL is honest and reads as "fall back to `home_tz`".
+
+  **Cross-service E2E:** a Tokyo chunk through recording → DP → storage → continuum, with the
+  operator's fallback deliberately set to UTC, renders **"around 15:00 local time"**. Pre-D17 the
+  identical run rendered **"06:00"** — a UTC reading labelled local, no error, no metric.
+
+  **Suites: storage 32 · continuum 189 · recording 144 · DP 770 (+21 skipped) · extension deno 11.
+  +26 tests, zero regressions.** Notable coverage: two zones in one window rendering independently
+  *with different local dates* (the case one-tz-per-window structurally cannot express); both
+  migrations against hand-built pre-D17 schemas; and **`record_id` stability** — civil-time context
+  is provenance, not a dialect input, so it must not fork the record or every existing record would
+  re-key on upgrade.
+
+  **OQs closed:** storage **OQ3** (clock skew — the "normalize upstream" lean was right and is now
+  built: nobody normalizes, and skew is *detectable* from `device_clock` + offset + `ingest_time`
+  rather than silently corrected) · DP **OQ4** (device clock discipline) · DP **OQ9** substantially
+  (envelope time suffices, now auditable; residual = nobody *measures* the disagreement rate yet) ·
+  continuum **OQ10**'s timezone half (a tz is needed for scheduling only) · **E-4**'s premise.
+
+  **Specified, NOT built — the board's own agenda, not for an unreviewed slip:** day-log
+  materialization continuum → storage, and the cycle window → watermark `[last_trained_t, now)`.
+  Both are written into the ARCHITECTURE C10 row. The second retires `window_for` entirely; it also
+  changes training-window semantics (`window_id` keys the journal, C5 `training_window`, and
+  publish's alias monotonicity), which is exactly why it wants the board and not a side-effect.
+
+  **Fleet applied (same session).** node-7's learn fleet was restarted onto the new code; both
+  SQLite migrations ran against live data. Backed up first with SQLite's online-backup API →
+  `/home/ubuntu/nmn/backups/pre-d17-20260726-211912/`. Post-restart verification:
+  `context_records` **125/125 rows intact**, both columns present, **all NULL** (no backfill by
+  design); `segments` **40/40 intact**, both columns present. The **`dp_state` migration also
+  fired**, backfilling all **68 chunks** → `processed`: the running processes dated from
+  2026-07-19 and predated the D16-async, v1-journal and hardening merges, so this restart
+  collected those too — the board's long-standing "fleet is behind" note is now cleared.
+  Live wire checks against the running service: `device_tz=Asia/Tokyo` accepted + persisted;
+  `device_tz=PST` **400**. A real `--smoke` run carved 3 chunks through faster-whisper →
+  C2 → `/context`; those records correctly **omit** the civil-time fields, since headless
+  `/capture/run` has no reporting device — absence, not null, is the contract. Verification rows
+  deleted afterwards (ledger back to its 40-segment baseline).
+
+  **Correction before commit (O-12, pass 2 of the review).** D17's headline read "BUILT + verified
+  end to end" while the row also carried the **watermark-window** clause — which is decided, not
+  built (`window_for()`/`closed_window_before()` are still local-date; `nightly.py` still calls
+  them). Fair catch: the Decisions log is the most authoritative doc we have, so a blanket BUILT
+  claim over a two-part decision is exactly the kind of drift this session existed to remove. D17's
+  status is now **split explicitly** — timezone split BUILT + verified, watermark window
+  DECIDED/pending — and ARCHITECTURE's C10 row is reworded from "the cycle window is" to "is to
+  become … and is still what runs". Both now name the blocking design question: `window_id` is the
+  local start date and keys the day-log, the cycle journal, C5's `training_window`, and publish's
+  active-alias monotonicity; the natural watermark key is the window's **end instant** (monotone per
+  user, no dateline case), but that changes the `w2026-07-21` format and **forks adapter lineage** —
+  a board call, not a refactor.

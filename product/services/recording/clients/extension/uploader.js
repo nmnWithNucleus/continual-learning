@@ -93,6 +93,25 @@ export function createUploader(opts) {
   const wireError = (message, fatal) =>
     Object.assign(new Error(message), { fatal });
 
+  // D17: the capturing device is the ONLY thing that knows where the user
+  // physically was at this instant — we already compute the local time and throw
+  // the zone away converting to UTC. Both fields are optional; a failure here
+  // omits them and consumers fall back to the user's profile home_tz, so this
+  // can never fail an upload.
+  function civilTime(msEpoch) {
+    const out = {};
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (tz) out.device_tz = tz; // IANA id, never an abbreviation
+    } catch { /* zone unavailable — omit */ }
+    // getTimezoneOffset() counts minutes BEHIND UTC (positive west of Greenwich);
+    // C1 wants the conventional signed offset, so negate. Evaluated AT the chunk's
+    // own instant so a chunk captured before a DST flip keeps its true offset.
+    const off = -new Date(msEpoch).getTimezoneOffset();
+    if (Number.isFinite(off)) out.device_utc_offset_minutes = String(off);
+    return out;
+  }
+
   async function uploadOnce(seg) {
     if (seg.sha256 === undefined) {
       // Cached across retries — the bytes don't change between attempts.
@@ -111,6 +130,7 @@ export function createUploader(opts) {
       t_end: new Date(seg.tEnd).toISOString(),
       mime: seg.mime,
       sha256: seg.sha256,
+      ...civilTime(seg.tStart),
     });
     let res;
     try {

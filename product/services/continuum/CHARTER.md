@@ -116,7 +116,19 @@ trigger ownership is tracked as output's proactive open question ([../output/CHA
    (pipeline-version bumps) — does a cycle window close by wall-clock, by ingestion time, or both?
    Pinned with storage in C10 ([../../ARCHITECTURE.md](../../ARCHITECTURE.md) § Contracts).
 10. **Cycle trigger.** Clock ("nightly", timezone-aware per user) vs data-volume threshold vs
-    hybrid; what floor of new data makes a cycle worth running?
+    hybrid; what floor of new data makes a cycle worth running? *(The **"timezone-aware" half is
+    settled by D17**, 2026-07-26, and it is smaller than it looked. A timezone is needed for
+    exactly one thing here — **deciding when a user's cycle fires** (their local ~04:00) — and that
+    reads storage's per-user profile `home_tz`. It is **not** needed to compute the window once the window
+    becomes the watermark range `[last_trained_t, now)` — a plain UTC duration query, which retires
+    `window_for(user, local_date, tz)` and its whole local-date-arithmetic class of bugs
+    (23 h/25 h days, a repeated local date across the dateline colliding `window_id`). **That window
+    change is DECIDED, NOT YET BUILT** (D17 status split; `window_for()`/`closed_window_before()`
+    are still local-date and `nightly.py` still calls them) — it rides the storage/C10 board session,
+    where `window_id`'s fate has to be settled first because C5's `training_window`, the cycle
+    journal and publish's alias monotonicity all key on it. **Rendering** local times is not a scheduling concern at all — each record carries its own
+    `device_tz`, so anchor lines are correct even for a day spent in another zone. What remains open
+    in OQ10 is only the **trigger policy** — clock vs volume vs hybrid, and the min-data floor.)*
 11. **GPU budgeting.** Per-user cycle cost on the shared 8-node partition, contended with research
     runs — priority classes, preemption checkpoints, nightly-window packing.
 12. **Adapter artifact lifecycle.** Where per-user adapters live (GCS layout), retention of

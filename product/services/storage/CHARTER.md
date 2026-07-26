@@ -4,9 +4,11 @@
 > per-user model directory. Stable doc — working state lives in [HANDOFF.md](HANDOFF.md);
 > system-wide architecture + contracts in [../../ARCHITECTURE.md](../../ARCHITECTURE.md).
 
-**Status:** chartered · **Last updated:** 2026-07-23 (proposed scope **expansion** from the
+**Status:** chartered · **Last updated:** 2026-07-26 (proposed scope **expansion** from the
 continuum/Morpheus design session — day-log materialization + recipe registry + reservoir custody;
-see § Scope note. **Pending founders'-board ratification.**)
+see § Scope note. **Pending founders'-board ratification.** *2026-07-26:* **D17** adds a fourth
+expansion row — the **per-user profile** owning `home_tz` — and corrects § The time index, which
+promised a per-record timezone this service never stored.)
 
 ## Mission
 
@@ -41,6 +43,7 @@ trains no models; it keeps what others produce safe, ordered, and fast to read.
 | In+ | **Day-log materialization** *(pending board)* | scheduled job: C2 records → segment/block day-log (+ `render_block` anchored text), a derived view over `/context`; served to continuum via the evolved C10. Recipe-versioned format |
 | In+ | **Recipe registry** *(pending board)* | versioned recipe/config hosting; fetch API for continuum (consolidation recipe) + inference (serving-side knobs) |
 | In+ | **Reservoir custody** *(pending board)* | per-user store of amplified corpora (continuum writes via API); audit/provenance — replay re-reads prior day-logs, not this |
+| In+ | **Per-user profile** *(pending board — ratified in principle by D17)* | one durable row per user for **policy** values that are neither sensor data nor recipe config. First v0 field: **`home_tz`** (IANA zone), whose *only* jobs are **(a) scheduling** — deciding when this user's nightly consolidation fires, a question asked before any of that night's records exist — and **(b) fallback** when a record carries no `device_tz`. Seeded from the most recent device-reported zone, user-overridable. It is NOT the pipeline's time semantics (that is per-record `device_tz`) and NOT part of the C10 range arithmetic. Cannot ride the recipe registry: `recipe_id` is global and versioned (`recipe_id` == filename stem), so a per-user value there would fork `recipe_id` per user. Contract ID minted with the expansion's other two |
 | In | `/context` store | processed life-stream records; storing side of C2 |
 | In | `/sessions` store | conversations → sessions → turns, incl. full mentor + tool traces; storing side of C4 |
 | In | Model directory | per-user adapter registry: version, base-model hash, training window, eval report, active/rolled-back; behind C5/C6 |
@@ -77,13 +80,27 @@ redefined.
 | C6 | inference ↔ model directory | serve the hot read path: resolve the active adapter for user_id per request, within a tight latency budget |
 | C10 | storage → continuum | serve the training-window read. **Evolving (pending board):** from a raw `/context` range read to a **day-log fetch** — storage materializes the segment/block day-log for the window and serves that; watermark semantics (late/reprocessed records, pipeline-version bumps) remain C10's core design work, pinned in ARCHITECTURE's C10 row as it lands |
 | C11 | storage → input (QueryBuilder) | serve the recent-context read: recency/semantic retrieval over `/context` + `/sessions`; the index lives here, QueryBuilder decides what enters the UserPrompt |
-| *(new, pending board)* | storage → continuum / inference | **recipe registry** fetch (versioned) + **reservoir** write/read; contract IDs minted when the board ratifies the expansion |
+| *(new, pending board)* | storage → continuum / inference | **recipe registry** fetch (versioned) + **reservoir** write/read + **per-user profile** fetch (`home_tz`; D17); contract IDs minted when the board ratifies the expansion |
 
 ### The time index (the load-bearing decision)
 - Every record carries device wall-clock `t_start`/`t_end` (from C2/C4) **and** a
   storage-assigned `ingest_time`. Wall-clock is the query axis; ingest time is the audit axis.
-- All timestamps stored UTC; the user's local timezone stored alongside, so "what happened
-  Tuesday" resolves in user-local time.
+- **All timestamps stored UTC; the capturing device's local timezone stored alongside** (`device_tz`,
+  IANA + `device_utc_offset_minutes`, carried on C2 `source{}`), so "what happened Tuesday" resolves
+  in the user's *actual* local time — including for a day they spent in another zone. **Built
+  2026-07-26 (D17)**; this line had promised it since 2026-07-08 while `context_records` had no such
+  column, and the gap is now closed rather than the promise withdrawn.
+- **UTC is canonical and is the only query axis.** `t_start` orders the timeline and answers every
+  range read (`GET /context/records?from=&to=` needs no timezone at all — C10 is a duration query).
+  The zone is *context beside* the instant, never a replacement for it, and never an index.
+- **Two timezone concepts, deliberately distinct** — see
+  [ARCHITECTURE §Ownership splits](../../ARCHITECTURE.md) → *User timezone*: the per-record
+  `device_tz` is the **fact** (where the user was; owned by the device, correct under travel), while
+  the per-user profile `home_tz` is the **policy** (when this user's night is; owned by us, used for
+  **scheduling the nightly cycle** and as the fallback when a record carries no zone).
+- **Two rules that stay rules:** never persist a derived local wall-clock string (`device_local_time`
+  is recoverable from instant + zone; storing it makes two sources of truth that will disagree), and
+  never accept a timezone *abbreviation* — `PST`/`MST` are ambiguous and DST-sensitive, IANA ids only.
 - A user's streams overlap (body cam + computer at the same moment): one timeline per user,
   indexed (user_id, t_start), with modality/device as filter columns — not parallel timelines.
 - Continuum's nightly window (C10) is `[last_trained_t, now)` per user — a single index-range
@@ -111,8 +128,17 @@ Engineering:
    BWM (base-model) weights custody is inference's (ARCHITECTURE §Ownership splits). Adapter
    weight files must sit where vLLM can hot-swap fast (GCS vs NFS vs node-local cache) — split
    with inference + platform.
-3. **Clock skew.** Does data-processing normalize device clocks before C2, or does storage keep
-   raw + corrected times? Lean: normalize upstream; storage stores C2's values + `ingest_time`.
+3. ~~**Clock skew.** Does data-processing normalize device clocks before C2, or does storage keep
+   raw + corrected times?~~ **RESOLVED (D17, 2026-07-26) — the lean was right, and is now built.**
+   Storage stores **exactly what C2 carries, verbatim, plus its own `ingest_time`**; it corrects
+   nothing. Data-processing likewise normalizes nothing — it is a pure passthrough for
+   `device_tz` / `device_utc_offset_minutes` / `device_location`. What makes this safe rather than
+   naive is that the envelope now carries its own audit trail: `device_clock` (`synced|unsynced`)
+   says whether the stamp is NTP-disciplined, `device_utc_offset_minutes` witnesses what the device
+   believed, and `ingest_time` is an independent server-side clock — so skew is **detectable after
+   the fact from stored data** instead of being silently baked in by an upstream correction. If a
+   corrected time is ever needed it lands as a new additive field beside the raw one; the raw device
+   stamp is never overwritten.
 4. **ID minting.** Session/turn ids originate in input (C3) — does storage enforce referential
    integrity on C4 writes, or trust writers?
 

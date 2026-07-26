@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS segments (
   received_at TEXT NOT NULL,
   state       TEXT NOT NULL DEFAULT 'received',     -- received | emitted | failed
   spool_path  TEXT NOT NULL,
+  device_tz   TEXT,                                 -- D17: IANA zone the device reported (NULL = not reported)
+  device_utc_offset_minutes INTEGER,                -- D17: offset the device believed at t_start
   error       TEXT,                                 -- why state == 'failed' (report visibility)
   PRIMARY KEY (session_id, seq)
 );
@@ -90,6 +92,12 @@ CREATE TABLE IF NOT EXISTS chunks (
 _MIGRATIONS = [
     ("chunks", "dp_state", "TEXT",
      "UPDATE chunks SET dp_state = 'processed' WHERE dp_acked = 1 AND dp_state IS NULL"),
+    # D17 civil-time context. No backfill: a segment received before the clients
+    # reported a zone genuinely has no zone, and inventing one (e.g. the server's)
+    # would be exactly the silent-wrong-timezone failure this slice exists to kill.
+    # NULL is the honest value and reads downstream as "fall back to home_tz".
+    ("segments", "device_tz", "TEXT", None),
+    ("segments", "device_utc_offset_minutes", "INTEGER", None),
 ]
 
 # Schema is idempotent (IF NOT EXISTS) but issuing it per request is pointless churn;
@@ -227,6 +235,8 @@ class Ledger:
         t_end: str,
         received_at: str,
         spool_path: str,
+        device_tz: str | None = None,
+        device_utc_offset_minutes: int | None = None,
     ) -> tuple[str, str]:
         """Record one delivered segment. Returns (status, state) where status is
         'received' | 'duplicate' | 'conflict' and state is the segment's CURRENT
@@ -259,10 +269,12 @@ class Ledger:
                 else:
                     conn.execute(
                         "INSERT INTO segments (session_id, seq, sha256, bytes, mime,"
-                        " t_start, t_end, received_at, state, spool_path)"
-                        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'received', ?)",
+                        " t_start, t_end, received_at, state, spool_path,"
+                        " device_tz, device_utc_offset_minutes)"
+                        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'received', ?, ?, ?)",
                         (session_id, seq, sha256, nbytes, mime, t_start, t_end,
-                         received_at, spool_path),
+                         received_at, spool_path, device_tz,
+                         device_utc_offset_minutes),
                     )
                     status = state = "received"
                 conn.execute("COMMIT")
@@ -451,7 +463,8 @@ class Ledger:
         session (user/device) + the source segment (wall-clock span)."""
         sql = (
             "SELECT c.stream_id, c.sequence, c.chunk_id, c.modality, c.codec, c.bytes,"
-            " c.sha256, c.blob_ref, s.user_id, s.device_id, g.t_start, g.t_end"
+            " c.sha256, c.blob_ref, s.user_id, s.device_id, g.t_start, g.t_end,"
+            " g.device_tz, g.device_utc_offset_minutes"
             " FROM chunks c"
             " JOIN sessions s ON s.session_id = c.session_id"
             " JOIN segments g ON g.session_id = c.session_id AND g.seq = c.seq"

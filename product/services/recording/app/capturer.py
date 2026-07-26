@@ -45,6 +45,8 @@ def _build_envelope(
     blob_ref: str,
     sha256: str,
     nbytes: int,
+    device_tz: str | None = None,
+    device_utc_offset_minutes: int | None = None,
 ) -> dict[str, Any]:
     envelope: dict[str, Any] = {
         "contract": "C1",
@@ -62,6 +64,14 @@ def _build_envelope(
         "blob_sha256": sha256,
         "blob_bytes": nbytes,
     }
+    # D17 civil-time context: the capturing device's own zone at capture time.
+    # OMITTED (not null) when the client didn't report it — C1 declares both
+    # optional, and an absent key is what makes consumers fall back to the
+    # user's profile home_tz rather than trusting a guessed zone.
+    if device_tz:
+        envelope["device_tz"] = device_tz
+    if device_utc_offset_minutes is not None:
+        envelope["device_utc_offset_minutes"] = device_utc_offset_minutes
     # Authoritative gate: the frozen C1 JSON Schema. Then the pydantic mirror.
     contracts.validate_c1(envelope)
     C1Envelope.model_validate(envelope)

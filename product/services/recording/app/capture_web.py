@@ -33,6 +33,7 @@ import logging
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -109,6 +110,8 @@ async def upload_segment(
     t_end: str = Query(min_length=1),
     mime: str = Query(min_length=1),
     sha256: str = Query(default=""),
+    device_tz: str | None = Query(default=None),
+    device_utc_offset_minutes: int | None = Query(default=None, ge=-1080, le=1080),
 ) -> dict:
     if not _SAFE_ID.fullmatch(session_id) or session_id in (".", ".."):
         raise HTTPException(400, "session_id must be filesystem-safe ([A-Za-z0-9._-])")
@@ -117,6 +120,25 @@ async def upload_segment(
         timeutil.parse_wallclock(t_end)
     except ValueError as exc:
         raise HTTPException(400, f"bad t_start/t_end: {exc}") from exc
+    # D17: reject a bad zone AT THE EDGE. A zone that can't be resolved is worse
+    # than none at all — an unresolvable id would blow up later in the renderer,
+    # far from the client that sent it, while an absent one cleanly falls back to
+    # the user's home_tz. Rejecting an abbreviation ('PST') is the point: they are
+    # ambiguous and DST-sensitive, and ZoneInfo happens to accept a few of them.
+    if device_tz is not None:
+        device_tz = device_tz.strip()
+        if not device_tz:
+            device_tz = None
+        elif "/" not in device_tz and device_tz not in ("UTC", "GMT"):
+            raise HTTPException(
+                400,
+                f"device_tz must be an IANA zone id like 'America/Los_Angeles', got {device_tz!r}",
+            )
+        else:
+            try:
+                ZoneInfo(device_tz)
+            except (ZoneInfoNotFoundError, ValueError) as exc:
+                raise HTTPException(400, f"unknown device_tz {device_tz!r}: {exc}") from exc
 
     settings = get_settings()
     data = await _read_body_capped(request, settings.max_segment_bytes)
@@ -148,6 +170,8 @@ async def upload_segment(
         t_end=t_end,
         received_at=timeutil.rfc3339(datetime.now(timezone.utc)),
         spool_path=str(spool),
+        device_tz=device_tz,
+        device_utc_offset_minutes=device_utc_offset_minutes,
     )
     if status == "conflict":
         spool.unlink(missing_ok=True)  # keep only the original seq's bytes spooled

@@ -22,7 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .window import Window, in_window
 
@@ -36,6 +36,11 @@ class Segment:
     asr: list[dict[str, Any]] = field(default_factory=list)   # {spk, text, t}
     ocr: list[str] = field(default_factory=list)
     quality: float | None = None   # C2 v0 has no quality field yet; None = not scored
+    # D17: the zone the CAPTURING DEVICE reported for the records in this bucket
+    # (C2 source.device_tz). None when no contributing record carried one, which
+    # is what makes the renderer fall back to the window's home_tz. This is the
+    # field that makes anchor lines correct for a day spent in another zone.
+    tz: str | None = None
 
     def is_empty(self) -> bool:
         return not (self.caption or self.asr or self.ocr)
@@ -86,6 +91,17 @@ def build_daylog(records: list[dict[str, Any]], win: Window, *,
             )
         return buckets[idx]
 
+    def note_tz(seg: Segment, rec: dict[str, Any]) -> Segment:
+        """Stamp the bucket with the capturing device's zone (first writer wins).
+
+        A ~10 s bucket cannot straddle a real zone change, so first-wins is not a
+        lossy choice here; it just avoids re-deciding per contributing record."""
+        if seg.tz is None:
+            device_tz = (rec.get("source") or {}).get("device_tz")
+            if device_tz:
+                seg.tz = device_tz
+        return seg
+
     for rec in records:
         content = rec.get("content", {})
         kind = content.get("kind")
@@ -103,7 +119,7 @@ def build_daylog(records: list[dict[str, Any]], win: Window, *,
                 st = _parse_ts(sub["t_start"])
                 if not in_window(st, win):
                     continue
-                seg_for(_bucket_index(st, win, segment_seconds)).asr.append(
+                note_tz(seg_for(_bucket_index(st, win, segment_seconds)), rec).asr.append(
                     {"spk": sub.get("speaker"), "text": sub_text, "t": sub["t_start"]})
             continue
         t0 = _parse_ts(rec["t_start"])
@@ -111,7 +127,7 @@ def build_daylog(records: list[dict[str, Any]], win: Window, *,
             continue  # attribution rule: t_start decides membership
         if not text:
             continue
-        seg = seg_for(_bucket_index(t0, win, segment_seconds))
+        seg = note_tz(seg_for(_bucket_index(t0, win, segment_seconds)), rec)
         if kind == "transcript":
             seg.asr.append({"spk": None, "text": text, "t": rec["t_start"]})
         elif kind == "ocr":
@@ -141,11 +157,34 @@ def build_daylog(records: list[dict[str, Any]], win: Window, *,
                   segments=segments, blocks=blocks)
 
 
+def _block_zone(win: Window, group: list[Segment]) -> ZoneInfo:
+    """The zone this block's anchor line is written in (D17).
+
+    Preference order — device-reported, then the window's fallback:
+      1. the `device_tz` the CAPTURING DEVICE reported for the block's first
+         segment: the only value that is right when the user was travelling,
+         because it says where they physically were at that moment;
+      2. `win.tz` — the user's profile `home_tz`, for records captured before
+         clients reported a zone, or by a device that can't determine one.
+
+    The first segment decides, matching the anchor line's own start time. An
+    unknown/garbage zone id must never sink a whole night's training run, so an
+    unresolvable value degrades to the window fallback rather than raising.
+    """
+    for seg in group:
+        if seg.tz:
+            try:
+                return ZoneInfo(seg.tz)
+            except (ZoneInfoNotFoundError, ValueError):
+                break  # bad id from a device — fall through to the window zone
+    return ZoneInfo(win.tz)
+
+
 def _render_block(win: Window, index: int, group: list[Segment]) -> Block:
     """v0 labeled-lines renderer; anchors written IN the text (never metadata-only).
     Times are rendered in the WEARER'S timezone — pairing the local date with UTC
     clock readings would anchor a moment up to a day away from the event."""
-    zone = ZoneInfo(win.tz)
+    zone = _block_zone(win, group)
     start_local = _parse_ts(group[0].t_start).astimezone(zone)
     end_local = _parse_ts(group[-1].t_end).astimezone(zone)
     local_date = start_local.date().isoformat()

@@ -164,6 +164,11 @@ async def redrive_accepted_chunks(settings: Settings, session_id: str | None = N
                 sequence=r["sequence"], chunk_id=r["chunk_id"], modality=r["modality"],
                 codec=r["codec"], t_start=r["t_start"], t_end=r["t_end"],
                 blob_ref=r["blob_ref"], sha256=r["sha256"], nbytes=r["bytes"],
+                # A re-driven chunk must carry the SAME civil-time context as its
+                # first push — the query joins segments, so this is the original
+                # device-reported zone, not a re-derived one.
+                device_tz=r["device_tz"],
+                device_utc_offset_minutes=r["device_utc_offset_minutes"],
             )
             ack = await dp.ingest(envelope)
             # A done-claim short-circuits to 200 + record_ids (no `accepted` flag) — that
@@ -299,6 +304,11 @@ async def _emit_tracks(
                 blob_ref=blob["blob_ref"],
                 sha256=sha256,
                 nbytes=len(data),
+                # ...and, for the same reason, the segment's civil-time context:
+                # both demuxed tracks were captured by one device in one zone.
+                # Pre-D17 ledger rows have no such column value -> None -> omitted.
+                device_tz=segment.get("device_tz"),
+                device_utc_offset_minutes=segment.get("device_utc_offset_minutes"),
             )
             ack = await dp.ingest(envelope)
             # Two DP reply shapes (the async-ingest wire, decided jointly with

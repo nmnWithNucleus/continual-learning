@@ -289,3 +289,34 @@ Deno.test("state() counters and onState notifications track the queue", async ()
   assertEquals(up.state().queued, 0);
   assert(snapshots.length >= 4, "onState fired for enqueues and acks");
 });
+
+// D17: the extension is the only thing that knows the user's zone at capture.
+Deno.test("civil-time context rides the query string", async () => {
+  const fetch = fakeFetch(() => ok200());
+  const up = createUploader({
+    baseUrl: "http://server:8084/",
+    sessionId: "SESH",
+    userId: "u1",
+    deviceId: "ext-chrome-abc",
+    fetch,
+    sleep: async () => {},
+    digest: async () => "cafe01",
+  });
+  up.enqueue({
+    blob: new Blob([new Uint8Array(3)]),
+    tStart: 1752800000000,
+    tEnd: 1752800010000,
+    mime: "video/webm;codecs=vp9",
+  });
+  await up.drain();
+  const sp = fetch.calls[0].url.searchParams;
+
+  // An IANA id, never an abbreviation like "PST" — the server rejects those.
+  const tz = sp.get("device_tz");
+  assert(tz === null || tz.includes("/") || tz === "UTC",
+    `device_tz must be an IANA id, got ${tz}`);
+
+  // The offset is evaluated AT the chunk's instant, so it survives a DST flip.
+  const expected = String(-new Date(1752800000000).getTimezoneOffset());
+  assertEquals(sp.get("device_utc_offset_minutes"), expected);
+});

@@ -85,18 +85,32 @@ def build_c2(
     if unit.content.segments:
         content["segments"] = unit.content.segments
 
+    # D17 civil-time context: carried VERBATIM from the envelope. We derive
+    # nothing, validate nothing, infer nothing — a timezone is a fact about where
+    # the user physically was, knowable only at the capturing device at capture
+    # time; anything reconstructed here would be a guess dressed as data. This is
+    # provenance passthrough (like device_id/blob_ref), NOT a signal we produce,
+    # so the record-emission law's T2 "reachable consumer" test does not gate it.
+    # Absent on the envelope => absent on the record => consumers fall back to the
+    # user's profile home_tz.
+    source: dict[str, Any] = {
+        "device_id": c1["device_id"],
+        "stream_id": c1["stream_id"],
+        "chunk_id": c1["chunk_id"],
+        "blob_ref": c1["blob_ref"],
+        "modality": c1["modality"],
+    }
+    for field in ("device_tz", "device_utc_offset_minutes", "device_location"):
+        value = c1.get(field)
+        if value is not None:
+            source[field] = value
+
     return {
         "contract": "C2",
         "version": "0",
         "record_id": record_id,
         "user_id": c1["user_id"],
-        "source": {
-            "device_id": c1["device_id"],
-            "stream_id": c1["stream_id"],
-            "chunk_id": c1["chunk_id"],
-            "blob_ref": c1["blob_ref"],
-            "modality": c1["modality"],
-        },
+        "source": source,
         "t_start": t_start,
         "t_end": t_end,
         "content": content,

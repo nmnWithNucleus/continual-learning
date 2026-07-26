@@ -32,6 +32,7 @@ No capture fidelity is worth a consent violation.
 | **In** | Chunking, retry, offline queueing on all clients | recording |
 | **In** | Device pairing + device auth | recording |
 | **In** | Device location capture where hardware allows — fills C1's optional location field (data-processing's geo-enrichment source) | recording |
+| **In** | **Civil-time capture (D17, 2026-07-26)** — every capture client reports the device's **IANA timezone** (`device_tz`) and **UTC offset in minutes** (`device_utc_offset_minutes`) alongside each chunk's UTC `t_start`/`t_end`. **We are the only service that can know these**: the zone is a fact about where the user physically was at that instant, and our clients already compute the local time and discard the zone converting to UTC. One line per client (`Intl.DateTimeFormat().resolvedOptions().timeZone` in the browser clients). Downstream nobody derives or guesses it — data-processing passes it through, storage persists it, continuum renders from it | recording |
 | **In** | On-device consent **enforcement**: pause / mute / delete-last-N-minutes; visible capture indicator | recording |
 | **In** | Capture-health telemetry (per-device uptime, gaps, queue depth, battery) | recording |
 | **In** | Observability: expose `/metrics` (request rate/latency/errors **+ ingest rate, capture-health, consent-gate rejections**) + own Grafana dashboard JSON in `dashboards/*.json`; Platform runs the shared Prometheus/Grafana — [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability | recording |
@@ -52,7 +53,7 @@ our output; everything past that is theirs.
 
 | Contract | Our role | One-line role |
 |---|---|---|
-| **C1** recording → data-processing | **We own the producing side** | **v0 FROZEN (D11).** Two legs: (1) blob leg — we `PUT` the raw bytes to storage `/raw` **first**, storage mints an opaque `blob_ref`; (2) envelope leg — we **push** the C1 envelope (user_id, device_id, `stream_id`, `sequence`, `chunk_id`, modality, codec, wall-clock t_start/t_end, `blob_ref`+sha256+bytes, optional device location/clock) to data-processing. **at-least-once, dedup on `chunk_id`, gaps via dense `(stream_id, sequence)`, blob-first.** |
+| **C1** recording → data-processing | **We own the producing side** | **v0 FROZEN (D11).** Two legs: (1) blob leg — we `PUT` the raw bytes to storage `/raw` **first**, storage mints an opaque `blob_ref`; (2) envelope leg — we **push** the C1 envelope (user_id, device_id, `stream_id`, `sequence`, `chunk_id`, modality, codec, wall-clock t_start/t_end, `blob_ref`+sha256+bytes, optional device location/clock, **optional `device_tz` + `device_utc_offset_minutes` — additive 2026-07-26, D17**) to data-processing. **at-least-once, dedup on `chunk_id`, gaps via dense `(stream_id, sequence)`, blob-first.** |
 | C3 / C8 | none — boundary marker | Interactive requests go through input/QueryBuilder, never through us; we carry only the passive life stream |
 
 Contract payloads are defined in [../../ARCHITECTURE.md](../../ARCHITECTURE.md) § Contracts —

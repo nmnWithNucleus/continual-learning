@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 import urllib.error
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -556,3 +557,41 @@ def test_cli_record_test_source_end_to_end(stub, tmp_path):
     assert "verdict: clean" in proc.stdout          # the stub's canned answer
     assert not list(spool.glob("seg-*.mp4"))        # acked segments were deleted
     assert (home / ".nucleus" / "device_id").exists()
+
+
+# --- D17: civil-time capture (the mac client is stdlib-only, no tzlocal) ------
+
+def test_local_iana_zone_prefers_an_explicit_tz_env(monkeypatch):
+    monkeypatch.setenv("TZ", "America/Los_Angeles")
+    assert cap.local_iana_zone() == "America/Los_Angeles"
+
+
+def test_local_iana_zone_ignores_abbreviation_style_tz(monkeypatch):
+    """A bare 'PST8PDT'-style TZ has no '/' and is not an IANA Area/Location id;
+    fall through to /etc/localtime rather than shipping an ambiguous token."""
+    monkeypatch.setenv("TZ", "PST8PDT")
+    zone = cap.local_iana_zone()
+    assert zone != "PST8PDT"
+
+
+def test_civil_time_params_offset_is_evaluated_at_the_chunk_instant(monkeypatch):
+    """Not at call time — a chunk captured either side of a DST flip must carry
+    the offset really in effect then. Los Angeles: PST (-480) in January,
+    PDT (-420) in July."""
+    monkeypatch.setenv("TZ", "America/Los_Angeles")
+    time.tzset()
+    try:
+        winter = cap.civil_time_params("2026-01-15T12:00:00.000Z")
+        summer = cap.civil_time_params("2026-07-15T12:00:00.000Z")
+        assert winter["device_utc_offset_minutes"] == -480
+        assert summer["device_utc_offset_minutes"] == -420
+        assert winter["device_tz"] == "America/Los_Angeles"
+    finally:
+        monkeypatch.delenv("TZ", raising=False)
+        time.tzset()
+
+
+def test_civil_time_params_never_raises_on_a_bad_timestamp():
+    """These fields are optional by contract; a parse failure must degrade to
+    omission, never fail an upload."""
+    assert "device_utc_offset_minutes" not in cap.civil_time_params("not-a-time")

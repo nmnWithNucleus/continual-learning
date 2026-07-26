@@ -96,7 +96,7 @@ what is locked now is direction, ownership, and shape.
 | **C7** | inference ↔ mentors | Assistance prompt out (system + user + user-context injection); thinking/plan/response traces back; **clarification-question relay** through our model to the user and back | Mentor traces route into C4 |
 | **C8** | QueryBuilder ↔ data-processing | The stream pipeline exposed as a **synchronous API** | Interactive requests get identical normalization to the life stream — one pipeline, two entry points |
 | **C9** | inference → output | Grounded **response-stream envelope**: token/text stream, mid-turn frames (mentor clarification questions, status), end-of-turn metadata | The only serve-loop hop after C4; mid-turn clarification frames are C7's user-facing leg — answers return as the C3 clarification-answer variant |
-| **C10** | storage → continuum | **Training-window read**: time-ranged, watermarked export of `/context` + `/sessions` per user | Watermark semantics (late-arriving / reprocessed records, pipeline-version bumps) are pinned here. **Evolution PROPOSED, pending founders' board** (learn-loop close-out 2026-07-25): from a raw range-read to a **day-log fetch, random-access by `(user, window_id)`** (storage materializes the segment/block day-log; continuum consumes it) — ratified jointly with the storage charter expansion (day-log materialization + recipe registry + reservoir); see [HANDOFF.md](HANDOFF.md) worklog + storage/continuum canvases. **Not pinned until ratified.** |
+| **C10** | storage → continuum | **Training-window read**: time-ranged, watermarked export of `/context` + `/sessions` per user | Watermark semantics (late-arriving / reprocessed records, pipeline-version bumps) are pinned here. **Evolution PROPOSED, pending founders' board** (learn-loop close-out 2026-07-25): from a raw range-read to a **day-log fetch, random-access by `(user, window_id)`** (storage materializes the segment/block day-log; continuum consumes it) — ratified jointly with the storage charter expansion (day-log materialization + recipe registry + reservoir); see [HANDOFF.md](HANDOFF.md) worklog + storage/continuum canvases. **Not pinned until ratified.** **Window semantics DECIDED 2026-07-26 (D17), NOT YET BUILT:** the cycle window *is to become* the **watermark range `[last_trained_t, now)`**, requested by continuum as a plain UTC range — *not* a local-date computation. This is what this row and the storage charter always said; continuum's as-built `window_for(user, local_date, tz)` drifted from it and **is still what runs**. Blocking design question for whoever builds it: `window_id` is today the local start date and keys the day-log, the cycle journal, C5's `training_window`, and publish's active-alias monotonicity — the natural watermark key is the window's **end instant** (monotone per user, no dateline case), but that changes the `w2026-07-21` format and forks adapter lineage. The consequences are that **storage needs no timezone to serve C10**, a missed night is absorbed into the next window instead of lost, and the dateline/DST pathologies of a local-date-derived boundary (23 h/25 h days, a repeated local date colliding `window_id`) cannot arise. The user's `home_tz` decides only **when the request fires** (their local ~04:00), never the arithmetic of the range. |
 | **C11** | storage → input (QueryBuilder) | **Recent-context read**: recency/semantic retrieval over `/context` + `/sessions` for same-day grounding | Bridges the gap before the nightly cycle lands in weights; the index lives in storage, QueryBuilder decides what enters the UserPrompt |
 
 ### Frozen MVP shapes — serve-loop v0.0 (2026-07-09)
@@ -141,7 +141,19 @@ shapes carry all four modalities so the vision/text pipelines add records withou
     (like C9's wire format), **not** a separate C-number.
   - **Envelope leg (recording → data-processing):** `{contract:"C1", version:"0", user_id,
     device_id, stream_id, sequence, chunk_id, modality, codec, t_start, t_end, blob_ref,
-    blob_sha256, blob_bytes, device_location?, device_clock?}`.
+    blob_sha256, blob_bytes, device_tz?, device_utc_offset_minutes?, device_location?,
+    device_clock?}`.
+  - **Civil-time context (additive, 2026-07-26 — D17).** `t_start`/`t_end` stay the canonical
+    **instant**, device wall-clock RFC3339 **UTC**. Alongside them the capturing device reports
+    **`device_tz`** (IANA zone id, e.g. `America/Los_Angeles` — never an abbreviation like "PST",
+    which is ambiguous and DST-sensitive) and **`device_utc_offset_minutes`** (the offset the device
+    *believed* at capture — not merely derivable from `device_tz`, because it is the independent
+    witness when a device's tzdata is stale or wrong). **Rationale:** the capturing device is the
+    only thing that knows where the user was at that moment; every client already computes the local
+    instant and converts it to UTC, discarding the zone on the same line. UTC alone answers duration
+    queries ("the last 24 h"); it cannot answer civil-time questions ("the user's Tuesday 09:00–17:00")
+    or render an honest local anchor line. **Both fields are optional-additive** (no version bump);
+    a client that omits them degrades to the user's profile `home_tz`.
   - **Delivery semantics (frozen):** **push, at-least-once**; consumers idempotent on **`chunk_id`**
     (the dedup key — a client-minted ULID, stable across retries); ordering + gap detection via
     **`(stream_id, sequence)`**, where `sequence` is **dense, zero-based, +1 per chunk** within a
@@ -150,14 +162,26 @@ shapes carry all four modalities so the vision/text pipelines add records withou
     envelope is emitted, so `blob_ref` does not dangle at emit — consumers still tolerate a
     since-deleted blob, since `/raw` deletion + re-pull-by-ref both exist).
 - **C2 Processed record v0** (`contracts/c2_processed_record.v0.json`): `{contract:"C2",
-  version:"0", record_id, user_id, source:{device_id, stream_id, chunk_id, blob_ref, modality},
-  t_start, t_end, content:{kind:"transcript", text, language?, segments?:[{t_start, t_end, text,
+  version:"0", record_id, user_id, source:{device_id, stream_id, chunk_id, blob_ref, modality,
+  device_tz?, device_utc_offset_minutes?, device_location?}, t_start, t_end,
+  content:{kind:"transcript", text, language?, segments?:[{t_start, t_end, text,
   speaker}]}, enrichments:{speakers:[], faces:[], places:[], objects:[]}, pipeline_version,
   processed_at}`. `record_id` is a **deterministic function of `(chunk_id, pipeline_version)`** — so
   reprocessing is an idempotent `/context` upsert and a `pipeline_version` bump forks a new record
   (version-forward). `enrichments` is **present-but-empty** in v0 (mirrors C4's empty trace arrays)
-  so diarization / world-data never reshape it. Storage assigns `ingest_time` + user-local tz —
-  **not** carried in C2.
+  so diarization / world-data never reshape it. Storage assigns `ingest_time` — **not** carried in
+  C2.
+  - **Civil-time passthrough (additive, 2026-07-26 — D17).** `source.device_tz`,
+    `source.device_utc_offset_minutes` and `source.device_location` are **carried verbatim from the
+    C1 envelope**. Data-processing performs **no timezone logic whatsoever** — it does not derive,
+    validate, normalize or infer a zone; it copies provenance, exactly as it already copies
+    `device_id`/`blob_ref`. These fields are therefore **not** subject to the record-emission law's
+    T2 "reachable consumer" test, which governs *signals DP produces*, not envelope provenance it
+    forwards. A record whose chunk carried no zone simply omits them.
+  - **Timestamps stay UTC-canonical.** `t_start`/`t_end` remain the instant and the sole ordering
+    and range-query axis; the zone is *context* stored beside them, never a replacement. Anything
+    reading a local wall-clock reads `t_start` + the record's `device_tz` (falling back to the
+    user's profile `home_tz`). See §Ownership splits → *User timezone*.
 
 ## Ownership splits (pinned — cross-referenced from the charters)
 
@@ -174,6 +198,7 @@ Where a responsibility naturally touches several services, the split is decided 
 | **BWM (base world model)** | The pick is recorded in §Decisions below. Inference owns artifact custody + serving. Continuum pins the base-model hash per adapter (C5) and executes upgrade migrations (fleet retrain) — upgrades are explicit, never hot. |
 | **People/known-faces registry** | Data-processing owns matching/enrichment; storage persists the registry; input owns the curation + consent UX surface. Voice-to-person linking (known-vs-unknown *speakers*) rides the same registry — deferred-vs-v0 is data-processing's call, recorded in its charter. |
 | **Same-day context** | Weights only know up to the last nightly cycle. The recent-context read path (C11) is owned by input's QueryBuilder; the recency/semantic index behind it lives in storage. |
+| **User timezone** (D17, 2026-07-26) | **Two different things, two different owners — conflating them was the original bug.** **(1) The FACT — where the user actually was at a moment:** owned by the **capturing device**, reported per chunk as `device_tz` + `device_utc_offset_minutes` on C1, carried verbatim by data-processing into C2 `source{}`, and persisted by storage beside the UTC instant. The device is the only thing that can know this, and it already does — every capture client computes the local instant and discards the zone converting to UTC. This is what renders an honest local anchor line, and it is **correct under travel** by construction. **(2) The POLICY — when is this user's night?:** owned by **storage**, as a per-user profile value **`home_tz`** (IANA), seeded from the last device-reported zone and user-overridable. Its *only* job is **scheduling** — deciding when a user's nightly consolidation fires — plus serving as the **fallback** when a record carries no `device_tz`. It is not the pipeline's time semantics. **Timestamps stay UTC-canonical everywhere:** UTC is the sole ordering and range-query axis (`GET /context/records?from=&to=` needs no zone at all); the zone is context stored *beside* the instant, never instead of it. **Never store a derived local time** — `device_local_time` is fully recoverable from instant + zone, and persisting it creates two sources of truth that will eventually disagree with no rule for which wins. **Never store abbreviations** (`PST`, `MST`) — ambiguous and DST-sensitive; IANA ids only. |
 | **Observability** | **Every service exposes a `/metrics` endpoint and ships its Grafana dashboard JSON** (per-service ownership). Platform runs the ONE shared Prometheus + Grafana + standard exporters and provisions those dashboards. See §Observability. |
 
 ## Observability (cross-cutting requirement — every service)

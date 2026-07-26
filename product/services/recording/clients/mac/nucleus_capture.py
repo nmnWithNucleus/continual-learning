@@ -110,6 +110,60 @@ def rfc3339_ms(epoch_ms: int) -> str:
     ) + ".%03dZ" % ms
 
 
+def local_iana_zone() -> "str | None":
+    """The device's IANA zone id, stdlib-only (this client takes no pip deps).
+
+    D17: the capturing device is the only thing that knows where the user was.
+    Python has no portable "local IANA zone" API — `time.tzname` and
+    `datetime.tzname()` return ABBREVIATIONS ('PDT'), which C1 forbids as
+    ambiguous and DST-sensitive. The portable trick on macOS and Linux is the
+    /etc/localtime symlink, which points into the zoneinfo tree. Returns None
+    when the zone genuinely can't be determined; the offset still ships and
+    consumers fall back to the user's profile home_tz.
+    """
+    tz_env = os.environ.get("TZ", "").strip()
+    if "/" in tz_env:  # an explicit IANA id wins (and makes this testable)
+        return tz_env
+    try:
+        target = os.path.realpath("/etc/localtime")
+    except OSError:
+        return None
+    marker = "/zoneinfo/"
+    idx = target.find(marker)
+    if idx == -1:
+        return None
+    zone = target[idx + len(marker):].strip("/")
+    # macOS resolves through /var/db/timezone/zoneinfo; both trees yield
+    # 'Area/Location'. A bare word (e.g. 'UTC') is a legal zone id too.
+    return zone or None
+
+
+def civil_time_params(t_start: str) -> dict:
+    """C1's optional civil-time context for a chunk starting at ``t_start``.
+
+    The offset is evaluated AT the chunk's own instant, not at call time, so a
+    chunk captured either side of a DST flip carries the offset that was really
+    in effect. Never raises: these fields are optional by contract.
+    """
+    out = {}
+    zone = local_iana_zone()
+    if zone:
+        out["device_tz"] = zone
+    try:
+        text = t_start.strip()
+        if text.endswith(("Z", "z")):
+            text = text[:-1] + "+00:00"
+        instant = datetime.fromisoformat(text)
+        if instant.tzinfo is None:
+            instant = instant.replace(tzinfo=timezone.utc)
+        offset = instant.astimezone().utcoffset()
+        if offset is not None:
+            out["device_utc_offset_minutes"] = int(offset.total_seconds() // 60)
+    except (ValueError, OSError):
+        pass  # offset unavailable — omit, never fail the upload
+    return out
+
+
 def chain_stamps(anchor_ms: int, durations_s) -> list:
     """D-F2: [(t_start, t_end)] per segment, chained from the anchor.
 
@@ -335,6 +389,7 @@ class SegmentUploader:
             "user_id": self.user_id, "device_id": self.device_id,
             "t_start": t_start, "t_end": t_end, "mime": mime,
             "sha256": hashlib.sha256(body).hexdigest(),
+            **civil_time_params(t_start),
         })
         ok = self._post_with_retry(
             "%s/capture/segments?%s" % (self.server, params),

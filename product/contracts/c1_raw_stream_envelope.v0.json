@@ -21,6 +21,17 @@
     "blob_ref": { "type": "string", "minLength": 1, "description": "Opaque ref storage minted when the bytes landed in /raw. Only storage resolves it; data-processing pulls the bytes by ref for ASR." },
     "blob_sha256": { "type": "string", "description": "SHA-256 hex of the blob bytes; end-to-end integrity check against /raw." },
     "blob_bytes": { "type": "integer", "minimum": 0, "description": "Blob size in bytes." },
+    "device_tz": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional-additive (D17, 2026-07-26). IANA timezone id of the CAPTURING DEVICE at capture time, e.g. 'America/Los_Angeles'. MUST be an IANA id — never an abbreviation like 'PST'/'MST', which are ambiguous and DST-sensitive. t_start/t_end remain the canonical instant in UTC; this is the civil-time context beside them, and it is what makes local-time rendering correct under travel (the capturing device is the only thing that knows where the user was at that moment). Omit when the device cannot report it — consumers fall back to the user's profile home_tz."
+    },
+    "device_utc_offset_minutes": {
+      "type": "integer",
+      "minimum": -1080,
+      "maximum": 1080,
+      "description": "Optional-additive (D17, 2026-07-26). The UTC offset in MINUTES that the device believed was in effect at t_start (e.g. -420 for PDT). Minutes, not hours: several real zones run on :30 and :45 offsets. Deliberately NOT treated as redundant with device_tz — it is the independent witness of what the device actually believed, which is the only way to detect a stale or wrong tzdata build after the fact. Never store a derived local wall-clock string: local time is recoverable from t_start + device_tz, and persisting it would create a second source of truth."
+    },
     "device_location": {
       "type": "object",
       "additionalProperties": false,

@@ -83,10 +83,24 @@ CREATE TABLE IF NOT EXISTS context_records (
     chunk_id         TEXT,
     pipeline_version TEXT,
     ingest_time      TEXT NOT NULL,
+    -- D17 civil-time context, promoted out of record_json so a civil-time query
+    -- ("the user's local Tuesday 09:00-17:00") is a column read, not a JSON scan.
+    -- t_start stays canonical UTC and the ONLY ordering/range axis; these are
+    -- context beside the instant, never a replacement, and deliberately NOT
+    -- indexed (no query orders by them). NULL = the device didn't report one.
+    device_tz        TEXT,
+    device_utc_offset_minutes INTEGER,
     record_json      TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_context_user_tstart ON context_records (user_id, t_start);
 """
+
+
+# (table, column, decl) — see Store._migrate. Additive only; never a rewrite.
+_MIGRATIONS = [
+    ("context_records", "device_tz", "TEXT"),
+    ("context_records", "device_utc_offset_minutes", "INTEGER"),
+]
 
 
 def db_path() -> str:
@@ -121,6 +135,26 @@ class Store:
     def init_schema(self) -> None:
         with self._connect() as conn:
             conn.executescript(_SCHEMA)
+            self._migrate(conn)
+
+    @staticmethod
+    def _migrate(conn: sqlite3.Connection) -> None:
+        """Additive column migrations for DBs created before a column existed.
+
+        `CREATE TABLE IF NOT EXISTS` is a no-op on an existing table, so a live
+        DB (node-7) would never gain a new column without this. SQLite has no
+        ADD COLUMN IF NOT EXISTS — probe pragma table_info and add what's missing.
+
+        No backfill, deliberately: a record landed before the clients reported a
+        zone genuinely HAS no zone, and inventing one (the server's, say) is
+        precisely the silently-wrong-timezone failure D17 exists to eliminate.
+        NULL is the honest value and reads downstream as "fall back to home_tz".
+        """
+        for table, column, decl in _MIGRATIONS:
+            cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+            if column not in cols:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+        conn.commit()
 
     def seed_base(self) -> None:
         """Idempotently seed the single base model-directory entry."""
@@ -297,14 +331,16 @@ class Store:
             conn.execute(
                 "INSERT INTO context_records "
                 "(record_id, user_id, t_start, t_end, chunk_id, pipeline_version, "
-                " ingest_time, record_json) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+                " ingest_time, device_tz, device_utc_offset_minutes, record_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT(record_id) DO UPDATE SET "
                 "  user_id=excluded.user_id, "
                 "  t_start=excluded.t_start, "
                 "  t_end=excluded.t_end, "
                 "  chunk_id=excluded.chunk_id, "
                 "  pipeline_version=excluded.pipeline_version, "
+                "  device_tz=excluded.device_tz, "
+                "  device_utc_offset_minutes=excluded.device_utc_offset_minutes, "
                 "  record_json=excluded.record_json",
                 (
                     record_id,
@@ -314,6 +350,11 @@ class Store:
                     source.get("chunk_id"),
                     record.get("pipeline_version"),
                     _utc_now(),
+                    # Promoted from source{} for civil-time querying. record_json
+                    # remains the verbatim C2 — these columns are a projection of
+                    # it, never an edit to it.
+                    source.get("device_tz"),
+                    source.get("device_utc_offset_minutes"),
                     json.dumps(record, ensure_ascii=False, separators=(",", ":")),
                 ),
             )

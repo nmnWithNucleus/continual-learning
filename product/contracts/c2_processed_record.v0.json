@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://nucleus.ai/contracts/c2_processed_record.v0.json",
   "title": "C2 Processed record v0 (learn-loop MVP, ASR-first)",
-  "description": "The processed life-stream record data-processing writes to storage /context (POST /context/records). One record per processed unit; v0 = one ASR transcript per audio chunk (a chunk MAY yield several records in later modalities, e.g. video keyframes). record_id is deterministic on (chunk_id, pipeline_version) so a reprocess under the same version is idempotent and a version bump forks a new record (version-forward reprocessing). Storage persists verbatim, time-indexed on (user_id, t_start), and assigns its own ingest_time + user-local timezone (NOT carried here). enrichments is present-but-empty in v0 (like C4's empty trace arrays) so later diarization / world-data enrichment never change the shape.",
+  "description": "The processed life-stream record data-processing writes to storage /context (POST /context/records). One record per processed unit; v0 = one ASR transcript per audio chunk (a chunk MAY yield several records in later modalities, e.g. video keyframes). record_id is deterministic on (chunk_id, pipeline_version) so a reprocess under the same version is idempotent and a version bump forks a new record (version-forward reprocessing). Storage persists verbatim, time-indexed on (user_id, t_start), and assigns its own ingest_time (NOT carried here). t_start/t_end are UTC and remain the canonical instant + the sole ordering/range-query axis; the capturing device's civil-time context (source.device_tz, source.device_utc_offset_minutes) rides along beside them, carried VERBATIM from the C1 envelope — data-processing performs no timezone logic of any kind (D17, 2026-07-26). enrichments is present-but-empty in v0 (like C4's empty trace arrays) so later diarization / world-data enrichment never change the shape.",
   "type": "object",
   "additionalProperties": false,
   "required": ["contract", "version", "record_id", "user_id", "source", "t_start", "t_end", "content", "enrichments", "pipeline_version", "processed_at"],
@@ -20,7 +20,10 @@
         "stream_id": { "type": "string", "minLength": 1 },
         "chunk_id": { "type": "string", "minLength": 1, "description": "The C1 chunk this record was processed from (provenance)." },
         "blob_ref": { "type": "string", "minLength": 1, "description": "The /raw ref carried forward from C1; the raw bytes remain the source of truth." },
-        "modality": { "enum": ["audio", "image", "video", "text"] }
+        "modality": { "enum": ["audio", "image", "video", "text"] },
+        "device_tz": { "type": "string", "minLength": 1, "description": "Optional-additive (D17, 2026-07-26). IANA timezone id of the capturing device at capture time, carried VERBATIM from the C1 envelope. Data-processing does not derive, validate, normalize or infer it — this is provenance passthrough, exactly like device_id. Consumers rendering a local wall-clock read t_start + this field, falling back to the user's profile home_tz when absent. IANA ids only, never abbreviations." },
+        "device_utc_offset_minutes": { "type": "integer", "minimum": -1080, "maximum": 1080, "description": "Optional-additive (D17, 2026-07-26). UTC offset in minutes the device believed at t_start, carried verbatim from C1. Kept alongside device_tz as an independent witness (detects stale/wrong tzdata after the fact)." },
+        "device_location": { "type": "object", "additionalProperties": false, "properties": { "lat": { "type": "number" }, "lon": { "type": "number" }, "accuracy_m": { "type": "number" } }, "description": "Optional-additive (D17, 2026-07-26). Carried verbatim from the C1 envelope when the device reported it. Previously C1 collected this and C2 dropped it on the floor." }
       },
       "description": "Provenance back to the raw chunk in /raw."
     },

@@ -24,7 +24,14 @@ from .window import closed_window_before, window_for
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="continuum nightly consolidation")
     ap.add_argument("--user", required=True)
-    ap.add_argument("--tz", default="UTC")
+    ap.add_argument("--tz", required=True,
+                    help="IANA zone for this user (their profile home_tz). REQUIRED: "
+                         "there is NO default timezone (D17) — a silent 'UTC' default "
+                         "mis-attributes a US-Pacific user's edge-of-night records by "
+                         "7-8 h, forever, with no error and no metric. Used for the "
+                         "window boundary and as the FALLBACK for rendering; each "
+                         "record's own device_tz wins when present. Becomes an "
+                         "override once storage serves the per-user profile.")
     ap.add_argument("--date", help="local window-start date YYYY-MM-DD "
                                    "(default: most recent closed window)")
     ap.add_argument("--synthetic", action="store_true",

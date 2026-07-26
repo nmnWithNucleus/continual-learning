@@ -95,6 +95,14 @@ class Content(_Strict):
     segments: list[Segment] | None = None  # optional (present in v0 ASR)
 
 
+class DeviceLocation(_Strict):
+    """Where the capturing device was, when it could say (C1 -> C2 passthrough)."""
+
+    lat: float | None = None
+    lon: float | None = None
+    accuracy_m: float | None = None
+
+
 class Source(_Strict):
     """Provenance back to the raw chunk in /raw."""
 
@@ -103,6 +111,14 @@ class Source(_Strict):
     chunk_id: str = Field(min_length=1)
     blob_ref: str = Field(min_length=1)
     modality: CaptureModality
+    # D17 civil-time context, carried verbatim from C1 by data-processing. This
+    # model is _Strict (extra="forbid") and is checked as a MIRROR of the frozen
+    # C2 JSON Schema — an additive schema field that isn't declared here would be
+    # accepted by the schema gate and then rejected here, so the two must move
+    # together. NULL/absent = the device didn't report one.
+    device_tz: str | None = Field(default=None, min_length=1)
+    device_utc_offset_minutes: int | None = Field(default=None, ge=-1080, le=1080)
+    device_location: DeviceLocation | None = None
 
 
 class Enrichments(_Strict):

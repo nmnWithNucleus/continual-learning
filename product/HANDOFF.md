@@ -6,7 +6,7 @@
 > [ARCHITECTURE.md](ARCHITECTURE.md) · [ORG.md](ORG.md) · [PROMPTS.md](PROMPTS.md).
 > Service-level state lives in each service's own HANDOFF.md — this board links, not restates.
 
-**Last updated:** 2026-07-25 · maintained across founders' sessions.
+**Last updated:** 2026-07-26 · maintained across founders' sessions.
 
 ---
 
@@ -27,7 +27,7 @@
 
 | Aspect | File | State |
 |---|---|---|
-| Engineering | [handoff/engineering.md](handoff/engineering.md) | active — serve-loop v0.0 **closed on real Qwen3-VL-32B**; capture M1 + computer surfaces DONE; DP v1 + HARDENING merged; **D15 continuum kickoff → LEARN LOOP CLOSED (2026-07-25): Morpheus port parity-proven, M0 (32B adapter → C5 → vLLM), Phase-3 dogfood proves the real recording→DP→storage→continuum path carries it (PIPELINE SOUND).** Next founder acts: **storage/C10 board session** (expansion + C10 evolution) |
+| Engineering | [handoff/engineering.md](handoff/engineering.md) | active — serve-loop v0.0 **closed on real Qwen3-VL-32B**; capture M1 + computer surfaces DONE; DP v1 + HARDENING merged; **D15 continuum kickoff → LEARN LOOP CLOSED (2026-07-25): Morpheus port parity-proven, M0 (32B adapter → C5 → vLLM), Phase-3 dogfood proves the real recording→DP→storage→continuum path carries it (PIPELINE SOUND).** Next founder acts: **storage/C10 board session** (expansion + C10 evolution — now carrying a fourth expansion row, the per-user profile owning `home_tz`, per **D17** 2026-07-26: timezone ownership decided, review item O-1 closed, C1/C2 untouched) |
 | Research | [handoff/research.md](handoff/research.md) | seeded — first agenda: POC→continuum bridge, research agenda v1 |
 | Design / UX | [handoff/design.md](handoff/design.md) | seeded |
 | Hiring / Ops | [handoff/hiring-ops.md](handoff/hiring-ops.md) | seeded |
@@ -50,7 +50,7 @@ prerequisite.
 | **E-3(b)** | A **captioner VL endpoint distinct from the user-facing `:8000`**. Today DP's `VIDEO_VLM_URL` and inference's `VLLM_URL` both default to the *same* Qwen3-VL-32B TP=8 instance on node-7 at `gpu_memory_utilization=0.90`. DP's prefill bursts would land in the same continuous batch as the assistant's decode steps; the failure mode is assistant TTFT, which no GPU-percent figure surfaces. During a 4 h nightly training window DP would dead-letter ~240 chunks = **4 h of a user's screen life**, after paying full ffmpeg prep on each. A 7B-class VL on 1–2 GPUs carries this load and isolates DP from both tenants. | platform + inference | scale-up (not the build) | **YES** — it closes DP CHARTER OQ3 (GPU placement/contention), which `platform/CHARTER.md:73,83` still lists as an unresolved *proposal* |
 | **E-5** | The **parked additive C2 edit**: `enrichments.text_regions[]` (OCR bbox geometry, CHARTER OQ14b) + a root `quality{}` (CHARTER risk row). **The ask today is to NOT take it.** `grep -rn enrichments continuum/app/` returns exactly one hit — the synthetic-record generator — so both fields would have **zero readers**. The exact diff, its four edit sites, and the asymmetric-mirror footgun are written up so that when the first real geometry or quality-gating consumer lands, the ratification session gets a decision, not a project. Cash OQ14b and the quality risk together, in one freeze-additive commit. | founders' session → then storage + data-processing rows | nothing | **YES, when triggered** — edit `ARCHITECTURE.md` §Contracts first, per `ORG.md:44-45` |
 | **E-2** | Storage: a **kind-aware** `DELETE /context/records?user_id=&from=&to=&pipeline_version=&kind=` retraction primitive. `record_id` forks by design on a dialect bump, old records persist, and `daylog.py` filters on neither `kind` nor `pipeline_version` — so any day re-consolidated across a cutover renders **both** dialects and double-counts. **Must key on `content.kind`**: the Phase-3 replay proved captions and transcripts can share one `pipeline_version` (`injected_caption` declares no fragment), so a kind-blind delete would remove transcripts to remove captions. Also the primitive right-to-be-forgotten and version-forward reprocess both already promise. | storage | **the cutover** | service-level, but flagged here because it is the one thing standing between a built path and a live one |
-| **E-1 · E-4 · E-6** | Sibling-service asks with no contract surface, routed service→service per `ORG.md`: **recording** `--segment-seconds 10→60` (the single largest cost lever, 5.8×; moves the audio leg too, so it is a joint call with DP-audio) · **continuum** per-fragment local timestamps in `_render_block` (**without this, "at 13:04 the user was writing an email about X" is structurally unreachable no matter what DP emits — DP cannot do it, C1 carries no timezone**) + OCR dedup + renderer ordering + a recipe fork · **recording** auto-retry of `failed` segments (a 503 is recoverable but becomes terminal in 1.5 s). | recording · continuum | cost figure / the RWT-granularity goal | no — noted for visibility |
+| **E-1 · E-4 · E-6** | Sibling-service asks with no contract surface, routed service→service per `ORG.md`: **recording** `--segment-seconds 10→60` (the single largest cost lever, 5.8×; moves the audio leg too, so it is a joint call with DP-audio) · **continuum** per-fragment local timestamps in `_render_block` + OCR dedup + renderer ordering + a recipe fork · **recording** auto-retry of `failed` segments (a 503 is recoverable but becomes terminal in 1.5 s). **E-4 RESOLVED-IN-PREMISE by D17 (2026-07-26); the remainder is a small continuum-only change.** E-4 read "DP cannot do it, C1 carries no timezone" — the timezone was never the blocker, and C1 now carries one anyway. Each ASR fragment's own UTC timestamp is **already in the day-log** (`daylog.py:110,116` write `{"spk","text","t": sub["t_start"]}` per sub-span) and `_render_block` simply ignores `t`, rendering only the block-level `group[0].t_start`/`group[-1].t_end` span. The zone to render them in is now resolved per record (`_block_zone`), so per-fragment local timestamps are **a renderer change with no contract, no DP work, and no scheduling dependency**. One honest residual: `seg.ocr`/`seg.caption` are bare strings with no `t`, so per-fragment times cover **ASR fragments only** until the day-log carries fragment times for the other kinds — still continuum-side, still no contract. The travel case that would once have made this wrong is now handled. | recording · continuum | cost figure / the RWT-granularity goal | no — noted for visibility |
 
 *Resolved items move to the Decisions log below. (The async `/ingest` reply shape was proposed +
 ratified in-session 2026-07-19 → **D16**.)*
@@ -75,6 +75,8 @@ ratified in-session 2026-07-19 → **D16**.)*
 | D14 | **Capture transport = segmented HTTP upload for ALL v0 surfaces** (phone / extension / mac CLI). Our capture path is the loss-intolerant, offline-resilient *archive/training* job (the Axon-bodycam pattern), not low-latency live-view (the Ring/Nest pattern — which runs both paths separately). **Continuous streaming ingest (WebSocket/RTSP/SRT → server segmenter) is a deferred ADDITIVE leg** terminating in the existing spool→demux→carve→emit machinery; C1/C2 unchanged (C1 begins after transport). Live-view is out of v0 scope | 2026-07-19 | recording canvas §Pinned decisions (D-M1-5); [ARCHITECTURE.md](ARCHITECTURE.md) capture path |
 | D15 | **Post-deep-session build order: continuum kickoff is the next founders-led slice**, gated on a **C10 v0 interface freeze** (storage × continuum propose, founders ratify; frozen against the beta-proven `/context` range read). **Platform's D9 backbone** (the one shared Prometheus + Grafana) runs as the small parallel slice. **DP image/text pipelines (M2) deferred until a producing surface exists** — no `image`/`text` C1 stream exists on the fleet today; screen text already flows via the video-keyframe OCR weave (D8); the OQ14b bbox additive waits with it. Mobile+C8 and a standalone C10 freeze considered + passed (rationale in the engineering thread) | 2026-07-19 | [handoff/engineering.md](handoff/engineering.md) §Post-capture-alpha sequencing; continuum canvas; this board |
 | D16 | **Async `/ingest` reply shape RATIFIED** (inter-service wire, prose-pinned in the DP canvas at merge — not a C-number; C1/C2 untouched). `INGEST_ASYNC` off-by-default, inline byte-unchanged. Async: **202** `{ok,accepted,chunk_id}` (+`duplicate:true` on in-flight dedup hit) · **200+record_ids** on done-dedup-hit · 400/422/501 resolve synchronously pre-claim · **503** bounded-queue backpressure. `/continuity` gains additive `processed`+`dead_lettered`. **Invariant preserved: `dp_acked` == "C2 durably written"** — recording moves in-slice (`dp_state='accepted'` + gap-report reconciliation; `clean` = every chunk confirmed; accepted-unconfirmed → `recording`, dead-lettered → `gaps`). Guarantee: **never falsely `clean`**; auto-recovery = M7 durable journal. **Condition:** accepted-unconfirmed re-drive path named + drilled in-slice. **Accepted caveat:** `record_ids=[]` ledger provenance on 202-path chunks (ids derivable) | 2026-07-19 | [handoff/engineering.md](handoff/engineering.md) ratification block; DP canvas (pinned prose at merge); recording canvas (verdict semantics) |
+
+| D17 | **Timezone: the DEVICE owns the fact, storage owns the policy — and they are different things.** Conflating them was the original bug. **(1) The FACT** (where the user physically was at a moment) is reported **per chunk by the capturing device**: `device_tz` (IANA) + `device_utc_offset_minutes`, **additive-optional on C1**, carried **verbatim** by DP into **C2 `source{}`** (DP does *no* timezone logic — it is provenance passthrough like `device_id`, so the emission law's T2 does not gate it), persisted by storage as promoted columns beside the UTC instant, and read by continuum's renderer. This is the only design that is **correct under travel**, and the device already knew it — every capture client computed the local instant and discarded the zone converting to UTC. **(2) The POLICY** (when is this user's night?) is storage's per-user profile **`home_tz`**, whose only jobs are **scheduling** the nightly fire and **fallback** when a record carries no zone. **Timestamps stay UTC-canonical**: UTC is the sole ordering/range axis, C10 is a pure duration query needing no zone. **Never** store a derived local wall-clock (two sources of truth), **never** accept abbreviations (`PST` is ambiguous + DST-sensitive; rejected 400 at the capture edge). **Supersedes the first draft of D17** (same day), which had storage own a per-user tz *only*, banned tz from C1/C2, and deferred travel — wrong because it applied T2 as a veto to a field whose consumer this very slice builds, and because it defended a `window_id` total-order problem the watermark window dissolves. — **STATUS, split deliberately (O-12, pass 2): the timezone split above is BUILT + verified end to end this session** (C1→C2→storage→renderer; `--tz` required, no default anywhere; suites storage 32 · continuum 189 · recording 144 · DP 770+21; node-7 migrated + smoked). **The companion window-semantics clause is DECIDED, NOT BUILT:** the cycle window *should become* the watermark range `[last_trained_t, now)` — what ARCHITECTURE's C10 row and the storage charter always said, and which retires the local-date pathologies (23 h/25 h days, a repeated local date colliding `window_id`) — but `window_for()` / `closed_window_before()` are still local-date and `nightly.py` still calls them. Nothing is broken; local-date windows work. **Open question the builder must answer first: does `window_id` survive the move?** It is today the local start date and it keys the day-log, the cycle journal, C5's `training_window`, and publish's active-alias monotonicity. Under a watermark window the natural key is the window's END INSTANT (monotone per user by construction, no dateline case) — but that changes the `w2026-07-21` format and therefore forks adapter lineage, which is a board call, not a refactor. Belongs to the storage/C10 board session with the day-log move | 2026-07-26 | [ARCHITECTURE.md](ARCHITECTURE.md) §Contracts C1+C2 blocks, §Ownership splits *User timezone*, C10 row; [contracts/](contracts/) c1+c2 schemas; [storage](services/storage/CHARTER.md) · [continuum](services/continuum/CHARTER.md) · [data-processing](services/data-processing/CHARTER.md) · [recording](services/recording/CHARTER.md) charters; [handoff/engineering.md](handoff/engineering.md) |
 
 ## Current state (terse)
 
@@ -271,8 +273,87 @@ ratified in-session 2026-07-19 → **D16**.)*
   own base control, `min_probes` 148) was split from the training recipe so a threshold change
   never forks `recipe_id`.
 
+- 2026-07-26 (founders' engineering session — **timezone: decided AND built, D17**): the
+  2026-07-26 accuracy review's open item **O-1** ("timezone ownership is unowned") is **CLOSED**,
+  and the fix shipped in the same session. Verified first: `context_records` really had no tz
+  column (`storage/app/db.py`), the wearer's tz really was a CLI flag defaulting to `"UTC"`
+  (`continuum/app/nightly.py:27`), and — the fact that decided the design — **the capture clients
+  already computed the local instant and threw the zone away on the same line**
+  (`clients/web/app.js:262`, `clients/extension/uploader.js:110`: `new Date(...).toISOString()`).
+  C1 also already collected `device_location`, and C2 **dropped it on the floor**; both
+  `device_location` and `device_clock` were declared in recording's and DP's `models.py` and read
+  by **neither**.
+
+  **Decision (D17 above): the device owns the fact, storage owns the policy.** The first draft of
+  D17, taken earlier the same day, was **wrong and is superseded**: it gave storage a per-user tz
+  *only*, banned tz from C1/C2, and deferred the travel case — applying the emission law's T2 as a
+  *veto* on a field whose consumer this very slice builds, when T2's own text calls it "a gate on
+  *when*, not a veto". The correction came from the CTO's read: the capturing device is the only
+  thing that can know where the user was, and it already knows.
+
+  **BUILT end to end, all four services + three clients** (contracts first, per ORG.md:44-45):
+  C1 gains `device_tz` + `device_utc_offset_minutes` (**additive-optional; `required` untouched on
+  both schemas — re-validated**); the three capture clients emit them (`Intl…resolvedOptions()
+  .timeZone` in the browser clients, an `/etc/localtime` symlink read in the stdlib-only mac CLI),
+  with the **offset evaluated at each chunk's own instant so a DST flip is carried honestly**;
+  recording validates at the edge (**an abbreviation like `PST` is a 400** — ambiguous and
+  DST-sensitive), persists to the ledger, and carries it into C1 **including on the `/redrive`
+  path**; DP passes all three fields (incl. the long-dropped `device_location`) **verbatim** into
+  C2 `source{}` with zero timezone logic; storage promotes them to columns beside the UTC instant
+  **and still serves the C2 back byte-verbatim**; continuum's `_block_zone` renders each block in
+  the **device's** zone, falling back to the window's `home_tz`, degrading (never raising) on a bad
+  id. Both SQLite stores got **additive ALTER migrations with deliberately NO backfill** — a record
+  captured before clients reported a zone genuinely has none, and inventing one is the exact
+  failure this slice removes.
+
+  **Cross-service E2E verified:** a Tokyo-captured chunk driven through
+  recording → DP → storage → continuum with the operator's fallback set to UTC renders
+  **"around 15:00 local time"**. The same run pre-D17 rendered **"06:00"** — a UTC clock reading
+  *labelled* local, with no error and no metric.
+
+  **Suites all green, +26 tests, zero regressions:** storage **32** (was 26) · continuum **189**
+  (was 185) · recording **144** (was 133) · DP **770 + 21 skipped** (was 765) · extension deno
+  **11** (was 10). New coverage includes the travel case (two zones in one window rendering
+  independently, with different local *dates*), both migrations, edge rejection of abbreviations,
+  and a test pinning that **civil-time context does not change `record_id`** — provenance must not
+  fork the dialect, or every existing record would re-key on upgrade.
+
+  **Also taken:** `nightly.py --tz` is now **required** (no default timezone anywhere).
+  **Open questions closed by this work:** storage **OQ3** (clock skew), DP **OQ4** (device clock
+  discipline), DP **OQ9** substantially (envelope time is enough — and now *auditable*), continuum
+  **OQ10**'s timezone half, and **E-4**'s premise. **Specified but deliberately NOT built** (they
+  are the storage/C10 board session's own agenda, not something to slip in unreviewed): moving
+  day-log materialization from continuum to storage, and switching the cycle window to the
+  watermark range `[last_trained_t, now)` — both now written into the ARCHITECTURE C10 row.
+
 ## Next
 
+- **D17 follow-through** (the tz path itself is BUILT + verified; these are the pieces that
+  belong to the board, not to a single session): at the **storage/C10 board session** — (1) mint
+  the **per-user profile** contract (`home_tz`) alongside the recipe-registry + reservoir IDs;
+  (2) move **day-log materialization** continuum → storage; (3) switch the cycle window to the
+  **watermark range `[last_trained_t, now)`**, retiring `window_for`'s local-date arithmetic — all
+  three are specified in the ARCHITECTURE C10 row + the storage charter. Then at the **C5 freeze**,
+  stamp the resolved tz into the run report + C5 entry (today `training_window:"w-day5"` records
+  nothing about the zone it was derived under, so a wrong-tz adapter is unfalsifiable after the
+  fact). Smaller + unblocked: **E-4**'s per-fragment local timestamps are now a pure continuum
+  renderer change; and DP **OQ9**'s residual — a `/metrics` counter on `unsynced` chunks +
+  `|ingest_time − t_end|` outliers, so clock skew is *measured*, not just detectable.
+- ~~**Fleet note (D17):** node-7's DBs predate the new columns~~ **DONE 2026-07-26 — the learn
+  fleet was restarted onto the new code and the migrations are applied.** Both live DBs were
+  backed up first via SQLite's online-backup API (`/home/ubuntu/nmn/backups/pre-d17-20260726-211912/`).
+  Verified after restart: `context_records` gained `device_tz` + `device_utc_offset_minutes` with
+  **125/125 rows intact and all NULL** (no backfill, as designed — a record captured before clients
+  reported a zone genuinely has none); `segments` gained both columns with **40/40 rows intact**.
+  The long-pending **`dp_state` migration also ran**, correctly backfilling all **68 chunks** to
+  `processed` — the running fleet had predated the D16/v1/hardening merges since 2026-07-19, so
+  this restart collected those too. Live checks: the capture wire **accepts** `device_tz=Asia/Tokyo`
+  and persists it, and **rejects `PST` with 400** ("must be an IANA zone id"); a real `--smoke`
+  capture run carved 3 chunks through faster-whisper ASR → C2 → `/context` (headless `/capture/run`
+  has no reporting device, so those records correctly **omit** the fields rather than nulling them).
+  Verification rows were removed; ledger is back to its 40-segment baseline. All three services
+  healthy (storage 8083 · DP 8085 · recording 8084). **Still off by default:** `INGEST_ASYNC`,
+  `INGEST_ISOLATION`. The serve loop (vLLM + app services) remains down.
 - ~~Recording-led capture M1~~ **DONE + ALPHA COMPLETE 2026-07-19** (see Current state above /
   the recording canvas). Gap-detection enforced, ASR pipeline standing, three capture surfaces
   verified `clean` on real hardware. Consent gate stayed back-burner per D13.
