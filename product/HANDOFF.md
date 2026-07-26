@@ -328,6 +328,13 @@ ratified in-session 2026-07-19 → **D16**.)*
 
 ## Next
 
+- **NEXT SESSION IS PREPPED:** the launch prompt for the storage/C10 board session is written
+  and its citations verified — [handoff/next-session-storage-c10.md](handoff/next-session-storage-c10.md).
+  Paste the block in it into a fresh chat; it opens on decisions, not explanation. Four decisions
+  in dependency order, **`window_id` first as the gate** (it is a filesystem path component, a
+  string-compared total order in three places, the training seed, and C5 lineage — a raw RFC3339
+  instant fails `ids.py`'s safe-id regex, so "key it on the end instant" needs a path-safe compact
+  form).
 - **D17 follow-through** (the tz path itself is BUILT + verified; these are the pieces that
   belong to the board, not to a single session): at the **storage/C10 board session** — (1) mint
   the **per-user profile** contract (`home_tz`) alongside the recipe-registry + reservoir IDs;
