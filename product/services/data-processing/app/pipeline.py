@@ -71,7 +71,9 @@ def build_c2(
     - content is the unit's content, exactly as the Processor emitted it (segments,
       when present, already carry absolute RFC3339 times);
     - enrichments carried from the unit (present-but-empty in v0);
-    - record_id folds in the unit's within-chunk discriminator.
+    - record_id folds in the unit's within-chunk discriminator, and (2026-07-27)
+      that same discriminator is EMITTED as a top-level field so a reader can see
+      it instead of only hashing it.
     """
     record_id = compute_record_id(c1["chunk_id"], pipeline_version, unit.discriminator)
 
@@ -105,7 +107,7 @@ def build_c2(
         if value is not None:
             source[field] = value
 
-    return {
+    record: dict[str, Any] = {
         "contract": "C2",
         "version": "0",
         "record_id": record_id,
@@ -116,5 +118,19 @@ def build_c2(
         "content": content,
         "enrichments": unit.enrichments,
         "pipeline_version": pipeline_version,
-        "processed_at": processed_at,
     }
+
+    # The within-chunk discriminator, SURFACED (2026-07-27, D18 follow-through).
+    # It has fed record_id since v0 but lived only inside the hash, so a reader
+    # holding two records of one chunk could not tell "two units" from "two
+    # dialects of one unit" — the distinction C10's day-log materialization keys
+    # its one-dialect-per-record rule on. Emitted ONLY when non-empty: the 1:1 case
+    # is ABSENCE, not "" (same shape rule as the D17 civil-time passthrough), which
+    # is what keeps a 1:1 record byte-identical to its pre-seam self. This adds NO
+    # id input — compute_record_id already folded the same value in, and it already
+    # skips an empty one — so no existing record re-keys.
+    if unit.discriminator:
+        record["discriminator"] = unit.discriminator
+
+    record["processed_at"] = processed_at
+    return record

@@ -143,6 +143,14 @@ class ProcessedRecord(_Strict):
     content: Content
     enrichments: Enrichments
     pipeline_version: str
+    # The within-chunk discriminator, surfaced 2026-07-27 (D18 follow-through):
+    # which of a chunk's several records this is (a video keyframe index, an ocr
+    # record beside its caption, a translation beside its original). Absent in the
+    # 1:1 case. Same _Strict rule as Source's D17 fields — an additive C2 field not
+    # declared here passes the schema gate and is then rejected by this mirror,
+    # which surfaces as a 500 on POST /context/records, so the two move together.
+    # C10's day-log materialization groups on (chunk_id, content.kind, this).
+    discriminator: str | None = Field(default=None, max_length=128)
     processed_at: str
 
 

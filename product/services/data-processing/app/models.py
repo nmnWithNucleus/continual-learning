@@ -101,4 +101,10 @@ class C2Record(BaseModel):
     content: C2Content
     enrichments: C2Enrichments
     pipeline_version: str
+    # The within-chunk discriminator, surfaced 2026-07-27 (D18 follow-through).
+    # OMITTED (not "") in the 1:1 case — see pipeline.build_c2. This model is
+    # extra="forbid", so an additive schema field that isn't declared here would
+    # pass the schema gate and then be rejected by the mirror: the two must move
+    # together (the trap D17 fell into).
+    discriminator: Optional[str] = Field(default=None, max_length=128)
     processed_at: str
