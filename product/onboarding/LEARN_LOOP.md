@@ -16,6 +16,17 @@ through DP into C2 → storage columns → the renderer; storage's per-user `hom
 fallback only; UTC stays canonical). §3, §5 and the E-4 row in §7 are updated with it. Suites after
 the change: storage **32** · continuum **189** · recording **144** · DP **770** (+21 skipped).
 
+**AMENDED 2026-07-27 — the storage↔continuum seam was rebuilt and this document was materially
+stale until now.** Read this before the body: **D18/D19/D20** moved day-log materialization from
+continuum to **storage**, replaced the local-date cycle window with a **watermark over storage's own
+`ingest_time`**, made `window_id` an opaque token, and minted **C12** (per-user profile),
+**C13** (recipe registry) and **C14** (reservoir). Continuum is cut over to storage's HTTP surface:
+`window_for()` / `closed_window_before()` / `Window.local_date` are **deleted** and `nightly.py --tz`
+is **retired** for the C12 profile read. The learn fleet runs on it. Sections 2, 3, 4, 6 and 7 carry
+the change; where an older passage still describes the pre-cutover shape it is marked *(pre-cutover)*
+rather than deleted, because the reasoning is still the best explanation of why the seam is where it
+is. Suites now: storage **310** · continuum **262** · recording **144** · DP **788** (+21 skipped).
+
 ---
 
 ## 1. Why the learn loop exists
@@ -129,9 +140,12 @@ flowchart LR
   DEMUX -- "blob-first PUT /raw/blobs" --> RAW
   DEMUX -- "C1 envelope push" --> ING
   SG -- "C2 POST /context/records" --> CTX
-  CTX -- "C10 (beta): GET /context/records<br/>?user_id&from&to" --> DLC
+  CTX -- "C10 EVOLVED: GET /training/daylog<br/>?user_id&window_id (storage renders)" --> DLC
+  CTX -- "C10 legacy range read: GET /context/records<br/>?user_id&from&to (kept — D12 beta feed)" --> DLC
   SMD -- "C6 resolve (base only today)" --> INF
-  CMD -. "C5 target: storage-hosted directory<br/>(pending board ratification)" .-> SMD
+  CMD -. "C5 target: storage-hosted directory<br/>(freeze DEFERRED — D19; consumer is inference)" .-> SMD
+  SMD -- "C12 profile: GET /users/{id}/profile<br/>home_tz — scheduling + render fallback" --> DLC
+  SMD -- "C13 recipe + gate policy · C14 reservoir" --> DLC
 ```
 
 ### 2c/2d. DP internals and the chunk lifecycle
@@ -145,14 +159,18 @@ Rendered inline in §4.2 (DP internals — the modality stage graph and the two 
 
 The contracts are the *only* coupling between services ([ARCHITECTURE.md](../ARCHITECTURE.md)
 §Contracts). Changing one means editing ARCHITECTURE.md §Contracts first (ORG rule). The learn
-loop rides five of them. Status at a glance:
+loop rides **eight** of them as of 2026-07-27 (five before the cutover). Status at a glance:
 
 | Contract | Producer → Consumer | Status | Machine schema |
 |---|---|---|---|
 | C1 | recording → data-processing (+ blob leg → storage `/raw`) | **v0 FROZEN** (2026-07-09) | [c1_raw_stream_envelope.v0.json](../contracts/c1_raw_stream_envelope.v0.json) |
 | C2 | data-processing → storage `/context` | **v0 FROZEN** (2026-07-09) | [c2_processed_record.v0.json](../contracts/c2_processed_record.v0.json) |
-| C10 | storage → continuum | **beta shape in use; evolution PROPOSED, unratified** | none yet |
-| C5 | continuum → model directory | **built continuum-local; NOT frozen** | none yet |
+| C2 `discriminator` | data-processing → storage | **additive-optional, added 2026-07-27** — surfaces the within-chunk discriminator that had fed `record_id` since v0 but lived only inside the hash. `record_id` unchanged; nothing re-keyed | same C2 schema |
+| C10 | storage → continuum | **EVOLVED + BUILT (D18, 2026-07-27)** — a day-log fetch by `(user_id, window_id)` plus the training-window ledger, over an **ingest-time watermark**. The legacy range read is **kept**, not retired | [c10_daylog.v1.json](../contracts/c10_daylog.v1.json) · [c10_training_window.v1.json](../contracts/c10_training_window.v1.json) |
+| C12 | storage → continuum | **BUILT** — per-user profile; `home_tz` only in v0 | [c12_user_profile.v0.json](../contracts/c12_user_profile.v0.json) |
+| C13 | storage → continuum + inference | **BUILT** — recipe registry + the separately-versioned gate policy | [c13_recipe.v0.json](../contracts/c13_recipe.v0.json) · [c13_gate_policy.v0.json](../contracts/c13_gate_policy.v0.json) |
+| C14 | continuum ↔ storage | **BUILT** — append-only reservoir ledger; audit/provenance, **not** the replay path | [c14_reservoir_ledger.v0.json](../contracts/c14_reservoir_ledger.v0.json) |
+| C5 | continuum → model directory | **built continuum-local; freeze DEFERRED (D19)** — its only consumer is inference via C6, which is not being built | none yet |
 | C11 | storage → input (QueryBuilder) | **designed only; zero code** | none yet |
 
 ### C1 — the raw-stream envelope (frozen)
@@ -222,7 +240,27 @@ user-local timezone, which was never built. Per **D17** the timezone comes from 
 device** instead: `source.device_tz` + `source.device_utc_offset_minutes`, additive-optional,
 carried verbatim from C1. Timestamps stay UTC-canonical; the zone rides beside them. See §8.4.)
 
-### C10 — the training-window read (beta shape live; evolution proposed)
+### C10 — the training-window read (**EVOLVED + BUILT 2026-07-27**)
+
+> **What changed, in one paragraph.** Continuum no longer builds the day-log; it issues a warrant
+> for one. Storage materializes C2 records into the segment/block day-log and serves it by
+> `(user_id, window_id)`, plus a training-window ledger (`POST /training/windows` is an idempotent
+> get-or-create) and a window enumeration read. The window itself is `[last_trained_t, now−δ)` on
+> **storage's `ingest_time`**, not on event time and not on a local date — so storage needs no
+> timezone to serve C10, a missed or failed night is absorbed into the next window, and *late data
+> cannot exist*, because `ingest_time` is assigned at write and can never land below a closed
+> boundary. `last_trained_t` advances **if and only if a cycle publishes**. `window_id` is an
+> opaque, path-safe, lexicographically-ordered token (`w<YYYYMMDD>T<HHMMSS>Z`) that **no consumer
+> may parse**. The decisive argument for moving materialization was replay: it re-reads *prior*
+> day-logs nightly, so a continuum-side builder would re-pull every prior day's raw records every
+> night — O(days²) to rebuild what storage could have kept. Full statement:
+> [ARCHITECTURE.md](../ARCHITECTURE.md) §Contracts → *C10 evolved*.
+>
+> **The legacy range read is NOT retired.** `GET /context/records?user_id=&from=&to=` remains
+> first-class — it is D12's beta training feed, the debugging path, and C11-adjacent.
+
+*The passage below describes the pre-cutover shape and is kept because it explains why the seam
+moved:*
 
 **As built:** continuum reads storage's beta range read —
 `GET /context/records?user_id=&from=&to=`, half-open `[from,to)`, ordered
@@ -751,10 +789,14 @@ sequenceDiagram
    32B base (`morpheus.py:74-108`, `cycle.py:229-246`).
 10. **Gate → C5.** Policy v1.1's four checks run against judge-scored probes with a same-run base
     control; on pass, a `{contract:"C5", adapter_version:"a-…", adapter_dir, base_model_hash,
-    training_window:"w2026-07-21", recipe_id, eval_report, status:"active"}` row appends to
+    training_window:"w20260721T110000Z", recipe_id, eval_report, status:"active"}` row appends to
     `entries.jsonl`, `active.json` flips forward-only, the night's corpus is admitted to the
-    reservoir (`cycle.py:260-294`, `publish.py:83-99`). On fail: recorded candidate, strike,
-    freeze at 2. The chunk's ten seconds of screen life are now weights — and tomorrow's serve
+    reservoir. **Since 2026-07-27 that whole tail is idempotent**: `publish()` keeps at most ONE
+    live activation per `training_window`, superseding rather than stacking, and a reservoir
+    conflict is non-fatal. Before that, a mid-tail failure left two `active` rows for one window and
+    a `rollback()` that flipped the alias to the *same* adapter — the only safety net a bad adapter
+    has, silently dead. On fail: recorded candidate, strike (**once per window**, however often it
+    is re-consolidated), freeze at 2. The chunk's ten seconds of screen life are now weights — and tomorrow's serve
     loop *will* pick that adapter up once the C5→C6 wiring lands (§4.6).
 
 ---
@@ -768,7 +810,10 @@ sequenceDiagram
 | Capture M1 + 3 real clients (mac CLI / phone web / extension), checked continuity | verified `clean` on real hardware 2026-07-19; 133 recording tests |
 | DP v1 + hardening: durable journal, stage graph, SlotView, permit-at-dispatch, opt-in subprocess isolation | merged `5350f7a`; byte-identity re-proven; 765 DP tests |
 | DP screen-video **clip path** (8 workstreams: clipprep/screentext/clipcap, prompt pack, emission law, eval harness, OCR sidecar) | built + integrated 2026-07-25, merged to **`main`** (`4779dee`; "merged to `svc/video-clip`" is stale wherever it appears — the ws file *and* DP's canvas in three places: status line, WS-VC row, Next) — **behind `VIDEO_PIPELINE=clip`, default `keyframe`** |
-| Storage v0.0: /raw, /context, /sessions, C6 resolve | integrated since 2026-07-09; 26 tests |
+| Storage v0.0: /raw, /context, /sessions, C6 resolve | integrated since 2026-07-09 |
+| **Storage D18 expansion (2026-07-27): C12 profile · training-window ledger + the sole `window_id` minter · day-log materialization (C10 evolved) · C13 registry · C14 reservoir** | **310 tests.** The day-log storage renders is proven **byte-identical** to continuum's over **two window origins including a misaligned one** (`storage/scripts/daylog_parity_diff.py`, 31 binding checks) |
+| **Continuum cut over to storage's HTTP surface (2026-07-27)** | **262 tests.** `window_for()`/`closed_window_before()`/`Window.local_date` deleted; `--tz` retired for C12. `app/morpheus/` + `tests/parity/` byte-unchanged — the research-parity kernel did not move |
+| **The seam proven live, two processes over HTTP** | `continuum/scripts/seam_check.py` — 10 steps, 152 checks, 0 blockers. Plus a real fleet run: capture → faster-whisper → `/context` → a nightly to **published**, with the watermark advancing only on publish and exactly one active C5 row |
 | Continuum: Morpheus port (parity-proven) + lean cycle + gate v1.1 + C5 publish/rollback + reservoir | M0 met (32B adapter → gate → C5 → vLLM); 185 tests |
 | Phase-3 dogfood: real data through the real services reproduces baseline learnability | PIPELINE SOUND (p=0.018 vs no-consolidation control) |
 | Serve loop v0.0 on real Qwen3-VL-32B (the learn loop's landing zone) | closed 2026-07-09 |
@@ -779,9 +824,9 @@ sequenceDiagram
 |---|---|---|
 | **O-2** — real-frame OCR bar | `VIDEO_OCR_BACKEND` ships `mock`; the OCR channel carries no real text | PP-OCR cleared a 204-frame *synthetic* macOS proxy (recall 0.988, CER 0.070 @1728 px) but the gate is defined over ~200 hand-labelled **real** frames; re-run the same harness on a real capture (≥0.85 recall, ≤0.10 CER). Engine shipped is PP-OCRv4, design named v6 (flagged L-3) |
 | **O-8** — blind-vs-injected A/B | the OCR→caption *injection* architecture (A) vs the minimal-hint fallback (D) | pre-registered rule: ship A iff entity-recall gain > 0.25 AND corrupted-OCR propagation < 0.10; needs a real VLM endpoint → E-3 |
-| **E-2** — storage kind-aware retraction | **the clip cutover itself** | without `DELETE /context/records?…&kind=`, any day re-consolidated across the dialect flip double-counts both dialects. Until then: forward-only cutover at a UTC day boundary on a fresh `user_id`, `DP_DIALECT_FREEZE=1`, never backfill |
-| **C10 evolution + storage charter expansion** | storage-owned day-log, recipe registry, reservoir; the HTTP client seams | the pending storage/C10 founders' board session ratifies; contract IDs for registry/reservoir minted then |
-| **C5 freeze** | the wired C5 → storage model directory → C6 → vLLM per-user hot-swap tail | a founders' ratification "with inference at the table"; publish.py is deliberately transport-swappable |
+| ~~**E-2**~~ **DEMOTED (D18)** — the day-log's one-dialect rule (latest `ingest_time` wins per `(chunk_id, kind, discriminator)`) fixes the double-render at *render* time, so the cutover no longer waits on a delete. E-2 is still wanted as the retraction/privacy/space primitive, and it **grew**: deletion must now cascade to the day-log and reservoir too. The 2026-07-27 fleet cutover hit its absence directly — clearing verification rows needed a full re-wipe | *(was)* **the clip cutover itself** | without `DELETE /context/records?…&kind=`, any day re-consolidated across the dialect flip double-counts both dialects. Until then: forward-only cutover at a UTC day boundary on a fresh `user_id`, `DP_DIALECT_FREEZE=1`, never backfill |
+| ~~**C10 evolution + storage charter expansion**~~ **BUILT + LIVE 2026-07-27 (D18/D19/D20)** — no longer a gate | *(was)* storage-owned day-log, recipe registry, reservoir; the HTTP client seams | the pending storage/C10 founders' board session ratifies; contract IDs for registry/reservoir minted then |
+| **C5 freeze** — **DEFERRED on purpose (D19)**, since its only consumer is inference via C6 and inference is not being built. Free to defer *because* C5 is unfrozen: D18 changed `training_window`'s format at no cost. One standing rule for whoever freezes it — **freeze `training_window` as an OPAQUE token, never as a date**, or the parsing D18 deleted grows back | the wired C5 → storage model directory → C6 → vLLM per-user hot-swap tail | a founders' ratification "with inference at the table"; publish.py is deliberately transport-swappable |
 | D16 async default | `INGEST_ASYNC=1` as production default | founders' call after the re-drive drill posture holds (drill landed in-slice) |
 
 ### Designed / open (no code, or explicitly deferred)
@@ -810,6 +855,39 @@ sequenceDiagram
 ## 7. The decisions that shaped it
 
 The handful of choices to internalize to reason about this system. Each: decision — alternative — why.
+
+> **Added 2026-07-27 (D18 · D19 · D20) — four choices that reshaped the storage↔continuum seam:**
+>
+> **A. The day-log is storage's, and the reason is replay.** Alternative: keep building it in
+> continuum, where it already worked and was parity-proven. Why not: replay re-reads *prior*
+> day-logs every night, so a continuum-side builder re-pulls every prior day's raw records nightly —
+> **O(days²)** across the wire to rebuild an artifact storage could simply have kept. The general
+> rule that fell out is worth more than the move: **storage owns the day-log's REPRESENTATION
+> outright; its CONTENT is a contract neither service may move alone** — *if the trainer can see it,
+> it is contract; if only storage can see it, it is storage's*. Block text is the training corpus, so
+> re-shaping an anchor line silently changes what the model learns and makes every prior measurement
+> incomparable.
+>
+> **B. The cycle window watermarks on `ingest_time`, not event time.** Alternative: a local-date
+> window, which is what ran. Why: it *dissolves* the late-data problem rather than handling it —
+> `ingest_time` is assigned at write, so a record can never land below a closed boundary, and a
+> phone offline for three days simply trains on Friday in a block anchored to Tuesday. It also
+> retires the 23h/25h-day and dateline pathologies, and storage needs **no timezone at all** to
+> serve C10. `last_trained_t` advances **iff a cycle publishes**, which makes the research design's
+> failed-day merge structural instead of bookkeeping.
+>
+> **C. `window_id` is opaque, and meaning is minted rather than parsed.** Alternative: keep
+> `w<local-date>`. Why not: under a watermark window there *is* no local date to name — a window can
+> span 23 h, 25 h, or 47 h after a missed night — so keeping the old format would mean synthesising a
+> date purely to name a window, reintroducing the timezone the query just proved it never needed.
+> One minter, one validator, and **no consumer may parse it**.
+>
+> **D. The stage is PROTOTYPE, and the docs say so (D19).** Alternative: keep writing in the
+> production voice every canvas already used. Why: a newcomer read those charters as commitments and
+> built for durability we have not earned. The banner licenses re-cutting contracts and wiping data;
+> it explicitly does **not** license skipping ORG's contract-edit order, leaving a decision
+> unrecorded, or **calling a thing BUILT when it is DECIDED**. That last clause caught two false
+> claims of my own during this very slice.
 
 1. **Learn and serve are two loops over shared stores and one per-user model.** Alternative: RAG
    over a context store, or live training. Why: the bet *is* weights ("the model knows
@@ -874,7 +952,21 @@ scandals — the reconciled canvases are honest — but a newcomer reading only 
 have been misled by several of them. **Three are now closed and kept here as decision records, not
 as live defects: item 4 (timezone → D17), item 3 (C5's field list → review item O-2), and item 12
 (LoRA "all layers" → review item O-3, which turned out to be an intent/build gap rather than an
-error).** Items 1 and 2 remain the two a newcomer is most likely to be misled by. The rest stand.
+error).**
+
+**CLOSED 2026-07-27 — every remaining item in this section is now resolved, and the review that
+tracked them is closed too** ([REVIEW_NOTES.md](REVIEW_NOTES.md): O-1 → D17, O-2/3/4 → 07-26,
+O-5…O-11 → 07-27). The C10/`window_for` items are superseded by the D18 build; the C2 discriminator
+prose item (O-4) was the schema being right and the summary lagging it, and the field is now
+*emitted* as well as hashed. This section is retained as a **decision record**, not a live defect
+list — a future pass appends rather than reopens.
+
+**The pattern is the part worth keeping.** Every serious defect in the D18 slice — a day-log
+stamping a recipe whose knobs it never used, a default path that silently trained on nothing, a
+rollback that had quietly stopped working — started exactly like the items below: a document
+disagreeing with the code, or with another document. None was caught by a test. Two harnesses were
+green *while asserting a defect as correct behaviour*. Read this section as evidence for how much
+that costs, not as a list to tick off.
 
 1. **The model directory is currently TWO unwired things.** ARCHITECTURE's diagram shows
    `continuum —C5→ model directory —C6→ inference` as one store in storage. In code: continuum
@@ -973,12 +1065,13 @@ error).** Items 1 and 2 remain the two a newcomer is most likely to be misled by
    continuum, with the operator's fallback deliberately set to UTC, renders *"around 15:00 local
    time"*. The same run before this change rendered *"06:00"* — a UTC clock reading **labelled**
    local, with no error and no metric. Nothing already published was harmed: both C5 publishes on
-   disk carry `training_window:"w-day5"` (a literal at `scripts/m0_smoke.py:133`; `window_for`
+   disk carried `training_window:"w-day5"` (a literal at `scripts/m0_smoke.py:133`; `window_for`
    never ran), and Phase-3 passed a real per-day zone.
 
    **Two things this decided that live elsewhere:** `nightly.py --tz` is now **required** (there is
    no default timezone anywhere), and the cycle window is specified to become the watermark range
-   `[last_trained_t, now)` rather than continuum's local-date `window_for()` — **specified, not yet
+   `[last_trained_t, now−δ)` on storage's INGEST axis rather than continuum's local-date
+   `window_for()` — **BUILT 2026-07-27 (D18); `window_for()` is deleted.** *(Original note: specified, not yet
    built**, and part of the storage/C10 board session along with moving day-log materialization to
    storage (see item 2).
 
