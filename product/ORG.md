@@ -100,8 +100,9 @@ workstream) maintains:
 | File | Nature | POC ancestor |
 |---|---|---|
 | `CHARTER.md` (root: README/VISION/ARCHITECTURE/ORG) | **Stable** — mission, scope, interfaces, milestones. Changes deliberately. | POC `README.md` |
-| `HANDOFF.md` | **Volatile** — working canvas: status tables, current state, next, gotchas. Updated every session. | POC `HANDOFF.md` |
-| `handoff/<ws>.md` | Per-workstream working file, opened on demand | POC `phase-N-*.md` / `wsN-*.md` |
+| `HANDOFF.md` | **Volatile board** — status tables, where we are, what's next, gotchas. **Rewritten in place** every session. | POC `HANDOFF.md` |
+| `handoff/<ws>.md` | Per-workstream / per-aspect working file: the reasoning and a newest-first worklog | POC `phase-N-*.md` / `wsN-*.md` |
+| `DECISIONS.md` (root only) | **Append-at-top register** of ratified founders' decisions (D-numbers). Cited everywhere, restated nowhere. | — (new 2026-07-27) |
 
 **Deliberate deviation from the original plan — one format, not two.** The original intent
 was parallel human-readable and AI-readable copies at every level (4+ docs per node). We
@@ -111,10 +112,27 @@ poisons every future session that cold-starts from it. If a machine-consumable i
 becomes necessary (e.g. a dashboard), we *generate* it from the markdown — never hand-author
 it twice. (Ratified 2026-07-09, D2; reversible if it fails us.)
 
+**A board is not a log — the two writing modes.** Added 2026-07-27, after `HANDOFF.md` grew to
+498 lines by quietly becoming a *second* worklog: its `§Current state` and `§Next` had accumulated
+~4,800 words of dated history that already lived in `handoff/engineering.md`, and — the tell — the
+weaker copy went stale within a day. Nobody deletes from a section called "current state"; they
+append. So the mode is now named, per section:
+
+| Mode | Applies to | Rule |
+|---|---|---|
+| **Rewrite in place** | every `HANDOFF.md` (root + service), every `CHARTER.md`, `README`/`VISION`/`ARCHITECTURE`/`STACK`/`ORG` | Describe **today**. Nothing is appended; no history accumulates. When an item is done it *leaves* the board for the aspect/ws worklog — it does not stay struck through. |
+| **Prepend (newest first)** | `handoff/<aspect>.md` and `handoff/<ws>.md` §Worklog · `DECISIONS.md` | Genuinely append-only history, written **at the top**, never at the bottom. A cold-starting reader hits today first and can stop reading whenever they have enough. |
+
+Worklog entries are `### <date> — <title>` headings, not list items, so every entry is a stable
+anchor other documents can point at. That is what lets a decision row carry a *pointer* to its
+reasoning instead of a copy of it.
+
 **Rules (inherited from the POCs, now law):**
 
 - **One fact, one home.** Shared truths (infra, contracts, conventions) live once — root
   docs or the owning charter — everything else links. Never restate a sibling's internals.
+  **Ratified decisions live in [DECISIONS.md](DECISIONS.md) and are cited by D-number** — if a
+  decision is written out in full anywhere else, that copy is the bug.
 - **Stamp your work.** Every canvas edit updates *Last updated* + owner session; finishing a
   workstream flips its status row in the index table.
 - **Don't scatter.** No stray READMEs/notes in working directories; everything routes
