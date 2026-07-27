@@ -1,8 +1,6 @@
 # Nucleus v0 — Organization & Operating Model
 
-> How we split the work, run parallel sessions, and keep everyone (human or agent) in
-> context. Launch prompts live in [PROMPTS.md](PROMPTS.md); live status in
-> [HANDOFF.md](HANDOFF.md).
+> How we split the work, run parallel sessions, and keep everyone (human or agent) in context. Launch prompts live in [PROMPTS.md](PROMPTS.md); live status in[HANDOFF.md](HANDOFF.md).
 
 **Last updated:** 2026-07-08
 
@@ -102,7 +100,7 @@ workstream) maintains:
 | `CHARTER.md` (root: README/VISION/ARCHITECTURE/ORG) | **Stable** — mission, scope, interfaces, milestones. Changes deliberately. | POC `README.md` |
 | `HANDOFF.md` | **Volatile board** — status tables, where we are, what's next, gotchas. **Rewritten in place** every session. | POC `HANDOFF.md` |
 | `handoff/<ws>.md` | Per-workstream / per-aspect working file: the reasoning and a newest-first worklog | POC `phase-N-*.md` / `wsN-*.md` |
-| `DECISIONS.md` (root only) | **Append-at-top register** of ratified founders' decisions (D-numbers). Cited everywhere, restated nowhere. | — (new 2026-07-27) |
+| `DECISIONS.md` | **Append-at-top register** of ratified decisions. Cited everywhere, restated nowhere. At the root it holds the founders' D-numbers; a service opens one only when it has service-local decisions to record (see *The same three files, at every level* below). | — (new 2026-07-27) |
 
 **Deliberate deviation from the original plan — one format, not two.** The original intent
 was parallel human-readable and AI-readable copies at every level (4+ docs per node). We
