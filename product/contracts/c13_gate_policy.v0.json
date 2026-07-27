@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nucleus.ai/contracts/c13_gate_policy.v0.json",
+  "title": "C13 gate policy v0 (registry artifact — WHETHER WE SHIP IT)",
+  "description": "The publish-gate policy, served verbatim by storage's registry at GET /policies/{policy_id}. A SEPARATE ARTIFACT FROM THE RECIPE, with a separate id, a separate schema and a separate lifecycle — this is the whole reason C13 has two shapes rather than one. `recipe_id` is hashed into continuum's amplify and train stage keys; `policy_id` is recorded in the gate report and MUST NEVER enter a stage key. Keeping thresholds inside the recipe was a real trap, not a tidiness point: a threshold edit would fork `recipe_id`, invalidate the amplify and train caches, re-run a night of GPU time, and imply the trained artifact had changed when only our willingness to publish it did. Re-deciding what is good enough to ship must never re-train anything. Thresholds ratified by the cofounders 2026-07-24 from measured distributions. Like the recipe schema, additional properties are ALLOWED: this artifact carries per-threshold rationale prose (`traps_note`, `min_probes_note`, `heldout.note`) that records why a number moved, and it belongs in the artifact rather than beside it.",
+  "type": "object",
+  "required": ["policy_id", "gate", "publish"],
+  "properties": {
+    "policy_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "description": "The policy's identity AND its filename stem (`<policies_dir>/<policy_id>.json`). Path-safe by pattern because it resolves to a file. Versioned independently of any recipe: gate-policy-v1.1 supersedes the gate/publish block formerly inside recipes/consolidation-v1.0.json, and no recipe_id moved when it did."
+    },
+    "ratified": { "type": "string", "description": "Optional provenance prose: who ratified these numbers, when, and from which measurement." },
+    "supersedes": { "type": "string", "description": "Optional provenance prose: what this policy replaced." },
+    "note": { "type": "string", "description": "Optional prose. The load-bearing sentence lives here in v1.1: policy_id must never enter a cycle stage key." },
+    "gate": {
+      "type": "object",
+      "description": "What an adapter must clear to be publishable. Every previous value blocked ~everything, including the validated recipe's own output — these are measured, not aspirational.",
+      "required": ["new_day_recall_min", "traps_pass_min", "heldout", "min_probes", "decay_retention_min", "consecutive_fail_freeze"],
+      "properties": {
+        "new_day_recall_min": { "type": "number", "minimum": 0, "maximum": 1, "description": "Minimum recall on the night's own new-day probes — did consolidation learn today at all." },
+        "traps_pass_min": { "type": "number", "minimum": 0, "maximum": 1, "description": "Minimum deny-then-correct trap pass rate — the collapse detector." },
+        "heldout": {
+          "type": "object",
+          "description": "The contamination check, run against the run's OWN base control rather than a fixed ceiling: a constant asks 'did this run score above 0.05', which conflates a leak with a base model that happens to know things, and breaks entirely the day the base model changes.",
+          "required": ["alpha", "backstop", "probes"],
+          "properties": {
+            "alpha": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "description": "One-sided exact-test significance level vs the run's own base control." },
+            "backstop": { "type": "number", "minimum": 0, "maximum": 1, "description": "Absolute ceiling, for a base model that is itself contaminated — the case where the differential test would see nothing." },
+            "probes": { "type": "integer", "minimum": 1, "description": "How many heldout probes the eval must run." },
+            "note": { "type": "string" }
+          }
+        },
+        "min_probes": { "type": "integer", "minimum": 1, "description": "Floor on total probes before a gate verdict means anything. A floor the harness cannot supply is unpassable by construction — 148 is measured against what it actually supplies (60 + 60 + 28)." },
+        "decay_retention_min": { "type": "number", "minimum": 0, "maximum": 1, "description": "Minimum retention of prior nights' material — the forgetting check." },
+        "consecutive_fail_freeze": { "type": "integer", "minimum": 1, "description": "How many consecutive gate failures freeze the user's cycle. A freeze leaves `last_trained_t` exactly where it was, so the next window is a strict superset." }
+      }
+    },
+    "publish": {
+      "type": "object",
+      "required": ["snapshot_retention"],
+      "properties": {
+        "snapshot_retention": { "type": "integer", "minimum": 1, "description": "How many published adapter snapshots to keep for rollback. NOT a data-retention policy — user content is keep-everything; this is about adapter artifacts." }
+      }
+    },
+    "unwired_checks": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Checks named in the policy but not yet executed by the harness. Listed in the artifact ON PURPOSE: a threshold nobody runs is worse than no threshold, and writing them down here is what keeps that visible instead of implied."
+    }
+  }
+}

@@ -86,8 +86,9 @@
 1. **C12 profile** (`../../contracts/c12_user_profile.v0.json` — the one schema minted at
    ratification). It lands **first**, because day-log materialization inherits D17's timezone
    resolution and therefore *reads the profile*. 404 on absence; tzdata resolution on write (a
-   regex cannot be the authority on IANA ids — it only excludes abbreviations); auto-seed from the
-   first device-reported `device_tz`, **never** auto-update.
+   regex cannot be the authority on IANA ids — it only excludes abbreviations); and `home_tz` is **declared, not
+   inferred** — the user sets it, storage never writes it unprompted, so it does not chase a
+   travelling user's device (D19, correcting D18's first draft).
 2. **Resolve the blocking discriminator question** (CHARTER OQ7) — the one-dialect rule groups by
    `(chunk_id, content.kind, discriminator)`, and the discriminator is today folded into the
    `record_id` hash with no independent field. Additive-optional C2 field, or prove
@@ -98,8 +99,10 @@
 4. **Day-log materialization.** Lift `../continuum/app/daylog.py` (`build_daylog` +
    `_render_block`) — **not** `Profile.render_block`, which is recipe-coupled and stays in
    continuum. Two changes ride along: membership by `ingest_time`, and segment buckets on a
-   **global epoch grid** instead of window-relative (`daylog.py:74`). **Exit bar is the M9
-   differential diff, and continuum's local path is not deleted until it is green.**
+   **global epoch grid** instead of window-relative (continuum's `_bucket_index` as it stood at
+   D18; **F4 has since moved continuum's own reference renderer onto the global grid too**, so the
+   two now differ only on membership). **Exit bar is the M9 differential diff, and continuum's
+   local path is not deleted until it is green.**
 5. **C13 registry + C14 reservoir**, then continuum's cutover.
 
 **Cutover act — WIPE, DO NOT MIGRATE (D19).** Everything captured so far is experiment output, not

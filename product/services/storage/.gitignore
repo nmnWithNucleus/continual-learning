@@ -7,5 +7,9 @@ __pycache__/
 # Local dev blob store (/raw bytes) — never commit captured bytes.
 raw_store/
 app/raw_store/
+# Local dev reservoir (C14 amplified corpora) — training artifacts derived from user
+# content, same rule as the blobs. NOTE: recipes/ and policies/ are the OPPOSITE — they are
+# committed source artifacts of the C13 registry, not runtime output.
+app/reservoir/
 # Isolated per-service venv for unit tests.
 .venv/

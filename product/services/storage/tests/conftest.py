@@ -13,10 +13,16 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture()
 def client(tmp_path, monkeypatch) -> TestClient:
-    """A fresh app + empty temp DB + empty temp /raw dir per test (env read at
-    create_app() time)."""
+    """A fresh app + empty temp DB + empty temp /raw dir + empty temp reservoir per test
+    (env read at create_app() time)."""
     monkeypatch.setenv("STORAGE_DB_PATH", str(tmp_path / "test.db"))
     monkeypatch.setenv("STORAGE_RAW_DIR", str(tmp_path / "raw_store"))
+    # The C14 reservoir is a filesystem store like /raw and needs the same redirection, or
+    # a test would admit corpora into the repo's own app/reservoir dir.
+    monkeypatch.setenv("STORAGE_RESERVOIR_DIR", str(tmp_path / "reservoir"))
+    # STORAGE_RECIPES_DIR / STORAGE_POLICIES_DIR are deliberately NOT redirected: the C13
+    # registry serves the service's own committed, read-only artifacts, and the tests want
+    # the real ones. Modules that need a synthetic registry override them locally.
     # Import inside the fixture so the env vars are set before create_app() runs.
     from app.main import create_app
 

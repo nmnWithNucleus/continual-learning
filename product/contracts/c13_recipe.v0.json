@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nucleus.ai/contracts/c13_recipe.v0.json",
+  "title": "C13 consolidation recipe v0 (registry artifact — WHAT WE TRAIN)",
+  "description": "One versioned training recipe, served verbatim by storage's registry at GET /recipes/{recipe_id}. `recipe_id` == the filename stem, and the registry refuses to serve a file whose own `recipe_id` disagrees with the id it was asked for — a registry that silently returned a differently-identified artifact would let a night mis-record what it trained under. GLOBAL AND VERSIONED, NEVER PER-USER: `recipe_id` is hashed into continuum's amplify and train stage keys, so a per-user value would fork the id per user and destroy artifact comparability (this is also why a per-user boundary_local_time cannot ride C13 and belongs on C12 instead). THE GATE POLICY IS A SEPARATE ARTIFACT with its own id and its own schema (c13_gate_policy.v0.json), ratified with gate v1.1 on 2026-07-24: only the training recipe may enter a cycle stage key, so changing a publish threshold must never fork `recipe_id` or invalidate hours of GPU cache. ADDITIONAL PROPERTIES ARE DELIBERATELY ALLOWED (unlike every other contract here): these artifacts carry human provenance prose — `source`, `note`, and per-threshold rationale — and a registry that rejected a recipe for documenting itself would push that documentation out of the artifact and into a wiki. A mistyped knob is still caught, because the knobs that matter are `required`.",
+  "type": "object",
+  "required": ["recipe_id", "amplify", "replay", "train", "corpus", "window"],
+  "properties": {
+    "recipe_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "description": "The recipe's identity AND its filename stem (`<recipes_dir>/<recipe_id>.json`). Path-safe by pattern because it resolves to a file: no slashes, no leading dot, no '..'. Every knob change forks it — the same posture as data-processing's `pipeline_version`; an artifact trained under recipe A is never silently comparable to one trained under recipe B."
+    },
+    "source": { "type": "string", "description": "Optional provenance prose: where these numbers came from and what was confirmed against what." },
+    "note": { "type": "string", "description": "Optional prose: what changed relative to the recipe this one forked from, and whether artifacts stay comparable." },
+    "amplify": {
+      "type": "object",
+      "description": "The amplification pass: how many retellings of each block, and how many of them are deny-then-correct negatives.",
+      "required": ["variants", "neg_frac", "ok_rate_min"],
+      "properties": {
+        "variants": { "type": "integer", "minimum": 1, "description": "Retellings per block (48 in the parity-locked v1.0)." },
+        "neg_frac": { "type": "number", "minimum": 0, "maximum": 1, "description": "Fraction of variants that are deny-then-correct negatives (0.15 in v1.0). Traps erode by ~night 12 without this pressure." },
+        "ok_rate_min": { "type": "number", "minimum": 0, "maximum": 1, "description": "Minimum acceptable amplifier OK rate before the stage is treated as failed." }
+      }
+    },
+    "replay": {
+      "type": "object",
+      "description": "The rehearsal mix — what rescues sequential consolidation from collapse. Generative replay demonstrably fails, so real past text is required forever.",
+      "required": ["frac", "source", "neg_boost"],
+      "properties": {
+        "frac": { "type": "number", "minimum": 0, "maximum": 1, "description": "Replay budget as a fraction of the night's target chars (0.30 in v1.0). 0.0 is the SEQ arm — the reference's own negative control." },
+        "source": {
+          "type": "string",
+          "enum": ["amp", "rawlog"],
+          "description": "Which pool replay samples from: `amp` = the amplified corpora in the C14 reservoir (v1.0, the parity path); `rawlog` = prior day-logs re-read via C10 (the locked architecture; a measured tie, and simpler). A CLOSED enum because continuum raises on anything else — an unknown source must fail at fetch, not at 2am."
+        },
+        "neg_boost": { "type": "number", "minimum": 0, "description": "Re-exposure boost for deny-then-correct paragraphs during replay. 0.0 until the ported sampler lands; paragraphs are already tagged at admission for it." }
+      }
+    },
+    "train": {
+      "type": "object",
+      "description": "The LoRA training pass. Parity-critical and frozen: these are the numbers the research line locked.",
+      "required": ["lora_r", "lora_alpha", "lr", "epochs", "batch_size", "chunk_tokens", "objective"],
+      "properties": {
+        "lora_r": { "type": "integer", "minimum": 1, "description": "LoRA rank (128 in v1.0)." },
+        "lora_alpha": { "type": "integer", "minimum": 1, "description": "LoRA alpha (256 in v1.0)." },
+        "lr": { "type": "number", "exclusiveMinimum": 0, "description": "Learning rate (1e-4 in v1.0)." },
+        "epochs": { "type": "integer", "minimum": 1 },
+        "batch_size": { "type": "integer", "minimum": 1 },
+        "chunk_tokens": { "type": "integer", "minimum": 1, "description": "Token length the corpus is chunked to for continued pre-training." },
+        "objective": {
+          "type": "string",
+          "enum": ["next-token CPT (never QA-SFT)"],
+          "description": "THE CORE INVARIANT OF THE WHOLE RESEARCH LINE, pinned as a single-value enum on purpose. Continued pre-training on the day's text — never supervised QA fine-tuning, which teaches the shape of an answer rather than the day. Widening this enum is a deliberate act that must be argued for, which is exactly why it is not a free-form string."
+        }
+      }
+    },
+    "corpus": {
+      "type": "object",
+      "description": "The DAY-LOG FORMAT knobs. These are the ones storage reads: they decide segment bucket width and block length, i.e. what a day-log looks like — which is why C10 bodies carry `recipe_id` beside `daylog_format_version`.",
+      "required": ["quality_min", "block_segments", "segment_seconds"],
+      "properties": {
+        "quality_min": { "type": "number", "minimum": 0, "maximum": 1, "description": "Minimum segment quality admitted to training. The gate lives in continuum, not in the day log: low-quality rows are excluded from TRAINING, never from the record." },
+        "block_segments": { "type": "integer", "minimum": 1, "description": "Maximum segments per scene block (12 in v1.0 => ~2 min blocks at 10 s segments)." },
+        "segment_seconds": { "type": "integer", "minimum": 1, "description": "Segment bucket width in seconds (10 in v1.0). Buckets sit on a GLOBAL epoch grid — floor(t_start / segment_seconds) — so a bucket does not depend on which window collected the record." }
+      }
+    },
+    "window": {
+      "type": "object",
+      "description": "When the nightly cycle fires. NOT the window's extent — that is `[last_trained_t, now-delta)` on storage's ingest clock (D18) and needs no recipe and no timezone.",
+      "required": ["boundary_local_time"],
+      "properties": {
+        "boundary_local_time": {
+          "type": "string",
+          "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+          "description": "HH:MM in the user's C12 `home_tz` — the local hour the cycle fires. GLOBAL today, which is precisely what cannot express a night-shift worker; the per-user override is named as C12's expected second field and is deliberately not minted until it has a consumer."
+        }
+      }
+    }
+  }
+}

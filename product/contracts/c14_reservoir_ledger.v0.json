@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nucleus.ai/contracts/c14_reservoir_ledger.v0.json",
+  "title": "C14 reservoir ledger v0 (storage -> continuum)",
+  "description": "The reservoir's LEDGER — what has been admitted for one user — served by GET /reservoir/{user_id}?before_window=. IT IS NOT THE CORPORA: the bodies are deliberately not on this read, because the ledger's consumer wants provenance (which windows were consolidated, under which recipe, with which content hash) and shipping megabytes of amplified text to answer that would be a different question badly answered. The reservoir exists to protect ONE invariant of the whole data design: amplified/synthetic text NEVER lands in /context. /context is the faithful record; this is a TRAINING artifact store — same storage discipline, different namespace. AUDIT/PROVENANCE, NOT THE REPLAY HOT PATH: replay re-reads prior day-logs via C10 (the locked architecture; raw source is a measured tie with amplified, and simpler). Admission is APPEND-ONLY and retention is KEEP-EVERYTHING: there is no sweeper and no expiry, because real past text is required forever (generative replay demonstrably fails) — deletion here is a deliberate privacy act via M5's cascade, never housekeeping.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract", "version", "user_id", "before_window", "entries"],
+  "properties": {
+    "contract": { "const": "C14" },
+    "version": { "const": "0" },
+    "user_id": { "type": "string", "minLength": 1, "description": "The user whose ledger this is. Per-user isolation is enforced by storage on the read; one user's entries never appear in another's ledger." },
+    "before_window": {
+      "type": ["string", "null"],
+      "description": "The `before_window` filter that produced this ledger, echoed back so a cached response is unambiguous. null == unfiltered. When set, entries are STRICTLY BEFORE it by plain string comparison on the opaque window_id — which is the only operation any consumer may perform on a window_id. Its caller is replay: never replay the window being trained, or the future."
+    },
+    "entries": {
+      "type": "array",
+      "description": "Admitted corpora, ascending by (window_id, recipe_id). A TORN ADMISSION IS INVISIBLE HERE BY CONSTRUCTION: the corpus body lands atomically first and the meta record lands second, so the meta is the commit marker and an admission interrupted between the two is simply not in this list. That ordering is a requirement, not an implementation detail.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["user_id", "window_id", "recipe_id", "sha", "chars", "admitted_at"],
+        "properties": {
+          "user_id": { "type": "string", "minLength": 1 },
+          "window_id": {
+            "type": "string",
+            "pattern": "^w\\d{8}T\\d{6}Z$",
+            "minLength": 17,
+            "maxLength": 17,
+            "description": "The training window this corpus was amplified from. THE LENGTH BOUNDS ARE NOT REDUNDANT WITH THE PATTERN: in the Python validator this contract is enforced by, `$` also matches just BEFORE A TRAILING NEWLINE, so `w20260722T035900Z\\n` satisfies the regex alone -- and since this id IS a filesystem path component under the reservoir root, that string names a different file from the id it looks like. Pinning the width to exactly 17 closes it. OPAQUE: comparable with < / >= and NOTHING ELSE. In particular it is NOT PARSED FOR A DATE — continuum's ReservoirEntry.local_window_date() did exactly that and is being deleted for it, because under a [last_trained_t, now-delta) window there is no local date to name (a window can span 23 h, 25 h or 47 h). It is a PER-USER token, which is why user_id rides beside it here and on every window-addressing surface."
+          },
+          "recipe_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+            "description": "The C13 recipe the corpus was amplified under. Part of the admission KEY, not a label: one window legitimately yields two corpora when a night is re-run under a new recipe, and an append-only audit store must keep both rather than let the second overwrite the first."
+          },
+          "sha": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "SHA-256 of the corpus text (UTF-8). This is what makes admission idempotent — re-admitting identical content is a no-op that does not even move `admitted_at` — and it is what continuum hangs its replay-mix stage key off, so a corpus that changed must produce a different key rather than a silently reused cache entry."
+          },
+          "chars": { "type": "integer", "minimum": 0, "description": "Length of the corpus text in characters. Cheap size accounting without fetching bodies." },
+          "admitted_at": { "type": "string", "format": "date-time", "description": "RFC3339 UTC instant of FIRST admission, storage-minted. Preserved across idempotent re-admission, exactly as /context preserves ingest_time across a reprocess: it records when the artifact landed, not when someone last asked about it." }
+        }
+      }
+    }
+  }
+}

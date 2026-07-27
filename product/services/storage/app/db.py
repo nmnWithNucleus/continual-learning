@@ -13,9 +13,24 @@ Metadata tables (SQLite):
   - ``context_records``: the ``/context`` store (C2). One row per processed record, keyed by
     ``record_id`` (deterministic on ``(chunk_id, pipeline_version)`` upstream, so a reprocess
     is an idempotent upsert here). Indexed on ``(user_id, t_start)`` — the wall-clock time
-    spine every reader leans on. Full C2 stored verbatim as JSON; ``ingest_time`` is the
-    storage-assigned audit axis (distinct from C2's ``processed_at``), preserved across
-    reprocess upserts.
+    spine every reader leans on — AND on ``(user_id, ingest_time)`` (D18), because the two
+    are different axes with different jobs: event time is the CONTENT axis (recall, day-log
+    bucketing, deletion ranges) and ingest time is the COMPLETENESS axis, the only one on
+    which "everything I had" is a guarantee, so it is what the training window watermarks on.
+    Full C2 stored verbatim as JSON; ``ingest_time`` is the storage-assigned audit axis
+    (distinct from C2's ``processed_at``), preserved across reprocess upserts.
+  - ``user_profiles``: the per-user C12 profile — POLICY the system reads to decide its own
+    behaviour for this user (today: ``home_tz``). Written ONLY by an explicit profile write;
+    storage never seeds or infers it. Absent row == 404 == this user is not schedulable.
+  - ``training_windows``: the D18 training-window ledger. One row per window over the
+    ``[last_trained_t, now-delta)`` ingest-time watermark; bounds immutable once opened. The
+    watermark itself is NOT a column — it is derived from this table (see
+    ``Store.last_trained_t``), which is what makes "advances iff published" true by
+    construction rather than by bookkeeping.
+  - ``day_logs``: the materialized C10 day-log per ``(user_id, window_id)`` — a DERIVED
+    VIEW over ``context_records``, built on demand at fetch and cached. Rebuildable from
+    C2 at any time, and invalidated automatically when a record inside its ingest range is
+    rewritten (see ``Store.put_context``).
 
 Blob bytes (dev store): a local directory tree under ``STORAGE_RAW_DIR`` (default
 ``app/raw_store`` beside this module). ``blob_ref`` is an opaque, storage-minted, hex-sharded
@@ -31,9 +46,11 @@ import hashlib
 import json
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
+
+from .window_id import mint_window_id
 
 _DEFAULT_DB_PATH = Path(__file__).resolve().parent / "dev.db"
 _DEFAULT_RAW_DIR = Path(__file__).resolve().parent / "raw_store"
@@ -93,14 +110,123 @@ CREATE TABLE IF NOT EXISTS context_records (
     record_json      TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_context_user_tstart ON context_records (user_id, t_start);
+-- D18: the COMPLETENESS axis gets its own index. Training-window membership is by
+-- ingest_time, so the nightly `[last_trained_t, now-delta)` read must be a single
+-- index-range scan. Event time (t_start) keeps its index above and stays the CONTENT
+-- axis; the asymmetry (training windows are ingest-time, retraction ranges are
+-- event-time) is deliberate — see CHARTER § The time index.
+CREATE INDEX IF NOT EXISTS idx_context_user_ingest ON context_records (user_id, ingest_time);
+
+-- D18 / C12: the per-user profile. POLICY the SYSTEM reads to decide its own behaviour
+-- for this user (scheduling, fallbacks) — never user-facing identity or presentation,
+-- which belong to the input service. `home_tz` is DECLARED, NOT INFERRED: the only
+-- writer is an explicit profile write, there is no auto-seed from a device-reported
+-- device_tz, and there is NO server-side default timezone anywhere in the system (D17).
+-- An absent row is a 404 and means the user is not schedulable — an operational alert,
+-- never a silent skip. `profile_version` is a monotone counter bumped on EVERY write.
+CREATE TABLE IF NOT EXISTS user_profiles (
+    user_id         TEXT PRIMARY KEY,
+    home_tz         TEXT NOT NULL,
+    profile_version INTEGER NOT NULL,
+    updated_at      TEXT NOT NULL
+);
+
+-- D18: the training-window ledger. One row per window over the ingest-time watermark
+-- range `[last_trained_t, now-delta)`. Bounds are IMMUTABLE once opened — continuum
+-- replays its crash-safe journal by window_id, so a retry that re-minted an id would
+-- force a full re-train, a second C5 entry and a second reservoir admission.
+--   state   : 'open' | 'consolidated'
+--   outcome : NULL while open; on close one of published | gate_failed | frozen |
+--             skipped_no_data | crashed. `last_trained_t` advances IFF 'published'.
+-- Note what is NOT here: a watermark column. It is derived (Store.last_trained_t) so
+-- that no second row can ever disagree with the ledger about what has been trained.
+-- KEYED (user_id, window_id), NOT window_id alone. The id is a PER-USER token — it is
+-- derived from an instant, so a nightly fleet run that opens two users' windows in the
+-- same second legitimately mints the same string twice, and a global key would turn a
+-- normal night into a primary-key collision. It is also why every window-addressing
+-- surface carries user_id (as the day-log fetch `?user_id=&window_id=` already does):
+-- per-user isolation must fail closed, and an id-only close would be a cross-user write
+-- to anyone who can guess a second.
+CREATE TABLE IF NOT EXISTS training_windows (
+    user_id    TEXT NOT NULL,
+    window_id  TEXT NOT NULL,
+    t_start    TEXT NOT NULL,
+    t_end      TEXT NOT NULL,
+    state      TEXT NOT NULL,
+    outcome    TEXT,
+    opened_at  TEXT NOT NULL,
+    closed_at  TEXT,
+    PRIMARY KEY (user_id, window_id)
+);
+-- At most ONE open window per user, enforced by the DB and not merely by the
+-- read-then-write in open_training_window: get-or-create must never be able to mint a
+-- second id for a user who already has one, because that is exactly the failure the
+-- idempotent open exists to prevent.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_training_windows_open
+    ON training_windows (user_id) WHERE state = 'open';
+
+-- D18 / C10: the materialized day-log cache. A day-log is a DERIVED VIEW over C2 — the
+-- record_json rows remain the source of truth and this table can be dropped and rebuilt —
+-- but it is also A SECOND COPY OF USER CONTENT, which is why M5's deletion cascade must
+-- reach it: a retraction that clears /context and leaves a day-log standing has deleted
+-- nothing. Built on demand at fetch (no scheduler in this service) and keyed
+-- (user_id, window_id), the same per-user addressing every window surface uses.
+--   t_start/t_end   : the WINDOW's ingest-time bounds, duplicated out of body_json so a
+--                     reprocess landing inside a materialized range can invalidate this
+--                     row with one indexed DELETE on the write path.
+--   daylog_format_version / recipe_id / home_tz : the three RENDER INPUTS this body was
+--                     rendered under. A fetch whose current values differ re-materializes
+--                     instead of serving an old dialect out of cache — home_tz included,
+--                     because it fixes the anchor line's local date for every record with
+--                     no device_tz, so a corrected profile zone must re-render the night.
+CREATE TABLE IF NOT EXISTS day_logs (
+    user_id               TEXT NOT NULL,
+    window_id             TEXT NOT NULL,
+    t_start               TEXT NOT NULL,
+    t_end                 TEXT NOT NULL,
+    daylog_format_version TEXT NOT NULL,
+    recipe_id             TEXT NOT NULL,
+    home_tz               TEXT NOT NULL,
+    content_fingerprint   TEXT NOT NULL,
+    materialized_at       TEXT NOT NULL,
+    body_json             TEXT NOT NULL,
+    PRIMARY KEY (user_id, window_id)
+);
+CREATE INDEX IF NOT EXISTS idx_day_logs_user_range ON day_logs (user_id, t_start, t_end);
 """
 
 
 # (table, column, decl) — see Store._migrate. Additive only; never a rewrite.
+# NOTE: only COLUMNS ON EXISTING TABLES belong here. New tables and new indexes are
+# handled by _SCHEMA alone (CREATE TABLE/INDEX IF NOT EXISTS runs on a live DB); a new
+# column is not, because CREATE TABLE IF NOT EXISTS is a no-op on an existing table.
 _MIGRATIONS = [
     ("context_records", "device_tz", "TEXT"),
     ("context_records", "device_utc_offset_minutes", "INTEGER"),
 ]
+
+# --- training-window vocabulary (D18) ------------------------------------------
+
+WINDOW_STATE_OPEN = "open"
+WINDOW_STATE_CONSOLIDATED = "consolidated"
+WINDOW_STATES = (WINDOW_STATE_OPEN, WINDOW_STATE_CONSOLIDATED)
+
+# The cycle outcomes a window can be closed with. Exactly ONE of them advances the
+# watermark; `skipped_no_data` deliberately does NOT (refined 2026-07-27 — D18's first
+# draft advanced on it), so a below-floor night simply accumulates material until a run
+# is worth it and the next window is a strict SUPERSET of the one that produced nothing.
+WINDOW_OUTCOMES = ("published", "gate_failed", "frozen", "skipped_no_data", "crashed")
+WINDOW_ADVANCING_OUTCOME = "published"
+
+# The watermark, written ONCE. Both readers (Store.last_trained_t and the get-or-create
+# in Store.open_training_window, which needs it inside its own transaction) run this
+# exact statement, so the definition of "trained up to here" cannot drift between them.
+_WATERMARK_SQL = (
+    "SELECT MAX(t_end) AS watermark FROM training_windows "
+    "WHERE user_id = ? AND outcome = ?"
+)
+
+_DEFAULT_WINDOW_DELTA_SECONDS = 60
 
 
 def db_path() -> str:
@@ -112,8 +238,74 @@ def raw_dir() -> str:
     return os.environ.get("STORAGE_RAW_DIR", str(_DEFAULT_RAW_DIR))
 
 
+def window_delta_seconds() -> int:
+    """The watermark lag ``delta`` in ``[last_trained_t, now-delta)``, default 60 s.
+
+    It exists for exactly one reason: an in-flight write racing the boundary could
+    otherwise be assigned an ``ingest_time`` below ``t_end`` yet commit *after*
+    materialization read the range. It is watermark lag, not slack — so it is service
+    config (``STORAGE_WINDOW_DELTA_SECONDS``), never a per-request knob a caller could
+    shrink to zero.
+    """
+    raw = os.environ.get("STORAGE_WINDOW_DELTA_SECONDS", "")
+    if not raw:
+        return _DEFAULT_WINDOW_DELTA_SECONDS
+    value = int(raw)
+    if value < 0:
+        raise ValueError("STORAGE_WINDOW_DELTA_SECONDS must be >= 0")
+    return value
+
+
+# Every timestamp storage mints. Second granularity, RFC3339 UTC, and — because it is
+# fixed width with a zero-padded numeric field per component — lexicographic order ==
+# chronological order, which is what lets every range clause be a plain string compare.
+_TS_FMT = "%Y-%m-%dT%H:%M:%SZ"
+
+
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(timezone.utc).strftime(_TS_FMT)
+
+
+class WindowRefused(Exception):
+    """The ledger refuses to OPEN a window; the route maps this to 409.
+
+    Two reasons, both "the user's current state forbids it" rather than "the request
+    was malformed": the user has no ingest history at all (nothing to train, so there
+    is no range to name), or the computed end is not strictly greater than every prior
+    window end for that user (which is what makes a second-granularity id collision
+    impossible by construction).
+    """
+
+    def __init__(self, detail: dict[str, Any]) -> None:
+        super().__init__(str(detail.get("error", "window refused")))
+        self.detail = detail
+
+
+class WindowOutcomeConflict(Exception):
+    """A close arrived for an already-consolidated window with a DIFFERENT outcome.
+
+    Re-closing with the SAME outcome is a retry and succeeds unchanged; re-closing with
+    a different one would rewrite history (and, if the new outcome were ``published``,
+    silently advance a watermark that a failed night deliberately left alone). 409.
+    """
+
+    def __init__(self, detail: dict[str, Any]) -> None:
+        super().__init__(str(detail.get("error", "window outcome conflict")))
+        self.detail = detail
+
+
+def _window_body(row: sqlite3.Row) -> dict[str, Any]:
+    """The ledger row as served. Storage-minted, so every field is ours."""
+    return {
+        "window_id": row["window_id"],
+        "user_id": row["user_id"],
+        "t_start": row["t_start"],
+        "t_end": row["t_end"],
+        "state": row["state"],
+        "outcome": row["outcome"],
+        "opened_at": row["opened_at"],
+        "closed_at": row["closed_at"],
+    }
 
 
 class Store:
@@ -324,7 +516,18 @@ class Store:
         """Persist a C2 processed record. Idempotent upsert on record_id (a reprocess under
         the same pipeline_version overwrites in place — no dup row). ``ingest_time`` (the
         storage-assigned audit axis) is set on first landing and preserved across reprocess.
-        Returns record_id."""
+        Returns record_id.
+
+        Also INVALIDATES any materialized day-log whose ingest range contains this
+        record's ``ingest_time``. This is not housekeeping, it is the one hole a cache over
+        an upsert has: a same-version reprocess rewrites a record's text in place while
+        deliberately NOT moving ``ingest_time``, so the record stays inside a window that
+        may already have been rendered and served. A forward-only ``pipeline_version``
+        bump does not hit this path at all (it mints a new record_id, hence a fresh
+        ``ingest_time``, hence the NEXT window) — which is exactly why the stale case is
+        easy to miss. The day-log is derived, so dropping the row is a complete fix; the
+        next fetch rebuilds it.
+        """
         record_id = record["record_id"]
         source = record.get("source") or {}
         with self._connect() as conn:
@@ -357,6 +560,14 @@ class Store:
                     source.get("device_utc_offset_minutes"),
                     json.dumps(record, ensure_ascii=False, separators=(",", ":")),
                 ),
+            )
+            landed = conn.execute(
+                "SELECT ingest_time FROM context_records WHERE record_id = ?",
+                (record_id,),
+            ).fetchone()["ingest_time"]
+            conn.execute(
+                "DELETE FROM day_logs WHERE user_id = ? AND t_start <= ? AND t_end > ?",
+                (record["user_id"], landed, landed),
             )
             conn.commit()
         return record_id
@@ -398,3 +609,374 @@ class Store:
         with self._connect() as conn:
             rows = conn.execute(sql, params).fetchall()
         return [json.loads(r["record_json"]) for r in rows]
+
+    def list_context_by_ingest(
+        self, user_id: str, from_ts: str, to_ts: str
+    ) -> list[dict[str, Any]]:
+        """C2 records for one user on the INGEST axis — training-window membership.
+
+        This is a different read from ``list_context``, not a parameterization of it, and
+        the asymmetry is deliberate rather than an oversight to be tidied away: training
+        windows are INGEST-time (the completeness axis — the only one on which "everything
+        I had" is a guarantee) while retraction ranges are EVENT-time (a deletion is about
+        a lived period). Overloading one endpoint with an axis flag would make it possible
+        to ask the wrong question by typo.
+
+        Half-open ``[from_ts, to_ts)`` on ``ingest_time``, served by
+        ``idx_context_user_ingest``. Rows come back in EVENT-time order
+        (``t_start ASC, rowid ASC``) because that is the order the renderer needs — a
+        block's caption/heard/world-text lines read chronologically — and it matches what
+        ``list_context`` hands continuum's local path today.
+
+        Each row is ``{"seq", "ingest_time", "record"}``. ``seq`` is the sqlite rowid and
+        rides along because "latest ingest_time wins" needs a tiebreak: ``ingest_time`` is
+        second-granularity, so a whole data-processing flush shares one value.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT rowid AS seq, ingest_time, record_json FROM context_records "
+                "WHERE user_id = ? AND ingest_time >= ? AND ingest_time < ? "
+                "ORDER BY t_start ASC, rowid ASC",
+                (user_id, from_ts, to_ts),
+            ).fetchall()
+        return [
+            {
+                "seq": r["seq"],
+                "ingest_time": r["ingest_time"],
+                "record": json.loads(r["record_json"]),
+            }
+            for r in rows
+        ]
+
+    # --- materialized day-logs (C10) --------------------------------------------
+
+    def get_daylog(self, user_id: str, window_id: str) -> Optional[dict[str, Any]]:
+        """The cached day-log row, or None. The CALLER decides whether it is still
+        current — it gets the whole row back, and in particular all three RENDER INPUTS
+        (``daylog_format_version``, ``recipe_id``, ``home_tz``), precisely so a format
+        bump, a recipe re-pin or a corrected profile zone re-materializes instead of being
+        served stale. ``home_tz`` is one of them because it decides the anchor line's local
+        date for every record that carries no ``device_tz``."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM day_logs WHERE user_id = ? AND window_id = ?",
+                (user_id, window_id),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def put_daylog(self, body: dict[str, Any]) -> None:
+        """Cache a materialized C10 body. Idempotent on ``(user_id, window_id)``; a
+        re-materialization REPLACES, because the day-log is derived and the newest render
+        of the same window is by definition the right one."""
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO day_logs "
+                "(user_id, window_id, t_start, t_end, daylog_format_version, recipe_id, "
+                " home_tz, content_fingerprint, materialized_at, body_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(user_id, window_id) DO UPDATE SET "
+                "  t_start=excluded.t_start, "
+                "  t_end=excluded.t_end, "
+                "  daylog_format_version=excluded.daylog_format_version, "
+                "  recipe_id=excluded.recipe_id, "
+                "  home_tz=excluded.home_tz, "
+                "  content_fingerprint=excluded.content_fingerprint, "
+                "  materialized_at=excluded.materialized_at, "
+                "  body_json=excluded.body_json",
+                (
+                    body["user_id"],
+                    body["window_id"],
+                    body["t_start"],
+                    body["t_end"],
+                    body["daylog_format_version"],
+                    body["recipe_id"],
+                    body["home_tz"],
+                    body["content_fingerprint"],
+                    _utc_now(),
+                    json.dumps(body, ensure_ascii=False, separators=(",", ":")),
+                ),
+            )
+            conn.commit()
+
+    # --- per-user profile (C12) -------------------------------------------------
+
+    def get_profile(self, user_id: str) -> Optional[dict[str, Any]]:
+        """The user's C12 profile body, or None if there is no row.
+
+        None means 404 at the surface. It does NOT mean "use a default" — there is no
+        server-side default timezone anywhere in the system (D17), so a user with no
+        profile is simply not schedulable, which is an operational alert rather than a
+        silent skip.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT user_id, home_tz, profile_version, updated_at "
+                "FROM user_profiles WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "contract": "C12",
+            "version": "0",
+            "user_id": row["user_id"],
+            "home_tz": row["home_tz"],
+            "profile_version": row["profile_version"],
+            "updated_at": row["updated_at"],
+        }
+
+    def put_profile(self, user_id: str, home_tz: str) -> dict[str, Any]:
+        """Upsert the user's profile. Returns the stored C12 body.
+
+        ``profile_version`` is bumped on EVERY write, including a write that sets the
+        same ``home_tz`` — the contract calls it a monotone counter bumped on every
+        write, and a reader that cached a fire time needs to see that policy was
+        touched, not merely that it changed value.
+
+        This is the ONLY writer of ``home_tz``. Nothing in storage calls it on its own
+        initiative: ``put_context`` records a device-reported ``device_tz`` as a per-
+        record FACT and never promotes it to per-user POLICY (corrected 2026-07-27).
+        """
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO user_profiles (user_id, home_tz, profile_version, updated_at) "
+                "VALUES (?, ?, 1, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET "
+                "  home_tz=excluded.home_tz, "
+                "  profile_version=user_profiles.profile_version + 1, "
+                "  updated_at=excluded.updated_at",
+                (user_id, home_tz, _utc_now()),
+            )
+            conn.commit()
+        body = self.get_profile(user_id)
+        assert body is not None  # we just wrote it
+        return body
+
+    # --- training-window ledger (D18, C10 evolved) ------------------------------
+
+    def last_trained_t(self, user_id: str) -> Optional[str]:
+        """The user's watermark: the end of their latest PUBLISHED window, or None.
+
+        DERIVED, not stored. That is the whole design: "``last_trained_t`` advances if
+        and only if the cycle publishes" is then true by construction — there is no
+        counter a close path could forget to leave alone, and no second row that could
+        disagree with the ledger. Gate failure, freeze, crash, no data and too-little
+        data all leave this exactly where it was, so the next window is a strict
+        SUPERSET of the failed one (the design-of-record's failed-day merge, obtained
+        structurally rather than by bookkeeping).
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                _WATERMARK_SQL, (user_id, WINDOW_ADVANCING_OUTCOME)
+            ).fetchone()
+        return row["watermark"] if row else None
+
+    def earliest_ingest_time(self, user_id: str) -> Optional[str]:
+        """The user's first-ever ingest instant — the floor of a never-trained user's
+        first window. None if they have no records at all."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT MIN(ingest_time) AS first_ingest FROM context_records "
+                "WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+        return row["first_ingest"] if row else None
+
+    def get_window(self, user_id: str, window_id: str) -> Optional[dict[str, Any]]:
+        """Random-access by ``(user_id, window_id)`` — the same addressing the day-log
+        fetch uses, and the reason both halves are always carried together: the id is a
+        per-user token, so it does not name a row on its own."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM training_windows WHERE user_id = ? AND window_id = ?",
+                (user_id, window_id),
+            ).fetchone()
+        return _window_body(row) if row else None
+
+    def get_open_window(self, user_id: str) -> Optional[dict[str, Any]]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM training_windows WHERE user_id = ? AND state = ?",
+                (user_id, WINDOW_STATE_OPEN),
+            ).fetchone()
+        return _window_body(row) if row else None
+
+    def list_windows(
+        self, user_id: str, state: Optional[str] = None
+    ) -> list[dict[str, Any]]:
+        """The user's windows, oldest first.
+
+        Ordered by ``window_id`` because that IS the chronological order — the id is
+        fixed-width and derived from the window's end instant, and window ends are
+        strictly increasing per user (enforced in ``open_training_window``). Consumers
+        rely on `<` / `>=` over these ids and on nothing else.
+        """
+        clauses = ["user_id = ?"]
+        params: list[Any] = [user_id]
+        if state is not None:
+            clauses.append("state = ?")
+            params.append(state)
+        sql = (
+            "SELECT * FROM training_windows WHERE "
+            + " AND ".join(clauses)
+            + " ORDER BY window_id ASC, rowid ASC"
+        )
+        with self._connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [_window_body(r) for r in rows]
+
+    def open_training_window(
+        self,
+        user_id: str,
+        *,
+        now: Optional[datetime] = None,
+        delta_seconds: Optional[int] = None,
+    ) -> dict[str, Any]:
+        """Idempotent get-or-create of the user's currently-open training window.
+
+        If a window is already open it is returned **unchanged** — same id, same
+        bounds, no new row. This is not a convenience: continuum's crash-safe journal
+        is keyed by ``window_id``, so a retry that recomputed ``now`` would mint a
+        fresh id, a fresh journal, and therefore a full re-train, a second C5 entry and
+        a second reservoir admission. Bounds are immutable once opened.
+
+        A new window runs ``[t_start, t_end)`` where ``t_start`` is the user's
+        ``last_trained_t`` — or, for a never-trained user, their earliest
+        ``ingest_time`` — and ``t_end`` is ``now - delta`` truncated to the second (so
+        it agrees exactly with the minted id).
+
+        Refuses (``WindowRefused``) when the user has no ingest history at all, and
+        when ``t_end`` is not strictly greater than every prior window end for this
+        user. The doc states that guard against ``last_trained_t``; this is its
+        strictly stronger form, and the strengthening is required rather than
+        defensive: a *gate-failed* window's id occupies the id namespace too, so
+        guarding only against the published watermark would let an immediate re-drive
+        mint a colliding id within the same second.
+        An injected ``now`` MUST be timezone-aware. ``mint_window_id`` states that rule and
+        refuses a naive datetime — but it is the LAST thing this method calls, and by then
+        ``.astimezone()`` has already read the naive value as the SERVER'S LOCAL ZONE and
+        handed the minter a perfectly aware (and, off UTC, wrong) instant, so the minter's
+        guard could never fire. Rejecting at the entry point is what makes the stated rule
+        true. It matters because ``t_end`` and the id minted from it move together: a host
+        running in Asia/Tokyo would otherwise mint a window nine hours early, and every
+        downstream string comparison over that id is then wrong by nine hours.
+        """
+        if now is not None and (
+            now.tzinfo is None or now.tzinfo.utcoffset(now) is None
+        ):
+            raise ValueError(
+                "open_training_window requires a timezone-aware `now`; got a naive one"
+            )
+        now_utc = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+        delta = window_delta_seconds() if delta_seconds is None else delta_seconds
+        with self._connect() as conn:
+            open_row = conn.execute(
+                "SELECT * FROM training_windows WHERE user_id = ? AND state = ?",
+                (user_id, WINDOW_STATE_OPEN),
+            ).fetchone()
+            if open_row is not None:
+                return _window_body(open_row)
+
+            watermark = conn.execute(
+                _WATERMARK_SQL, (user_id, WINDOW_ADVANCING_OUTCOME)
+            ).fetchone()["watermark"]
+            t_start = watermark
+            if t_start is None:
+                t_start = conn.execute(
+                    "SELECT MIN(ingest_time) AS first_ingest FROM context_records "
+                    "WHERE user_id = ?",
+                    (user_id,),
+                ).fetchone()["first_ingest"]
+            if t_start is None:
+                raise WindowRefused(
+                    {
+                        "error": "no ingest history",
+                        "user_id": user_id,
+                        "reason": "user has never been trained and has no /context "
+                                  "records, so there is no window start to name",
+                    }
+                )
+
+            end_dt = (now_utc - timedelta(seconds=delta)).replace(microsecond=0)
+            t_end = end_dt.strftime(_TS_FMT)
+            prior_end = conn.execute(
+                "SELECT MAX(t_end) AS prior_end FROM training_windows WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()["prior_end"]
+            floor_ts = max(t for t in (t_start, watermark, prior_end) if t is not None)
+            if t_end <= floor_ts:
+                raise WindowRefused(
+                    {
+                        "error": "window end is not strictly greater than the floor",
+                        "user_id": user_id,
+                        "t_end": t_end,
+                        "floor": floor_ts,
+                        "last_trained_t": watermark,
+                        "prior_window_end": prior_end,
+                        "reason": "a window must advance past every prior window end; "
+                                  "this is what makes an id collision impossible",
+                    }
+                )
+
+            window_id = mint_window_id(end_dt)
+            opened_at = _utc_now()
+            conn.execute(
+                "INSERT INTO training_windows "
+                "(user_id, window_id, t_start, t_end, state, outcome, opened_at, closed_at) "
+                "VALUES (?, ?, ?, ?, ?, NULL, ?, NULL)",
+                (user_id, window_id, t_start, t_end, WINDOW_STATE_OPEN, opened_at),
+            )
+            conn.commit()
+            row = conn.execute(
+                "SELECT * FROM training_windows WHERE user_id = ? AND window_id = ?",
+                (user_id, window_id),
+            ).fetchone()
+            return _window_body(row)
+
+    def close_training_window(
+        self, user_id: str, window_id: str, outcome: str
+    ) -> Optional[dict[str, Any]]:
+        """Close a window with a cycle outcome. Returns the row, or None if this user
+        has no such window (which is also what a cross-user attempt gets — isolation
+        fails closed rather than reporting that someone else's window exists).
+
+        The watermark moves — or doesn't — as a CONSEQUENCE of the recorded outcome,
+        because ``last_trained_t`` is derived from ``outcome = 'published'`` rows. There
+        is deliberately no "advance the watermark" statement here to get wrong.
+
+        Re-closing with the same outcome is a retry and returns the row unchanged;
+        re-closing with a different one raises ``WindowOutcomeConflict`` (409) rather
+        than rewriting history.
+        """
+        if outcome not in WINDOW_OUTCOMES:
+            raise ValueError(f"unknown window outcome {outcome!r}")
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM training_windows WHERE user_id = ? AND window_id = ?",
+                (user_id, window_id),
+            ).fetchone()
+            if row is None:
+                return None
+            if row["state"] == WINDOW_STATE_CONSOLIDATED:
+                if row["outcome"] == outcome:
+                    return _window_body(row)  # idempotent retry
+                raise WindowOutcomeConflict(
+                    {
+                        "error": "window already consolidated with a different outcome",
+                        "user_id": user_id,
+                        "window_id": window_id,
+                        "recorded_outcome": row["outcome"],
+                        "requested_outcome": outcome,
+                    }
+                )
+            conn.execute(
+                "UPDATE training_windows SET state = ?, outcome = ?, closed_at = ? "
+                "WHERE user_id = ? AND window_id = ?",
+                (WINDOW_STATE_CONSOLIDATED, outcome, _utc_now(), user_id, window_id),
+            )
+            conn.commit()
+            closed = conn.execute(
+                "SELECT * FROM training_windows WHERE user_id = ? AND window_id = ?",
+                (user_id, window_id),
+            ).fetchone()
+        return _window_body(closed)

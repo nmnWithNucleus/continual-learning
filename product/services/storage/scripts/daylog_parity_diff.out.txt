@@ -1,0 +1,156 @@
+day-log differential proof — storage CHARTER M9 (bar NARROWED 2026-07-27, D20;
+extended to a MISALIGNED window origin 2026-07-27, F4)
+======================================================================================
+  left   continuum/LocalDayLogClient
+  right  storage/materialize_daylog
+  fixture              27 C2 records, one user, one window
+  window_id            w20260722T030000Z
+  storage window       [2026-07-22T02:00:00Z, 2026-07-22T03:00:00Z)  on ingest_time
+  continuum window     [2026-07-21T04:00:00Z, 2026-07-22T04:00:00Z)  on event t_start   <- grid-aligned
+  continuum window     [2026-07-21T04:00:03Z, 2026-07-22T04:00:03Z)  on event t_start   <- misaligned
+  segmentation         segment_seconds=10 block_segments=12 recipe_id=consolidation-v1.1
+  home_tz              America/New_York
+  storage rendered     24 segments, 5 blocks
+
+PRECONDITIONS (fixture-level) — the divergences this proof neutralises
+----------------------------------------------------------------------
+  P3 and P6 are ORIGIN-dependent and appear once per origin, below.
+  [PASS] P1  every fixture record is schema-valid C2
+  [PASS] P2  N1 neutralised: both paths saw the SAME records in the SAME order (27 records)
+  [PASS] P4  N3 neutralised: every fixture record is its own dialect (27 distinct keys)
+  [PASS] P5  storage's body validates against contracts/c10_daylog.v1.json
+
+THE BAR, RUN OVER EVERY ORIGIN
+------------------------------
+  Everything the trainer and the amplifier can SEE. ARCHITECTURE §Ownership
+  splits, 'Day-log: representation vs. content': block text + anchors are
+  CONTRACT, not storage's to move; a difference here changes what the model
+  learns, silently and with no error.
+  Where BLOCK ORDERING is proven, precisely: A2/A4/A5/A7 compare the per-block
+  and per-segment lists POSITIONALLY, so they are order-sensitive — reordering
+  two blocks fails them. A3 pins the ordering LABELS, which is a weaker claim on
+  its own (both renderers number blocks from 0, so equal counts alone make the
+  label sequences match) and is not asked to carry the ordering proof.
+  Tier B's positional pairing (k-th left <-> k-th right) is NOT an assumption:
+  A6 + A7 already proved the k-th segments are the same segment, same bounds and
+  same content.
+
+ORIGIN [grid-aligned] — continuum's event window [2026-07-21T04:00:00Z, 2026-07-22T04:00:00Z)
+---------------------------------------------------------------------------------------------
+  the pre-F4 origin: on the segment grid, where a window-relative grid and the global grid are the same partition of the timeline
+  rendered  24 vs 24 segments, 5 vs 5 blocks
+  [PASS] P3  [grid-aligned] the origin is ON the 10s segment grid, which is what this case exists to cover
+  [PASS] P6  [grid-aligned] the render is NON-VACUOUS — both sides produced the pinned fixture's 24 segments and 5 blocks, every block with non-empty text (an empty render passes every comparison below)
+
+  TIER A [grid-aligned] — BYTE-IDENTICAL, NON-NEGOTIABLE (M9(a))
+  [PASS] A1  [grid-aligned] block count
+  [PASS] A2  [grid-aligned] block text, byte-for-byte (UTF-8)
+  [PASS] A3  [grid-aligned] block_id sequence — the ordering labels (values, in order)
+  [PASS] A4  [grid-aligned] block anchors
+  [PASS] A5  [grid-aligned] block quality
+  [PASS] A6  [grid-aligned] segment count
+  [PASS] A7  [grid-aligned] segment payloads — bounds, caption/asr/ocr, tz, quality (seg_id excluded: tier B)
+
+  TIER B [grid-aligned] — PROVEN-EQUIVALENT (M9(b): the seg_id relabelling is an order-preserving bijection with per-block membership preserved)
+  [PASS] B1  [grid-aligned] seg_id is unique within each render (a bijection needs it on both sides)
+  [PASS] B2  [grid-aligned] the relabelling is a BIJECTION — 24 left ids -> 24 distinct right ids, total and injective both ways
+  [PASS] B3  [grid-aligned] the bijection is ORDER-PRESERVING — both renders emit seg_ids in strictly ascending order, so the k-th -> k-th map preserves '<'
+  [PASS] B4  [grid-aligned] PER-BLOCK MEMBERSHIP is preserved — mapping every left block's seg_ids through the bijection reproduces the right block's, exactly and in order
+
+ORIGIN [misaligned] — continuum's event window [2026-07-21T04:00:03Z, 2026-07-22T04:00:03Z)
+-------------------------------------------------------------------------------------------
+  what a REAL window looks like: [watermark, now-delta) at second granularity, so nine origins in ten are off the segment grid
+  rendered  24 vs 24 segments, 5 vs 5 blocks
+  [PASS] P3  [misaligned] the origin is OFF the 10s segment grid, which is what this case exists to cover
+  [PASS] P6  [misaligned] the render is NON-VACUOUS — both sides produced the pinned fixture's 24 segments and 5 blocks, every block with non-empty text (an empty render passes every comparison below)
+
+  TIER A [misaligned] — BYTE-IDENTICAL, NON-NEGOTIABLE (M9(a))
+  [PASS] A1  [misaligned] block count
+  [PASS] A2  [misaligned] block text, byte-for-byte (UTF-8)
+  [PASS] A3  [misaligned] block_id sequence — the ordering labels (values, in order)
+  [PASS] A4  [misaligned] block anchors
+  [PASS] A5  [misaligned] block quality
+  [PASS] A6  [misaligned] segment count
+  [PASS] A7  [misaligned] segment payloads — bounds, caption/asr/ocr, tz, quality (seg_id excluded: tier B)
+
+  TIER B [misaligned] — PROVEN-EQUIVALENT (M9(b): the seg_id relabelling is an order-preserving bijection with per-block membership preserved)
+  [PASS] B1  [misaligned] seg_id is unique within each render (a bijection needs it on both sides)
+  [PASS] B2  [misaligned] the relabelling is a BIJECTION — 24 left ids -> 24 distinct right ids, total and injective both ways
+  [PASS] B3  [misaligned] the bijection is ORDER-PRESERVING — both renders emit seg_ids in strictly ascending order, so the k-th -> k-th map preserves '<'
+  [PASS] B4  [misaligned] PER-BLOCK MEMBERSHIP is preserved — mapping every left block's seg_ids through the bijection reproduces the right block's, exactly and in order
+
+A8 — ORIGIN-INDEPENDENCE (the invariant the two cases above exist to state)
+---------------------------------------------------------------------------
+  Both renderers bucket on the GLOBAL epoch grid, so the window origin is not
+  an input to the render at all. Stated directly rather than only implied by
+  the per-origin tiers, so that a reader can see the claim and a regression
+  names it. Reverting continuum to a window-relative grid fails this check by
+  construction, whatever else it might fail.
+  [PASS] A8  continuum's render is ORIGIN-INDEPENDENT — the 2 origins above produce byte-identical segments and blocks
+
+TIER C — EXCLUDED DELIBERATELY, ASSERTED NOWHERE (M9(c): content_fingerprint)
+-----------------------------------------------------------------------------
+  continuum/LocalDayLogClient:
+    6b3e25554f3ea31335613282cf4bf250081725e75f43b4878e9fbfe7e29c935b
+  storage/materialize_daylog:
+    6b3e25554f3ea31335613282cf4bf250081725e75f43b4878e9fbfe7e29c935b
+  equal: True   <- INFORMATION ONLY. No check above or below reads this line.
+  It hashes seg_id (daylog.py daylog_fingerprint hashes the segment rows whole),
+  and it is a CACHE KEY compared only to ITSELF across runs — the journal stage
+  key. It SHOULD change when the renderer changes; forcing it to match would make
+  the cache lie. It changes once at cutover, that night re-materializes, and that
+  is correct behaviour, not a defect. Equal on THIS fixture is not a promise that
+  it is equal in production: there the two paths select records on different axes
+  (N1), so they legitimately hash different day-logs.
+
+EXPECTED DIVERGENCE, EXPLAINED — the demoted D5/D6/D9 dimensions (INFORMATIONAL)
+--------------------------------------------------------------------------------
+  These three were M9's bar as FIRST written, and this script FAILED them on
+  2026-07-27. D20 narrowed the bar rather than the code: D5/D6 became tier B's
+  four structural checks above and D9 became tier C. Their raw output is kept
+  here verbatim — a bar that stops PRINTING what differs is a bar that has
+  quietly stopped looking. Nothing in this section affects the verdict.
+
+  (was D5) seg_id sequence:
+      (identical in this run — no divergence to show)
+
+  (was D6) per-block seg_ids membership — a pure CONSEQUENCE of D5; tier B's B4
+  is the same comparison with the relabelling applied first:
+      (identical in this run — no divergence to show)
+
+  (was D9) content_fingerprint — see tier C above for both values and for why it
+  is excluded rather than merely tolerated.
+
+  CHARACTERISATION — seg_ids are IDENTICAL in this run, and that is the F4
+  fix's doing, so read it precisely rather than as 'D20 was wrong'.
+
+  D20's argument still stands, unchanged: storage CANNOT reproduce a
+  window-relative seg_id. Its window bounds are on the INGEST axis, where a
+  backlog record yields a NEGATIVE window-relative index, and the global
+  epoch index is nine digits and voids the fixed {:05d} width. The labelling
+  could therefore only ever converge in ONE direction — and in F4 it did:
+  continuum's LOCAL renderer, which is the parity REFERENCE and not the
+  research-golden one, adopted storage's grid (the defect fix) and, with it,
+  storage's ordinal labelling (the consequence: once buckets are global,
+  labelling by bucket index means nine-digit ids).
+
+  WHAT THAT COSTS, said plainly: tier B no longer MEASURES a relabelling on
+  this fixture, because there is none left to measure. Its four checks still
+  BIND — a segment dropped, duplicated, reordered or moved between blocks by
+  either renderer still fails B1/B2/B3/B4 — but they no longer demonstrate
+  that a DIFFERENCE in labels is harmless. Identity is the strongest form of
+  tier B's property and the weakest evidence for it, both at once.
+
+VERDICT
+-------
+  PASS — all 31 binding checks hold (8 preconditions, 15 tier A byte-identical, 8 tier B proven-equivalent), over 2 window origins: grid-aligned, misaligned.
+  Tier A is byte-identical: the block text, ordering, block_ids, anchors,
+  quality and segment payloads storage renders ARE continuum's, to the byte —
+  and now for a window origin OFF the segment grid, which is what every
+  window storage actually mints has (A8 states the invariant directly).
+  Tier B is proven, not assumed: the seg_id relabelling is an order-preserving
+  bijection with per-block membership preserved, so nothing that reads a
+  day-log can tell the two renderers apart.
+  Tier C (content_fingerprint) is excluded by M9(c); both values are printed
+  above rather than hidden, and nothing asserts on them.
+  M9's narrowed exit bar is met for this window.

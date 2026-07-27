@@ -24,6 +24,24 @@ C2_ID = "https://nucleus.ai/contracts/c2_processed_record.v0.json"
 C3_ID = "https://nucleus.ai/contracts/c3_userprompt.v0.json"
 C4_ID = "https://nucleus.ai/contracts/c4_turn_record.v0.json"
 C6_ID = "https://nucleus.ai/contracts/c6_resolve.v0.json"
+# C10 is v1, not v0: it EVOLVED in place (D18) from a raw C2 range read into the day-log
+# fetch, keeping its number because its direction and peers are unchanged.
+#
+# C10 is TWO schemas for the same reason C13 is: a contract is a family of OPERATIONS,
+# and the day-log body and the training-window ledger row are different bodies on
+# different endpoints. One file could only carry both behind a `oneOf` that hides exactly
+# the distinction the contract is about, and `c10_daylog.v1.json`'s $id names the day-log
+# specifically — a consumer validating "a C10 day-log" against a root that had quietly
+# become a union would be checking nothing.
+C10_ID = "https://nucleus.ai/contracts/c10_daylog.v1.json"
+C10_WINDOW_ID = "https://nucleus.ai/contracts/c10_training_window.v1.json"
+C12_ID = "https://nucleus.ai/contracts/c12_user_profile.v0.json"
+# C13 is TWO schemas, not one, and that is the contract rather than a filing choice: the
+# training recipe and the gate policy are separate artifacts with separate ids and separate
+# lifecycles, because only `recipe_id` may enter a cycle stage key.
+C13_RECIPE_ID = "https://nucleus.ai/contracts/c13_recipe.v0.json"
+C13_POLICY_ID = "https://nucleus.ai/contracts/c13_gate_policy.v0.json"
+C14_ID = "https://nucleus.ai/contracts/c14_reservoir_ledger.v0.json"
 
 
 def contracts_dir() -> Path:
@@ -73,3 +91,72 @@ def validate_c4(payload: Any) -> list[dict[str, str]]:
 
 def validate_c6(payload: Any) -> list[dict[str, str]]:
     return errors(C6_ID, payload)
+
+
+def validate_c10(payload: Any) -> list[dict[str, str]]:
+    """C10 day-log fetch (v1). Storage PRODUCES this one, so it is a self-check on the
+    read path (the same shape ``/model-directory/resolve`` applies to C6): a violation is
+    a 500, not a 422 — nobody sent us a bad request, we rendered a bad body."""
+    return errors(C10_ID, payload)
+
+
+def validate_c10_window(payload: Any) -> list[dict[str, str]]:
+    """C10 training-window ledger ROW (v1) — the body of the open, the close, and every
+    element of the enumeration.
+
+    Storage mints every field of it, so this is a read-path self-check with the same
+    posture as ``validate_c10``: a violation is a 500, not a 422.
+
+    It is a STRICTLY STRONGER gate than the ``TrainingWindow`` pydantic mirror, and that
+    is the reason it exists rather than being redundant with it. The mirror can say
+    ``state: Literal["open","consolidated"]`` and ``outcome: WindowOutcome | None``, but it
+    cannot say that the two AGREE — a consolidated row carrying a null outcome sails
+    through the model and is a night whose training status is unanswerable, because
+    ``last_trained_t`` is derived by selecting rows whose outcome is ``published``. The
+    schema's ``allOf``/``if`` pair is where that invariant lives.
+
+    ``GET /training/windows`` returns a bare JSON array with no envelope, so callers
+    validate it ELEMENT-WISE against this schema; there is deliberately no list wrapper
+    contract, because an envelope stamped on every row would put it in the wrong place.
+    """
+    return errors(C10_WINDOW_ID, payload)
+
+
+def validate_c12(payload: Any) -> list[dict[str, str]]:
+    """C12 user profile.
+
+    NOTE what this does NOT check: ``home_tz``'s pattern is a cheap SHAPE gate (it
+    structurally excludes abbreviations like ``PST`` by requiring a region/city form)
+    and it happily admits ids that do not exist, e.g. ``Not/AZone``. Only tzdata
+    resolution — ``zoneinfo.ZoneInfo(value)`` — can say whether a zone is real, and the
+    write path MUST perform it. Likewise ``format: date-time`` is decorative here: the
+    validator is built without a ``format_checker``, as it is for every other contract
+    in this service.
+    """
+    return errors(C12_ID, payload)
+
+
+def validate_c13_recipe(payload: Any) -> list[dict[str, str]]:
+    """C13 training recipe. Storage SERVES this one verbatim off disk, so it is a
+    self-check on the read path: a violation means an operator filed a malformed artifact,
+    which is a 500 (our registry's contents are wrong) rather than a 422.
+
+    NOTE what these two C13 schemas do differently from every other contract here: they
+    ALLOW additional properties. Recipe and policy artifacts carry human provenance prose
+    (``source``, ``note``, ``traps_note``) and a registry that rejected a recipe for
+    documenting itself would push that documentation out of the artifact. A mistyped knob
+    is still caught, because every knob that matters is ``required``.
+    """
+    return errors(C13_RECIPE_ID, payload)
+
+
+def validate_c13_policy(payload: Any) -> list[dict[str, str]]:
+    """C13 gate policy — a SEPARATE artifact from the recipe, with its own id and its own
+    schema. Same self-check posture as ``validate_c13_recipe``."""
+    return errors(C13_POLICY_ID, payload)
+
+
+def validate_c14(payload: Any) -> list[dict[str, str]]:
+    """C14 reservoir ledger. Storage PRODUCES this body, so it is another read-path
+    self-check (500 on violation)."""
+    return errors(C14_ID, payload)
