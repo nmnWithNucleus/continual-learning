@@ -102,8 +102,24 @@ class _UserState:
         fsio.atomic_write_json(self.path, self.data)
 
     def strike(self, window_id: str, freeze_at: int) -> None:
-        if window_id not in self.data["debt"]:
-            self.data["debt"].append(window_id)
+        """Count ONE failure per window, however many times it is re-consolidated.
+
+        `debt` is the set of windows currently owed a successful consolidation, so
+        membership in it is exactly "this window has already struck". Using it as
+        the idempotency guard is what makes the window-monotonic claim above TRUE
+        rather than aspirational: the journal's terminal key hangs off the day-log
+        content fingerprint, so any legitimate re-materialization (an operator
+        correcting `home_tz` is the realistic one) sails past the guard and reaches
+        here a second time. Measured before this fix, with the shipped
+        `consecutive_fail_freeze: 2`: one window struck twice and FROZE the user.
+
+        A window that fails, later passes, then fails again strikes twice — and
+        should: `record_pass` clears it from `debt`, so those are two genuine
+        failures rather than one counted twice."""
+        if window_id in self.data["debt"]:
+            self.save()
+            return
+        self.data["debt"].append(window_id)
         if window_id >= self.data.get("latest_window", ""):
             self.data["consecutive_failures"] += 1
             self.data["latest_window"] = window_id

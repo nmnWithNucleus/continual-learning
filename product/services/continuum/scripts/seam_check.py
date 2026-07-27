@@ -1092,8 +1092,19 @@ def step7(st: Storage, win: Any, result: Any) -> None:
             outcomes == {win.window_id: "published", w2.window_id: "gate_failed"},
             f"{outcomes}")
     prior = ledger.prior_windows(USER_OK, w3.window_id, tz=HOME_TZ)
-    R.check("prior_windows(W3) is the replay input — both, strictly before W3",
-            [w.window_id for w in prior] == [win.window_id, w2.window_id],
+    # This assertion USED to expect both windows, and in doing so it encoded the H2
+    # defect as correct behaviour: it was green while the replay pool silently
+    # included nights that never entered the adapter. Replay is ANTI-FORGETTING, so
+    # only a PUBLISHED night can be rehearsed — W2 gate-failed, so its material was
+    # never trained and has nothing to be forgotten. Worse, because a failed window
+    # does not advance the watermark, W2's records are already back in W3 as
+    # tonight's FRESH corpus; rehearsing them too spent measured 50% of the budget
+    # re-teaching text the night was learning anyway.
+    R.check("prior_windows(W3) is the replay input — PUBLISHED nights only",
+            [w.window_id for w in prior] == [win.window_id],
+            f"{[w.window_id for w in prior]}")
+    R.check("...so the gate-failed W2 is EXCLUDED, not merely ordered after",
+            all(w.window_id != w2.window_id for w in prior),
             f"{[w.window_id for w in prior]}")
 
     # Leave nothing open, so the ledger we tear down is not mid-flight.

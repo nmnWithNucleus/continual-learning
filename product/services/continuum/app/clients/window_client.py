@@ -95,7 +95,9 @@ class WindowLedger(Protocol):
 
     def prior_windows(self, user_id: str, before_window: str, *,
                       tz: str) -> list[Window]:
-        """Consolidated windows strictly before `before_window` — replay's input."""
+        """**Published** windows strictly before `before_window` — replay's input.
+        Published, not merely consolidated: replay is anti-forgetting, so a night
+        that never entered the adapter has nothing to be forgotten."""
 
     def close(self, win: Window, outcome: str) -> Window:
         """Record the night's outcome; advances the watermark iff `published`."""
@@ -152,13 +154,31 @@ class HttpWindowLedger:
 
     def prior_windows(self, user_id: str, before_window: str, *,
                       tz: str) -> list[Window]:
-        """The windows replay may re-read: consolidated, strictly before this one.
+        """The windows replay may re-read: **PUBLISHED**, strictly before this one.
+
+        The `outcome == "published"` filter is load-bearing, not defensive. Replay
+        is ANTI-FORGETTING: it re-teaches material the adapter already learned, so
+        it can only ever mean *published* nights. A gate-failed or crashed window
+        was never trained into the adapter, so it has nothing to be forgotten —
+        rehearsing it is definitionally wrong for the mechanism, and because the
+        budget is fixed it also DISPLACES genuinely-old material one-for-one.
+
+        It compounds with the watermark's superset rule: a failed window does not
+        advance `last_trained_t`, so its records are re-trained as tonight's FRESH
+        corpus. Without this filter its day-log would be a rehearsal source at the
+        same time — measured at 50% of the replay budget spent re-teaching text
+        already in tonight's corpus.
+
+        This was the pre-cutover behaviour and it was lost by accident: the pool
+        used to come from `reservoir.entries()`, and `reservoir.admit()` is only
+        reached inside the gate-PASSED branch, so "published only" was implicit in
+        the source. Substituting the ledger made the filter explicit work.
 
         `<` on the opaque id is the ONLY operation performed on it — the same
         comparison the reservoir's `before_window` filter and publish's alias
         guard make, and the reason the id is fixed-width and zero-padded."""
         windows = [w for w in self.enumerate(user_id, tz=tz, state="consolidated")
-                   if w.window_id < before_window]
+                   if w.window_id < before_window and w.outcome == "published"]
         return sorted(windows, key=lambda w: w.window_id)
 
     def close(self, win: Window, outcome: str) -> Window:

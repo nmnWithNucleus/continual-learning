@@ -95,12 +95,41 @@ class ModelDirectory:
     def publish(self, *, user_id: str, adapter_version: str, adapter_dir: str,
                 base_model_hash: str, training_window: str, recipe_id: str,
                 eval_report: dict, snapshot_retention: int) -> PublishResult:
+        """Append a C5 activation. IDEMPOTENT, and at most ONE live activation
+        per `training_window`.
+
+        Both properties are load-bearing rather than tidy. `run_cycle`'s publish
+        tail is a sequence of side effects — this call, the strike/pass counter,
+        the reservoir admission — and only then the journal's terminal record.
+        Anything failing in that gap keeps the side effects and loses the record,
+        so the retry re-enters here. Appending unconditionally then meant TWO
+        `active` rows for one window, `_active_stack` two deep, and — the part
+        that actually hurts — `rollback()` flipping the alias to the SAME adapter
+        version, silently disabling the one safety net a bad adapter has
+        (CHARTER M2: "rollback restores the prior version in one command").
+
+        So: re-publishing the SAME (training_window, adapter_version) is a no-op
+        that re-asserts the alias; publishing a DIFFERENT adapter for a window
+        that already has a live activation SUPERSEDES it — the prior entry is
+        rolled back first, which is the honest record (it is no longer the
+        activation for that window) and keeps the stack one deep. The realistic
+        source of a different version for one window is a re-materialized day-log,
+        e.g. after an operator corrects `home_tz`."""
+        entries_path = self._entries_path(user_id)
+        stack = _active_stack(self.entries(user_id))
+        live = [e for e in stack if (e.get("training_window") or "") == training_window]
+        if any(e.get("adapter_version") == adapter_version for e in live):
+            # Already published, by an earlier attempt at this same night.
+            self._reassert_alias(user_id, adapter_version, adapter_dir, training_window)
+            self._prune_snapshots(user_id, snapshot_retention)
+            return PublishResult(adapter_version, "active", str(entries_path))
+        for stale in reversed(live):
+            fsio.append_jsonl(entries_path, {**stale, "status": "rolled_back"})
         entry = {"contract": "C5", "user_id": user_id,
                  "adapter_version": adapter_version, "adapter_dir": adapter_dir,
                  "base_model_hash": base_model_hash,
                  "training_window": training_window, "recipe_id": recipe_id,
                  "eval_report": eval_report, "status": "active"}
-        entries_path = self._entries_path(user_id)
         fsio.append_jsonl(entries_path, entry)
         current = self.active(user_id)
         if current is None or (current.get("training_window") or "") <= training_window:
@@ -109,6 +138,16 @@ class ModelDirectory:
                                        "training_window": training_window})
         self._prune_snapshots(user_id, snapshot_retention)
         return PublishResult(adapter_version, "active", str(entries_path))
+
+    def _reassert_alias(self, user_id: str, adapter_version: str,
+                        adapter_dir: str, training_window: str) -> None:
+        """Point the alias at this activation unless a LATER window already holds
+        it — the same never-move-backward rule `publish` applies."""
+        current = self.active(user_id)
+        if current is None or (current.get("training_window") or "") <= training_window:
+            self._set_active(user_id, {"adapter_version": adapter_version,
+                                       "adapter_dir": adapter_dir,
+                                       "training_window": training_window})
 
     def record_gate_failure(self, *, user_id: str, adapter_version: str,
                             training_window: str, recipe_id: str,

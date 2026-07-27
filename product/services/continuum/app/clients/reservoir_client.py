@@ -36,6 +36,10 @@ audit/provenance rather than the replay hot path.
 """
 from __future__ import annotations
 
+import logging
+
+import httpx
+
 from pathlib import Path
 from typing import Protocol
 
@@ -45,6 +49,8 @@ from ..window import Window
 from ._http import request_json
 from .daylog_client import DayLogClient
 
+
+log = logging.getLogger(__name__)
 
 class ReservoirClient(Protocol):
     def admit(self, user_id: str, window_id: str, recipe_id: str,
@@ -123,10 +129,39 @@ class HttpReservoirClient:
 
     def admit(self, user_id: str, window_id: str, recipe_id: str,
               corpus_text: str) -> ReservoirEntry:
-        _, body = request_json(
-            "POST", f"{self.storage_url}/reservoir/{user_id}/{window_id}",
-            json_body={"recipe_id": recipe_id, "corpus_text": corpus_text},
-            timeout=self.timeout, transport=self.transport)
+        """Admit this night's corpus. A CONFLICT is not fatal — the existing entry
+        stands and the night proceeds.
+
+        C14 is append-only by charter, so re-admitting a window with a DIFFERENT
+        corpus is a 409. That is the right answer for the reservoir and the wrong
+        answer for the cycle: the publish tail reaches admission after the adapter
+        is already published, so a hard failure here strands the night short of its
+        terminal journal record — and since the conflict is permanent, every retry
+        fails at the same point while appending more C5 rows. Measured before this
+        fix: three `active` rows for one window and a night that could never
+        complete, recoverable only by deleting a reservoir entry, which the charter
+        defines as a deliberate privacy act rather than an operation.
+
+        The corpus differing means the night was re-materialized (an operator
+        correcting `home_tz` re-renders the day-log). Append-only says the FIRST
+        admission stands; the audit trail is intact either way, and provenance must
+        never be the thing that blocks consolidation."""
+        try:
+            _, body = request_json(
+                "POST", f"{self.storage_url}/reservoir/{user_id}/{window_id}",
+                json_body={"recipe_id": recipe_id, "corpus_text": corpus_text},
+                timeout=self.timeout, transport=self.transport)
+        except httpx.HTTPStatusError as exc:
+            if exc.response is None or exc.response.status_code != 409:
+                raise
+            existing = [e for e in self.entries(user_id) if e.window_id == window_id]
+            if not existing:
+                raise
+            log.warning(
+                "reservoir already holds a corpus for (%s, %s) with different "
+                "content — the first admission stands (C14 is append-only) and the "
+                "night proceeds; this window was re-materialized", user_id, window_id)
+            return existing[0]
         return self._entry(body)
 
     def entries(self, user_id: str, *,
