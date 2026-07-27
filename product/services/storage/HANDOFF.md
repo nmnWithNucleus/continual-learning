@@ -108,9 +108,18 @@
 **Cutover act — WIPE, DO NOT MIGRATE (D19).** Everything captured so far is experiment output, not
 user data, so the D18 `window_id` reformat costs nothing: there is no mixed-format ordering to
 defend, no seed discontinuity to reconcile, and the two `w-day5` C5 rows disappear rather than
-needing a rule. To be cleared at cutover: continuum's `var_dir` (`journal/`, `cycles/`, `adapters/`,
-`reservoir/`, `model_directory/`) and node-7's learn-fleet DBs (`context_records`, `segments`,
-`raw_blobs`). Lineage restarts from base. **Back up first anyway** — D17's precedent used SQLite's
+needing a rule. **Scope corrected 2026-07-27 after measuring it — the original wording would have destroyed
+research evidence for zero benefit.** The wipe was specified as "continuum's `var_dir`
+(`journal/`, `cycles/`, `adapters/`, `reservoir/`, `model_directory/`) plus the fleet DBs". Measured
+on the box: **none of those five directories exists anywhere** — there is no old-format cycle state
+to clear, so the continuum half is a **no-op**. What `continuum/var/` actually holds is **66 GB of
+research output** (`diag` 49 G, `phase3` 14 G, `parity` 4 G, `slurm` 217 M) — the evidence behind the
+Phase-1/2/3 parity proofs. **Do not delete it.** The wipe is therefore only the three fleet SQLite
+DBs: storage `dev.db` (128 `context_records`, 71 `raw_blobs`), recording `ledger.db` (68 chunks,
+40 segments, 19 streams, 12 sessions), DP `dp.db`. Note this is **cleanliness, not correctness** —
+storage's migrations are additive, so the old records survive the new code fine; the reason to clear
+them is that they predate `device_tz`/`home_tz` and would sit in a fresh store as permanently
+zone-less rows. **Back up first anyway** — D17's precedent used SQLite's
 online-backup API into `/home/ubuntu/nmn/backups/`, which costs seconds and has already paid for
 itself once. **Consequence to expect, not to debug:** the first post-wipe run needs `home_tz` set
 explicitly for the user (D19 removed auto-seed — `home_tz` is declared, not inferred), and until it
