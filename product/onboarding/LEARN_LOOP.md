@@ -945,6 +945,21 @@ The handful of choices to internalize to reason about this system. Each: decisio
 
 ---
 
+### Coverage limits of the verification passes
+
+Stated so breadth is not mistaken for completeness. Carried over from the review file that tracked
+it (now closed and removed, its findings folded into the docs they belonged to):
+
+- Phase-3 and parity **statistics** are traced to their reports, not recomputed here.
+- `ws-video-clip.md` is 2,513 lines; the ~15 claims this doc draws from it were verified, not the
+  whole document.
+- **Real capture, GPU and fleet state:** partially exercised. The D17 session restarted the node-7
+  learn fleet and drove a real `--smoke` capture; the 2026-07-27 cutover re-ran that on a wiped
+  store through faster-whisper to a published nightly. **GPU training and real client capture (phone
+  / extension on hardware) remain unexercised** — `TRAINER_BACKEND=mock` throughout.
+- Read but not line-audited: input/output/inference charters, the extension and phone clients,
+  `stagegraph/executor.py` internals (SlotView, permit-at-dispatch).
+
 ## 8. Doc discrepancies found (code wins)
 
 Verified 2026-07-25; re-verified against code in a second independent pass 2026-07-26. None are
@@ -955,8 +970,9 @@ as live defects: item 4 (timezone → D17), item 3 (C5's field list → review i
 error).**
 
 **CLOSED 2026-07-27 — every remaining item in this section is now resolved, and the review that
-tracked them is closed too** ([REVIEW_NOTES.md](REVIEW_NOTES.md): O-1 → D17, O-2/3/4 → 07-26,
-O-5…O-11 → 07-27). The C10/`window_for` items are superseded by the D18 build; the C2 discriminator
+tracked them is closed too** (O-1 → D17 · O-2/3/4 → 2026-07-26 · O-5…O-11 → 2026-07-27; the
+review file that tracked them was folded into the docs it explained and deleted, per
+[ORG.md](../ORG.md) §Keeping documents true, rule 5). The C10/`window_for` items are superseded by the D18 build; the C2 discriminator
 prose item (O-4) was the schema being right and the summary lagging it, and the field is now
 *emitted* as well as hashed. This section is retained as a **decision record**, not a live defect
 list — a future pass appends rather than reopens.

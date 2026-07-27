@@ -57,6 +57,41 @@ contracts before fan-out, the contract-edit order, documents as the org chart �
 "prototype" is never a reason to leave a decision unrecorded or to call a thing BUILT when it is
 DECIDED. Full posture: [ARCHITECTURE.md](ARCHITECTURE.md) §Stage.
 
+## Keeping documents true (learned the hard way, 2026-07-25 → 07-27)
+
+Documents drifting from code is not a hygiene problem here; it is the **leading indicator of real
+defects**. Across the D18 slice every serious bug — a day-log stamping a recipe whose knobs it never
+used, a shipped default that silently trained on nothing, a `rollback()` that had quietly stopped
+working — presented first as a document disagreeing with the code or with another document. **None
+was caught by a test.** Twice a *test harness* was green while asserting the defect as correct
+behaviour. So:
+
+**1. Sort a doc defect by SHAPE before deciding ceremony.** Three shapes recur, and they need
+wildly different responses:
+
+| Shape | What it means | Ceremony |
+|---|---|---|
+| **Incomplete description** | one truth, written down only partially | fill it in everywhere; no D-number |
+| **Intent/build gap** | two true statements about *different things* — the standing intent vs what v0 built | state both and name the gap; no D-number. The defect is asserting the intent in the voice of the build |
+| **Prose lagging its own authoritative artifact** | the schema/code was already right; only the summary lagged | fix the prose; explicitly **not** a contract change |
+
+**2. Inventory with a repo-wide grep, not by memory.** A "fixed in three places" item turned out to
+be in five — and the two missed sites included the strongest as-though-built claim in the repo
+(`VISION.md`'s *"v0 mechanism (locked)"*). `grep -rn "<claim>" --include=*.md` costs seconds.
+
+**3. A number belongs in exactly one *current* place.** Status boards carry current figures; dated
+entries keep their contemporaneous ones. Rewriting a dated entry to match today destroys the record
+rather than reconciling it.
+
+**4. State a claim's status in the row that makes it.** "DECIDED" and "BUILT" are different words
+and the [ARCHITECTURE.md](ARCHITECTURE.md) §Stage banner forbids trading one for the other. When
+something ships, annotate the original decision with its build date — do not rewrite what was
+decided.
+
+**5. When a review closes, fold its findings into the docs they belong to and delete the review
+file.** A standing notes file holding reasoning that explains a charter is exactly the parallel copy
+the protocol below forbids — and it will drift from the thing it explains.
+
 ## Documentation protocol
 
 **Two files per node, one format.** Every node in the org (product root, each service, each

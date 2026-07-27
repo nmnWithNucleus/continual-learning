@@ -1076,7 +1076,7 @@ Considered and passed, on the record so we don't re-litigate:
   into `/context`; a C12 profile set and a missing one 404'd; a nightly to **published** over HTTP;
   the watermark advancing **only** on `published`; **exactly one** active C5 row.
 
-  **Doc close-out:** all eleven REVIEW_NOTES items are closed (O-1 → D17, O-2/3/4 → 07-26,
+  **Doc close-out:** all eleven accuracy-review items are closed (O-1 → D17, O-2/3/4 → 07-26,
   O-5…O-11 → today), storage OQ7 resolved, OQ9 re-scoped now that `day_logs` is a real table, and
   **two false claims of my own retracted** — D19's "the min-data-floor mechanism exists" (it appears
   nowhere in the repo) and the parity PASS I reported before it covered a misaligned origin. Both
