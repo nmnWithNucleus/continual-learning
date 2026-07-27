@@ -4,7 +4,7 @@
 > Read [CHARTER.md](CHARTER.md) first (mission/scope/interfaces), then this file — the
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
-**Status:** serve-loop MVP (v0.0) built + tested + **integrated E2E** (integrator ran the live loop 2026-07-09: C4 written by inference, re-read by `turn_id` + `session_id`; C6 resolved base). **Learn-loop capture M0: `/raw` blob leg (C1) + `/context` store (C2) built + tested (26 pass) + integrated E2E + independently verified 2026-07-09** (blob-first + push loop live; idempotency proven on both legs); unchanged through the 2026-07-10 DP modality-seam pass (still 26 tests) · **Last updated:** 2026-07-18 (post-return doc sync)
+**Status:** serve-loop MVP (v0.0) built + tested + **integrated E2E** (integrator ran the live loop 2026-07-09: C4 written by inference, re-read by `turn_id` + `session_id`; C6 resolved base). **Learn-loop capture M0: `/raw` blob leg (C1) + `/context` store (C2) built + tested (26 pass) + integrated E2E + independently verified 2026-07-09** (blob-first + push loop live; idempotency proven on both legs); unchanged through the 2026-07-10 DP modality-seam pass; **32 tests** post-D17 · **Last updated:** 2026-07-26 (**D18** — scope expansion + C10 evolution RATIFIED, all **decided, not built**; see § RATIFIED below)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
@@ -75,10 +75,40 @@
 - Integrator: point inference's C4 writer + C6 resolve at `:8083` (see build conventions).
 - **Observability (D9, ratified 2026-07-09) — now on backlog:** expose `/metrics` (request rate/latency/errors + DB/query metrics: query latency, rows read/written, DB/file size, pool health) and own the Grafana dashboard JSON (`dashboards/*.json`); shared Prometheus/Grafana is Platform's. See [CHARTER.md](CHARTER.md) scope/M7 + [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability.
 
-## Incoming — scope expansion from the continuum/Morpheus design (2026-07-23, pending board)
-The continuum kickoff settled that storage owns the learn-loop **data jobs** (continuum stays a
-lean training engine). Three additions land here once the founders' board ratifies (they re-cut
-this charter) — details in [CHARTER.md](CHARTER.md) § Scope note + [../continuum/handoff/ws-morpheus-port.md](../continuum/handoff/ws-morpheus-port.md):
+## RATIFIED — scope expansion + C10 evolution (**D18**, founders' board 2026-07-26)
+
+> **DECIDED, NOT BUILT. Nothing in this section exists in code.** Four new responsibilities are now
+> in scope with contract IDs minted; the build slice has not started. Authoritative text:
+> [../../HANDOFF.md](../../HANDOFF.md) D18 · [../../ARCHITECTURE.md](../../ARCHITECTURE.md)
+> §Contracts *C10 evolved* · [CHARTER.md](CHARTER.md) §Scope + §Open questions 6–9 + M5/M8/M9.
+
+**Build order is forced by dependencies, not preference:**
+1. **C12 profile** (`../../contracts/c12_user_profile.v0.json` — the one schema minted at
+   ratification). It lands **first**, because day-log materialization inherits D17's timezone
+   resolution and therefore *reads the profile*. 404 on absence; tzdata resolution on write (a
+   regex cannot be the authority on IANA ids — it only excludes abbreviations); auto-seed from the
+   first device-reported `device_tz`, **never** auto-update.
+2. **Resolve the blocking discriminator question** (CHARTER OQ7) — the one-dialect rule groups by
+   `(chunk_id, content.kind, discriminator)`, and the discriminator is today folded into the
+   `record_id` hash with no independent field. Additive-optional C2 field, or prove
+   `(chunk_id, kind, t_start)` unique per dialect. **Do not start the materializer first.**
+3. **Window ledger + the `window_id` minter** — `w<YYYYMMDD>T<HHMMSS>Z` from the window's end
+   instant, **one minter + one validator**, bounds immutable once opened, `POST /training/windows`
+   idempotent get-or-create.
+4. **Day-log materialization.** Lift `../continuum/app/daylog.py` (`build_daylog` +
+   `_render_block`) — **not** `Profile.render_block`, which is recipe-coupled and stays in
+   continuum. Two changes ride along: membership by `ingest_time`, and segment buckets on a
+   **global epoch grid** instead of window-relative (`daylog.py:74`). **Exit bar is the M9
+   differential diff, and continuum's local path is not deleted until it is green.**
+5. **C13 registry + C14 reservoir**, then continuum's cutover.
+
+**E-2 is no longer a cutover blocker** (D18) — the one-dialect rule fixes the double-count. It rides
+M5, which **widened**: day-logs and the reservoir are second copies of user content and must be in
+every deletion's cascade.
+
+*Original framing (2026-07-23), kept because it is still the rationale.* The continuum kickoff
+settled that storage owns the learn-loop **data jobs** (continuum stays a lean training engine) —
+details in [CHARTER.md](CHARTER.md) § Scope note + [../continuum/handoff/ws-morpheus-port.md](../continuum/handoff/ws-morpheus-port.md):
 - **Day-log materialization** — a scheduled job renders a user-day's `/context` (C2) into the
   segment/block **day-log** (incl. `render_block` anchored text). This is where **C10 evolves**:
   from a raw record range read to a **day-log fetch**. The day-log format is recipe-versioned.
@@ -87,8 +117,12 @@ this charter) — details in [CHARTER.md](CHARTER.md) § Scope note + [../contin
 - **Recipe registry** — versioned recipe/config hosting; fetch API for continuum + inference.
 - **Reservoir custody** — amplified-corpus store (continuum writes via API); replay re-reads prior
   day-logs, so this is audit/provenance, not the replay hot path.
-- **C10 watermark semantics** (charter OQ, still open) get decided at the same C10-evolution session
-  jointly with continuum; new contract IDs for recipe-registry + reservoir minted at ratification.
+- ~~**C10 watermark semantics** (charter OQ, still open)~~ **DECIDED (D18):** the window watermarks
+  on **`ingest_time`**, not event time — which dissolves late data rather than handling it;
+  `last_trained_t` advances **iff** `published`/`skipped_no_data`, making the failed-day merge
+  structural; reprocessed records resolve **latest `ingest_time` wins** per
+  `(chunk_id, content.kind, discriminator)`. Contract IDs minted: **C12** profile · **C13** recipe
+  registry · **C14** reservoir; **C10 evolves in place**.
 
 **Sharpened by continuum's 2c build (2026-07-24) — concrete requirements the seam surfaced:**
 - **Day-log fetch must serve ANY prior window on demand, by `(user_id, window_id)`** — not just the

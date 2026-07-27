@@ -52,7 +52,9 @@ Almost all of it is config; only two small files are net-new. Grounded findings:
 "drop in one file". It downloads a Speed **audio** track's bytes (extracted from the 20-min video
 blob in GCS) and yields it as chunk(s); driven through the existing `POST /capture/run` (accepts
 `modality, source, chunk_seconds, user_id, device_id, base_wallclock` — `models.py:49-64`).
-- **Blob leg needs the BYTES** — storage has no by-reference/GCS-URL registration (OQ8, unbuilt), so
+- **Blob leg needs the BYTES** — storage has no by-reference/GCS-URL registration (**recording's**
+  OQ8, unbuilt — `../../recording/CHARTER.md:175`; this line said "storage OQ8", which does not
+  exist and the mislabel propagated into the storage/C10 launch prompt — corrected by D18), so
   re-PUT through `/raw/blobs`. Fine at test volume; `/capture/run` avoids the 64 MB segment cap.
 - Feed **audio** (not video): the blob then serves double duty — real ASR runs on it AND it resolves
   the mandatory `blob_ref` sha-check that DP does before any stage.

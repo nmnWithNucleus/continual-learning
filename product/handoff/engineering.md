@@ -4,8 +4,11 @@
 > Cross-service build sequencing, integration plans, infra calls. Service-internal
 > engineering lives in each service's canvas, not here.
 
-**Status:** active · **Last updated:** 2026-07-26 (**D17 — timezone ownership decided**, review
-item O-1 closed; see the dated entry at the end of the worklog)
+**Status:** active · **Last updated:** 2026-07-26 (**D18 — storage/C10 board: the day-log moves to
+storage, the cycle window becomes an ingest-time watermark, `window_id` becomes opaque; C12/C13/C14
+minted. ALL DECIDED, NOT BUILT.** Same day, earlier: **D17 — timezone ownership decided AND built**,
+review item O-1 closed; then review items **O-2 / O-3 / O-4** closed as three *different* doc
+shapes. All three dated entries are at the end of the worklog)
 
 ---
 
@@ -803,3 +806,148 @@ Considered and passed, on the record so we don't re-litigate:
   active-alias monotonicity; the natural watermark key is the window's **end instant** (monotone per
   user, no dateline case), but that changes the `w2026-07-21` format and **forks adapter lineage** —
   a board call, not a refactor.
+
+- 2026-07-26 (later) — **Review items O-2 / O-3 / O-4 closed: three doc defects, three ceremony
+  levels.** They arrived as one batch of eight edits across five files. Treating them uniformly was
+  the trap; sorting them by *shape* first is what made the ceremony obvious, and none of the three
+  needed a D-number.
+
+  | Item | Shape | Ceremony | Why |
+  |---|---|---|---|
+  | **O-2** — C5's field list short in four places | **INCOMPLETE description** — one truth, written down only partially | The real judgment call (below); doc edits + one comment-only code edit | Nothing is in dispute: `publish.py:83-99` writes nine fields, `record_gate_failure` (`:101-114`) writes a third status. The docs simply hadn't caught up |
+  | **O-3** — "LoRA over all layers" | **INTENT/BUILD GAP** — two truths about different things | Lowest; state both, name the gap | Neither side is wrong. The defect was asserting the *intent* in the voice of the *build*, so a newcomer read the charter and believed vision towers were adapted |
+  | **O-4** — C2 `record_id` discriminator | **PROSE LAGGING ITS OWN AUTHORITATIVE SCHEMA** — one truth, already recorded correctly | Lowest; **explicitly not a contract change** | The frozen schema has mandated the discriminator since v0; only ARCHITECTURE's summary lagged. Confirmed before editing, against the CURRENT file (post-D17), not from memory |
+
+  **Verified before editing, not taken on the brief's word:** `LM_PROJECTIONS` + `_LM_SCOPE` and
+  their in-source rationale (`morpheus/train.py:27-32`), `lora_target_modules()` (`:89-100`), the
+  252/252 parity row ([phase-2a-report](../services/continuum/handoff/phase-2a-report.md):60), the
+  nine-field `publish()` entry and the `gate_failed` row, the C2 schema's current
+  `record_id.description`, `compute_record_id`'s empty-discriminator byte-identity
+  (`data-processing/app/pipeline.py:33-46`), and all eight target lines.
+
+  **O-3 — the reframe worth keeping.** "All layers" mis-names the axis. v0 *does* adapt every
+  layer — all 36 — at all 7 projections. What it excludes is a **tower**, not a layer. So the gap
+  is *which stacks*, one axis not two, and that is how it is now written. Both facts the CTO asked
+  to shape the wording ride beside it, so nobody re-derives the argument: **flipping back is cheap**
+  (a module-name-filter change plus a re-parity run — an option kept open, not a door closed), and
+  **the exclusion's premise is falsifiable and self-expiring** (it holds only while the day log
+  reaches the trainer as text; the day DP feeds it pixels, the reason evaporates on its own).
+  ARCHITECTURE §Decisions keeps "all layers" as the intent — still sourced to `start.md`, an
+  inherited founding assumption, never a ratified D-number.
+
+  **O-2 — the judgment call, taken explicitly: (a) describe as-built now, labelled.** C5 is
+  deliberately unfrozen (`publish.py:3-4`) and **this session did not freeze it** — inference is not
+  at the table, and the C5 → model directory → C6 → vLLM tail is still unwired. The counter-argument
+  was real (a field list in ARCHITECTURE §Contracts is how things become de-facto frozen around
+  here) and is answered **inside the wording rather than by silence**: the *"as built, not frozen"*
+  label rides in the same table cell as the field list, so the row cannot be quoted without its
+  caveat. A known-wrong description should not outlive a session that has no date. The most costly
+  omission was not a field but a **status**: all four sites said `active/rolled-back`, hiding
+  `gate_failed` — the audit trail for a blocked candidate, i.e. the thing a reader most needs to
+  know exists.
+
+  **`gate_failed` is not only documentation — it constrains the storage build at freeze time.**
+  Storage's `model_directory` today is the *trivial C6 row* (`user_id, model_id, adapter,
+  adapter_path` — `storage/app/db.py:59-63`): no entries log, no status column. So "the
+  storage-hosted swap-in is a transport change, not a redesign" is true of *continuum*, not of
+  storage — storage has to build the log, and the short field list is exactly what an implementer
+  would have built to. Three constraints, now written into the storage charter's model-directory
+  row so they reach the freeze session: **(1)** `status` must be a **three**-value enum, or
+  `record_gate_failure()` has nowhere to land and the audit trail is dropped silently at the swap;
+  **(2)** `gate_failed` rows carry **NULL `adapter_dir` and NULL `base_model_hash`**, so neither
+  column can be `NOT NULL` — a schema derived from the happy path would reject precisely the rows
+  that matter most; **(3)** C6 eligibility is a **log replay** (`active` pushes, `rolled_back` pops
+  the matching top, **`gate_failed` does neither** — `publish.py:33-44`), *not* "latest row wins" —
+  a directory resolving the newest entry would serve a gate-failed candidate, which is the ungated
+  swap the gate exists to prevent.
+
+  **Eight sites edited** (only O-4 touched contract prose, and it was a summary catching up to its
+  own schema — no [ORG.md](../ORG.md):42-45 contract-change routing was owed, and none was
+  performed): ARCHITECTURE §Contracts C2 block + C5 row + §Decisions Personalization row · continuum
+  CHARTER mission + scope + C5 row · storage CHARTER model-directory row ·
+  `continuum/app/publish.py` module docstring (**comment-only**; continuum suite re-run after —
+  **195 passed, 1 skipped**, the same 196 collected as the headless 189+7 baseline, with more
+  parity tests simply running in this env). LEARN_LOOP §3 (C2 + C5) and §8 items 3 + 12 updated to
+  match; O-2/O-3/O-4 struck from REVIEW_NOTES, which now carries only the seven charter/canvas
+  hygiene items (O-5…O-11).
+
+  **Two sites the review's O-3 inventory missed — found by a repo-wide sweep after the three
+  listed edits, and fixed in the same pass.** [VISION.md](../VISION.md):68 and :104 also say "all
+  layers", and **:68 is the worst instance of the defect anywhere in the repo**: it reads *"v0
+  mechanism (**locked**): per-user LoRA over all layers"* — the intent asserted not merely in the
+  build's voice but as a *locked v0 mechanism*, in the company's most-quoted document. Fixed
+  minimally rather than rewritten (VISION should stay a vision doc): "all layers" survives as the
+  stated intent, with a parenthetical naming the as-built narrowing and pointing at continuum's
+  charter for the argument. **Lesson for the next review pass:** an inventory built by reading the
+  *engineering* docs will miss VISION.md — `grep -rn "all layers" --include=*.md` takes one second
+  and would have caught it at pass 1.
+
+- 2026-07-26 (later — **founders' storage/C10 board: D18**). Ratified the storage scope expansion
+  and the C10 evolution. **Everything below is DECIDED, NOT BUILT** — stated that way from the
+  first draft rather than corrected in afterwards, which is the O-12 lesson applied prospectively.
+
+  **The gate first, because it decided the rest.** All five `window_id` claims in the launch prompt
+  verified. Three more consumers found that it did not list: **`publish.py:106`** is a *fourth*
+  string comparison (the alias-monotonicity guard itself — the prompt named only `active_before` at
+  `:83`), and **`window.py:44`** + **`reservoir.py:65-69`** *parse the id back into a date*, which
+  **`cycle.py:217`** then uses to rebuild prior windows under *tonight's* timezone.
+
+  **A premise of the prompt was wrong, and correcting it made the session easier, not harder.**
+  The stated HARD CONSTRAINT — "`render_block` must stay byte-parity with the research line @
+  `b3c58e1`; moving the renderer must not break it" — conflates two functions with the same name:
+
+  | | Locked by | Consumes | Verdict |
+  |---|---|---|---|
+  | `Profile.render_block` (`morpheus/profiles/speed.py:89`) | `tests/parity/test_render_block.py`, 1427/1427 vs research goldens | 5-min description dicts | **recipe-coupled — STAYS** |
+  | `daylog.py:183 _render_block` | nothing; no golden has ever existed | C2 records | **moves to storage** |
+
+  The research line never materialized the 10 s-segment/2 min-block schema (continuum's own canvas:
+  "zero producing code; a research 'block' = one 5-min description"), so the product renderer could
+  not have had a golden. `morpheus/blocks.py:5-7` had already drawn the boundary — *"keeping that
+  boundary narrow is what lets the day-log move behind a storage client without any kernel
+  noticing."* So the move **cannot** break research parity. The bar became a **differential
+  byte-equality** against our own current output for a real window — script + result committed, DP's
+  byte-identity precedent — with continuum's local path **not deleted until that diff is green**.
+  That is strictly more falsifiable than re-running a golden suite that never covered this code.
+
+  **The four decisions.** *(0)* `window_id` → `w<YYYYMMDD>T<HHMMSS>Z`, minted once from the window's
+  **end instant**, **parsed by nobody**; seconds not minutes because a truncating id can silently
+  collide two windows. The format change is a **consequence** of the watermark window, not a cost of
+  it: `[last_trained_t, now−δ)` has no local date to name. Re-keys enumerated in D18 including the
+  **training seed** (`cycle.py:147`) — accepted as a real discontinuity rather than papered over,
+  and `tests/parity/` is unaffected because it seeds from its own harness. `w-day5` ruled **a mess,
+  not a precedent** (`m0_smoke.py:133` breaks the total order twice over), so the durable output is
+  **one minter + one validator**. *(1)* **C12** per-user profile — a *profile*, fenced to
+  system-read policy values, `home_tz` only in v0, **404 on absence**, auto-seeded once and **never
+  auto-updated**. Schema written (`contracts/c12_user_profile.v0.json`); **C13** recipe registry and
+  **C14** reservoir minted, schemas land with the build slice per `contracts/README.md`'s own rule.
+  *(2)* Day-log → storage. The decisive argument is **replay**: it re-reads *prior* day-logs nightly,
+  so a continuum-side builder re-pulls every prior day's raw records every night — **O(days²)** to
+  rebuild what storage could have kept. *(3)* The window watermarks on **`ingest_time`**, which
+  *dissolves* late data rather than handling it; `last_trained_t` advances **only** on
+  `published`/`skipped_no_data`, which makes the design-of-record's **failed-day merge structural**
+  and demotes `_UserState.debt` to reporting; reprocessed records resolve **latest `ingest_time`
+  wins per `(chunk_id, kind, discriminator)`** — on `ingest_time` because `pipeline_version` is a
+  *composed* string and not orderable, on `kind` because Phase-3 proved captions and transcripts
+  share one.
+
+  **E-2 demoted, not dropped.** The one-dialect materialization rule is what actually fixes the
+  WS-VC double-count, so E-2 stops gating the cutover and reverts to the retraction/privacy/space
+  primitive it always was. Its shape rides storage M5.
+
+  **Two obligations this session opened rather than closed** — recorded because a decision session
+  that only closes things is not being honest: **(a)** the day-log and reservoir are *second copies
+  of user content*, so **M5's deletion must cascade to both** (a retraction that clears `/context`
+  and leaves a day-log standing has deleted nothing); **(b)** the **within-chunk discriminator is
+  not independently readable from C2** — it lives only inside the `record_id` hash — so the build
+  must either surface it as an additive-optional C2 field (ARCHITECTURE → schema → **both**
+  `extra="forbid"` mirrors, the exact D17 trap) or prove `(chunk_id, kind, t_start)` unique per
+  dialect. **Do not start the materializer before that is chosen.**
+
+  **Also corrected:** "storage OQ8" does not exist. Blob-by-reference is **recording's** OQ8
+  (`recording/CHARTER.md:175`); the mislabel originated at `ws-phase3-dogfood.md:55` and had
+  propagated into this session's own launch prompt. Storage's OQ list now carries a note that OQ
+  numbers are stable ids and are never renumbered.
+
+  **No code changed; no suite was run this session.** Baselines stand as of D17 — storage 32 ·
+  continuum 189 · recording 144 · DP 770 (+21 skipped) · extension deno 11.

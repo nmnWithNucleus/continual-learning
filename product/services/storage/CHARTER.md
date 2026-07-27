@@ -4,11 +4,13 @@
 > per-user model directory. Stable doc — working state lives in [HANDOFF.md](HANDOFF.md);
 > system-wide architecture + contracts in [../../ARCHITECTURE.md](../../ARCHITECTURE.md).
 
-**Status:** chartered · **Last updated:** 2026-07-26 (proposed scope **expansion** from the
-continuum/Morpheus design session — day-log materialization + recipe registry + reservoir custody;
-see § Scope note. **Pending founders'-board ratification.** *2026-07-26:* **D17** adds a fourth
-expansion row — the **per-user profile** owning `home_tz` — and corrects § The time index, which
-promised a per-record timezone this service never stored.)
+**Status:** chartered · **Last updated:** 2026-07-26 (**scope expansion RATIFIED — D18**,
+founders' storage/C10 board: day-log materialization + recipe registry + reservoir custody +
+per-user profile are now in scope, with contract IDs **C12/C13/C14** minted and **C10 evolved** to
+a day-log fetch over a `[last_trained_t, now−δ)` **ingest-time watermark window**. All four rows are
+**DECIDED, NOT BUILT** — nothing here ships until it is built and the day-log's byte-equality is
+proven. *Earlier 2026-07-26:* **D17** added the profile row and corrected § The time index, which
+had promised a per-record timezone this service never stored.)
 
 ## Mission
 
@@ -25,9 +27,11 @@ trains no models; it keeps what others produce safe, ordered, and fast to read.
 
 ## Scope — v0
 
-> **Proposed expansion (2026-07-23, pending board) — the "data jobs" for the learn loop.**
+> **Expansion RATIFIED 2026-07-26 (D18) — the "data jobs" for the learn loop. DECIDED, NOT BUILT.**
 > The continuum/Morpheus design settled that continuum stays a lean training engine and storage
-> owns the *data* work around it. Three new responsibilities (rows tagged **In+**):
+> owns the *data* work around it; the founders' storage/C10 board ratified it and minted the
+> contract IDs. Rows tagged **In+** below. The 2026-07-23 framing is kept verbatim because it is
+> still the rationale:
 > **(1) Day-log materialization** — a scheduled job renders a user-day's `/context` (C2) records
 > into the segment/block **day-log** (incl. `render_block` anchored text); continuum fetches it via
 > C10 (which evolves from "raw record range read" to "day-log fetch"). **(2) Recipe registry** —
@@ -36,17 +40,29 @@ trains no models; it keeps what others produce safe, ordered, and fast to read.
 > replay itself re-reads prior day-logs. This keeps "storage produces no *faithful* data, trains
 > no models" intact: the day-log is a derived VIEW over C2, the reservoir holds training artifacts
 > others produced, and the registry holds config — none of it is new sensor data or model weights.
+>
+> **What D18 added on top of that framing, and what it costs us.** (a) A **fourth** responsibility,
+> the per-user **profile** (`home_tz`, C12) — and it is a *prerequisite*, not a peer: if storage
+> renders the day-log then storage inherits D17's timezone resolution (`daylog._block_zone` — the
+> record's `device_tz` wins, the window's `home_tz` falls back), so **materialization reads the
+> profile**. (b) The **training-window ledger** and the sole `window_id` minter, which the watermark
+> window puts here because `[last_trained_t, now−δ)` is a fact about *our* ingest clock and nothing
+> else can own it. (c) An obligation that arrives with the day-log and is easy to miss: **the
+> day-log is a second copy of user content**, so **M5's deletion primitives must cascade to it** —
+> and to the reservoir. A retraction that clears `/context` and leaves a materialized day-log
+> standing has deleted nothing. That is a genuine widening of M5, recorded in its row below.
 
 | | Item | Notes / owning sibling |
 |---|---|---|
 | In | `/raw` store | raw capture blobs; recording writes via ingest, the C1 envelope carries the ref; custody split in ARCHITECTURE §Ownership splits |
-| In+ | **Day-log materialization** *(pending board)* | scheduled job: C2 records → segment/block day-log (+ `render_block` anchored text), a derived view over `/context`; served to continuum via the evolved C10. Recipe-versioned format |
-| In+ | **Recipe registry** *(pending board)* | versioned recipe/config hosting; fetch API for continuum (consolidation recipe) + inference (serving-side knobs) |
-| In+ | **Reservoir custody** *(pending board)* | per-user store of amplified corpora (continuum writes via API); audit/provenance — replay re-reads prior day-logs, not this |
-| In+ | **Per-user profile** *(pending board — ratified in principle by D17)* | one durable row per user for **policy** values that are neither sensor data nor recipe config. First v0 field: **`home_tz`** (IANA zone), whose *only* jobs are **(a) scheduling** — deciding when this user's nightly consolidation fires, a question asked before any of that night's records exist — and **(b) fallback** when a record carries no `device_tz`. Seeded from the most recent device-reported zone, user-overridable. It is NOT the pipeline's time semantics (that is per-record `device_tz`) and NOT part of the C10 range arithmetic. Cannot ride the recipe registry: `recipe_id` is global and versioned (`recipe_id` == filename stem), so a per-user value there would fork `recipe_id` per user. Contract ID minted with the expansion's other two |
+| In+ | **Day-log materialization** *(RATIFIED D18 — decided, not built)* | scheduled job: C2 records → segment/block day-log (+ anchored block text), a derived view over `/context`; served to continuum via the evolved **C10**, random-access by `(user_id, window_id)`. Recipe-versioned format (`daylog_format_version` + `recipe_id` on the body). **We inherit `daylog.py`'s `build_daylog` + `_render_block`** (the *product* renderer over C2 records) — **not** continuum's parity-locked `Profile.render_block`, which is recipe-coupled and stays with the amplifier. Two rule changes come with the watermark window: membership is by **`ingest_time`**, and segment buckets sit on a **global epoch grid** rather than window-relative (`daylog.py:74`), which is required once membership is on the ingest axis and also makes a bucket stable across re-materialization. Also inherits the **one-dialect-per-record** rule (latest `ingest_time` wins per `(chunk_id, content.kind, discriminator)`) — see § Open questions for the one named sub-item the builder must close first |
+| In+ | **Training-window ledger + the `window_id` minter** *(RATIFIED D18 — decided, not built)* | the per-user `last_trained_t` watermark and the durable window rows (`window_id`, `t_start`, `t_end`, state). `POST /training/windows` is an **idempotent get-or-create** of the user's open window; bounds are **immutable once opened** (this is what preserves continuum's crash-safe journal replay — recomputing `now` on a retry would mint a fresh id and force a full re-train, a second C5 entry and a second reservoir admission). `window_id` is minted in **exactly one place**, format `w<YYYYMMDD>T<HHMMSS>Z`, opaque to every consumer. Storage is the only service that can own this: the watermark is a fact about *our* ingest clock |
+| In+ | **Recipe registry** *(RATIFIED D18 → **C13** — decided, not built)* | versioned recipe/config hosting; fetch API for continuum (consolidation recipe) + inference (serving-side knobs). `recipe_id` == filename stem, **global and versioned — never per-user**. The **gate policy is a separate artifact with its own id**: only the *training recipe* may enter a cycle stage key, so changing a publish threshold must not fork `recipe_id` or invalidate hours of GPU cache. Reference implementation to lift: `../continuum/app/clients/registry.py` |
+| In+ | **Reservoir custody** *(RATIFIED D18 → **C14** — decided, not built)* | per-user store of amplified corpora (continuum writes via API); **audit/provenance — replay re-reads prior day-logs via C10, not this**. Append-only, keyed `(user_id, window_id, recipe_id)`, content-hashed. Guards the one invariant of the data design: **amplified/synthetic text never lands in `/context`** — same storage discipline, different namespace. Deletion here is a deliberate privacy act, never housekeeping, and it is **in M5's cascade** |
+| In+ | **Per-user profile** *(RATIFIED D18 → **C12**, schema `../../contracts/c12_user_profile.v0.json` — decided, not built)* | one durable row per user for **policy** values that are neither sensor data nor recipe config. First v0 field: **`home_tz`** (IANA zone), whose *only* jobs are **(a) scheduling** — deciding when this user's nightly consolidation fires, a question asked before any of that night's records exist — and **(b) fallback** when a record carries no `device_tz`. Seeded from the most recent device-reported zone, user-overridable. It is NOT the pipeline's time semantics (that is per-record `device_tz`) and NOT part of the C10 range arithmetic. Cannot ride the recipe registry: `recipe_id` is global and versioned (`recipe_id` == filename stem), so a per-user value there would fork `recipe_id` per user. **D18 additions:** it is a **profile, not a settings blob** — it holds values *the system reads to decide its own behaviour* for this user (scheduling, fallbacks, policy) and never user-facing identity or presentation, which are input's; that fence is what makes the general noun safe. A missing profile is a **404** and a user with no `home_tz` is **not schedulable** — an operational alert, never a silent skip, because D17 abolished default timezones. Storage **auto-seeds** from the first device-reported `device_tz` for that user and **NEVER auto-updates** — a traveller's night boundary must not chase their device, which is the entire point of the FACT/POLICY split. Second field named but deliberately **not** minted until it has a consumer (the E-5 precedent): a per-user `boundary_local_time` override, today a *global* recipe knob that cannot express a night-shift worker |
 | In | `/context` store | processed life-stream records; storing side of C2 |
 | In | `/sessions` store | conversations → sessions → turns, incl. full mentor + tool traces; storing side of C4 |
-| In | Model directory | per-user adapter registry: version, base-model hash, training window, eval report, active/rolled-back; behind C5/C6 |
+| In | Model directory | per-user adapter registry behind C5/C6. **C5's shape, as continuum builds it today and NOT yet frozen** (the freeze needs inference at the table; describing it is not pinning it) — nine fields: `contract:"C5"`, `user_id`, `adapter_version`, `adapter_dir`, `base_model_hash`, `training_window`, `recipe_id`, `eval_report`, `status` ∈ **`active` \| `gate_failed` \| `rolled_back`** (`../continuum/app/publish.py:83-114`). **Three of those are load-bearing for US at freeze time, not just for the docs** — today storage's `model_directory` table is the *trivial C6 row* (`user_id, model_id, adapter, adapter_path` — `app/db.py:59-63`), with no entries log and no status column at all, so hosting C5 is a build, not a transport swap, and the short field list this row used to carry is precisely what an implementer would have built to: **(1) `status` is a THREE-value enum** — a two-value `active/rolled_back` column has nowhere to put `record_gate_failure()`, and the audit trail for blocked candidates would be dropped silently at the swap; **(2) `gate_failed` rows carry NULL `adapter_dir` and NULL `base_model_hash`** — so those columns cannot be `NOT NULL`, or the schema rejects exactly the rows that matter most; **(3) C6 eligibility is a LOG REPLAY, not "latest row wins"** — `active` pushes, `rolled_back` pops the matching top, and **`gate_failed` does neither** (`publish.py:33-44`); a directory that resolved the newest entry would serve a gate-failed candidate, which is the ungated swap the gate exists to prevent |
 | In | People/known-faces registry persistence | data-processing matches/enriches, input curates the UX; storage persists — split in ARCHITECTURE §Ownership splits |
 | In | Schemas + indexing | canonical record schemas; every store indexed by (user_id, time) |
 | In | Time-ranged retrieval | per-user time-window reads (recall queries); producing side of C10 (watermarked training-window export) |
@@ -78,9 +94,11 @@ redefined.
 | C4 | inference → `/sessions` | serve the write path: persist turn records incl. mentor + tool traces, keyed conversation → session → turn |
 | C5 | continuum → model directory | host the registry: accept adapter version entries; one active adapter per user; rollback history kept |
 | C6 | inference ↔ model directory | serve the hot read path: resolve the active adapter for user_id per request, within a tight latency budget |
-| C10 | storage → continuum | serve the training-window read. **Evolving (pending board):** from a raw `/context` range read to a **day-log fetch** — storage materializes the segment/block day-log for the window and serves that; watermark semantics (late/reprocessed records, pipeline-version bumps) remain C10's core design work, pinned in ARCHITECTURE's C10 row as it lands |
+| C10 | storage → continuum | serve the training-window read. **EVOLVED + RATIFIED (D18) — decided, not built:** a **day-log fetch**, random-access by `(user_id, window_id)`, plus window enumeration and the window-ledger open/close writes; over a `[last_trained_t, now−δ)` **ingest-time watermark window**. Watermark semantics are **decided** (see § Open questions, formerly the open OQ) and pinned in ARCHITECTURE's C10 row + its detail block. **The raw range read `GET /context/records?user_id=&from=&to=` is NOT retired** — it remains first-class (D12's beta training feed, debugging, C11-adjacent); C10-evolved is additive |
+| C12 | storage → continuum *(later inference/input)* | serve the **per-user profile** read (`home_tz`). Read side is C12; the write surface is ours and prose-pinned (D11's `/raw` precedent) until input ships a settings consumer |
+| C13 | storage → continuum + inference | host + serve the **recipe registry** (versioned recipes; the separately-versioned gate policy) |
+| C14 | continuum ↔ storage | host the **reservoir**: accept amplified-corpus writes, serve the ledger |
 | C11 | storage → input (QueryBuilder) | serve the recent-context read: recency/semantic retrieval over `/context` + `/sessions`; the index lives here, QueryBuilder decides what enters the UserPrompt |
-| *(new, pending board)* | storage → continuum / inference | **recipe registry** fetch (versioned) + **reservoir** write/read + **per-user profile** fetch (`home_tz`; D17); contract IDs minted when the board ratifies the expansion |
 
 ### The time index (the load-bearing decision)
 - Every record carries device wall-clock `t_start`/`t_end` (from C2/C4) **and** a
@@ -103,8 +121,23 @@ redefined.
   never accept a timezone *abbreviation* — `PST`/`MST` are ambiguous and DST-sensitive, IANA ids only.
 - A user's streams overlap (body cam + computer at the same moment): one timeline per user,
   indexed (user_id, t_start), with modality/device as filter columns — not parallel timelines.
-- Continuum's nightly window (C10) is `[last_trained_t, now)` per user — a single index-range
-  scan must satisfy it at v0 scale (handful of pilot users).
+- **`t_start` and `ingest_time` are TWO AXES and D18 assigns each a job** — conflating them is the
+  same class of error D17 fixed for timezones. **Event time (`t_start`) is the CONTENT axis:**
+  recall queries, day-log bucketing, block anchors, and **deletion ranges** ("delete last Tuesday"
+  is a claim about a lived period). **Ingest time is the COMPLETENESS axis:** it is the only axis on
+  which "everything I had" is a guarantee, so it is what continuum's training window watermarks on.
+  Both are indexed.
+- Continuum's nightly window (C10) is `[last_trained_t, now−δ)` per user **on the `ingest_time`
+  axis** (D18) — a single index-range scan must satisfy it at v0 scale (handful of pilot users).
+  Three properties follow and they are the reason for the choice: **storage needs no timezone to
+  serve C10 at all**; a missed or gate-failed night is **absorbed** into the next window rather than
+  lost; and **"late data" cannot exist** — `ingest_time` is assigned by us at write, so a record can
+  never land below an already-closed boundary. `δ` (default 60 s) exists for exactly one reason: an
+  in-flight write racing the boundary could otherwise be assigned an `ingest_time` below `t_end` yet
+  commit after materialization read the range. It is watermark lag, not slack.
+- **Note the deliberate asymmetry, and do not "fix" it:** training windows are ingest-time,
+  retraction ranges are event-time. They answer different questions, and making them agree would
+  break one of them.
 
 ## v0 deliverables
 
@@ -115,11 +148,17 @@ redefined.
 | M2 | `/sessions` live: C4 write path + session/turn reads | inference persists a complete turn incl. mentor + tool traces; a conversation replays exactly from the store |
 | M3 | Model directory live: C5 registration + C6 resolution | continuum registers an adapter; inference resolves the active adapter within budget; rollback flips resolution atomically |
 | M4 | Security baseline: encryption at rest everywhere + isolation test suite | cross-user access attempts fail closed under test; encryption verified on DB, blobs, and backups |
-| M5 | Retention + deletion primitives: full-user delete + time-slice delete | full-user delete purges `/raw`, `/context`, `/sessions`, directory entries + adapter artifacts and schedules backup expiry; deletion manifest is auditable; platform's orchestration + proof-of-deletion (its M2) calls these primitives — we don't own the end-to-end pipeline |
+| M5 | Retention + deletion primitives: full-user delete + time-slice delete **+ the kind-aware retraction (E-2)**, all cascading to the derived stores | full-user delete purges `/raw`, `/context`, `/sessions`, directory entries + adapter artifacts and schedules backup expiry; deletion manifest is auditable; platform's orchestration + proof-of-deletion (its M2) calls these primitives — we don't own the end-to-end pipeline. **WIDENED BY D18:** once we materialize day-logs and host the reservoir, **both are second copies of user content and both must be in every deletion's cascade** — a retraction that clears `/context` and leaves a day-log standing has deleted nothing, and this is a right-to-be-forgotten defect, not a tidiness one. **E-2's shape** (board-reviewed 2026-07-26): `DELETE /context/records?user_id=&from=&to=&kind=&pipeline_version=`, `user_id` required, `from`/`to` half-open on **`t_start`** (event time — a retraction is about a lived period), `kind` + `pipeline_version` optional filters, returns an **auditable manifest** of counts by `kind` × `pipeline_version`, with `dry_run=true` returning the manifest without deleting. It must **re-materialize or invalidate every affected day-log** |
 | M6 | Backup/restore | scheduled backups running; point-in-time restore drill passes on a dev instance |
 | M7 | Metrics + dashboard | service `/metrics` scraped by the shared Prometheus; dashboard (`dashboards/*.json`) shows request rate/latency/errors + DB/query metrics (query latency, rows read/written, DB/file size, pool health); Platform provisions it (§Observability) |
+| M8 | **C12 profile + C13 recipe registry + C14 reservoir** (D18) | profile read serves `home_tz` with a 404 on absence and auto-seed-never-auto-update semantics, validated against `../../contracts/c12_user_profile.v0.json` with tzdata resolution on write; registry serves recipes + gate policy by id; reservoir accepts append-only corpus writes and serves its ledger. **C12 lands first — day-log materialization depends on it** |
+| M9 | **C10 evolved: day-log materialization + the training-window ledger** (D18) | storage mints windows idempotently over the `ingest_time` watermark, materializes day-logs, and serves fetch-by-`(user, window_id)` + enumeration + close. **Exit bar is a differential proof, not a claim:** for at least one real window, the day-log storage renders is **byte-identical** to the one continuum's `LocalDayLogClient` renders from the same records — block text, `seg_id`/`block_id` ordering, and anchors — with the script and its output committed, on the DP byte-identity precedent. Continuum's local path is **not deleted until that diff is green** |
 
 ## Open questions
+
+> **OQ numbers are stable identifiers and are never renumbered** — resolved ones are struck
+> through in place (OQ3, OQ6), so a cross-service reference like "storage OQ3" keeps meaning what
+> it meant. The counter runs across both subsections, which is why Engineering skips 5.
 
 Engineering:
 1. **Storage tech.** Postgres (records + directory) + GCS (bulk payloads, adapter artifacts) is
@@ -141,6 +180,49 @@ Engineering:
    stamp is never overwritten.
 4. **ID minting.** Session/turn ids originate in input (C3) — does storage enforce referential
    integrity on C4 writes, or trust writers?
+6. ~~**C10 watermark semantics.** Late-arriving records, reprocessed records, `pipeline_version`
+   bumps — what advances `last_trained_t`, and what happens to a record landing with a `t_start`
+   inside an already-trained window?~~ **RESOLVED (D18, 2026-07-26)** — this was the session's
+   substantive design work. Full statement in [ARCHITECTURE.md](../../ARCHITECTURE.md) § Contracts
+   → *C10 evolved*; the four rules:
+   - **The window watermarks on `ingest_time`, not event time.** This dissolves the question rather
+     than answering it: a record landing with a `t_start` inside an already-trained window is simply
+     a record whose `ingest_time` is *now*, so it joins the current window and trains — rendered in
+     a block anchored to its own real local date. **Late data cannot be lost because on an
+     ingest-time watermark late data does not exist.** Content stays event-time-correct because
+     day-log blocks are formed by temporal adjacency and carry their own anchors, so a week-old
+     backlog forms its own blocks rather than corrupting today's.
+   - **`last_trained_t` advances iff the cycle reaches `published` or `skipped_no_data`.**
+     `gate_failed`, `frozen` and any crash leave it, so the next window is a strict **superset** of
+     the failed one. This is the research design-of-record's *failed-day merge*, obtained
+     structurally instead of by bookkeeping (it demotes continuum's `_UserState.debt` list to
+     reporting).
+   - **Reprocessed records: one dialect per record, latest `ingest_time` wins**, keyed
+     `(chunk_id, content.kind, within-chunk discriminator)`. Keyed on `ingest_time` because
+     `pipeline_version` is a *composed* string and therefore not orderable; keyed on `content.kind`
+     because Phase-3 proved captions and transcripts can share one `pipeline_version`, so a
+     kind-blind rule drops transcripts to drop captions. **This is what actually fixes the
+     re-consolidation double-count** (`daylog.py` filters on neither field today) and it is why
+     **E-2 is no longer a correctness blocker for the WS-VC cutover**.
+   - **A `pipeline_version` bump is a forward-only correction.** It improves future training; it
+     does not repair past weights, which on an append-only weight chain is irreducible. The remedy
+     for a dialect bad enough to need repair is a deliberate **rebuild from base over retained
+     history** — named as the escape hatch, not built. **Accepted, named cost:** the same lived
+     moment can train twice in two dialects (OQ8 below).
+7. **The within-chunk discriminator is not readable from C2 — BLOCKING sub-item for the build
+   slice.** The one-dialect rule needs to group by `(chunk_id, content.kind, discriminator)`, but
+   the discriminator is today folded into the `record_id` hash and exists as no independent field
+   (`../data-processing/app/pipeline.py:33-46`). The build must either **(a)** surface it as an
+   additive-optional C2 field — a frozen-schema edit, so ARCHITECTURE first, then the schema, then
+   **both** pydantic mirrors, which are `extra="forbid"` on DP *and* storage and will reject it
+   otherwise (the exact trap D17 hit) — or **(b)** prove `(chunk_id, kind, t_start)` unique per
+   dialect and key on that. Do not start the materializer before this is chosen.
+8. **Double exposure across a dialect bump (accepted, tracked).** Because a reprocessed record
+   re-enters a later window, the same lived moment can be trained twice. Suppressing
+   already-rendered chunks would stop the double exposure — but it would equally stop the
+   *correction* from ever training, and we bump precisely because the old dialect was worse, so
+   **training the correction wins**. Revisit only if measured over-weighting appears.
+9. **Day-log + reservoir deletion cascade (new, opened by D18).** See M5 — scoped, not designed.
 
 Research:
 5. **Deletion vs weights.** A time-slice delete of records already trained into an adapter is not

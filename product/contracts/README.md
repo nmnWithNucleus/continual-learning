@@ -18,8 +18,22 @@ is push/at-least-once, dedup on `chunk_id`, gaps via `(stream_id, sequence)`.
   A **breaking** change = new `*.vN.json` file + version bump + an [ARCHITECTURE.md](../ARCHITECTURE.md)
   §Contracts edit. Never mutate a frozen file in place once services build against it.
 - Every service validates the payloads it produces/consumes against these schemas in its tests.
-- Six v0.0 contracts are materialized: C3/C9/C4/C6 (serve loop) + C1/C2 (learn loop). C5/C7/C8/
-  C10/C11 get schema files when their slices start.
+- Seven contracts are materialized: C3/C9/C4/C6 (serve loop) + C1/C2 (learn loop) + **C12**
+  (user profile, D18). C5/C7/C8/C10/C11/C13/C14 get schema files when their slices start.
+
+## C-numbers minted 2026-07-26 (D18 — storage/C10 board)
+
+`C12` **user profile** (per-user policy; `home_tz`) · `C13` **recipe registry** · `C14`
+**reservoir**. Shapes are pinned in [../ARCHITECTURE.md](../ARCHITECTURE.md) §Contracts; **C10
+evolves in place** (raw range read → day-log fetch + watermark window) rather than taking a new
+number, because its direction and peers are unchanged.
+
+Only **C12** ships a schema today: it is one field, fully determined, and it makes D17's
+"no default timezone anywhere" rule machine-checkable. **C10-evolved, C13 and C14 schemas land as
+the build slice's first act** — per the rule above and per [../ORG.md](../ORG.md) §"Contracts before
+fan-out", the schemas must exist before that slice's workstreams fan out, and not before there is a
+slice. Writing a schema no service validates against is how prose and schema drift apart, which is
+the failure D17 hit (a claim hiding in a schema `description`, missed by a count taken from prose).
 
 ## The serve-loop v0.0 flow these describe
 ```

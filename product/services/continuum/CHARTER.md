@@ -9,7 +9,7 @@
 dogfood PIPELINE SOUND)** · **Last updated:** 2026-07-25 (Morpheus core = our nightly-consolidation
 engine, per [handoff/ws-morpheus-port.md](handoff/ws-morpheus-port.md); serve-time memory harness →
 inference; **day-log build + recipe registry + reservoir → storage**; continuum slimmed to a 5-verb
-loop — see [HANDOFF.md](HANDOFF.md). Storage re-cut + C10 evolution pending founders'-board ratification.)
+loop — see [HANDOFF.md](HANDOFF.md). **Storage re-cut + C10 evolution RATIFIED 2026-07-26 — D18**; contracts C10-evolved/C12/C13/C14 pinned, and all of it is **decided, not built**.)
 
 ## Mission
 
@@ -17,14 +17,17 @@ Own the periodic (nightly-ish) per-user fine-tuning loop that turns the product'
 "infinite context" + true personalization — into weights. Each cycle: curate a training mixture
 from the user's NEW `/context` and `/sessions` records since the last cycle (including mentor
 traces, distilling mentor competence into the personal model), blend in an anti-forgetting replay
-mixture, run a LoRA job over all layers of the BWM (base world model), gate the candidate adapter
+mixture, run a LoRA job over the BWM (base world model) — v0 adapts **all layers of the language
+model, vision towers excluded**; "all layers" everywhere remains the standing intent, and §Scope
+names the gap — gate the candidate adapter
 on personal-recall AND general-capability evals, and publish (or roll back) through the model
 directory. The service is research-heavy by design: continual-learning stability, recency vs
 long-term retention, self-distillation, and the LoRA → MoE-experts-per-user scaling path live here.
 
 ## Scope — v0
 
-> **Slimming (2026-07-23, pending board):** continuum is now the **Morpheus** nightly-consolidation
+> **Slimming (2026-07-23; RATIFIED 2026-07-26 — D18, which put the counterpart data jobs in
+> storage's scope with contract IDs):** continuum is now the **Morpheus** nightly-consolidation
 > engine — a lean **5-verb loop: fetch recipe · fetch day-log · amplify · finetune · gate · publish.**
 > Day-log materialization, the recipe registry, and the reservoir move to **storage** (rows below +
 > Out-of-scope). We *consume* those; we own the recipe-coupled training transforms.
@@ -34,8 +37,10 @@ long-term retention, self-distillation, and the LoRA → MoE-experts-per-user sc
 | Cycle data curation | **Fetch the day-log** for the window via C10 (storage materializes it; we no longer build it client-side); mentor traces (C4) are first-class distillation targets |
 | Anti-forgetting replay mixture | Capability-aligned replay (text + vision) trained alongside the personal data; ratio + LR schedule are the levers |
 | Amplification (train-time) | The nightly corpus build: styled retellings + deny-then-correct negatives generated FROM the day's faithful records, per the pinned recipe. Output is a training artifact — **amplified/synthetic text never lands in `/context`** (grounding + paging read the faithful record only) |
-| Reservoir *write* | We write each night's amplified corpus to the **storage-owned** reservoir via API (audit/provenance). Replay itself re-fetches prior **day-logs** (raw source is a validated tie), so the reservoir is not on the replay hot path. Deletion is a privacy act, never housekeeping |
-| LoRA training jobs | Per-user LoRA over **all layers** of the BWM (v0 decision); runs on the shared SLURM partition |
+| Reservoir *write* | We write each night's amplified corpus to the **storage-owned** reservoir via API (**C14**, D18; audit/provenance). Replay itself re-fetches prior **day-logs** (raw source is a validated tie), so the reservoir is not on the replay hot path. Deletion is a privacy act, never housekeeping |
+| Block rendering — **the half that stays** (D18) | **`Profile.render_block`** (`app/morpheus/profiles/`) is **recipe-coupled** and stays here with the amplifier: it is the surface `tests/parity/test_render_block.py` locks **byte-identical** against the research line (`b3c58e1`, 1427/1427 blocks). `app/morpheus/blocks.py:5-7` drew this boundary before the move was proposed — *"the ONLY interface between ingest and consolidation… keeping that boundary narrow is what lets the day-log move behind a storage client without any kernel noticing."* Also staying: the **trainer-seam file materialization** (`app/renderer.py` → `segments.jsonl`/`blocks.jsonl`/`day.txt`), which is how *our* trainer consumes a day-log it fetched |
+| Day-log *construction* — **leaves** (D18, decided not built) | `app/daylog.py` (`build_daylog` + the v0 labeled-lines `_render_block` over C2 records) and `app/window.py`'s local-date arithmetic move to **storage**. **These are a different renderer from the parity surface above and have never had a research golden** — the research line never materialized the 10 s-segment/2 min-block schema (zero producing code; a research "block" is one 5-min description), so the move cannot break research parity. What it must prove instead is a **differential byte-equality** against our own current output; see the storage charter's M9 exit bar. `LocalDayLogClient` + the `RecordProvider` seam disappear exactly as `clients/daylog_client.py:14-19` predicted; `app/window.py` shrinks to the `Window` value object storage returns |
+| LoRA training jobs | **AS BUILT (v0): per-user LoRA over the LLM projection linears — all 36 language-model layers × 7 projections (`q,k,v,o,gate,up,down`) — with the VISION TOWERS DELIBERATELY EXCLUDED.** Rationale in the code that enforces it (`app/morpheus/train.py:27-32`, `lora_target_modules()` at `:89-100`): the day log reaches the model **as text**, so adapting the vision stack spends rank on modules that never see the training signal. Parity-proved **252/252 modules = 7 × 36, zero vision-tower**, against the research line's golden adapter tensor keys ([handoff/phase-2a-report.md](handoff/phase-2a-report.md):60). **KNOWN OPEN ITEM, not a contradiction:** [ARCHITECTURE §Decisions](../../ARCHITECTURE.md) still records **"LoRA per user, all layers"** as the standing *intent* (sourced to `start.md`, an inherited founding assumption, never a ratified D-number). Both statements are true of different things — the intent is the research direction, this row is the build. Two things to hold when revisiting: (1) **flipping to the towers is cheap** — a module-name filter change in `LM_PROJECTIONS`/`_LM_SCOPE` plus a re-parity run, *not* an architecture change, so nothing about writing today's behaviour down makes the flip harder; (2) **the exclusion's premise is falsifiable and expires on its own** — it holds only while the day log reaches the trainer as text, so the day DP feeds the trainer pixels, the reason is gone and this row must be re-argued. Runs on the shared SLURM partition |
 | Pre-publish eval gates | Personal-recall suite (does it know yesterday?) + general-capability forgetting suite (did it get dumber?); no green, no publish |
 | Publish / rollback | C5 adapter version entries in the model directory; one-command rollback to the previous active version |
 | Per-user scheduling | Cadence orchestration across pilot users; retries, idempotency, cost accounting |
@@ -48,9 +53,9 @@ long-term retention, self-distillation, and the LoRA → MoE-experts-per-user sc
 | Serving adapters / hot-swap in vLLM (C6 resolution) | Inference Service |
 | Serve-time memory harness — fast-memory (SSM/mneme) runtime + per-user state, think-back paging executor, day-log-grounded answering, memory routing | Inference Service (kickoff decision 2026-07-22, pending founders'-board ratification; we TRAIN and publish the memory artifacts — mneme module, reader-LoRA, paging recipe — they execute them) |
 | `/context` + `/sessions` storage engine and query APIs | Storage Service |
-| **Day-log materialization** (scheduled C2 → segments/blocks + `render_block`) | Storage Service (2026-07-23 decision, pending board) — we fetch the rendered day-log via C10 |
-| **Recipe registry** (versioned recipe hosting; continuum *and* inference pull) | Storage Service (2026-07-23 decision, pending board) — we fetch the pinned recipe, we don't host it |
-| **Reservoir custody** (amplified-corpus store + replay-sample read) | Storage Service (2026-07-23 decision, pending board) — we write to it, storage owns the store |
+| **Day-log materialization** (scheduled C2 → segments/blocks + anchored block text) | Storage Service (**RATIFIED D18**, 2026-07-26 — decided, not built) — we fetch the rendered day-log via the evolved **C10**, random-access by `(user_id, window_id)`. Note the boundary precisely: what leaves is `daylog.py`'s *product* renderer over C2 records; the **parity-locked `Profile.render_block` stays here**, because it is recipe-coupled |
+| **Recipe registry** (versioned recipe hosting; continuum *and* inference pull) | Storage Service (**RATIFIED D18** → **C13**, decided not built) — we fetch the pinned recipe + the separately-versioned gate policy, we don't host them |
+| **Reservoir custody** (amplified-corpus store) | Storage Service (**RATIFIED D18** → **C14**, decided not built) — we write to it, storage owns the store. Replay does **not** read it: it re-reads prior day-logs via C10 |
 | Producing the records we consume (stream + session processing) | Data Processing Service (C2), Inference Service (C4) |
 | Calling mentor models (traces reach us only as stored C4 records) | Inference Service (C7) |
 | Model directory hosting/query (we only publish via C5) | Storage Service |
@@ -64,8 +69,11 @@ Upstream: **Storage Service** (we read via C10). Downstream: **model directory �
 
 | Contract | Direction | Our role (payloads defined in [../../ARCHITECTURE.md](../../ARCHITECTURE.md) § Contracts) |
 |---|---|---|
-| C10 | **consume** | Time-ranged, watermarked training-window read of `/context` + `/sessions`: processed life-stream records (the experiential training data for each cycle window) + turn records incl. full mentor + tool traces (the distillation training data) |
-| C5 | **produce** | Adapter version entry: user_id, adapter version, base-model hash, training window, eval report, status active/rolled-back |
+| C10 | **consume** | **A DAY-LOG FETCH as of D18 (2026-07-26) — decided, not built.** We ask storage for "the day-log for `(user_id, window_id)`" and get rendered segment/block rows back; we no longer build it, and we no longer pull raw records to do so. Also consumed: window **enumeration** (which windows has this user consolidated — today inferred from the reservoir ledger, `cycle.py:204`) and the window-ledger **open/close** calls. The window itself is storage's `[last_trained_t, now−δ)` **ingest-time watermark**, so we no longer compute it from a local date and **`window_for()` / `closed_window_before()` are deleted**. The `/sessions` (mentor-trace) leg of this row is unchanged and remains **unbuilt** |
+| C12 | **consume** | Per-user profile read — `home_tz`. It replaces `nightly.py --tz`: the cycle stops being told a timezone by its caller. We use it for **nothing but** the scheduler's fire time; the window arithmetic needs no zone, and each block's rendered anchor is resolved by storage from the record's own `device_tz` |
+| C13 | **consume** | Recipe registry — the pinned training recipe and the separately-versioned gate policy, by id. Our `LocalRecipeRegistry` is the reference implementation storage lifts |
+| C14 | **produce** | Reservoir writes — each night's amplified corpus, append-only, audit/provenance. **Not** the replay path: replay re-reads prior day-logs via C10 |
+| C5 | **produce** | Adapter version entry — **as built, NOT frozen** (`app/publish.py:3-4`: "C5's v0 shape is NOT frozen yet (needs inference at the table; founders ratify)"); described here so the gap is visible, **not** to pin it. Nine fields (`publish.py:83-99`): `contract:"C5"`, `user_id`, `adapter_version`, `adapter_dir`, `base_model_hash`, `training_window`, `recipe_id`, `eval_report`, `status`. **`status` has THREE values — `active` \| `gate_failed` \| `rolled_back`** — because a candidate the gate blocks is *recorded* rather than discarded (`record_gate_failure`, `publish.py:101-114`): the row is appended for audit + lineage with `adapter_dir`/`base_model_hash` NULL, and never becomes eligible. That audit trail is exactly what a reader most needs to know exists, so it belongs in the field list and not only in the code |
 | C6 | observe | Inference resolves the latest *eligible* adapter per request; our C5 `status` field is what makes an adapter eligible — we never touch serving |
 
 Future scope (not v0): proactive/coach-mode triggers will involve us jointly with inference —
@@ -112,9 +120,18 @@ trigger ownership is tracked as output's proactive open question ([../output/CHA
    behavior/preference prediction on held-out user actions? A future eval track beyond M2's gates.
 
 **Engineering**
-9. **Watermark semantics (part of C10's design).** Late-arriving or reprocessed records
-   (pipeline-version bumps) — does a cycle window close by wall-clock, by ingestion time, or both?
-   Pinned with storage in C10 ([../../ARCHITECTURE.md](../../ARCHITECTURE.md) § Contracts).
+9. ~~**Watermark semantics (part of C10's design).** Late-arriving or reprocessed records
+   (pipeline-version bumps) — does a cycle window close by wall-clock, by ingestion time, or both?~~
+   **RESOLVED (D18, 2026-07-26) — by ingestion time.** The window is
+   `[last_trained_t, now−δ)` on **storage's `ingest_time`**, which dissolves the late-data question
+   instead of answering it: a record's `ingest_time` is assigned at write, so it can never land
+   below a closed boundary — **late data cannot exist on this axis**, and a chunk captured Tuesday
+   but uploaded Friday simply trains in Friday's window, in a block anchored to Tuesday. What we
+   own downstream of that: **`last_trained_t` advances iff we reach `published` or
+   `skipped_no_data`** — a `gate_failed`, `frozen` or crashed night leaves it, so the next window is
+   a strict superset of the failed one. That is the design-of-record's **failed-day merge, obtained
+   structurally**, and it demotes `_UserState.debt` (`cycle.py:88-118`) from mechanism to reporting.
+   Full statement: [../../ARCHITECTURE.md](../../ARCHITECTURE.md) § Contracts → *C10 evolved*.
 10. **Cycle trigger.** Clock ("nightly", timezone-aware per user) vs data-volume threshold vs
     hybrid; what floor of new data makes a cycle worth running? *(The **"timezone-aware" half is
     settled by D17**, 2026-07-26, and it is smaller than it looked. A timezone is needed for
@@ -126,7 +143,13 @@ trigger ownership is tracked as output's proactive open question ([../output/CHA
     change is DECIDED, NOT YET BUILT** (D17 status split; `window_for()`/`closed_window_before()`
     are still local-date and `nightly.py` still calls them) — it rides the storage/C10 board session,
     where `window_id`'s fate has to be settled first because C5's `training_window`, the cycle
-    journal and publish's alias monotonicity all key on it. **Rendering** local times is not a scheduling concern at all — each record carries its own
+    journal and publish's alias monotonicity all key on it. **`window_id` was settled by D18**
+    (2026-07-26): it becomes an opaque, path-safe, lexicographically-ordered token
+    `w<YYYYMMDD>T<HHMMSS>Z` minted once from the window's end instant, minted **only** by storage,
+    and **parsed by nobody** — which deletes `Window.local_date` and
+    `ReservoirEntry.local_window_date()` and, with them, `cycle.py:217`'s reconstruction of prior
+    windows under *tonight's* timezone. Prior windows are enumerated from storage instead. Still
+    DECIDED, NOT BUILT. **Rendering** local times is not a scheduling concern at all — each record carries its own
     `device_tz`, so anchor lines are correct even for a day spent in another zone. What remains open
     in OQ10 is only the **trigger policy** — clock vs volume vs hybrid, and the min-data floor.)*
 11. **GPU budgeting.** Per-user cycle cost on the shared 8-node partition, contended with research

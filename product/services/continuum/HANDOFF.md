@@ -11,11 +11,44 @@ ensemble indistinguishable p=0.82; **M0** — a 32B adapter our pipeline trained
 services reproduces the baseline separation (0.137 vs 0.179, p=0.148 same distribution). Our real
 services carry the learn loop without losing learnability.
 **Open (NOT integration defects):** (1) recipe/dose — amplification must scale with block-text at our
-native cadence → **Gnandeep's knob** (cofounder to raise); (2) storage-expansion + C10-evolution →
-**founders' board** (see below + storage handoff); (3) storage server-side (day-log materialization /
-recipe registry / reservoir) → storage workstream; (4) serve-time memory harness → inference, a
-separate future phase. ·
-**Last updated:** 2026-07-25 (learn-loop close-out)
+native cadence → **Gnandeep's knob** (cofounder to raise); (2) ~~storage-expansion + C10-evolution →
+founders' board~~ **RATIFIED 2026-07-26 → D18** (decided, not built — see below); (3) storage
+server-side (day-log materialization / recipe registry / reservoir) → storage workstream, now with
+contracts C10-evolved/C12/C13/C14; (4) serve-time memory harness → inference, a separate future
+phase. ·
+**Last updated:** 2026-07-26 (**D18** — C10 evolution ratified)
+
+## D18 (2026-07-26) — what changes HERE, once the storage build lands
+
+**Decided, not built. No continuum code has changed.** The board ratified the C10 evolution and the
+storage scope expansion; our side of it:
+
+- **`app/daylog.py` and `app/window.py`'s local-date arithmetic LEAVE** for storage. `window_for()`
+  and `closed_window_before()` are **deleted**; `window.py` shrinks to the `Window` value object
+  storage returns. `LocalDayLogClient` + the `RecordProvider` seam disappear exactly as
+  `clients/daylog_client.py:14-19` predicted, replaced by `HttpDayLogClient`.
+- **`Profile.render_block` STAYS.** The board corrected a premise here: the parity-locked renderer
+  (`morpheus/profiles/speed.py:89`, 1427/1427 vs research goldens, over 5-min description dicts) is
+  **recipe-coupled** and is *not* what moves. What moves is `daylog.py:183 _render_block`, the
+  product renderer over C2 records, which never had a research golden. `morpheus/blocks.py:5-7` had
+  already drawn this line. **The move cannot break research parity**; what it must clear is a
+  differential byte-equality against our current output (storage CHARTER M9), and **our local path
+  is not deleted until that diff is green**.
+- **`nightly.py --tz` is retired** in favour of the **C12** profile read. The cycle stops being told
+  a timezone by its caller; it uses `home_tz` for **nothing but** the scheduler's fire time.
+- **`window_id` becomes opaque** — `w<YYYYMMDD>T<HHMMSS>Z`, minted by storage, **parsed by nobody**.
+  That deletes `Window.local_date` (`window.py:44`), `ReservoirEntry.local_window_date()`
+  (`reservoir.py:65-69`) and `cycle.py:217`'s reconstruction of prior windows under *tonight's*
+  timezone. Prior windows come from storage's **enumeration** read instead — which is why that read
+  is load-bearing and not a convenience. **The training seed changes** (`cycle.py:147` hashes
+  `window_id`), so a night re-run across the cutover is **not apples-to-apples**; `tests/parity/`
+  is unaffected (own harness, own seeds). `scripts/m0_smoke.py:133`'s `w-day5` moves onto the
+  minter — it breaks the total order twice over today and was ruled a mess, not a precedent.
+- **`_UserState.debt` demotes to reporting.** `last_trained_t` advances only on
+  `published`/`skipped_no_data`, so a failed night is absorbed by the next window automatically —
+  the design-of-record's failed-day merge, obtained structurally. Strike counting is unaffected
+  (each failed night is a distinct, larger window, so each strikes once) and `active_before` still
+  resumes from the last `active` entry.
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
@@ -24,7 +57,7 @@ separate future phase. ·
 | WS2 | **Morpheus port** (real `TRAINER_BACKEND=morpheus`); exit = Speed-data night reproduces recipe-v1.0 numbers through our gate + C5 path | **2a + 2b DONE ✅** (port proven; 32B M0 published + served) | [ws-morpheus-port.md](handoff/ws-morpheus-port.md) · [phase-2a-report.md](handoff/phase-2a-report.md) · [overnight-2-report.md](handoff/overnight-2-report.md) | Morpheus sessions |
 | WS2c | **Lean storage seams** — 5-verb loop over three storage CLIENT interfaces (day-log fetch / recipe registry / reservoir), local impls; daylog/window/renderer migrated behind the day-log client (byte-identical); raw-source replay wired | **done ✅** (185 tier-A + 83 tier-B green; cycle.py fetches + keys on the day-log fingerprint) | [ws-morpheus-port.md](handoff/ws-morpheus-port.md) §7 (2c) | 2c: Morpheus session |
 | WS-P3 | **Phase 3 — DP dogfood**: Speed data through the real recording→DP→storage→continuum pipeline. 3a bridged 209.7 h of real audio; 3b's 1-min rule-bend collapsed on **dose**; the **decomp (parity content) reproduced the baseline separation** → **PIPELINE SOUND** | **done ✅** — learn-loop integration proven end-to-end | [handoff/ws-phase3-dogfood.md](handoff/ws-phase3-dogfood.md) · [phase-3-decomp-report.md](handoff/phase-3-decomp-report.md) | Phase-3 sessions |
-| WS3 | C10 v0 freeze (with storage; founders ratify) + real storage integration + watermark/late-data policy | queued | *(opens with the freeze session)* | — |
+| WS3 | C10 **evolution** + real storage integration + watermark/late-data policy | **UNBLOCKED — contract ratified (D18, 2026-07-26), build not started** | *(opens with the build slice)* | — |
 | WS4 | Eval gates v1: probe generation (generator ≠ corpus-generator), Gemini judge on our creds, the 3 unwired gate checks | queued — after WS2 | *(opens with work)* | — |
 
 ## Validation strategy — replay Speed's data to prove the port (2026-07-22)

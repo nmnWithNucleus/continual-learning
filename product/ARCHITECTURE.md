@@ -91,13 +91,16 @@ what is locked now is direction, ownership, and shape.
 | **C2** | data-processing → storage `/context` | Processed record: timestamps, transcript/caption content, enrichments (speakers, known faces, geo/place tags, objects), raw ref, pipeline version | **v0 frozen (learn-loop, below).** Timestamp spine: concurrent activities from different devices must be alignable |
 | **C3** | input (QueryBuilder) → inference | **UserPrompt**: chat-templated multimodal request + session/turn ids + client capabilities | The seam where "user request" becomes "model input"; a *clarification-answer* variant binds a reply to a pending turn (see C7/C9) |
 | **C4** | inference → storage `/sessions` | Turn record incl. **full mentor traces + tool traces** | Traces are continuum's training data — never truncate |
-| **C5** | continuum → model directory | Adapter version entry: `user_id`, version, base-model hash, training window, eval report, status (active/rolled-back) | Publish is eval-gated; rollback is first-class |
+| **C5** | continuum → model directory | Adapter version entry — **described AS BUILT, deliberately NOT frozen** (the freeze needs inference at the table; founders ratify — field names may still move, and writing them here does not pin them): `contract:"C5"`, `user_id`, `adapter_version`, `adapter_dir`, `base_model_hash`, `training_window`, `recipe_id`, `eval_report`, `status` ∈ **`active` \| `gate_failed` \| `rolled_back`** — nine fields (`services/continuum/app/publish.py:83-99`) | Publish is eval-gated; rollback is first-class. **`gate_failed` is the audit row for a candidate the gate blocked** — appended for lineage, never eligible to serve, with `adapter_dir` and `base_model_hash` NULL (`publish.py:101-114`). Entries live today in continuum's own `var_dir/model_directory/entries.jsonl`; the storage-hosted directory is still ahead of us, and **three things the short field list used to hide must survive the swap**: `status` is a *three*-value enum, `gate_failed` rows carry NULLs where the happy path carries paths, and C6 eligibility replays the log (`active` pushes, `rolled_back` pops, **`gate_failed` does neither**) rather than taking the latest row. See [storage charter](services/storage/CHARTER.md) §Model directory |
 | **C6** | model directory ↔ inference | `resolve(user_id)` → latest eligible adapter; hot-swap in vLLM per request | Same mechanism during fine-tuning windows |
 | **C7** | inference ↔ mentors | Assistance prompt out (system + user + user-context injection); thinking/plan/response traces back; **clarification-question relay** through our model to the user and back | Mentor traces route into C4 |
 | **C8** | QueryBuilder ↔ data-processing | The stream pipeline exposed as a **synchronous API** | Interactive requests get identical normalization to the life stream — one pipeline, two entry points |
 | **C9** | inference → output | Grounded **response-stream envelope**: token/text stream, mid-turn frames (mentor clarification questions, status), end-of-turn metadata | The only serve-loop hop after C4; mid-turn clarification frames are C7's user-facing leg — answers return as the C3 clarification-answer variant |
-| **C10** | storage → continuum | **Training-window read**: time-ranged, watermarked export of `/context` + `/sessions` per user | Watermark semantics (late-arriving / reprocessed records, pipeline-version bumps) are pinned here. **Evolution PROPOSED, pending founders' board** (learn-loop close-out 2026-07-25): from a raw range-read to a **day-log fetch, random-access by `(user, window_id)`** (storage materializes the segment/block day-log; continuum consumes it) — ratified jointly with the storage charter expansion (day-log materialization + recipe registry + reservoir); see [HANDOFF.md](HANDOFF.md) worklog + storage/continuum canvases. **Not pinned until ratified.** **Window semantics DECIDED 2026-07-26 (D17), NOT YET BUILT:** the cycle window *is to become* the **watermark range `[last_trained_t, now)`**, requested by continuum as a plain UTC range — *not* a local-date computation. This is what this row and the storage charter always said; continuum's as-built `window_for(user, local_date, tz)` drifted from it and **is still what runs**. Blocking design question for whoever builds it: `window_id` is today the local start date and keys the day-log, the cycle journal, C5's `training_window`, and publish's active-alias monotonicity — the natural watermark key is the window's **end instant** (monotone per user, no dateline case), but that changes the `w2026-07-21` format and forks adapter lineage. The consequences are that **storage needs no timezone to serve C10**, a missed night is absorbed into the next window instead of lost, and the dateline/DST pathologies of a local-date-derived boundary (23 h/25 h days, a repeated local date colliding `window_id`) cannot arise. The user's `home_tz` decides only **when the request fires** (their local ~04:00), never the arithmetic of the range. |
+| **C10** | storage → continuum | **Training-window read — RATIFIED AS A DAY-LOG FETCH + WATERMARK WINDOW (D18, 2026-07-26; DECIDED, NOT BUILT).** Storage materializes the segment/block day-log and owns the per-user training-window ledger; continuum fetches, never builds. Four operations: `POST /training/windows {user_id}` → **idempotent get-or-create** of the user's currently-open window `{window_id, t_start, t_end}`; `GET /training/daylog?user_id=&window_id=` → the materialized day-log for **any** window (random access over history — replay re-reads *prior* day-logs, so this is not a forward cursor); `GET /training/windows?user_id=&state=` → window enumeration (`open`\|`consolidated`), the "which windows has this user consolidated?" read continuum today infers from the reservoir ledger; `POST /training/windows/{window_id}/close {outcome}` → advances the watermark. The raw range read `GET /context/records?user_id=&from=&to=` **is NOT replaced** — it stays first-class (D12's beta training feed, debugging, C11-adjacent). Day-log body + watermark rules in the learn-loop block below. | **The window is `[last_trained_t, now−δ)` on storage's `ingest_time` axis** — not event time, not a local date. Consequences: storage needs **no timezone** to serve C10; a missed or gate-failed night is **absorbed** into the next window; and **late-arriving records cannot be lost, because on an ingest-time watermark "late data" does not exist** — `ingest_time` is assigned by storage at write, so a record can never land below an already-closed boundary (`δ`, default 60 s, covers in-flight writes racing the boundary). `last_trained_t` advances **iff** a cycle reaches `published` or `skipped_no_data`; a `gate_failed` / `frozen` / crashed night leaves it, which makes the research design's **failed-day merge structural instead of bookkeeping**. Window bounds are **immutable once opened**, so a retry re-opens the *same* `window_id` and `cycle.py`'s crash-safe journal replay is preserved. `window_id` is an **opaque, path-safe, lexicographically-ordered per-user token**, minted once per window from its end instant — `w<YYYYMMDD>T<HHMMSS>Z` (e.g. `w20260721T110000Z`); **no consumer may parse it**. The `/sessions` (C4 mentor-trace) leg of this row is unchanged and remains **unbuilt** — v0's day-log derives from `/context` only. |
 | **C11** | storage → input (QueryBuilder) | **Recent-context read**: recency/semantic retrieval over `/context` + `/sessions` for same-day grounding | Bridges the gap before the nightly cycle lands in weights; the index lives in storage, QueryBuilder decides what enters the UserPrompt |
+| **C12** | storage → continuum · (later inference / input) | **User profile read (per-user POLICY)**: `GET /users/{user_id}/profile` → `{contract:"C12", version:"0", user_id, home_tz, profile_version, updated_at}` (`contracts/c12_user_profile.v0.json`) | Minted **D18** (2026-07-26) — the contract home for D17's `home_tz`. **v0 carries exactly one policy field: `home_tz` (IANA, REQUIRED)**, whose only jobs are **scheduling** the nightly cycle and **fallback** when a record carries no `device_tz` (§Ownership splits → *User timezone*). **404 when no profile exists — there is no server-side default timezone anywhere** (D17), and a user with no `home_tz` is **not schedulable**: an operational alert, never a silent skip. Storage **auto-seeds** `home_tz` from the first device-reported `device_tz` it sees for a user and **never auto-updates it** — a traveller's night boundary must not chase their device, which is the entire point of the FACT/POLICY split. It is a **profile, not a settings blob**: it holds values *the system reads to decide its own behaviour* for this user (scheduling, fallbacks, policy), never user-facing identity or presentation — those belong to input. Expected second field, deliberately **not** minted until it has a consumer (E-5 precedent): a per-user `boundary_local_time` override — today a *global* recipe knob, which cannot express a night-shift worker. It cannot ride C13: `recipe_id` is global + versioned (`recipe_id` == filename stem), so a per-user value there forks `recipe_id` per user. The **write** surface is storage-owned and prose-pinned (D11's `/raw` precedent) until input ships a settings consumer |
+| **C13** | storage → continuum + inference | **Recipe registry fetch**: versioned consolidation/serving recipes, and the separately-versioned gate policy, by id | Minted **D18** (2026-07-26). `recipe_id` == filename stem, **global and versioned** — a recipe is never per-user. The **gate policy is a separate artifact with its own id** (ratified with gate v1.1, 2026-07-24): only the *training recipe* may enter a cycle stage key, so changing a publish threshold must never fork `recipe_id` or invalidate hours of GPU cache. Continuum's `LocalRecipeRegistry` (`app/clients/registry.py`) is the reference implementation to lift |
+| **C14** | continuum ↔ storage | **Reservoir**: write a night's amplified corpus (append-only, keyed `(user_id, window_id, recipe_id)`, content-hashed); read the ledger | Minted **D18** (2026-07-26). **Audit / provenance — NOT the replay hot path**: replay re-reads prior *day-logs* via C10 (the locked architecture; raw-source is a measured tie with amplified, and simpler). The one invariant it exists to protect: **amplified / synthetic text never lands in `/context`** — same storage discipline, different namespace. Admission is append-only and **deletion here is a deliberate privacy act, never housekeeping** |
 
 ### Frozen MVP shapes — serve-loop v0.0 (2026-07-09)
 
@@ -166,9 +169,18 @@ shapes carry all four modalities so the vision/text pipelines add records withou
   device_tz?, device_utc_offset_minutes?, device_location?}, t_start, t_end,
   content:{kind:"transcript", text, language?, segments?:[{t_start, t_end, text,
   speaker}]}, enrichments:{speakers:[], faces:[], places:[], objects:[]}, pipeline_version,
-  processed_at}`. `record_id` is a **deterministic function of `(chunk_id, pipeline_version)`** — so
-  reprocessing is an idempotent `/context` upsert and a `pipeline_version` bump forks a new record
-  (version-forward). `enrichments` is **present-but-empty** in v0 (mirrors C4's empty trace arrays)
+  processed_at}`. `record_id` is a **deterministic function of `(chunk_id, pipeline_version,
+  within-chunk discriminator)`** — so reprocessing is an idempotent `/context` upsert and a
+  `pipeline_version` bump forks a new record (version-forward). The **discriminator** is what keeps
+  a chunk's *multiple* records distinct and individually stable (video keyframes, an `ocr` record
+  beside a `caption`, original+translation); it is `""` in the 1:1 case, and an empty discriminator
+  reproduces the two-component v0 id **byte-for-byte**, so nothing forked when it landed
+  (`services/data-processing/app/pipeline.py:33-46`). This is **not a contract change**: the frozen
+  schema has mandated the discriminator since v0
+  (`contracts/c2_processed_record.v0.json` → `properties.record_id.description`, "fold a
+  within-chunk discriminator into the id so each is stable and distinct") — the schema is
+  authoritative and was already correct; only this prose summary lagged it, and now matches.
+  `enrichments` is **present-but-empty** in v0 (mirrors C4's empty trace arrays)
   so diarization / world-data never reshape it. Storage assigns `ingest_time` — **not** carried in
   C2.
   - **Civil-time passthrough (additive, 2026-07-26 — D17).** `source.device_tz`,
@@ -182,6 +194,117 @@ shapes carry all four modalities so the vision/text pipelines add records withou
     and range-query axis; the zone is *context* stored beside them, never a replacement. Anything
     reading a local wall-clock reads `t_start` + the record's `device_tz` (falling back to the
     user's profile `home_tz`). See §Ownership splits → *User timezone*.
+
+### C10 evolved — the day-log fetch + the watermark window (D18, 2026-07-26 — DECIDED, NOT BUILT)
+
+Ratified at the storage/C10 board session. Schemas land in [contracts/](contracts/) as the build
+slice's **first act**, per that directory's own rule ("C5/C7/C8/C10/C11 get schema files when their
+slices start"); the shapes below are the pin.
+
+- **`window_id` — an opaque, path-safe, lexicographically-ordered per-user token.**
+  Format `w<YYYYMMDD>T<HHMMSS>Z`, e.g. `w20260721T110000Z`, derived from the window's **end
+  instant** in UTC. Three properties are load-bearing and none of them is decorative:
+  **(1) path-safe** — it is a filesystem path component and an `rmtree` target
+  (`services/continuum/app/ids.py:8`; `journal/`, `cycles/`, `reservoir/`, `adapters/`), and a raw
+  RFC3339 instant **fails** that regex because of its colons; **(2) lexicographic order ==
+  chronological order**, because it is compared *as a string* in four places — `publish.py:83`
+  (`active_before`, the resume-from lineage) and `publish.py:106` (**the alias-monotonicity guard
+  itself** — "never move the serving alias backward"), `cycle.py:106,115` (journal debt +
+  `latest_window`), `reservoir.py:105` (replay's `before_window` filter); fixed width + zero
+  padding is what guarantees it. **(3) Second granularity, not minute** — a truncating id can
+  silently collide two distinct windows (a manual catch-up, a re-drive, a test), and an id
+  collision corrupts the journal, the reservoir and C5 lineage at once. Belt and braces: the cycle
+  **refuses a window whose end is not strictly greater than `last_trained_t`**, so a collision is
+  impossible by construction rather than by luck.
+- **Meaning is minted, never parsed.** The id is derived in **exactly one place** (a
+  `mint_window_id(end_utc)` + `validate_window_id()` pair, regex `^w\d{8}T\d{6}Z$`); every consumer
+  treats it as opaque and may rely on `<` / `>=` **and on nothing else**. This deletes
+  `Window.local_date` (`window.py:44`) and `ReservoirEntry.local_window_date()`
+  (`reservoir.py:65-69`), the two places that parse the id back into a date today — and with them
+  `cycle.py:217`, which rebuilds *prior* windows by re-deriving their bounds from that parsed date
+  under *tonight's* timezone. Prior windows are no longer reconstructed at all: they are
+  **enumerated and fetched** from storage, which is why the window-enumeration read above is
+  load-bearing rather than a convenience.
+- **Why the format must change, and it is not a cost of the change — it is a consequence.** Under
+  `[last_trained_t, now−δ)` there is no local date to name: a window can span 23 h, 25 h, or (after a
+  missed night) 47 h. Keeping `w<local-date>` would mean *synthesising* a local date purely to name
+  a window — reintroducing the timezone dependency into a query we just proved needs none, and
+  making the id lie about the window's extent. **You cannot have the watermark window and keep the
+  current format honestly.**
+- **What re-keys, stated in full so nobody discovers it later.** (a) Filesystem paths —
+  `journal/{user}/{window_id}.json`, `cycles/`, `adapters/`, `reservoir/{user}/{window_id}.corpus.txt`
+  + `.meta.json`; old dirs are **orphaned, not corrupted**, and need no migration for correctness.
+  (b) The four string comparisons above stay correct **provided one user's history uses one format**
+  — mixed formats order correctly only by ASCII accident (`-` = 0x2D sorts below `0` = 0x30), so the
+  reservoir cutover must be explicit and tested, never trusted. (c) **The training seed** —
+  `cycle.py:147` `seed = int(_h(user_id, window_id)[:8], 16)` — so amplification variant selection
+  and replay sampling change, and **a night re-run across the change is not apples-to-apples**. We
+  accept that discontinuity rather than re-pinning the seed on a "stable" value that is itself
+  changing; anyone needing a controlled comparison pins it explicitly, which is a recipe change.
+  **The `tests/parity/` suite is unaffected** — it seeds from its own harness, not from `window_id`.
+  (d) `seg_id` = `{window_id}_s{n:05d}` (`daylog.py:88`) and `block_id` = `{window_id}_b{n:04d}`
+  (`daylog.py:206`) re-key; both are regenerated per window, so no migration. (e) **C5
+  `training_window` lineage forks** — small today (the M0 demo entries).
+- **`w-day5` is a mess, not a precedent.** Both on-disk C5 publishes carry the literal `w-day5`
+  because `scripts/m0_smoke.py:133` writes `f"w-day{args.day}"` and never calls `window_for`. That
+  string breaks the total order twice over (`w-day10` < `w-day5`; all `w-day*` sort below all
+  `w2026-*`). It is harmless only because it is a smoke script — but it proves the real lesson:
+  **the ordering invariant is only as strong as the discipline that mints ids, and today nothing
+  enforces it.** Hence the single minter + validator above; `m0_smoke.py` moves to it.
+- **The window is opened, not computed.** Storage mints `(window_id, t_start, t_end)` **durably and
+  idempotently**: `POST /training/windows` returns the user's already-open window if one exists.
+  This is what preserves the cycle's crash-safe idempotency, which an end-instant id would otherwise
+  destroy — recomputing `now` on a retry would mint a *fresh* id, a fresh journal, and therefore a
+  full re-train, a second C5 entry and a second reservoir admission.
+- **Day-log body** (`GET /training/daylog?user_id=&window_id=`):
+  `{contract:"C10", version:"1", user_id, window_id, t_start, t_end, daylog_format_version,
+  recipe_id, home_tz, segments:[{seg_id, t_start, t_end, caption[], asr[], ocr[], quality, tz}],
+  blocks:[{block_id, seg_ids[], text, anchors{}, quality}], content_fingerprint}`.
+  `daylog_format_version` + `recipe_id` satisfy the recipe-versioning requirement; `home_tz` records
+  **the fallback zone actually used**, which closes the D17 follow-up that a wrong-timezone adapter
+  is otherwise unfalsifiable after the fact. `content_fingerprint` is computed **by whoever renders**
+  and is only ever compared to *itself* across runs (it is a journal stage key, not a cross-backend
+  equality claim) — at cutover it changes once and that night re-runs, which is correct, because the
+  input source genuinely changed.
+- **Materialization rules (these are where the watermark's substance lives).**
+  - *Membership is by `ingest_time`; bucketing is by `t_start`.* A window contains every C2 record
+    whose `ingest_time` falls in `[t_start, t_end)`, **whatever its event time** — so a chunk
+    captured Tuesday and uploaded Friday trains in Friday's window, rendered in a block anchored
+    "On [Tuesday]". Content stays event-time-correct because blocks are formed by **temporal
+    adjacency** and carry their own local anchors; a backlog simply forms its own blocks.
+  - *Segment buckets sit on a **global** epoch grid* (`floor(t_start / segment_seconds)`), not
+    relative to the window start as today (`daylog.py:74`). This is required — window-relative
+    indices go negative once membership is on the ingest axis — and it is also **better**: a
+    segment's bucket is then stable across re-materialization.
+  - *One dialect per record, latest wins.* Among records sharing
+    `(chunk_id, content.kind, within-chunk discriminator)`, the materializer keeps the one with the
+    **latest `ingest_time`** and drops the rest. `pipeline_version` is a *composed* string
+    (a mutate stage's enabledness is its version fragment) and therefore **not orderable** —
+    `ingest_time` is storage's own monotone clock and is. It must key on `content.kind`, because
+    Phase-3 proved captions and transcripts can share one `pipeline_version`. **This is what
+    actually fixes the cutover double-count** (`daylog.py` filters on neither `kind` nor
+    `pipeline_version` today), and it demotes **E-2** from a correctness blocker to the retraction /
+    privacy / space primitive it should always have been. **Named blocking sub-item for the
+    builder:** the discriminator is today folded into the `record_id` hash and is **not
+    independently readable from C2** — the build slice must either surface it as an additive
+    optional C2 field or prove `(chunk_id, kind, t_start)` unique per dialect. Do not hand-wave it.
+- **Watermark advance + the outcome rule.** `last_trained_t` advances **iff** the cycle reaches
+  `published` or `skipped_no_data`. `gate_failed`, `frozen` and any crash leave it where it is, so
+  the next window is a strict **superset** of the failed one — the design-of-record's failed-day
+  merge, obtained structurally rather than by the `_UserState.debt` bookkeeping it demotes. Strike
+  counting is unaffected: each failed night is a distinct (larger) window, so each strikes once, and
+  `active_before` still resumes from the last **`active`** entry because a `gate_failed` row never
+  enters the activation stack.
+- **`pipeline_version` bumps are a forward-only correction.** A bump mints new `record_id`s, hence
+  new `ingest_time`s, hence they land in the *next* window and the day-log renders the new dialect.
+  The old dialect is **not un-trained** — on an append-only weight chain that is irreducible. The
+  remedy for a dialect bad enough to need repair is a deliberate **rebuild from base over retained
+  history**, which storage's retained day-logs + the reservoir make possible; it is named here as
+  the escape hatch and is not built. **Accepted, named cost:** the same lived moment can be trained
+  twice in two dialects. Suppressing already-rendered chunks would prevent the double exposure but
+  would also prevent the *correction* from ever training — and since we bump precisely because the
+  old dialect was worse, **training the correction wins**. Tracked as a storage OQ, not built.
+
 
 ## Ownership splits (pinned — cross-referenced from the charters)
 
@@ -199,6 +322,7 @@ Where a responsibility naturally touches several services, the split is decided 
 | **People/known-faces registry** | Data-processing owns matching/enrichment; storage persists the registry; input owns the curation + consent UX surface. Voice-to-person linking (known-vs-unknown *speakers*) rides the same registry — deferred-vs-v0 is data-processing's call, recorded in its charter. |
 | **Same-day context** | Weights only know up to the last nightly cycle. The recent-context read path (C11) is owned by input's QueryBuilder; the recency/semantic index behind it lives in storage. |
 | **User timezone** (D17, 2026-07-26) | **Two different things, two different owners — conflating them was the original bug.** **(1) The FACT — where the user actually was at a moment:** owned by the **capturing device**, reported per chunk as `device_tz` + `device_utc_offset_minutes` on C1, carried verbatim by data-processing into C2 `source{}`, and persisted by storage beside the UTC instant. The device is the only thing that can know this, and it already does — every capture client computes the local instant and discards the zone converting to UTC. This is what renders an honest local anchor line, and it is **correct under travel** by construction. **(2) The POLICY — when is this user's night?:** owned by **storage**, as a per-user profile value **`home_tz`** (IANA), seeded from the last device-reported zone and user-overridable. Its *only* job is **scheduling** — deciding when a user's nightly consolidation fires — plus serving as the **fallback** when a record carries no `device_tz`. It is not the pipeline's time semantics. **Timestamps stay UTC-canonical everywhere:** UTC is the sole ordering and range-query axis (`GET /context/records?from=&to=` needs no zone at all); the zone is context stored *beside* the instant, never instead of it. **Never store a derived local time** — `device_local_time` is fully recoverable from instant + zone, and persisting it creates two sources of truth that will eventually disagree with no rule for which wins. **Never store abbreviations** (`PST`, `MST`) — ambiguous and DST-sensitive; IANA ids only. |
+| **Day-log + training-window custody** (D18, 2026-07-26) | **Storage materializes, continuum consumes — the day-log is a derived VIEW over C2, and it lives with C2.** Storage owns: the scheduled materialization (C2 records → ~10 s segment rows → gap-bounded scene blocks → anchored block text), the **retained** day-logs (random-access by `(user_id, window_id)`), the per-user **training-window ledger** + the `ingest_time` watermark, and the sole `window_id` minter. Continuum owns: the **amplifier's** renderer — `Profile.render_block` (`services/continuum/app/morpheus/profiles/`), which is *recipe-coupled* and is the surface locked byte-identical against the research line — plus the trainer-seam file materialization (`segments.jsonl` / `blocks.jsonl` / `day.txt`, `app/renderer.py`). **These are two different renderers and only one of them moves:** `daylog.py:183 _render_block` (the product labeled-lines renderer over C2 records) goes to storage and has never had a research golden; `Profile.render_block` (`morpheus/profiles/speed.py:89`, the 1427/1427 parity surface over 5-min description dicts) **stays**. `morpheus/blocks.py:5-7` already drew this line — *"Keeping that boundary narrow is what lets the day-log move behind a storage client without any kernel noticing."* **The decisive reason for the split is replay, not tidiness:** replay re-reads *prior* day-logs every night, so a continuum-side builder would re-pull every prior day's raw records nightly — O(days²) across the wire to rebuild an artifact storage could simply have kept. Two consequences that are obligations, not notes: the day-log renderer needs both `device_tz` (per record) and `home_tz` (per user, C12), so **materialization depends on the profile contract**; and **the day-log is a second copy of user content, so storage's deletion primitives (M5) must cascade to it** — a retraction that clears `/context` and leaves a materialized day-log standing has deleted nothing. The same cascade binds the reservoir (C14). |
 | **Observability** | **Every service exposes a `/metrics` endpoint and ships its Grafana dashboard JSON** (per-service ownership). Platform runs the ONE shared Prometheus + Grafana + standard exporters and provisions those dashboards. See §Observability. |
 
 ## Observability (cross-cutting requirement — every service)
@@ -260,7 +384,7 @@ add-on: an always-on system needs both founders to open one place and see any se
 |---|---|---|
 | Base model (BWM) | **Qwen3-VL-32B** (open, dense; already served on vLLM TP=8 in poc/live_video_chat, so the serving path is proven). The older chunk-sweep's OCR dip is **not a blocker**: OCR is handled upstream by a specialist pass in data-processing (below), not by the BWM reading pixels at inference | user (CTO) |
 | On-screen text (OCR) | **Decouple OCR from the base model.** A dedicated OCR-strong VLM transcribes legible text + frame location in the data-processing pipeline; that text is woven into the description written to `/context` (and returned via C8 → `/sessions`). The user model learns text from the *description target*, so BWM OCR quality never gates the product. Owner: [data-processing](services/data-processing/CHARTER.md) | user (CTO) |
-| Personalization | **LoRA per user, all layers**; MoE-experts-per-user is the research path, not v0 | start.md |
+| Personalization | **LoRA per user, all layers** — the standing INTENT, unchanged; MoE-experts-per-user is the research path, not v0. **What v0 BUILT is narrower, and the gap is deliberate + open:** the adapter covers the **language-model stack only** — all 36 LLM layers × 7 projections (q/k/v/o/gate/up/down), **vision towers excluded**, because the day log reaches the model as text, so rank spent on the vision stack adapts modules that never see the training signal (`services/continuum/app/morpheus/train.py:27-32`; parity-proved **252/252 modules, zero vision-tower**, against the research line's golden adapter tensor keys — [phase-2a-report](services/continuum/handoff/phase-2a-report.md):60). Note the axis: v0 *does* adapt all **layers**; what it excludes is a **tower**. Widening to vision is a **module-name-filter change plus a re-parity run** — cheap, and an option we are explicitly keeping open, not a door closed. The exclusion's premise is **falsifiable and self-expiring**: it holds only while the day log reaches the trainer as text, so if DP ever feeds the trainer pixels, the reason evaporates and the answer flips without further argument. Owner: [continuum](services/continuum/CHARTER.md) §Scope | start.md (intent) · continuum v0 build (as-built) |
 | Serving | **vLLM** with adapter hot-swap on request boundaries, during fine-tuning too | start.md |
 | Learning cadence | Periodic (nightly-ish), **eval-gated** before publish — never trained live into serving | start.md + POC forgetting results |
 | Devices | **Capture:** computer (screen / extension / mic) + wearable body cam (camera + mic, **no speaker**). **Interaction + speech-out:** computer, wearable push-to-talk, and a **v0 mobile app**. Only *mobile screen capture* is deferred (iOS restriction) — the mobile app itself ships in v0 | start.md + CTO |
