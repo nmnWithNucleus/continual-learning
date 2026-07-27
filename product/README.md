@@ -2,17 +2,17 @@
 
 > Product-focused successor to the `poc/` research directories (which continue as research
 > feeders). Everything about building Nucleus v0 — vision, architecture, org, and one
-> directory per service — lives here.
+> directory per service lives here.
 
 **Last updated:** 2026-07-08
 
 ## Cold start — read in this order
 
-1. [VISION.md](VISION.md) — what we're building and why (context → weights; personalization).
-2. [ARCHITECTURE.md](ARCHITECTURE.md) — the v0 system: the two loops, components, **§Contracts** (the spine).
+1. [VISION.md](VISION.md) — what we're building and why.
+2. [ARCHITECTURE.md](ARCHITECTURE.md) — the v0 system: the two loops, components, services and **§Contracts**.
 3. [ORG.md](ORG.md) — how we work: doc protocol, session mechanics, growth rules.
-4. [HANDOFF.md](HANDOFF.md) — live state: service status board, escalations, next.
-5. [PROMPTS.md](PROMPTS.md) — copy-paste prompts to launch any kind of session.
+4. [HANDOFF.md](HANDOFF.md) — live state: service status board, escalations, action-items, next tasks.
+5. [PROMPTS.md](PROMPTS.md) — sample copy-paste prompt templates to launch any kind of session.
 
 A service lead only needs 1–2 above plus their own `services/<key>/CHARTER.md` + `HANDOFF.md`.
 
@@ -22,14 +22,15 @@ A service lead only needs 1–2 above plus their own `services/<key>/CHARTER.md`
 product/
 ├── README.md            ← you are here
 ├── VISION.md            why (stable)
-├── ARCHITECTURE.md      system + contracts C1–C11 (stable, owns the seams)
-├── STACK.md             stack registry: shared runtime, serving stack, per-service manifests
+├── ARCHITECTURE.md      system + contracts C1–C11 (stable)
+├── STACK.md             stack registry: shared runtime, serving stack, per-service manifests (stable)
 ├── ORG.md               operating model + doc protocol (stable)
-├── PROMPTS.md           session launch prompts (stable)
+├── PROMPTS.md           session launch prompt templates (stable)
 ├── HANDOFF.md           founders' working canvas (volatile)
-├── contracts/           frozen machine-readable payload schemas (C3/C9/C4/C6 v0…)
-├── handoff/             founders' aspect threads: engineering · research · design · hiring-ops
-└── services/            one node per service — CHARTER.md (stable) + HANDOFF.md (volatile)
+├── onboarding/          new joinee's workbook to ramp-up on the product landscape (stable)
+├── contracts/           frozen machine-readable payload schemas (C1/C2/C3 ... with versioning)
+├── handoff/             founders' aspect threads: `engineering`, `research`, `design`, `hiring-ops`
+└── services/            one node per service. Contains CHARTER.md (stable) + HANDOFF.md (volatile)
     ├── recording/         life capture: wearable + computer → ingest
     ├── data-processing/   raw streams → timestamped enriched records
     ├── storage/           /context · /sessions · model directory

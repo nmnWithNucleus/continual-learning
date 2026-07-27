@@ -376,8 +376,10 @@ ratified in-session 2026-07-19 → **D16**.)*
 - ~~**NEXT SESSION IS PREPPED:** the storage/C10 board launch prompt~~ **RUN 2026-07-26 → D18.**
   All four decisions taken plus E-2's disposition; the prompt's `window_id` gate was verified (and
   three further consumers found), and one of its premises — the `render_block` parity constraint —
-  was corrected. Prompt kept at [handoff/next-session-storage-c10.md](handoff/next-session-storage-c10.md)
-  for provenance.
+  was corrected. The prep file itself was retired 2026-07-27 once
+  everything in it had a home — decisions in D18/D19/D20, contracts in ARCHITECTURE + `contracts/`,
+  scope in the owning charters, and the prompt-format lessons it proved in
+  [PROMPTS.md](PROMPTS.md) §D+.
 - ~~**NEXT FOUNDER ACT — the storage build slice**~~ **BUILT 2026-07-27** (`a5a48fb` storage ·
   `1757efb` continuum · `2698b63` data-processing). D20's bar met and verified by the founders'
   session, not relayed: storage **310** · continuum **251**+7 · recording **144** · DP **788**+21 ·

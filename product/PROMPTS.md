@@ -114,6 +114,34 @@ process changes → ORG.md) and echoed in product/handoff/<aspect>.md. Before we
 the aspect file + HANDOFF.md status board if it moved, commit.
 ```
 
+### D+ — when the session is decision-dense, extend the template
+
+The block above is the standing shape. For a session whose job is to *ratify* rather than explore —
+several coupled decisions, each with real blast radius — the D17 → D18 pair converged much faster
+with five additions. Written down because the prep file that proved them has been retired into the
+docs it produced:
+
+1. **Order the agenda by dependency and say which one gates the rest.** D18's `window_id` decision
+   had to land before the day-log move and the watermark window, because both key on it. Deciding
+   it late means redoing them.
+2. **Open each decision with "VERIFY THIS FIRST" and a handful of `file:line` citations.** Not
+   background — the specific greps that make the decision concrete. Every one of D18's five
+   `window_id` claims was verified in minutes, and the exercise turned up *three more consumers the
+   prompt had not listed*, one of which was load-bearing.
+3. **State your own read and invite the argument** — "My read (argue with it)". It gives the session
+   something to push against instead of a blank page, and it makes disagreement cheap. One premise
+   in D18's prompt was flatly wrong (it conflated two functions named `render_block`); saying it out
+   loud is what got it caught rather than inherited.
+4. **List the deliverables explicitly, and require DECIDED vs BUILT stated separately for each.**
+   This is the O-12 discipline in prompt form: a session that ratifies four things will otherwise
+   report them under one status headline, and the Decisions log is the most authoritative doc we
+   have.
+5. **Name the things that must not get lost again**, with their escalation ids. Items that had
+   already slipped twice (E-2, the unminted C-numbers) survived only because the prompt listed them.
+
+The failure this guards against is not a bad decision; it is a session that spends its first hour
+reconstructing context that was hot when the prep was written.
+
 ## E — Integrator (after a parallel fan-out)
 
 ```
