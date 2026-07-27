@@ -1051,7 +1051,7 @@ error).** Items 1 and 2 remain the two a newcomer is most likely to be misled by
 13. **Recording scope items that read as shipped but aren't:** device auth-token issuance
     (CHARTER M0 exit row) and pairing are unbuilt — `/capture/segments` is unauthenticated and
     `device_id` is self-minted client-side; C1's optional `device_location`/`device_clock` are
-    never filled by any client. And the "120 tests" figure is stale in **both** places it appears —
+    never filled by any client. And the "120 tests" figure was stale in **both** places it appeared (**fixed 2026-07-27, review item O-10 — recording is 144**) —
     the founders' board service row *and* recording's own canvas status line (133 collected
     — the delta is the Phase-3 replay-source tests).
 

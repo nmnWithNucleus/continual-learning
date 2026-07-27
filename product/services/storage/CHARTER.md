@@ -264,8 +264,8 @@ Engineering:
      for a dialect bad enough to need repair is a deliberate **rebuild from base over retained
      history** — named as the escape hatch, not built. **Accepted, named cost:** the same lived
      moment can train twice in two dialects (OQ8 below).
-7. **The within-chunk discriminator is not readable from C2 — BLOCKING sub-item for the build
-   slice.** The one-dialect rule needs to group by `(chunk_id, content.kind, discriminator)`, but
+7. ~~**The within-chunk discriminator is not readable from C2 — BLOCKING sub-item for the build
+   slice.**~~ **RESOLVED (2026-07-27) — option (a) taken: it is SURFACED.** `discriminator` is an additive-optional top-level field on C2 (`contracts/c2_processed_record.v0.json`), emitted by DP only when non-empty (absence, not `""`, is the 1:1 contract — the shape D17 used for the civil-time fields), with both `extra="forbid"` pydantic mirrors moved alongside it. It adds no new promise: DP already REJECTED duplicate discriminators within a chunk (`stagegraph/executor.py:396-401`), so this only makes an enforced invariant readable. `record_id` is unchanged and pinned by test — the value was always an id input, and an empty discriminator reproduces the two-component v0 id byte-for-byte, so nothing re-keyed. The day-log's one-dialect rule keys on `(chunk_id, content.kind, discriminator)` and is covered by unit tests plus the live seam check. **Chosen over the cheaper alternative** — proving `(chunk_id, kind, t_start)` unique per dialect — because that is a proof that expires silently the day a stage emits two records at one timestamp, and D19's prototype posture makes an additive contract edit cheap. *Original text:* The one-dialect rule needs to group by `(chunk_id, content.kind, discriminator)`, but
    the discriminator is today folded into the `record_id` hash and exists as no independent field
    (`../data-processing/app/pipeline.py:33-46`). The build must either **(a)** surface it as an
    additive-optional C2 field — a frozen-schema edit, so ARCHITECTURE first, then the schema, then
@@ -277,7 +277,7 @@ Engineering:
    already-rendered chunks would stop the double exposure — but it would equally stop the
    *correction* from ever training, and we bump precisely because the old dialect was worse, so
    **training the correction wins**. Revisit only if measured over-weighting appears.
-9. **Day-log + reservoir deletion cascade (new, opened by D18).** See M5 — scoped, not designed.
+9. **Day-log + reservoir deletion cascade (opened by D18; still OPEN, now concrete).** Both are second copies of user content and both now EXIST as real stores — `day_logs` and the reservoir are tables/dirs in a live database as of the 2026-07-27 cutover, not future work. So a retraction that clears `/context` and leaves them standing has deleted nothing. Sharpened by the cutover: **E-2's `DELETE /context/records` is still unbuilt**, which the fleet bring-up hit directly — clearing verification rows required a full re-wipe because no retraction primitive exists. See M5, which this widens. Design owed: does a delete cascade synchronously, or mark day-logs stale for re-materialization (the mechanism `home_tz` correction already uses)?
 
 Research:
 5. **Deletion vs weights.** A time-slice delete of records already trained into an adapter is not

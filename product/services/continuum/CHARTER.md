@@ -167,9 +167,17 @@ trigger ownership is tracked as output's proactive open question ([../output/CHA
     not the design. The **min-data floor** — the volume of new block text below which a night is
     not worth a GPU run — lands as a **recipe knob** (`min_block_chars`), measured in *characters of
     eligible block text* rather than block count, because Phase-3 showed recall depends on
-    retellings per unit of text. Default **0** for the prototype, i.e. today's behaviour: only a
-    genuinely empty window skips (`cycle.py:175`). The mechanism exists so the value becomes a
-    config change; picking a non-zero value is a founders' call once we have real nightly volumes.)*
+    retellings per unit of text. **CORRECTION (2026-07-27): the mechanism does NOT exist.** D19 recorded that
+    "the mechanism exists so the value becomes a config change"; that was false and is retracted
+    here rather than caveated. `min_block_chars` appears in no `Recipe` field, no `recipe_from_dict`,
+    no `recipes/*.json` and not in `contracts/c13_recipe.v0.json` — a grep returns zero hits in the
+    whole repo. Today only a genuinely empty window skips (`cycle.py:175`), so setting a floor is a
+    three-file code change plus a schema edit, not a config edit. This is exactly the
+    "claiming something is built when it is decided" failure D19's own §Stage banner forbids, caught
+    by an adversarial round rather than by a test. **Still the right design** — characters of
+    eligible block text, not block count, because Phase-3 showed recall tracks retellings per unit
+    of text — and it stays cheap to add because D20's advance-only-on-publish rule already makes a
+    below-floor night carry forward for free. It is simply not built.)*
 11. **GPU budgeting.** Per-user cycle cost on the shared 8-node partition, contended with research
     runs — priority classes, preemption checkpoints, nightly-window packing.
 12. **Adapter artifact lifecycle.** Where per-user adapters live (GCS layout), retention of

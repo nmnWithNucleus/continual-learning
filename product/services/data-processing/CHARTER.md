@@ -15,7 +15,7 @@
 > Full posture + what changes at dev/prod: [ARCHITECTURE.md](../../ARCHITECTURE.md) §Stage.
 
 
-**Status:** chartered · **Last updated:** 2026-07-09
+**Status:** chartered · **Last updated:** 2026-07-27 (**D18/D19/D20** — C2 gains an additive-optional `discriminator`, surfaced so storage's day-log materialization can keep one dialect per record; §Stage banner added. *2026-07-25:* WS-VC screen-video clip path ratified, OQ10/OQ13/OQ14 rewritten)
 
 ---
 
@@ -72,7 +72,7 @@ referenced here by ID only, never redefined.
 | Contract | Direction | Our role |
 |---|---|---|
 | **C1** | recording → us | **v0 FROZEN (D11).** Sole ingest: the pushed raw-stream envelope (device/`stream_id`/`sequence`/`chunk_id`/modality/codec/wall-clock/`blob_ref`/optional location+clock). at-least-once, we dedup on `chunk_id`, order via `(stream_id, sequence)`, pull bytes by `blob_ref`. Capture semantics belong to `recording`. |
-| **C2** | us → storage | **v0 FROZEN (D10).** Sole output for stream data: the processed record (`record_id` deterministic on `(chunk_id, pipeline_version)`; source provenance; `content{kind,text,segments}`; present-but-empty `enrichments`; raw ref; `pipeline_version`; `processed_at`). |
+| **C2** | us → storage | **v0 FROZEN (D10).** Sole output for stream data: the processed record (`record_id` deterministic on `(chunk_id, pipeline_version, within-chunk discriminator)` — matching this file's own §Record ids line and the frozen schema, which have both carried the discriminator since v0; source provenance; `content{kind,text,segments}`; present-but-empty `enrichments`; raw ref; `pipeline_version`; `processed_at`). |
 | **C8** | input ↔ us | Serve the pipeline as a synchronous API so interactive requests are normalized by the same code that processes the life stream. |
 
 Indirect consumers (no direct contract with us): `continuum` reads /context + /sessions via

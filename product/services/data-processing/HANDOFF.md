@@ -148,7 +148,7 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
   C1 carries no timezone**) + OCR-dedup + renderer ordering + recipe fork; **E-5** the parked additive
   C2 edit (`enrichments.text_regions[]` + root `quality{}`), diff written, **not taken** (no
   consumer); **E-6** recording auto-retry `failed` segments.
-- **Small follow-ups (non-blocking):** widen the production `dp_caption_ungrounded_quote_total`
+- **Small follow-ups (non-blocking):** **wire** the production `dp_caption_ungrounded_quote_total`
   counter from double-quoted spans to all named ≥4-char strings (WS-VC/H found mock captions carry
   **zero** double-quotes, so the quote-only counter measures an empty set; the widened scorer already
   lives in `scripts/prompt_ab.grounding`); collapse `app/vision/ocr/assemble.ocr_cap`'s local stub to

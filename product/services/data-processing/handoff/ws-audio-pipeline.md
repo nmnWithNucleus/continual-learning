@@ -3,7 +3,7 @@
 > The AUDIO-modality lead's fill of the three staged stubs in
 > [`app/processing/processors/audio.py`](../app/processing/processors/audio.py) —
 > `diarize → translate → acoustic_events` — with real backends behind off-by-default
-> switches, under a NEW `app/audio/` namespace. Read [CHARTER.md](../../CHARTER.md)
+> switches, under a NEW `app/audio/` namespace. Read [CHARTER.md](../CHARTER.md)
 > §Scope (audio pipeline) + OQ11/OQ12 and [HANDOFF.md](../HANDOFF.md) (Processor seam +
 > Current state) first; this is the volatile record for the beyond-ASR audio work.
 

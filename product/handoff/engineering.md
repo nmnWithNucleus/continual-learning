@@ -1054,3 +1054,31 @@ Considered and passed, on the record so we don't re-litigate:
   31 binding checks over 2 window origins including a misaligned one** (exit 0) · live two-process
   seam **PASS, 10 steps / 151 checks, zero blockers** (exit 0) · `app/morpheus/` and `tests/parity/`
   **byte-unchanged**.
+
+- 2026-07-27 (close-out) — **the seam is shipped, the fleet is live, and the review backlog is
+  empty.** Final round fixed three defects an adversarial pass proved against the real services and
+  no suite caught: **H1** the publish tail was not atomic (two `active` C5 rows for one window, and
+  one `rollback()` flipping the alias to the *same* adapter — the only safety net a bad adapter has,
+  silently dead; worse branch, a C14 append-only 409 that stranded a night forever); **H2** the
+  replay pool filtered on ledger *state* and never *outcome*, so nights that never entered the
+  adapter were rehearsed — measured at 50% of a night's budget re-teaching text already in that
+  night's fresh corpus; **M1** one window could strike twice and freeze a user. Fixed at the source:
+  `publish()` idempotent with one live activation per window, a reservoir conflict non-fatal,
+  `prior_windows` published-only, `debt` membership as the strike guard. 11 tests, each proven to
+  fail without its fix.
+
+  **`seam_check` was asserting H2 as correct behaviour** — green while pinning the bug. That is the
+  second harness this week to bless a defect (the `recipe_id` test did it first), and it is the
+  reason the review rounds kept finding what the suites could not.
+
+  **Fleet cut over:** stopped → three stores backed up and *verified restorable* → cleared →
+  restarted on the new code. Proven live rather than in tests: real capture through faster-whisper
+  into `/context`; a C12 profile set and a missing one 404'd; a nightly to **published** over HTTP;
+  the watermark advancing **only** on `published`; **exactly one** active C5 row.
+
+  **Doc close-out:** all eleven REVIEW_NOTES items are closed (O-1 → D17, O-2/3/4 → 07-26,
+  O-5…O-11 → today), storage OQ7 resolved, OQ9 re-scoped now that `day_logs` is a real table, and
+  **two false claims of my own retracted** — D19's "the min-data-floor mechanism exists" (it appears
+  nowhere in the repo) and the parity PASS I reported before it covered a misaligned origin. Both
+  were caught by adversarial rounds rather than tests, which is the week's actual lesson: every
+  serious defect started as a document disagreeing with the code.

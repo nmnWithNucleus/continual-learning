@@ -1,6 +1,6 @@
 # The record-vs-mutation law — CHARTER extract (WS-E)
 
-**Status:** ready for the lead to fold into `CHARTER.md` at WS-VC reconciliation. WS-E does not
+**Status:** FOLDED into [CHARTER.md](../CHARTER.md) §Record-vs-mutation law (2026-07-25, WS-VC) — this file is the long-form rationale the charter row points at, not a pending proposal. Kept because the reasoning is what makes the rule enforceable.
 edit `CHARTER.md`; this file is the extract, written to that standard.
 **Source of truth for the reasoning:** `handoff/ws-video-clip.md` §4 (invariant, T1–T5, R1–R5, the
 18-row worked table).

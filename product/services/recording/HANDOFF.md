@@ -14,7 +14,7 @@ tester's Comet browser) to direct tab capture; passed on the first real run. Cli
 **`/ingest/*` → `/capture/*`** (founders; alias removed). All prior data purged 2026-07-19;
 fleet fresh. Runbook: [handoff/alpha-runbook.md](handoff/alpha-runbook.md). **+ async-ingest
 seam tolerance (DP's `INGEST_ASYNC`) + D9 `/metrics` + dashboard (M6) landed 2026-07-19.** ·
-recording suite **120 tests** (110 + 7 async-seam/redrive/migration + 3 metrics) · **Last updated:** 2026-07-19
+recording suite **144 tests** (110 + 7 async-seam/redrive/migration + 3 metrics) · **Last updated:** 2026-07-19
 (async-observability session)
 
 ## Workstream index
@@ -158,7 +158,7 @@ recording suite **120 tests** (110 + 7 async-seam/redrive/migration + 3 metrics)
     durable on **both** legs. Recording's `/redrive` stays the belt-and-suspenders (and the
     means to converge a chunk lost past DP's drain-timeout / a hard kill, which DP's journal
     marks re-drivable but does not itself re-push to us). No recording change needed; the async
-    seam is unchanged (still 120 tests). Flipping `INGEST_ASYNC=1` on the fleet remains the
+    seam is unchanged (120 tests at the time; **144** as of 2026-07-27). Flipping `INGEST_ASYNC=1` on the fleet remains the
     open D16 re-drive-drill decision.
 - **Glossary** (pinned so docs/sessions stay unambiguous): **segment** = client→server
   upload unit (~10 s self-contained clip; `seq` dense per capture session) · **chunk** =

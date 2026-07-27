@@ -1,5 +1,9 @@
 # LEARN_LOOP.md — accuracy review, running notes
 
+> **ALL ITEMS CLOSED as of 2026-07-27** (O-1 → D17 · O-2/O-3/O-4 → 2026-07-26 ·
+> O-5…O-11 → 2026-07-27). Kept as the record of what was found and how each was
+> resolved; a future review pass appends rather than reopens.
+
 > Working file for the founders' review of [LEARN_LOOP.md](LEARN_LOOP.md). Findings are removed
 > from this file as they are fixed, so **whatever is still written here is still outstanding.**
 > Delete this file when it empties.
@@ -50,9 +54,26 @@ storage **32** · extension deno **11**.
 
 ---
 
-## ⬜ OPEN — service charter / canvas hygiene
+## ✅ CLOSED 2026-07-27 — service charter / canvas hygiene
 
-Found underneath the review. None are LEARN_LOOP's fault; all are real.
+Found underneath the review. None were LEARN_LOOP's fault; all were real; **all seven are now
+fixed**, closing the last of this review's open items (O-2/O-3/O-4 closed 2026-07-26).
+
+| # | Closed by |
+|---|---|
+| **O-5** | data-processing CHARTER re-stamped 2026-07-27, naming what actually changed under it (WS-VC 2026-07-25, then the C2 `discriminator` and §Stage banner) |
+| **O-6** | its C2 row now reads `(chunk_id, pipeline_version, within-chunk discriminator)`, matching the same file's §Record ids line and the frozen schema, both of which have carried the discriminator since v0 |
+| **O-7** | `record-emission-law.md`'s status now says FOLDED, and says what the file is *for* now that it is not a proposal |
+| **O-8** | "widen" → **"wire"**: the counter is declared, seeded to zero, and incremented nowhere |
+| **O-9** | the platform canvas gains an § Incoming recording the **D9 backbone** (D9 + D15) and **E-3(b)**, plus the still-open "who restarts a service" ops gap — the cold-start failure ORG's protocol exists to prevent |
+| **O-10** | recording is **144**, corrected on the board and in its own canvas (both said 120) |
+| **O-11** | the status board carries **788 + 21 skipped**. *Dated historical entries keep their contemporaneous figures on purpose* — DP 128 / 163 / 173 / 765 were each true when written, and rewriting them would destroy the record rather than reconcile it. Only the status board must be current |
+
+**The lesson worth keeping, since it recurred all week:** every one of these was a document
+disagreeing with the code or with another document, and none was caught by a test. The two review
+rounds that found real *bugs* this week both started from exactly this kind of drift.
+
+*Original defect table, for the record:*
 
 | # | File | Defect |
 |---|---|---|
