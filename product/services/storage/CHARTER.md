@@ -4,6 +4,17 @@
 > per-user model directory. Stable doc — working state lives in [HANDOFF.md](HANDOFF.md);
 > system-wide architecture + contracts in [../../ARCHITECTURE.md](../../ARCHITECTURE.md).
 
+> ### ⚠️ STAGE: PROTOTYPE (pre-dev, pre-production) — D19, 2026-07-27
+> This charter is written in a production voice. **It is aspirational, not a commitment.** We are
+> building one end-to-end product that genuinely works, as fast as we can honestly get there.
+> **Licensed:** re-cutting contracts rather than versioning them (*"v0 frozen" means stable enough
+> to build against today, not immutable*); wiping and re-collecting stored data rather than
+> migrating it; deferring durability work with the reason written down.
+> **Not licensed:** skipping [ORG.md](../../ORG.md)'s contract-edit order, leaving a decision
+> unrecorded, silent breakage, or calling a thing BUILT when it is only DECIDED.
+> Full posture + what changes at dev/prod: [ARCHITECTURE.md](../../ARCHITECTURE.md) §Stage.
+
+
 **Status:** chartered · **Last updated:** 2026-07-26 (**scope expansion RATIFIED — D18**,
 founders' storage/C10 board: day-log materialization + recipe registry + reservoir custody +
 per-user profile are now in scope, with contract IDs **C12/C13/C14** minted and **C10 evolved** to
@@ -59,10 +70,10 @@ trains no models; it keeps what others produce safe, ordered, and fast to read.
 | In+ | **Training-window ledger + the `window_id` minter** *(RATIFIED D18 — decided, not built)* | the per-user `last_trained_t` watermark and the durable window rows (`window_id`, `t_start`, `t_end`, state). `POST /training/windows` is an **idempotent get-or-create** of the user's open window; bounds are **immutable once opened** (this is what preserves continuum's crash-safe journal replay — recomputing `now` on a retry would mint a fresh id and force a full re-train, a second C5 entry and a second reservoir admission). `window_id` is minted in **exactly one place**, format `w<YYYYMMDD>T<HHMMSS>Z`, opaque to every consumer. Storage is the only service that can own this: the watermark is a fact about *our* ingest clock |
 | In+ | **Recipe registry** *(RATIFIED D18 → **C13** — decided, not built)* | versioned recipe/config hosting; fetch API for continuum (consolidation recipe) + inference (serving-side knobs). `recipe_id` == filename stem, **global and versioned — never per-user**. The **gate policy is a separate artifact with its own id**: only the *training recipe* may enter a cycle stage key, so changing a publish threshold must not fork `recipe_id` or invalidate hours of GPU cache. Reference implementation to lift: `../continuum/app/clients/registry.py` |
 | In+ | **Reservoir custody** *(RATIFIED D18 → **C14** — decided, not built)* | per-user store of amplified corpora (continuum writes via API); **audit/provenance — replay re-reads prior day-logs via C10, not this**. Append-only, keyed `(user_id, window_id, recipe_id)`, content-hashed. Guards the one invariant of the data design: **amplified/synthetic text never lands in `/context`** — same storage discipline, different namespace. Deletion here is a deliberate privacy act, never housekeeping, and it is **in M5's cascade** |
-| In+ | **Per-user profile** *(RATIFIED D18 → **C12**, schema `../../contracts/c12_user_profile.v0.json` — decided, not built)* | one durable row per user for **policy** values that are neither sensor data nor recipe config. First v0 field: **`home_tz`** (IANA zone), whose *only* jobs are **(a) scheduling** — deciding when this user's nightly consolidation fires, a question asked before any of that night's records exist — and **(b) fallback** when a record carries no `device_tz`. Seeded from the most recent device-reported zone, user-overridable. It is NOT the pipeline's time semantics (that is per-record `device_tz`) and NOT part of the C10 range arithmetic. Cannot ride the recipe registry: `recipe_id` is global and versioned (`recipe_id` == filename stem), so a per-user value there would fork `recipe_id` per user. **D18 additions:** it is a **profile, not a settings blob** — it holds values *the system reads to decide its own behaviour* for this user (scheduling, fallbacks, policy) and never user-facing identity or presentation, which are input's; that fence is what makes the general noun safe. A missing profile is a **404** and a user with no `home_tz` is **not schedulable** — an operational alert, never a silent skip, because D17 abolished default timezones. Storage **auto-seeds** from the first device-reported `device_tz` for that user and **NEVER auto-updates** — a traveller's night boundary must not chase their device, which is the entire point of the FACT/POLICY split. Second field named but deliberately **not** minted until it has a consumer (the E-5 precedent): a per-user `boundary_local_time` override, today a *global* recipe knob that cannot express a night-shift worker |
+| In+ | **Per-user profile** *(RATIFIED D18 → **C12**, schema `../../contracts/c12_user_profile.v0.json` — decided, not built)* | one durable row per user for **policy** values that are neither sensor data nor recipe config. First v0 field: **`home_tz`** (IANA zone), whose *only* jobs are **(a) scheduling** — deciding when this user's nightly consolidation fires, a question asked before any of that night's records exist — and **(b) fallback** when a record carries no `device_tz`. Seeded from the most recent device-reported zone, user-overridable. It is NOT the pipeline's time semantics (that is per-record `device_tz`) and NOT part of the C10 range arithmetic. Cannot ride the recipe registry: `recipe_id` is global and versioned (`recipe_id` == filename stem), so a per-user value there would fork `recipe_id` per user. **D18 additions:** it is a **profile, not a settings blob** — it holds values *the system reads to decide its own behaviour* for this user (scheduling, fallbacks, policy) and never user-facing identity or presentation, which are input's; that fence is what makes the general noun safe. A missing profile is a **404** and a user with no `home_tz` is **not schedulable** — an operational alert, never a silent skip, because D17 abolished default timezones. **Storage never writes it on its own** (corrected 2026-07-27 — D18's first draft had it auto-seed from the first device-reported `device_tz`): `home_tz` is **declared, not inferred**. The user sets it; the device's zone may be *suggested* in a UI, never stored as an answer. Consequence worth stating because it is the whole point: **`home_tz` does not move when the user travels** — a week in Tokyo changes every record's `device_tz` and changes nothing here, so the night boundary stays put instead of jumping 9 h and producing a 15 h night followed by a 33 h one. In the prototype the operator sets it directly; there is no auto-seed to fall back on, so **a user with no `home_tz` simply does not consolidate** — visible, not silent. Second field named but deliberately **not** minted until it has a consumer (the E-5 precedent): a per-user `boundary_local_time` override, today a *global* recipe knob that cannot express a night-shift worker |
 | In | `/context` store | processed life-stream records; storing side of C2 |
 | In | `/sessions` store | conversations → sessions → turns, incl. full mentor + tool traces; storing side of C4 |
-| In | Model directory | per-user adapter registry behind C5/C6. **C5's shape, as continuum builds it today and NOT yet frozen** (the freeze needs inference at the table; describing it is not pinning it) — nine fields: `contract:"C5"`, `user_id`, `adapter_version`, `adapter_dir`, `base_model_hash`, `training_window`, `recipe_id`, `eval_report`, `status` ∈ **`active` \| `gate_failed` \| `rolled_back`** (`../continuum/app/publish.py:83-114`). **Three of those are load-bearing for US at freeze time, not just for the docs** — today storage's `model_directory` table is the *trivial C6 row* (`user_id, model_id, adapter, adapter_path` — `app/db.py:59-63`), with no entries log and no status column at all, so hosting C5 is a build, not a transport swap, and the short field list this row used to carry is precisely what an implementer would have built to: **(1) `status` is a THREE-value enum** — a two-value `active/rolled_back` column has nowhere to put `record_gate_failure()`, and the audit trail for blocked candidates would be dropped silently at the swap; **(2) `gate_failed` rows carry NULL `adapter_dir` and NULL `base_model_hash`** — so those columns cannot be `NOT NULL`, or the schema rejects exactly the rows that matter most; **(3) C6 eligibility is a LOG REPLAY, not "latest row wins"** — `active` pushes, `rolled_back` pops the matching top, and **`gate_failed` does neither** (`publish.py:33-44`); a directory that resolved the newest entry would serve a gate-failed candidate, which is the ungated swap the gate exists to prevent |
+| In | Model directory | per-user adapter registry behind C5/C6. **Hosting DEFERRED (D19, 2026-07-27)** — the consumer is inference (C6), which is not being built; continuum's local `entries.jsonl` carries the lifecycle, so this is not on the learn-loop critical path. **C5's shape, as continuum builds it today and NOT yet frozen** (the freeze needs inference at the table; describing it is not pinning it) — nine fields: `contract:"C5"`, `user_id`, `adapter_version`, `adapter_dir`, `base_model_hash`, `training_window`, `recipe_id`, `eval_report`, `status` ∈ **`active` \| `gate_failed` \| `rolled_back`** (`../continuum/app/publish.py:83-114`). **Three of those are load-bearing for US at freeze time, not just for the docs** — today storage's `model_directory` table is the *trivial C6 row* (`user_id, model_id, adapter, adapter_path` — `app/db.py:59-63`), with no entries log and no status column at all, so hosting C5 is a build, not a transport swap, and the short field list this row used to carry is precisely what an implementer would have built to: **(1) `status` is a THREE-value enum** — a two-value `active/rolled_back` column has nowhere to put `record_gate_failure()`, and the audit trail for blocked candidates would be dropped silently at the swap; **(2) `gate_failed` rows carry NULL `adapter_dir` and NULL `base_model_hash`** — so those columns cannot be `NOT NULL`, or the schema rejects exactly the rows that matter most; **(3) C6 eligibility is a LOG REPLAY, not "latest row wins"** — `active` pushes, `rolled_back` pops the matching top, and **`gate_failed` does neither** (`publish.py:33-44`); a directory that resolved the newest entry would serve a gate-failed candidate, which is the ungated swap the gate exists to prevent |
 | In | People/known-faces registry persistence | data-processing matches/enriches, input curates the UX; storage persists — split in ARCHITECTURE §Ownership splits |
 | In | Schemas + indexing | canonical record schemas; every store indexed by (user_id, time) |
 | In | Time-ranged retrieval | per-user time-window reads (recall queries); producing side of C10 (watermarked training-window export) |
@@ -154,6 +165,35 @@ redefined.
 | M8 | **C12 profile + C13 recipe registry + C14 reservoir** (D18) | profile read serves `home_tz` with a 404 on absence and auto-seed-never-auto-update semantics, validated against `../../contracts/c12_user_profile.v0.json` with tzdata resolution on write; registry serves recipes + gate policy by id; reservoir accepts append-only corpus writes and serves its ledger. **C12 lands first — day-log materialization depends on it** |
 | M9 | **C10 evolved: day-log materialization + the training-window ledger** (D18) | storage mints windows idempotently over the `ingest_time` watermark, materializes day-logs, and serves fetch-by-`(user, window_id)` + enumeration + close. **Exit bar is a differential proof, not a claim:** for at least one real window, the day-log storage renders is **byte-identical** to the one continuum's `LocalDayLogClient` renders from the same records — block text, `seg_id`/`block_id` ordering, and anchors — with the script and its output committed, on the DP byte-identity precedent. Continuum's local path is **not deleted until that diff is green** |
 
+## Retention — the knob ships, the policy does not (D19, 2026-07-27)
+
+**Decision: `keep_forever` for every store, prototype-wide.** Nothing is deleted on a schedule; the
+only deletions are the explicit privacy primitives in M5. The founders' instinct — that this belongs
+in *service config*, not in code — is right, and this section pins the shape so the dev/prod
+conversation is a config edit rather than an excavation.
+
+**The design, and why each property is load-bearing:**
+
+| Property | Why it is not optional |
+|---|---|
+| Retention is **data, not code** — a versioned document storage reads at startup and on change | Changing what we keep must never require a deploy. It is a *policy*, and we already learned this shape once: the gate policy was split from the training recipe (2026-07-24) precisely so a threshold change could not fork an artifact id |
+| **Versioned + logged**, with the active version reported on `/metrics` | The question a privacy review actually asks is *"what policy was in force when this record was deleted?"* — unanswerable if the rule was a constant in a source file, and unanswerable after the fact if it was an unversioned config edit |
+| **Per-store**, not global — `/raw`, `/context`, day-log, reservoir, `/sessions`, adapters | These genuinely differ. Raw A/V is the expensive one and the least re-derivable-from; day-logs are cheap, derived, and the thing replay needs forever; the reservoir is append-only by charter. A single global TTL would be wrong for all six |
+| **Rules mark ELIGIBILITY; a separate explicit sweep acts and writes a manifest** | This is the important one. A retention config that deletes *implicitly* means a typo in a config file destroys user data with no review step and no record. Eligibility + explicit sweep means the blast radius of a bad edit is a wrong number in a report |
+| **Deletion is never the mechanism for correctness** | D18 established this in the specific case (the one-dialect materialization rule fixes the WS-VC double-count; E-2 does not). It generalises: if we ever find ourselves deleting records to make training come out right, the bug is upstream |
+
+**v0 concretely:** one versioned `retention.v0` document, every store `keep_forever`, read and
+surfaced on `/metrics`, **no sweeper implemented**. That is a few lines and it is the cheapest
+possible way to buy the future decision. The reservoir's own charter line already anticipates the
+posture — *deletion there is a deliberate privacy act, never housekeeping* — and this generalises it
+to every store.
+
+**What changes at dev/prod** (tracked, not forgotten): choose real per-store values; build the
+sweeper + its manifest; decide whether retention tiers by consent state; and reconcile with the
+research design-of-record's stance (raw A/V ≤72 h · day-logs forever · 14-night hard-delete replay),
+which continuum's canvas has flagged since 2026-07-22 as *"a PRODUCT decision to take explicitly"*
+and which D19 explicitly defers rather than silently adopts.
+
 ## Open questions
 
 > **OQ numbers are stable identifiers and are never renumbered** — resolved ones are struck
@@ -163,6 +203,16 @@ redefined.
 Engineering:
 1. **Storage tech.** Postgres (records + directory) + GCS (bulk payloads, adapter artifacts) is
    the lean default for a handful of users — confirm with platform at M0, incl. where the DB runs.
+   **ANSWERED FOR THE PROTOTYPE (D19, 2026-07-27): stay local** — SQLite + filesystem, including for
+   the four new stores (day-log, window ledger, reservoir, profile). **The target is unchanged and
+   is option (c): metadata in Postgres, day-logs + corpora in GCS**, and it is near the top of the
+   list the moment we leave prototype — day-logs-forever is the first store that grows without
+   bound. **What keeps that migration cheap is a rule, not foresight:** every new store goes behind
+   a **narrow interface** in storage from day one, so the swap is a backend change rather than a
+   rewrite. Continuum already proved the shape on the client side (`app/clients/` — local today,
+   HTTP-to-storage later, the cycle unchanged); storage owes the same on the server side. Two
+   existing properties help and must be preserved: `blob_ref` is already **opaque + storage-owned**,
+   and `record_json` is served **byte-verbatim**, so neither leaks the substrate to a caller.
 2. **Adapter artifact placement.** The directory holds adapter artifacts + metadata only —
    BWM (base-model) weights custody is inference's (ARCHITECTURE §Ownership splits). Adapter
    weight files must sit where vLLM can hot-swap fast (GCS vs NFS vs node-local cache) — split
@@ -192,11 +242,14 @@ Engineering:
      ingest-time watermark late data does not exist.** Content stays event-time-correct because
      day-log blocks are formed by temporal adjacency and carry their own anchors, so a week-old
      backlog forms its own blocks rather than corrupting today's.
-   - **`last_trained_t` advances iff the cycle reaches `published` or `skipped_no_data`.**
-     `gate_failed`, `frozen` and any crash leave it, so the next window is a strict **superset** of
-     the failed one. This is the research design-of-record's *failed-day merge*, obtained
-     structurally instead of by bookkeeping (it demotes continuum's `_UserState.debt` list to
-     reporting).
+   - **`last_trained_t` advances if and only if the cycle PUBLISHES** *(refined 2026-07-27 — the
+     first draft also advanced on `skipped_no_data`)*. Gate failure, freeze, crash, no data and
+     **too little** data all leave it, so the next window is a strict **superset**. This is the
+     design-of-record's *failed-day merge* obtained structurally rather than by bookkeeping (it
+     demotes continuum's `_UserState.debt` to reporting), and it makes the min-data floor nearly
+     free: a below-floor night just doesn't advance, so material accumulates until a run is worth
+     it. Named cost: an inactive user's open window grows and is re-scanned nightly — correct, and
+     cheap at v0 scale.
    - **Reprocessed records: one dialect per record, latest `ingest_time` wins**, keyed
      `(chunk_id, content.kind, within-chunk discriminator)`. Keyed on `ingest_time` because
      `pipeline_version` is a *composed* string and therefore not orderable; keyed on `content.kind`

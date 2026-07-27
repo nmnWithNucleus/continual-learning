@@ -44,6 +44,19 @@ Why the simplification (this is the "simpler solution" answer):
    [ARCHITECTURE.md §Contracts](ARCHITECTURE.md). Change a contract → edit that section
    first, then note it in both affected services' canvases.
 
+## Stage: PROTOTYPE (pre-dev, pre-production)
+
+**Ratified 2026-07-27 (D19).** Every charter and canvas in this repo reads as though we were
+shipping to production. We are not. **The goal is one end-to-end product that genuinely works,
+reached as fast as we can honestly get there** — so contracts may be re-cut rather than versioned,
+stored data may be wiped and re-collected rather than migrated, and durability work is deferred on
+purpose with the reason recorded.
+
+This changes what we build. **It never changes what we say about what we built.** The rules below —
+contracts before fan-out, the contract-edit order, documents as the org chart — hold unchanged, and
+"prototype" is never a reason to leave a decision unrecorded or to call a thing BUILT when it is
+DECIDED. Full posture: [ARCHITECTURE.md](ARCHITECTURE.md) §Stage.
+
 ## Documentation protocol
 
 **Two files per node, one format.** Every node in the org (product root, each service, each

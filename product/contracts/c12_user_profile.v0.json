@@ -2,32 +2,16 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://nucleus.ai/contracts/c12_user_profile.v0.json",
   "title": "C12 user profile v0 (per-user POLICY)",
-  "description": "Response body of storage's per-user profile read `GET /users/{user_id}/profile`, minted by D18 (2026-07-26) as the contract home for D17's `home_tz`. This row holds POLICY — values the SYSTEM reads to decide its own behaviour for this user (scheduling, fallbacks) — and never user-facing identity or presentation, which belong to the input service. It is deliberately distinct from the per-record `device_tz` FACT carried on C2 `source{}`: the fact says where the user physically was at a moment and is correct under travel; the policy says when this user's night is. Absent profile => 404. There is no server-side default timezone anywhere in the system (D17), so a user with no `home_tz` is NOT schedulable — an operational alert, never a silent skip.",
+  "description": "Response body of storage's per-user profile read `GET /users/{user_id}/profile`, minted by D18 (2026-07-26) as the contract home for D17's home_tz. This row holds POLICY — values the SYSTEM reads to decide its own behaviour for this user (scheduling, fallbacks) — and never user-facing identity or presentation, which belong to the input service. It is deliberately distinct from the per-record device_tz FACT carried on C2 source{}: the fact says where the user physically was at a moment and is correct under travel; the policy says when this user's night is. Absent profile => 404. There is no server-side default timezone anywhere in the system (D17), so a user with no home_tz is NOT schedulable — an operational alert, never a silent skip.",
   "type": "object",
   "additionalProperties": false,
   "required": ["contract", "version", "user_id", "home_tz", "profile_version", "updated_at"],
   "properties": {
     "contract": { "const": "C12" },
     "version": { "const": "0" },
-    "user_id": {
-      "type": "string",
-      "minLength": 1,
-      "description": "The user this profile belongs to. Per-user isolation is enforced by storage on the read."
-    },
-    "home_tz": {
-      "type": "string",
-      "pattern": "^(UTC|[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+)+)$",
-      "description": "IANA zone id (e.g. 'America/Los_Angeles'), REQUIRED. Two jobs and no others: (a) SCHEDULING — deciding when this user's nightly consolidation fires, a question asked before any of that night's records exist; (b) FALLBACK — the zone a day-log block is rendered in when no contributing record carried a `device_tz`. It is NOT part of C10's range arithmetic, which is a plain UTC duration query needing no zone at all. ABBREVIATIONS ARE REJECTED: 'PST'/'MST' are ambiguous and DST-sensitive (D17) — the pattern requires a region/city form, which structurally excludes them. THE PATTERN IS A CHEAP SHAPE GATE, NOT THE AUTHORITY: only tzdata resolution (`zoneinfo.ZoneInfo(value)`) can say whether an id exists, and storage MUST perform it on write, exactly as recording already does at the capture edge (unknown IANA id => 400). Bare 'UTC' is admitted because it is a real, unambiguous, DST-free zone id — but note it is also the shape a lazy default takes, and D17 abolished default timezones, so a profile that says UTC should be one somebody chose. Storage AUTO-SEEDS this from the first device-reported `device_tz` it sees for the user and NEVER auto-updates it: a traveller's night boundary must not chase their device, which is the whole point of the FACT/POLICY split."
-    },
-    "profile_version": {
-      "type": "integer",
-      "minimum": 1,
-      "description": "Monotone counter, bumped on every write. Lets a reader detect that policy changed under it (e.g. a scheduler that cached a fire time)."
-    },
-    "updated_at": {
-      "type": "string",
-      "format": "date-time",
-      "description": "RFC3339 UTC instant of the last write. UTC-canonical like every other timestamp in the system."
-    }
+    "user_id": { "type": "string", "minLength": 1, "description": "The user this profile belongs to. Per-user isolation is enforced by storage on the read." },
+    "home_tz": { "type": "string", "pattern": "^(UTC|[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+)+)$", "description": "IANA zone id (e.g. 'America/Los_Angeles'), REQUIRED. Two jobs and no others: (a) SCHEDULING — deciding when this user's nightly consolidation fires, a question asked before any of that night's records exist; (b) FALLBACK — the zone a day-log block is rendered in when no contributing record carried a device_tz. It is NOT part of C10's range arithmetic, which is a plain UTC duration query needing no zone at all. ABBREVIATIONS ARE REJECTED: 'PST'/'MST' are ambiguous and DST-sensitive (D17); the pattern requires a region/city form, which structurally excludes them. THE PATTERN IS A CHEAP SHAPE GATE, NOT THE AUTHORITY: only tzdata resolution (zoneinfo.ZoneInfo(value)) can say whether an id exists, and storage MUST perform it on write, exactly as recording already does at the capture edge (unknown IANA id => 400). Bare 'UTC' is admitted because it is a real, unambiguous, DST-free zone id — but it is also the shape a lazy default takes, and D17 abolished default timezones, so a profile that says UTC should be one somebody chose. STORAGE NEVER WRITES THIS ON ITS OWN: home_tz is DECLARED, NOT INFERRED (corrected 2026-07-27; D18's first draft had storage auto-seed it from the first device-reported device_tz). The user sets it; a client may SUGGEST the device's current zone in a UI, but a guess is never stored as though it were an answer. It therefore does NOT move when the user travels: a week in Tokyo changes every record's device_tz and changes nothing here, so the consolidation boundary stays put instead of jumping 9h and producing a 15h night followed by a 33h one. That is the FACT/POLICY split working as designed." },
+    "profile_version": { "type": "integer", "minimum": 1, "description": "Monotone counter, bumped on every write. Lets a reader detect that policy changed under it (e.g. a scheduler that cached a fire time)." },
+    "updated_at": { "type": "string", "format": "date-time", "description": "RFC3339 UTC instant of the last write. UTC-canonical like every other timestamp in the system." }
   }
 }

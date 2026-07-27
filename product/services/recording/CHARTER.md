@@ -5,6 +5,17 @@
 > lives in [HANDOFF.md](HANDOFF.md); system-wide architecture + contracts in
 > [../../ARCHITECTURE.md](../../ARCHITECTURE.md).
 
+> ### ⚠️ STAGE: PROTOTYPE (pre-dev, pre-production) — D19, 2026-07-27
+> This charter is written in a production voice. **It is aspirational, not a commitment.** We are
+> building one end-to-end product that genuinely works, as fast as we can honestly get there.
+> **Licensed:** re-cutting contracts rather than versioning them (*"v0 frozen" means stable enough
+> to build against today, not immutable*); wiping and re-collecting stored data rather than
+> migrating it; deferring durability work with the reason written down.
+> **Not licensed:** skipping [ORG.md](../../ORG.md)'s contract-edit order, leaving a decision
+> unrecorded, silent breakage, or calling a thing BUILT when it is only DECIDED.
+> Full posture + what changes at dev/prod: [ARCHITECTURE.md](../../ARCHITECTURE.md) §Stage.
+
+
 **Status:** chartered; **capture M1 + computer surfaces alpha-complete** (see §v0 deliverables
 milestone-progress note) · **Last updated:** 2026-07-19
 

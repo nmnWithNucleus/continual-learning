@@ -951,3 +951,47 @@ Considered and passed, on the record so we don't re-litigate:
 
   **No code changed; no suite was run this session.** Baselines stand as of D17 — storage 32 ·
   continuum 189 · recording 144 · DP 770 (+21 skipped) · extension deno 11.
+
+- 2026-07-27 — **D19: the stage is PROTOTYPE, and the docs now say so.** The founders' read: every
+  canvas here is written in a production voice, so a fresh session builds for durability we have not
+  earned. Fixed globally (**ARCHITECTURE §Stage**, **ORG §Stage**) and locally (a banner on **all
+  eight** service charters). The posture licenses re-cutting contracts rather than versioning them,
+  wiping data rather than migrating it, and deferring durability work with the reason recorded — and
+  explicitly does **not** license skipping ORG's contract-edit order, leaving a decision unwritten,
+  or calling a thing BUILT when it is DECIDED.
+
+  **Seven calls taken under it.** Retention → **keep everything**, but the *knob ships and the
+  policy does not*: a versioned per-store retention document, every store `keep_forever`, read and
+  surfaced on `/metrics`, **no sweeper built**, and rules that mark *eligibility* while an explicit
+  sweep acts and writes a manifest — so a bad config edit can produce a wrong report, never silent
+  data loss. Storage tech → **local now, option (c) later**, kept cheap by a rule rather than
+  foresight (every new store behind a narrow interface from day one, the shape continuum already
+  proved client-side). C2 `discriminator` → **surfaced** rather than inferred from
+  `(chunk_id, kind, t_start)` uniqueness, taking the option that cannot rot now that contracts are
+  explicitly not frozen; it adds no promise (DP already rejects duplicates within a chunk) and
+  `record_id` is unchanged, so nothing re-keys. Existing state → **wiped, not migrated**, which is
+  what makes D18's `window_id` reformat genuinely free. Cycle trigger → **cron at the user's
+  `home_tz` boundary, interval configurable**; materialization **on demand at fetch**, buying a slow
+  first fetch to delete a whole scheduler; min-data floor → a recipe knob in *characters of block
+  text*, default 0. C5 freeze → **deferred**, free because C5 is unfrozen, with one standing rule
+  recorded for whoever freezes it (`training_window` must be frozen **opaque, never as a date**).
+
+  **Two corrections to D18, both from the CTO's answers:**
+  1. **`home_tz` is declared, not inferred** — D18's first draft had storage auto-seed it from the
+     first device-reported `device_tz`. Wrong: a guessed zone and a chosen zone are different facts,
+     and only the second can be corrected by the person who knows. The CTO's question — *should it
+     change when the user travels?* — has exactly one right answer, **no**, and it is the whole
+     point of D17's FACT/POLICY split: a week in Tokyo moves every record's `device_tz` and moves
+     nothing here, so the boundary stays put instead of jumping 9 h and producing a 15 h night
+     followed by a 33 h one.
+  2. **The watermark advances if and only if a cycle PUBLISHES** — D18 also advanced on
+     `skipped_no_data`. My own refinement, taken because the min-data floor forces it: a below-floor
+     night must not advance or the material is lost. Unifying gives one sentence covering gate
+     failure, freeze, crash, no data and too-little data, and makes the name literally true —
+     `last_trained_t` is the high-water mark of what has actually been trained. Named cost: an
+     inactive user's open window grows and is re-scanned nightly, which is correct and cheap.
+
+  **Commits:** the tree was split into two — `6bb8f4a` (O-2/O-3/O-4 doc slice) and `b96a1b0` (D18).
+  Perfect hunk attribution was not achievable: the two overlapping sessions' edits had merged into
+  shared hunks in four docs, so the split is at file granularity and `b96a1b0`'s message says so
+  rather than implying a cleanliness it does not have.

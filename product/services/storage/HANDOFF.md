@@ -102,6 +102,17 @@
    differential diff, and continuum's local path is not deleted until it is green.**
 5. **C13 registry + C14 reservoir**, then continuum's cutover.
 
+**Cutover act — WIPE, DO NOT MIGRATE (D19).** Everything captured so far is experiment output, not
+user data, so the D18 `window_id` reformat costs nothing: there is no mixed-format ordering to
+defend, no seed discontinuity to reconcile, and the two `w-day5` C5 rows disappear rather than
+needing a rule. To be cleared at cutover: continuum's `var_dir` (`journal/`, `cycles/`, `adapters/`,
+`reservoir/`, `model_directory/`) and node-7's learn-fleet DBs (`context_records`, `segments`,
+`raw_blobs`). Lineage restarts from base. **Back up first anyway** — D17's precedent used SQLite's
+online-backup API into `/home/ubuntu/nmn/backups/`, which costs seconds and has already paid for
+itself once. **Consequence to expect, not to debug:** the first post-wipe run needs `home_tz` set
+explicitly for the user (D19 removed auto-seed — `home_tz` is declared, not inferred), and until it
+is set that user does not consolidate. That is visible by design, not a fault.
+
 **E-2 is no longer a cutover blocker** (D18) — the one-dialect rule fixes the double-count. It rides
 M5, which **widened**: day-logs and the reservoir are second copies of user content and must be in
 every deletion's cascade.

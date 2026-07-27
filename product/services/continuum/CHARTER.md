@@ -5,6 +5,17 @@
 > state lives in [HANDOFF.md](HANDOFF.md); system-wide architecture + contracts in
 > [../../ARCHITECTURE.md](../../ARCHITECTURE.md).
 
+> ### ⚠️ STAGE: PROTOTYPE (pre-dev, pre-production) — D19, 2026-07-27
+> This charter is written in a production voice. **It is aspirational, not a commitment.** We are
+> building one end-to-end product that genuinely works, as fast as we can honestly get there.
+> **Licensed:** re-cutting contracts rather than versioning them (*"v0 frozen" means stable enough
+> to build against today, not immutable*); wiping and re-collecting stored data rather than
+> migrating it; deferring durability work with the reason written down.
+> **Not licensed:** skipping [ORG.md](../../ORG.md)'s contract-edit order, leaving a decision
+> unrecorded, silent breakage, or calling a thing BUILT when it is only DECIDED.
+> Full posture + what changes at dev/prod: [ARCHITECTURE.md](../../ARCHITECTURE.md) §Stage.
+
+
 **Status:** chartered; kicked off; **learn-loop integration PROVEN end-to-end (M0 met; Phase-3 DP
 dogfood PIPELINE SOUND)** · **Last updated:** 2026-07-25 (Morpheus core = our nightly-consolidation
 engine, per [handoff/ws-morpheus-port.md](handoff/ws-morpheus-port.md); serve-time memory harness →
@@ -73,7 +84,7 @@ Upstream: **Storage Service** (we read via C10). Downstream: **model directory �
 | C12 | **consume** | Per-user profile read — `home_tz`. It replaces `nightly.py --tz`: the cycle stops being told a timezone by its caller. We use it for **nothing but** the scheduler's fire time; the window arithmetic needs no zone, and each block's rendered anchor is resolved by storage from the record's own `device_tz` |
 | C13 | **consume** | Recipe registry — the pinned training recipe and the separately-versioned gate policy, by id. Our `LocalRecipeRegistry` is the reference implementation storage lifts |
 | C14 | **produce** | Reservoir writes — each night's amplified corpus, append-only, audit/provenance. **Not** the replay path: replay re-reads prior day-logs via C10 |
-| C5 | **produce** | Adapter version entry — **as built, NOT frozen** (`app/publish.py:3-4`: "C5's v0 shape is NOT frozen yet (needs inference at the table; founders ratify)"); described here so the gap is visible, **not** to pin it. Nine fields (`publish.py:83-99`): `contract:"C5"`, `user_id`, `adapter_version`, `adapter_dir`, `base_model_hash`, `training_window`, `recipe_id`, `eval_report`, `status`. **`status` has THREE values — `active` \| `gate_failed` \| `rolled_back`** — because a candidate the gate blocks is *recorded* rather than discarded (`record_gate_failure`, `publish.py:101-114`): the row is appended for audit + lineage with `adapter_dir`/`base_model_hash` NULL, and never becomes eligible. That audit trail is exactly what a reader most needs to know exists, so it belongs in the field list and not only in the code |
+| C5 | **produce** | **FREEZE DEFERRED (D19, 2026-07-27):** C5's only consumer is inference via C6 resolve, and we are not building inference yet, so freezing now would cost a session and buy nothing. Continuum's local `var_dir/model_directory/entries.jsonl` carries the full lifecycle meanwhile. The deferral is *free precisely because C5 is unfrozen* — D18 changed `training_window`'s format, which would otherwise have been a breaking edit. **One standing instruction for whoever does freeze it: `training_window` must be frozen as an OPAQUE token, never as a date**, or the id-parsing D18 just deleted (`Window.local_date`, `ReservoirEntry.local_window_date()`) grows straight back. Shape below — Adapter version entry — **as built, NOT frozen** (`app/publish.py:3-4`: "C5's v0 shape is NOT frozen yet (needs inference at the table; founders ratify)"); described here so the gap is visible, **not** to pin it. Nine fields (`publish.py:83-99`): `contract:"C5"`, `user_id`, `adapter_version`, `adapter_dir`, `base_model_hash`, `training_window`, `recipe_id`, `eval_report`, `status`. **`status` has THREE values — `active` \| `gate_failed` \| `rolled_back`** — because a candidate the gate blocks is *recorded* rather than discarded (`record_gate_failure`, `publish.py:101-114`): the row is appended for audit + lineage with `adapter_dir`/`base_model_hash` NULL, and never becomes eligible. That audit trail is exactly what a reader most needs to know exists, so it belongs in the field list and not only in the code |
 | C6 | observe | Inference resolves the latest *eligible* adapter per request; our C5 `status` field is what makes an adapter eligible — we never touch serving |
 
 Future scope (not v0): proactive/coach-mode triggers will involve us jointly with inference —
@@ -127,9 +138,9 @@ trigger ownership is tracked as output's proactive open question ([../output/CHA
    instead of answering it: a record's `ingest_time` is assigned at write, so it can never land
    below a closed boundary — **late data cannot exist on this axis**, and a chunk captured Tuesday
    but uploaded Friday simply trains in Friday's window, in a block anchored to Tuesday. What we
-   own downstream of that: **`last_trained_t` advances iff we reach `published` or
-   `skipped_no_data`** — a `gate_failed`, `frozen` or crashed night leaves it, so the next window is
-   a strict superset of the failed one. That is the design-of-record's **failed-day merge, obtained
+   own downstream of that: **`last_trained_t` advances if and only if we PUBLISH** *(refined
+   2026-07-27)* — gate failure, freeze, crash, no data and **too little** data all leave it, so the
+   next window is a strict superset of the failed one. That is the design-of-record's **failed-day merge, obtained
    structurally**, and it demotes `_UserState.debt` (`cycle.py:88-118`) from mechanism to reporting.
    Full statement: [../../ARCHITECTURE.md](../../ARCHITECTURE.md) § Contracts → *C10 evolved*.
 10. **Cycle trigger.** Clock ("nightly", timezone-aware per user) vs data-volume threshold vs
@@ -151,7 +162,15 @@ trigger ownership is tracked as output's proactive open question ([../output/CHA
     windows under *tonight's* timezone. Prior windows are enumerated from storage instead. Still
     DECIDED, NOT BUILT. **Rendering** local times is not a scheduling concern at all — each record carries its own
     `device_tz`, so anchor lines are correct even for a day spent in another zone. What remains open
-    in OQ10 is only the **trigger policy** — clock vs volume vs hybrid, and the min-data floor.)*
+    in OQ10 is only the **trigger policy** — clock vs volume vs hybrid, and the min-data floor.
+    **Partly settled 2026-07-27 (D19):** the trigger is a **cron per user at their `home_tz`
+    boundary**, interval configurable in the service — a human-run CLI is the prototype stand-in,
+    not the design. The **min-data floor** — the volume of new block text below which a night is
+    not worth a GPU run — lands as a **recipe knob** (`min_block_chars`), measured in *characters of
+    eligible block text* rather than block count, because Phase-3 showed recall depends on
+    retellings per unit of text. Default **0** for the prototype, i.e. today's behaviour: only a
+    genuinely empty window skips (`cycle.py:175`). The mechanism exists so the value becomes a
+    config change; picking a non-zero value is a founders' call once we have real nightly volumes.)*
 11. **GPU budgeting.** Per-user cycle cost on the shared 8-node partition, contended with research
     runs — priority classes, preemption checkpoints, nightly-window packing.
 12. **Adapter artifact lifecycle.** Where per-user adapters live (GCS layout), retention of

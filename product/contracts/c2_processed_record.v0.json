@@ -67,6 +67,7 @@
       "description": "Present-but-empty in v0; shape stable so world-data enrichment never changes C2."
     },
     "pipeline_version": { "type": "string", "description": "data-processing pipeline version that produced this record; continuum trains on consistent dialects, reprocessing is version-forward." },
+    "discriminator": { "type": "string", "maxLength": 128, "description": "OPTIONAL, ADDITIVE (2026-07-27, D18 follow-through). The within-chunk discriminator distinguishing multiple records produced from ONE chunk (a video keyframe index, an ocr record beside a caption, an original beside its translation); absent or \"\" in the 1:1 case. This value has fed record_id since v0 but lived ONLY inside the hash, so a reader holding two records could not tell 'two units of one chunk' from 'two dialects of one unit' — the exact distinction C10's day-log materialization keys its one-dialect-per-record rule on (latest ingest_time wins per (chunk_id, content.kind, discriminator)). It adds NO new guarantee: data-processing already rejects duplicate discriminators within a chunk (app/stagegraph/executor.py:396-401), so this only surfaces an invariant that is already enforced. record_id is UNCHANGED by this field's presence — the value was always an id input, and an empty discriminator reproduces the two-component v0 id byte-for-byte, so no existing record re-keys." },
     "processed_at": { "type": "string", "description": "When data-processing produced this record, RFC3339 UTC (distinct from storage's ingest_time)." }
   }
 }
