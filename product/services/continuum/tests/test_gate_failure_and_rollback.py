@@ -1,14 +1,12 @@
 import json
-from datetime import date
 
-from tests._helpers import consolidate
+from tests._helpers import consolidate, make_window
 from app.publish import ModelDirectory
 from app.synth import synth_records
-from app.window import window_for
 
 
 def _night(user, day, recipe, seed=1, policy=None):
-    win = window_for(user, date(2026, 7, day), "UTC")
+    win = make_window(user, day, "UTC")
     return consolidate(synth_records(win, seed=seed, events=20), win,
                        recipe=recipe, policy=policy), win
 
@@ -26,7 +24,7 @@ def test_failed_gate_never_activates_and_prior_adapter_survives(
     assert directory.entries("u-f")[-1]["status"] == "gate_failed"
     state = json.loads((var_dir / "state" / "u-f.json").read_text())
     assert state["consecutive_failures"] == 1
-    assert state["debt"] == ["w2026-07-19"]
+    assert state["debt"] == [make_window("u-f", 19, "UTC").window_id]
 
 
 def test_two_consecutive_failures_freeze_user(var_dir, small_recipe, monkeypatch):

@@ -12,6 +12,22 @@ VAD-carved (5–30 s) and video captions are per-keyframe records, so one ~10 s
 segment gathers every C2 record (or diarized sub-span) whose t_start falls in
 its bucket. Records are attributed by t_start (window rule).
 
+THE BUCKET GRID IS GLOBAL, NOT WINDOW-RELATIVE (D18 rule 2, adopted here
+2026-07-27 — see `_bucket_index`). This module is the PARITY REFERENCE that
+storage's `materialize_daylog` is diffed against (storage CHARTER M9), and a
+window-relative grid made that diff true only for a window whose origin happened
+to sit on a segment boundary. Real windows are `[watermark, now−δ)` at second
+granularity, so nine origins in ten are misaligned and the two renderers grouped
+records into DIFFERENT segments — different block text, i.e. different training
+text. Measured, not reasoned: with the M9 fixture's origin shifted by 1–9 s,
+tier A failed for every one of the nine.
+
+ONE deliberate difference from storage's materializer remains, and it is not a
+defect: MEMBERSHIP. This path filters on EVENT time (`in_window(t_start, win)`)
+because its callers hold an event-time window on purpose; storage selects on the
+INGEST axis. That is D18 rule 1, and it is what the M9 fixture neutralises (N1)
+rather than something either side should change.
+
 v0 renderer note: block text is labeled anchored lines (anchor line + Caption /
 Heard / World text). The research prose renderer (render_block's structured
 fields + in-text anchor weaving) lives in morpheus/blocks.py; the seam and field
@@ -61,6 +77,12 @@ class DayLog:
     user_id: str
     segments: list[Segment]
     blocks: list[Block]
+    # C10 v1's `content_fingerprint`, when the day-log came from storage. Computed
+    # BY WHOEVER RENDERS and only ever compared to ITSELF across runs (it is the
+    # cycle's day-log stage key, not a cross-backend equality claim), so the fetch
+    # carries the server's value through rather than re-deriving one. None on the
+    # locally-built path, where `daylog_fingerprint` computes it.
+    content_fingerprint: str | None = None
 
 
 def _parse_ts(raw: str) -> datetime:
@@ -70,8 +92,25 @@ def _parse_ts(raw: str) -> datetime:
     return dt
 
 
-def _bucket_index(t: datetime, win: Window, segment_seconds: int) -> int:
-    return int((t - win.start_utc).total_seconds() // segment_seconds)
+def _bucket_index(t: datetime, segment_seconds: int) -> int:
+    """The GLOBAL epoch grid — `floor(epoch_seconds / segment_seconds)`.
+
+    The window origin is deliberately not a parameter. It used to be
+    (`floor((t - win.start_utc)/segment_seconds)`), and that is the same partition
+    of the timeline ONLY when the origin lands exactly on a segment boundary.
+    Storage's materializer buckets on this global grid (D18 rule 2: a
+    window-relative index goes negative on the ingest axis), so for any other
+    origin the two renderers put the same records in different segments and
+    rendered different block text — the one thing M9 tier A says must be
+    byte-identical.
+
+    Storage's grid is the one that had to win: it is the production path, its
+    reason (negative indices on the ingest axis) is structural, and this module is
+    the reference measured against it. A bucket is also now stable under
+    re-materialization, because it no longer depends on which window collected the
+    record.
+    """
+    return int(t.timestamp() // segment_seconds)
 
 
 def build_daylog(records: list[dict[str, Any]], win: Window, *,
@@ -82,10 +121,17 @@ def build_daylog(records: list[dict[str, Any]], win: Window, *,
 
     def seg_for(idx: int) -> Segment:
         if idx not in buckets:
-            start = win.start_utc.timestamp() + idx * segment_seconds
+            start = idx * segment_seconds
             end = start + segment_seconds
             buckets[idx] = Segment(
-                seg_id=f"{win.window_id}_s{idx:05d}",
+                # seg_id is assigned after the buckets are sorted (see below): it
+                # is the ORDINAL in the day-log, not the epoch bucket index, which
+                # at 10 s buckets is a nine-digit number that would blow the {:05d}
+                # width. Storage labels segments by the same rule, for the same
+                # reason, and the label is a REPRESENTATION choice either way —
+                # nothing parses a seg_id (the only reader is a histogram's
+                # `len(b.seg_ids)` in scripts/phase3_daylog.py).
+                seg_id="",
                 t_start=datetime.fromtimestamp(start, tz=timezone.utc).isoformat(),
                 t_end=datetime.fromtimestamp(end, tz=timezone.utc).isoformat(),
             )
@@ -119,7 +165,7 @@ def build_daylog(records: list[dict[str, Any]], win: Window, *,
                 st = _parse_ts(sub["t_start"])
                 if not in_window(st, win):
                     continue
-                note_tz(seg_for(_bucket_index(st, win, segment_seconds)), rec).asr.append(
+                note_tz(seg_for(_bucket_index(st, segment_seconds)), rec).asr.append(
                     {"spk": sub.get("speaker"), "text": sub_text, "t": sub["t_start"]})
             continue
         t0 = _parse_ts(rec["t_start"])
@@ -127,7 +173,7 @@ def build_daylog(records: list[dict[str, Any]], win: Window, *,
             continue  # attribution rule: t_start decides membership
         if not text:
             continue
-        seg = note_tz(seg_for(_bucket_index(t0, win, segment_seconds)), rec)
+        seg = note_tz(seg_for(_bucket_index(t0, segment_seconds)), rec)
         if kind == "transcript":
             seg.asr.append({"spk": None, "text": text, "t": rec["t_start"]})
         elif kind == "ocr":
@@ -136,6 +182,8 @@ def build_daylog(records: list[dict[str, Any]], win: Window, *,
             seg.caption.append(text)
 
     segments = [buckets[i] for i in sorted(buckets)]
+    for ordinal, seg in enumerate(segments):
+        seg.seg_id = f"{win.window_id}_s{ordinal:05d}"
     non_empty = [s for s in segments if not s.is_empty()]
 
     # A block is a run of TEMPORALLY ADJACENT segments (≤ block_segments long);

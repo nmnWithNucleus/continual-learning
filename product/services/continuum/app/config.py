@@ -48,8 +48,20 @@ def _default_policies_dir() -> str:
 @dataclass(frozen=True)
 class Settings:
     trainer_backend: str   # "mock" (default, no GPU) | "morpheus" (the real core)
-    storage_url: str       # /context range read (C10 proposal shape) lives here
+    storage_url: str       # every storage surface: C10 day-log + windows, C12, C13, C14
     http_timeout: float    # inter-service httpx timeout (seconds)
+    # Which backend the three swappable storage seams use — day-log, recipe
+    # registry, reservoir. **"http" is the DEFAULT**: the D18 cutover IS continuum
+    # talking to storage over the seam, and that is the path `scripts/seam_check.py`
+    # proves end to end against the real service. A default that bypasses the seam
+    # ships a configuration nobody exercises.
+    # "local" is still selectable and is NOT dead code — it is the parity reference
+    # storage's narrowed M9 differential diff is measured against — but it only
+    # answers "here are the records, render them" (an explicit `record_provider`).
+    # It cannot source a TRAINING day-log itself: see `clients.day_log_client`.
+    # The window ledger and the C12 profile read have no local backend and ignore
+    # this knob — storage mints window ids and owns home_tz.
+    storage_clients: str   # "local" | "http"
     var_dir: str           # journals + reservoir + adapter artifacts + outbox
     # Registry: continuum fetches the recipe + policy BY ID, not by a file path.
     # The ids are what a run records; the dirs are the local registry's backing
@@ -160,8 +172,11 @@ def get_settings() -> Settings:
                                 ("mock", "morpheus"), "mock"),
         storage_url=os.getenv("STORAGE_URL", "http://localhost:8083").rstrip("/"),
         http_timeout=float(os.getenv("CONTINUUM_HTTP_TIMEOUT", "60")),
+        storage_clients=_choice("CONTINUUM_STORAGE_CLIENTS",
+                                os.getenv("CONTINUUM_STORAGE_CLIENTS", "http"),
+                                ("local", "http"), "http"),
         var_dir=os.getenv("CONTINUUM_VAR_DIR", _default_var_dir()),
-        recipe_id=os.getenv("CONTINUUM_RECIPE_ID", "consolidation-v1.0"),
+        recipe_id=os.getenv("CONTINUUM_RECIPE_ID", "consolidation-v1.1"),
         policy_id=os.getenv("CONTINUUM_POLICY_ID", "gate-policy-v1.1"),
         recipes_dir=os.getenv("CONTINUUM_RECIPES_DIR", _default_recipes_dir()),
         policies_dir=os.getenv("CONTINUUM_POLICIES_DIR", _default_policies_dir()),

@@ -1,10 +1,24 @@
-"""C10 training-window read — thin client over storage's beta range read.
+"""The raw `/context` range read — thin client over `GET /context/records`.
 
-Shape deliberately matches what storage already serves (and what the C10 v0
-freeze proposal extends): `GET /context/records?user_id=&from=&to=`, half-open
-`[from, to)`, ordered by t_start. The freeze itself is a founders' act (D15);
-this client codes to the beta shape and grows the frozen extras (cursor,
-pipeline_version / modality filters) when they're ratified.
+Half-open `[from, to)` on EVENT time, ordered by t_start. This is **not** the
+C10-evolved training read any more: D18 made C10 a day-log fetch over storage's
+INGEST-time watermark (`app/clients/daylog_client.py`), and this range read was
+explicitly **not** retired by that decision — it stays first-class as a different
+question on a different axis (a retraction, a debug, D12's beta training feed).
+
+**It has NO job in the nightly path, and wiring it into one was a defect.** It was
+the local day-log client's default record provider, which meant the default nightly
+handed a training window's INGEST-time bounds to an EVENT-time filter and trained on
+whatever fell out — in the measured case, nothing at all. A training window is
+`[last_trained_t, now−δ)` on `ingest_time`; this read answers a question about a
+lived period. Same units, different axis, no error. `clients.day_log_client` now
+refuses that wiring outright (`IngestWindowNotReadable`).
+
+Its real consumers hold an EVENT-time window on purpose and say so: the retraction
+and debugging paths, D12's beta training feed, and `scripts/phase3_daylog.py`, which
+re-renders archived local calendar days and builds its own event-time window for
+each. The M9 parity reference does not use it either — it hands
+`LocalDayLogClient.from_records` a fixed record list.
 """
 from __future__ import annotations
 

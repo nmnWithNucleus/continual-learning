@@ -1,11 +1,9 @@
 import json
-from datetime import date
 
-from tests._helpers import consolidate
+from tests._helpers import StubWindowLedger, consolidate, make_window
 from app.publish import ModelDirectory
 from app.reservoir import Reservoir
 from app.synth import synth_records
-from app.window import window_for
 
 
 def test_full_cycle_publishes_and_admits_reservoir(var_dir, small_recipe, win, day_records):
@@ -39,8 +37,8 @@ def test_rerun_is_idempotent(var_dir, small_recipe, win, day_records):
 
 
 def test_second_night_mixes_replay_and_continues_adapter(var_dir, small_recipe, day_records):
-    win1 = window_for("u-test", date(2026, 7, 20), "America/Los_Angeles")
-    win2 = window_for("u-test", date(2026, 7, 21), "America/Los_Angeles")
+    win1 = make_window("u-test", 20, "America/Los_Angeles")
+    win2 = make_window("u-test", 21, "America/Los_Angeles")
     r1 = consolidate(synth_records(win1, seed=1, events=25), win1, recipe=small_recipe)
     r2 = consolidate(synth_records(win2, seed=2, events=25), win2, recipe=small_recipe)
     assert r1.status == r2.status == "published"
@@ -60,7 +58,7 @@ def test_second_night_mixes_replay_and_continues_adapter(var_dir, small_recipe, 
 
 
 def test_empty_window_skips_without_strike(var_dir, small_recipe):
-    win = window_for("u-empty", date(2026, 7, 20), "UTC")
+    win = make_window("u-empty", 20, "UTC")
     result = consolidate([], win, recipe=small_recipe)
     assert result.status == "skipped_no_data"
     state_path = var_dir / "state" / "u-empty.json"
@@ -74,21 +72,59 @@ def test_rawlog_replay_source_runs_through_the_cycle(var_dir, small_recipe):
     change, not a code change. Night 2 must pull replay from night 1's raw day-log.
 
     The day-log client here is WINDOW-AWARE (synthesizes per window), which is what
-    the real providers do (`synth_records(w)`, `fetch_window_records(url, w)`);
-    rawlog replay re-fetches prior windows, so it needs that."""
+    the real providers do (`synth_records(w)`, `HttpDayLogClient.fetch_daylog(w)`);
+    rawlog replay re-fetches prior windows, so it needs that.
+
+    Post-D18 the prior windows come from the LEDGER's enumeration, not from parsing
+    a window id back into a date — so the cycle is handed a ledger, and the
+    provider keys off window IDENTITY (a dict lookup) rather than picking digits
+    out of the id."""
     import dataclasses
 
     from app.clients import LocalDayLogClient
     from app.cycle import run_cycle
     raw_recipe = dataclasses.replace(small_recipe, replay_source="rawlog")
-    win1 = window_for("u-raw", date(2026, 7, 20), "UTC")
-    win2 = window_for("u-raw", date(2026, 7, 21), "UTC")
-    dc = LocalDayLogClient(lambda w: synth_records(w, seed=int(w.window_id[-2:]), events=40),
+    win1 = make_window("u-raw", 20, "UTC")
+    win2 = make_window("u-raw", 21, "UTC")
+    seeds = {win1.window_id: 1, win2.window_id: 2}   # opaque key, never parsed
+    ledger = StubWindowLedger()
+    dc = LocalDayLogClient(lambda w: synth_records(w, seed=seeds[w.window_id], events=40),
                            segment_seconds=raw_recipe.segment_seconds,
                            block_segments=raw_recipe.block_segments)
-    run_cycle(win1, daylog_client=dc, recipe=raw_recipe)
-    run_cycle(win2, daylog_client=dc, recipe=raw_recipe)
+    run_cycle(win1, daylog_client=dc, recipe=raw_recipe, windows=ledger)
+    ledger.add(win1)   # storage would have recorded night 1 as consolidated
+    run_cycle(win2, daylog_client=dc, recipe=raw_recipe, windows=ledger)
     journal2 = json.loads(
         (var_dir / "journal" / "u-raw" / f"{win2.window_id}.json").read_text())
     assert journal2["stages"]["replay_mix"]["replay_source"] == "rawlog"
     assert journal2["stages"]["replay_mix"]["replay_chars"] > 0
+
+
+def test_rawlog_replay_uses_ledger_enumeration_not_the_reservoir_ledger(
+        var_dir, small_recipe):
+    """The enumeration read is LOAD-BEARING: a prior window storage has not
+    consolidated contributes no replay, even though the reservoir remembers it.
+
+    Before D18 the prior windows were rebuilt from the reservoir entries' parsed
+    ids; now the reservoir ledger keys the stage (content shas) and the window
+    ledger says which windows exist and what their bounds are."""
+    import dataclasses
+
+    from app.clients import LocalDayLogClient
+    from app.cycle import run_cycle
+    raw_recipe = dataclasses.replace(small_recipe, replay_source="rawlog")
+    win1 = make_window("u-enum", 20, "UTC")
+    win2 = make_window("u-enum", 21, "UTC")
+    seeds = {win1.window_id: 1, win2.window_id: 2}
+    dc = LocalDayLogClient(lambda w: synth_records(w, seed=seeds[w.window_id], events=40),
+                           segment_seconds=raw_recipe.segment_seconds,
+                           block_segments=raw_recipe.block_segments)
+    empty_ledger = StubWindowLedger()          # storage knows of no prior window
+    run_cycle(win1, daylog_client=dc, recipe=raw_recipe, windows=empty_ledger)
+    run_cycle(win2, daylog_client=dc, recipe=raw_recipe, windows=empty_ledger)
+    journal2 = json.loads(
+        (var_dir / "journal" / "u-enum" / f"{win2.window_id}.json").read_text())
+    # Night 1 IS in the reservoir (it published), but enumeration returned nothing,
+    # so there is nothing to replay — and the cycle did not invent a window.
+    assert Reservoir(var_dir).entries("u-enum", before_window=win2.window_id)
+    assert journal2["stages"]["replay_mix"]["replay_chars"] == 0

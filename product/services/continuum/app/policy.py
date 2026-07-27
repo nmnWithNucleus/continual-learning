@@ -44,8 +44,9 @@ class GatePolicy:
     snapshot_retention: int
 
 
-def load_policy(path: str | Path) -> GatePolicy:
-    raw = json.loads(Path(path).read_text())
+def policy_from_dict(raw: dict) -> GatePolicy:
+    """Parse a C13 gate-policy artifact — one parser for both registry backends
+    (local file and storage's verbatim `GET /policies/{id}` response)."""
     gate, publish = raw["gate"], raw["publish"]
     return GatePolicy(
         policy_id=raw["policy_id"],
@@ -59,6 +60,10 @@ def load_policy(path: str | Path) -> GatePolicy:
         consecutive_fail_freeze=int(gate["consecutive_fail_freeze"]),
         snapshot_retention=int(publish["snapshot_retention"]),
     )
+
+
+def load_policy(path: str | Path) -> GatePolicy:
+    return policy_from_dict(json.loads(Path(path).read_text()))
 
 
 def heldout_p_value(adapter_hits: int, adapter_n: int,

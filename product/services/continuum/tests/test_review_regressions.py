@@ -1,18 +1,16 @@
 """Regression tests for the adversarial-review findings on the WS1 scaffold."""
 import json
-from datetime import date
 
 import pytest
 
-from tests._helpers import consolidate
+from tests._helpers import consolidate, make_window
 from app.publish import ModelDirectory
 from app.reservoir import Reservoir
 from app.synth import synth_records
-from app.window import window_for
 
 
 def _night(user, day, recipe, seed=None):
-    win = window_for(user, date(2026, 7, day), "UTC")
+    win = make_window(user, day, "UTC")
     return consolidate(synth_records(win, seed=seed if seed is not None else day,
                                      events=20), win, recipe=recipe), win
 
@@ -51,9 +49,11 @@ def test_old_window_reconsolidation_flips_nothing_but_is_recorded(var_dir, small
     directory = ModelDirectory(var_dir)
     # ...entry appended for audit, but the serving alias stays on the newest window,
     assert directory.active("u-b2")["adapter_version"] == new.adapter_version
-    # ...and the NEXT night's lineage resumes from the newest window, not w18.
-    prior = directory.active_before("u-b2", "w2026-07-20")
-    assert prior["training_window"] == "w2026-07-19"
+    # ...and the NEXT night's lineage resumes from the newest window, not day 18's.
+    # `active_before` compares the OPAQUE ids as strings and does nothing else with
+    # them — which is the whole contract of the id.
+    prior = directory.active_before("u-b2", make_window("u-b2", 20, "UTC").window_id)
+    assert prior["training_window"] == make_window("u-b2", 19, "UTC").window_id
 
 
 def test_rollback_is_reentrant_down_to_base(var_dir, small_recipe):
@@ -74,7 +74,8 @@ def test_reservoir_content_change_invalidates_replay_mix(var_dir, small_recipe):
     assert second.status == "published"
     # A past day's reservoir corpus is legitimately re-written...
     long_para = "x" * 200
-    Reservoir(var_dir).admit("u-d", "w2026-07-18", small_recipe.recipe_id,
+    Reservoir(var_dir).admit("u-d", make_window("u-d", 18, "UTC").window_id,
+                             small_recipe.recipe_id,
                              "\n\n".join(f"{long_para}{i}" for i in range(10)))
     # ...so re-running night 19 must rebuild its replay mix, not trust the cache.
     redo = consolidate(synth_records(win19, seed=19, events=20), win19,
@@ -84,7 +85,7 @@ def test_reservoir_content_change_invalidates_replay_mix(var_dir, small_recipe):
 
 
 def test_unsafe_user_id_is_rejected_everywhere(var_dir, small_recipe):
-    win = window_for("../evil", date(2026, 7, 20), "UTC")
+    win = make_window("../evil", 20, "UTC")
     with pytest.raises(ValueError, match="user_id"):
         consolidate([], win, recipe=small_recipe)
     with pytest.raises(ValueError):
@@ -106,7 +107,7 @@ def test_debt_clears_when_failed_window_later_consolidates(var_dir, small_recipe
 
 def test_boundary_straddling_subspan_lands_in_window():
     from app.daylog import build_daylog
-    win = window_for("u-f", date(2026, 7, 20), "UTC")
+    win = make_window("u-f", 20, "UTC")
     from datetime import timedelta
     before = win.start_utc - timedelta(seconds=5)   # parent chunk starts pre-boundary
     inside = win.start_utc + timedelta(seconds=2)
@@ -124,7 +125,7 @@ def test_boundary_straddling_subspan_lands_in_window():
 
 def test_block_anchor_uses_local_clock(var_dir, small_recipe):
     from app.daylog import build_daylog
-    win = window_for("u-g", date(2026, 7, 20), "America/Los_Angeles")
+    win = make_window("u-g", 20, "America/Los_Angeles")
     daylog = build_daylog(synth_records(win, seed=7, events=10), win)
     header = daylog.blocks[0].text.splitlines()[0]
     assert "local time" in header and "UTC" not in header
@@ -136,7 +137,7 @@ def test_block_anchor_uses_local_clock(var_dir, small_recipe):
 def test_blocks_break_on_camera_off_gaps(var_dir, small_recipe):
     from app.daylog import build_daylog
     from datetime import timedelta
-    win = window_for("u-h", date(2026, 7, 20), "UTC")
+    win = make_window("u-h", 20, "UTC")
     recs = []
     for i, offset in enumerate((0, 10, 7200, 7210)):  # two pairs, 2h apart
         t0 = win.start_utc + timedelta(seconds=offset)

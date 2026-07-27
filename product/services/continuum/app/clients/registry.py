@@ -13,15 +13,17 @@ see recipe.py / policy.py.
 
   LocalRecipeRegistry   resolves an id to `<recipes_dir>/<id>.json` (and policy to
                         `<policies_dir>/<id>.json`), i.e. the files already on disk.
-  (future) HttpRecipeRegistry  GETs the versioned artifact from storage.
+  HttpRecipeRegistry    GETs the versioned artifact from storage's C13 registry
+                        (`GET /recipes/{id}`, `GET /policies/{id}`), served verbatim.
 """
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Protocol
 
-from ..policy import GatePolicy, load_policy
-from ..recipe import Recipe, load_recipe
+from ..policy import GatePolicy, load_policy, policy_from_dict
+from ..recipe import Recipe, load_recipe, recipe_from_dict
+from ._http import request_json
 
 
 class RecipeNotFound(KeyError):
@@ -73,5 +75,54 @@ class LocalRecipeRegistry:
         if policy.policy_id != policy_id:
             raise RecipeNotFound(
                 f"policy {policy_id!r} resolves to a file whose policy_id is "
+                f"{policy.policy_id!r} — registry id and content id disagree")
+        return policy
+
+
+class HttpRecipeRegistry:
+    """Storage backend: the C13 registry.
+
+    Two endpoints for two artifacts, which IS the contract — `recipe_id` is hashed
+    into the amplify and train stage keys, `policy_id` never is, so re-deciding
+    what is shippable must not re-train anything. There is no `user_id` on this
+    surface and there must never be one: a recipe is global and versioned, and a
+    per-user value would fork the id per user and destroy comparability.
+
+    Storage serves both artifacts VERBATIM (they carry human provenance prose), so
+    the same parser reads a file and a response body — the two backends cannot
+    drift on what a recipe means.
+    """
+
+    def __init__(self, storage_url: str, *, timeout: float = 60.0, transport=None):
+        self.storage_url = storage_url.rstrip("/")
+        self.timeout = timeout
+        self.transport = transport
+
+    def _fetch(self, kind: str, path: str, artifact_id: str) -> dict:
+        status, body = request_json(
+            "GET", f"{self.storage_url}/{path}/{artifact_id}", timeout=self.timeout,
+            transport=self.transport, allow_status=(404,))
+        if status == 404:
+            raise RecipeNotFound(
+                f"no {kind} {artifact_id!r} in the storage registry at "
+                f"{self.storage_url}/{path} — register the artifact or fix the id")
+        return body
+
+    def fetch_recipe(self, recipe_id: str) -> Recipe:
+        recipe = recipe_from_dict(self._fetch("recipe", "recipes", recipe_id))
+        # Same guard as the local backend, for the same reason: a registry that
+        # silently returns a differently-identified artifact would let a night
+        # mis-record what it trained under.
+        if recipe.recipe_id != recipe_id:
+            raise RecipeNotFound(
+                f"recipe {recipe_id!r} resolves to an artifact whose recipe_id is "
+                f"{recipe.recipe_id!r} — registry id and content id disagree")
+        return recipe
+
+    def fetch_policy(self, policy_id: str) -> GatePolicy:
+        policy = policy_from_dict(self._fetch("policy", "policies", policy_id))
+        if policy.policy_id != policy_id:
+            raise RecipeNotFound(
+                f"policy {policy_id!r} resolves to an artifact whose policy_id is "
                 f"{policy.policy_id!r} — registry id and content id disagree")
         return policy

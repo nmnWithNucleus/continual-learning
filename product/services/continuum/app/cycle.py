@@ -27,10 +27,11 @@ from typing import Any
 
 from . import fsio
 from .backends import get_backend
-from .clients import DayLogClient, RecipeRegistry
+from .clients import DayLogClient, RecipeRegistry, WindowLedger
 from .clients import day_log_client
 from .clients import recipe_registry as build_registry
 from .clients import reservoir_client as build_reservoir_client
+from .clients import window_ledger as build_window_ledger
 from .config import get_settings
 from .gate import GateReport, run_gate
 from .ids import validate_id
@@ -38,7 +39,7 @@ from .policy import GatePolicy
 from .publish import ModelDirectory, PublishResult
 from .recipe import Recipe
 from .renderer import blocks_text, render_corpus_file
-from .window import Window, window_for
+from .window import Window
 
 BASE_MODEL_HASH = "qwen3-vl-32b-instruct"  # pinned for real once D6's exact variant lands
 
@@ -120,12 +121,17 @@ class _UserState:
 
 def run_cycle(win: Window, *, daylog_client: DayLogClient | None = None,
               registry: RecipeRegistry | None = None, recipe: Recipe | None = None,
-              policy: GatePolicy | None = None, force: bool = False) -> CycleResult:
+              policy: GatePolicy | None = None, windows: WindowLedger | None = None,
+              force: bool = False) -> CycleResult:
     """One night's consolidation as the lean 5-verb loop:
     fetch recipe · fetch day-log · amplify · finetune · gate · publish.
 
     Every data-shaped input arrives through a storage CLIENT (registry, day-log,
-    reservoir) — local today, HTTP-to-storage later, the cycle unchanged."""
+    reservoir, window ledger) — local or HTTP per settings, the cycle unchanged.
+
+    `win` is HANDED IN, never computed: it is storage's window row (D18). The
+    cycle neither mints nor parses `window_id` — it uses it as a journal/reservoir
+    key and compares it with `<` / `>=`, and nothing else."""
     validate_id(win.user_id, "user_id")
     validate_id(win.window_id, "window_id")
     settings = get_settings()
@@ -197,10 +203,10 @@ def run_cycle(win: Window, *, daylog_client: DayLogClient | None = None,
     amp_text = amp_path.read_text()
 
     # ---- stage: replay mix -------------------------------------------------------
-    # Prior consolidated windows for this user, reconstructed from the reservoir's
-    # ledger (the amplified store is the record of WHICH nights ran, whichever
-    # source replay then reads). Key includes each entry's content sha: a
-    # re-consolidated past day must invalidate this night's mix.
+    # The reservoir LEDGER (C14) is the record of which nights ran and what they
+    # produced. It is read for the stage KEY: each entry's content sha is hashed in,
+    # so a re-consolidated past day invalidates this night's mix instead of silently
+    # reusing a cache entry. `before_window` is a plain `<` on the opaque id.
     prior = reservoir.entries(win.user_id, before_window=win.window_id)
     reservoir_state = ";".join(f"{e.window_id}:{e.sha}" for e in prior)
     mix_key = _h(amp_key, reservoir_state, str(recipe.replay_frac), recipe.replay_source)
@@ -212,10 +218,18 @@ def run_cycle(win: Window, *, daylog_client: DayLogClient | None = None,
         # The locked decision is raw prior day-logs; recipe v1.0 pins amp for
         # parity. Both go through the reservoir client — amp reads the amplified
         # store, rawlog re-reads prior day-logs via the day-log client.
+        #
+        # Prior windows come from storage's window ENUMERATION, which is the whole
+        # reason that read exists. They used to be REBUILT here, by parsing each
+        # reservoir entry's window id back into a local date and re-deriving its
+        # bounds under TONIGHT's timezone — wrong whenever the user had travelled,
+        # and impossible once a window stopped being a local day (it can span 23 h,
+        # 25 h or 47 h). A window id is now opaque and a window's bounds are a fact
+        # only its minter holds.
         prior_windows = None
         if recipe.replay_source == "rawlog":
-            prior_windows = [window_for(win.user_id, e.local_window_date(), win.tz,
-                                        recipe.boundary_local_time) for e in prior]
+            ledger = windows or build_window_ledger(settings)
+            prior_windows = ledger.prior_windows(win.user_id, win.window_id, tz=win.tz)
         replay = reservoir.sample_replay(
             win.user_id, target_chars=len(amp_text), frac=recipe.replay_frac,
             seed=seed, before_window=win.window_id,

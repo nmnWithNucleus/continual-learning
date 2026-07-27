@@ -57,16 +57,19 @@ def sample_pooled(source_texts: list[str], *, target_chars: int, frac: float,
 @dataclass(frozen=True)
 class ReservoirEntry:
     user_id: str
-    window_id: str
+    window_id: str   # OPAQUE — comparable with < / >=, and NOTHING else
     recipe_id: str
-    path: str
+    path: str        # local backend only; the C14 ledger serves no bodies and no paths
     sha: str = ""   # corpus content hash — replay-mix stage keys hang off this
 
-    def local_window_date(self):
-        """The local start date encoded in the window id ("w2026-07-21" -> date).
-        Lets a prior window be reconstructed for a raw-day-log replay fetch."""
-        from datetime import date
-        return date.fromisoformat(self.window_id[1:])
+    # `local_window_date()` was DELETED at the D18 cutover. It parsed the window id
+    # back into a date so a prior window could be *reconstructed* for a raw-day-log
+    # replay fetch — under tonight's timezone, which was wrong the moment a user
+    # travelled, and impossible the moment a window stopped being a local day (it
+    # can span 23 h, 25 h or 47 h). Prior windows are no longer reconstructed at
+    # all: they are ENUMERATED from storage's ledger
+    # (`GET /training/windows?user_id=&state=consolidated`), which is why that read
+    # is load-bearing rather than a convenience.
 
 
 class Reservoir:

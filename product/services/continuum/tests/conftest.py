@@ -1,19 +1,28 @@
 from __future__ import annotations
 
-from datetime import date
-
 import pytest
 
 from app.policy import GatePolicy
 from app.recipe import Recipe
 from app.synth import synth_records
-from app.window import window_for
+from tests._helpers import make_window
 
 
 @pytest.fixture
 def var_dir(tmp_path, monkeypatch):
+    """A self-contained local sandbox for one test: temp var/ tree, no storage service.
+
+    It pins `CONTINUUM_STORAGE_CLIENTS=local` EXPLICITLY rather than leaning on the
+    default, and that is the point rather than boilerplate: the shipped default is
+    `http` (the seam is what the D18 slice built, and it is what `scripts/seam_check.py`
+    proves against the real service). A suite that runs without a storage service must
+    say so out loud — if it instead inherited the production default, the day the
+    default changes the suite either starts making real HTTP calls or silently proves
+    something about a configuration nobody ships.
+    """
     d = tmp_path / "var"
     monkeypatch.setenv("CONTINUUM_VAR_DIR", str(d))
+    monkeypatch.setenv("CONTINUUM_STORAGE_CLIENTS", "local")
     monkeypatch.delenv("MOCK_GATE", raising=False)
     monkeypatch.delenv("TRAINER_BACKEND", raising=False)
     return d
@@ -50,7 +59,8 @@ def small_policy():
 
 @pytest.fixture
 def win():
-    return window_for("u-test", date(2026, 7, 20), "America/Los_Angeles")
+    """One window, as storage would have minted and returned it."""
+    return make_window("u-test", 20, "America/Los_Angeles")
 
 
 @pytest.fixture

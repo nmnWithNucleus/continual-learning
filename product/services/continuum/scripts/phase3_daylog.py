@@ -31,8 +31,9 @@ import json
 import statistics
 import sys
 from collections import Counter
-from datetime import date
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -41,7 +42,33 @@ from app.config import get_settings                        # noqa: E402
 from app.context_reader import fetch_window_records        # noqa: E402
 from app.morpheus.profiles.speed import EXCERPT_CHARS      # noqa: E402
 from app.recipe import load_recipe                         # noqa: E402
-from app.window import window_for                          # noqa: E402
+from app.window import Window                              # noqa: E402
+
+
+def replay_window(user_id: str, local_day: date, tz: str, boundary: str) -> Window:
+    """The archived day this REPLAY re-renders, as an explicit window.
+
+    `app.window.window_for()` is deleted (D18): a production window is
+    `[last_trained_t, now-delta)` on storage's INGEST clock, opened by
+    `POST /training/windows` and named by an opaque id. This script is not a
+    production night — it re-renders a fixed set of already-archived Speed days,
+    each of which really is one local calendar day in one named city, and it reads
+    them back through the raw `/context` range read (EVENT time), which D18
+    explicitly did NOT retire.
+
+    So the local-date arithmetic that used to live in the product lives here, in
+    the replay harness that actually has a local date to work with, and nowhere
+    else. The id is minted in storage's format from the window's end instant so it
+    stays path-safe and lexicographically ordered; it is NOT a ledger id and this
+    script does not talk to the window ledger.
+    """
+    hh, mm = boundary.split(":")
+    zone = ZoneInfo(tz)
+    start_local = datetime.combine(local_day, time(int(hh), int(mm)), tzinfo=zone)
+    end_utc = (start_local + timedelta(days=1)).astimezone(timezone.utc)
+    return Window(window_id="w" + end_utc.strftime("%Y%m%dT%H%M%SZ"),
+                  user_id=user_id, tz=tz,
+                  start_utc=start_local.astimezone(timezone.utc), end_utc=end_utc)
 
 
 def allowed_caption_starts(captions_file: Path, day: int, splits: tuple[str, ...]) -> set[str]:
@@ -63,8 +90,8 @@ def allowed_caption_starts(captions_file: Path, day: int, splits: tuple[str, ...
 def build_day(day: int, plan: dict, args, recipe) -> dict:
     settings = get_settings()
     info = plan["days"][str(day)]
-    win = window_for(plan["user_id"], date.fromisoformat(info["date"]), info["tz"],
-                     recipe.boundary_local_time)
+    win = replay_window(plan["user_id"], date.fromisoformat(info["date"]),
+                        info["tz"], recipe.boundary_local_time)
     allowed = allowed_caption_starts(Path(plan["captions_file"]), day, tuple(args.splits.split(",")))
     seen = Counter()
 

@@ -46,8 +46,14 @@ class Recipe:
     boundary_local_time: str  # "HH:MM" user-local consolidation boundary
 
 
-def load_recipe(path: str | Path) -> Recipe:
-    raw = json.loads(Path(path).read_text())
+def recipe_from_dict(raw: dict) -> Recipe:
+    """Parse a C13 recipe artifact.
+
+    One parser, both registry backends: the local registry reads the file and the
+    HTTP registry reads storage's `GET /recipes/{id}` response, which serves the
+    artifact VERBATIM. Anything else would let the two backends disagree about
+    what a recipe means, which is the one thing a versioned registry exists to
+    prevent."""
     return Recipe(
         recipe_id=raw["recipe_id"],
         variants=int(raw["amplify"]["variants"]),
@@ -68,3 +74,7 @@ def load_recipe(path: str | Path) -> Recipe:
         segment_seconds=int(raw["corpus"]["segment_seconds"]),
         boundary_local_time=str(raw["window"]["boundary_local_time"]),
     )
+
+
+def load_recipe(path: str | Path) -> Recipe:
+    return recipe_from_dict(json.loads(Path(path).read_text()))

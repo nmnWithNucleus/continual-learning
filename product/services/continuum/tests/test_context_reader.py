@@ -1,15 +1,12 @@
-import json
-from datetime import date
-
 import httpx
 import pytest
 
 from app.context_reader import fetch_window_records
-from app.window import window_for
+from tests._helpers import make_window
 
 
 def test_fetch_uses_c10_range_shape_and_unwraps():
-    win = window_for("u1", date(2026, 7, 20), "UTC")
+    win = make_window("u1", 20, "UTC")
     seen = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -27,7 +24,7 @@ def test_fetch_uses_c10_range_shape_and_unwraps():
 
 
 def test_bare_list_payload_accepted():
-    win = window_for("u1", date(2026, 7, 20), "UTC")
+    win = make_window("u1", 20, "UTC")
     transport = httpx.MockTransport(
         lambda req: httpx.Response(200, json=[{"record_id": "r1"}]))
     assert fetch_window_records("http://storage", win, transport=transport) \
@@ -35,7 +32,7 @@ def test_bare_list_payload_accepted():
 
 
 def test_http_error_raises_never_truncates():
-    win = window_for("u1", date(2026, 7, 20), "UTC")
+    win = make_window("u1", 20, "UTC")
     transport = httpx.MockTransport(lambda req: httpx.Response(500))
     with pytest.raises(httpx.HTTPStatusError):
         fetch_window_records("http://storage", win, transport=transport)
