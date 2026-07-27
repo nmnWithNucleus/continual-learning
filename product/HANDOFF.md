@@ -385,7 +385,18 @@ ratified in-session 2026-07-19 → **D16**.)*
   Four adversarial rounds ran and every one found something real — the sharpest being that the seam
   showed 148 green checks *while the shipped default trained on nothing*, because the harnesses
   proved the paths they exercised and the default was not one of them.
-- **THE WIPE (D19) is the remaining act**, gated on D20 and on a final adversarial round. Continuum's
+- ~~**THE WIPE (D19)**~~ **DONE 2026-07-27 — the fleet is live on the new code and healthy.**
+  Sequence: fleet stopped → all three stores backed up via SQLite's online-backup API and the
+  backups verified restorable (`/home/ubuntu/nmn/backups/pre-wipe-20260727-155147/`) → stores
+  cleared → restarted on the cutover code. Fresh schema carries `user_profiles`, `training_windows`
+  and `day_logs`. **Proven live, two processes, real ASR:** a `/capture/run` carried 3 chunks
+  through faster-whisper into `/context`; a C12 profile was set and a *missing* one 404'd; a nightly
+  ran over HTTP to **published**; and the three invariants held on the real fleet — the watermark
+  advanced **only** on `published` (the following `skipped_no_data` window did not move it, and the
+  next window opened exactly at the published window's `t_end`), and C5 carried **exactly one**
+  active row. Verification data was then cleared and the fleet restarted clean — note E-2's DELETE
+  primitive is still unbuilt, so a re-wipe is currently the only way to retract rows.
+- *Superseded:* the wipe was gated on D20 and a final adversarial round. Continuum's
   `var_dir` and node-7's learn-fleet DBs are experiment output, not user data; lineage restarts from
   base, which is what makes D18's `window_id` reformat free. Back up first via SQLite's
   online-backup API (D17 precedent). **Expect, do not debug:** after the wipe a user has no
