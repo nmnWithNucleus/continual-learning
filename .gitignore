@@ -3,3 +3,6 @@
 
 # Agent session state
 .claude/scheduled_tasks.lock
+
+# Local session scratch — kept on disk, never tracked
+start.md
