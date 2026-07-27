@@ -18,7 +18,14 @@
 4. **LoRA → MoE-users** — scope the first paper-reading + feasibility pass.
 
 ## Decisions
-*(none yet)*
+
+Ratified decisions live in [DECISIONS.md](../DECISIONS.md) and are cited by
+D-number — never restated here. *(none from this thread yet)*
 
 ## Worklog
+
+> **Newest first.** New entries are *prepended* directly under this heading, never appended at
+> the bottom ([ORG.md](../ORG.md) §Documentation protocol). Each entry is a `### <date> — <title>`
+> anchor so [DECISIONS.md](../DECISIONS.md) can point at the reasoning behind a decision by name.
+
 - 2026-07-08 — thread seeded at product-structure standup.
