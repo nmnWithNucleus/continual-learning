@@ -29,7 +29,7 @@ purpose**, with the reason written down.
   unrecorded — the deferral itself is the thing that must be written down, or it is just a gap.
 - Silent breakage. A thing we know is wrong stays wrong on the record, not quietly.
 - **Claiming something is built when it is decided.** The stage changes what we build, never what
-  we say about it (see D17's O-12 correction and D18's status split).
+  we say about it.
 
 **What changes at dev/prod.** Everything parked under this banner is *tracked*, not forgotten: the
 retention policy (today `keep_forever` everywhere, with the knob shipped and the sweeper not
@@ -51,7 +51,7 @@ The serve loop makes the product usable today; the learn loop is why it exists.
 ## System diagram
 
 ```mermaid
-flowchart LR
+flowchart TD
   U((Users))
 
   subgraph capture [Life capture — learn loop]
