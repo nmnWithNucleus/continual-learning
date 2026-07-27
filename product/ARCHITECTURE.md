@@ -299,7 +299,17 @@ slices start"); the shapes below are the pin.
   `{contract:"C10", version:"1", user_id, window_id, t_start, t_end, daylog_format_version,
   recipe_id, home_tz, segments:[{seg_id, t_start, t_end, caption[], asr[], ocr[], quality, tz}],
   blocks:[{block_id, seg_ids[], text, anchors{}, quality}], content_fingerprint}`.
-  `daylog_format_version` + `recipe_id` satisfy the recipe-versioning requirement; `home_tz` records
+  `daylog_format_version` + `recipe_id` satisfy the recipe-versioning requirement — and the
+  requirement is satisfied by the CONSUMER, not by the stamp: continuum's `HttpDayLogClient`
+  compares both against the night it is about to run and **refuses** (`DayLogDialectMismatch`,
+  window left open, exit 2) rather than training on a dialect or a recipe it did not expect
+  (F3, 2026-07-27 — until then both fields were written by storage and read by nobody, which
+  is exactly the silent format change the fields exist to prevent). The two pins are set
+  INDEPENDENTLY (`STORAGE_DAYLOG_RECIPE_ID`, `CONTINUUM_RECIPE_ID`), so a half-finished re-pin
+  is an ordinary deployment slip that only the consumer can detect: storage renders honestly
+  under its own pin and stamps what it rendered, while publish writes CONTINUUM's `recipe_id`
+  into C5 — so the artifact would be audited as trained under a recipe it was not trained
+  under. `home_tz` records
   **the fallback zone actually used**, which closes the D17 follow-up that a wrong-timezone adapter
   is otherwise unfalsifiable after the fact. `content_fingerprint` is computed **by whoever renders**
   and is only ever compared to *itself* across runs (it is a journal stage key, not a cross-backend
@@ -311,10 +321,25 @@ slices start"); the shapes below are the pin.
     captured Tuesday and uploaded Friday trains in Friday's window, rendered in a block anchored
     "On [Tuesday]". Content stays event-time-correct because blocks are formed by **temporal
     adjacency** and carry their own local anchors; a backlog simply forms its own blocks.
+  - *`seg_id` is an opaque ordinal label with no cross-materialization stability guarantee* (D20).
+    What is stable is the **bucket grid** below, which decides grouping; the *label* is the
+    segment's position in the rendered day-log, so a re-materialization that drops a record (the
+    one-dialect rule) legitimately renumbers everything after it. Nothing external stores a
+    `seg_id`: it is written to `segments.jsonl` and read by no trainer. Consequently it is **not**
+    part of the day-log's byte-identity bar — see storage CHARTER M9(b), which requires instead
+    that the relabelling be an order-preserving bijection with per-block membership preserved.
   - *Segment buckets sit on a **global** epoch grid* (`floor(t_start / segment_seconds)`), not
-    relative to the window start as today (`daylog.py:74`). This is required — window-relative
-    indices go negative once membership is on the ingest axis — and it is also **better**: a
-    segment's bucket is then stable across re-materialization.
+    relative to the window start. This is required — window-relative indices go negative once
+    membership is on the ingest axis — and it is also **better**: a segment's bucket is then
+    stable across re-materialization. **Both renderers do this as of 2026-07-27 (F4).**
+    Continuum's local `build_daylog` bucketed window-relatively until then, and storage's M9
+    differential proof hid it behind a fixture whose event-window origin was chosen *aligned* to
+    the segment grid — the one origin for which the two rules agree, and one **no real window
+    has** (windows are `[watermark, now−δ)` at second granularity). Measured before the fix:
+    shifting that fixture's origin 1–9 s broke M9 tier A at every one of the nine — segment
+    bounds always, **block text** (the training artifact) at eight, and at +3 s the segment count
+    and per-block membership as well. The proof now runs its whole origin-dependent bar over an
+    aligned **and** a misaligned origin, and asserts of each that it is what it claims to be.
   - *One dialect per record, latest wins.* Among records sharing
     `(chunk_id, content.kind, within-chunk discriminator)`, the materializer keeps the one with the
     **latest `ingest_time`** and drops the rest. `pipeline_version` is a *composed* string
@@ -327,10 +352,12 @@ slices start"); the shapes below are the pin.
     builder:** the discriminator is today folded into the `record_id` hash and is **not
     independently readable from C2** — the build slice must either surface it as an additive
     optional C2 field or prove `(chunk_id, kind, t_start)` unique per dialect. Do not hand-wave it.
-- **Watermark advance + the outcome rule.** `last_trained_t` advances **iff** the cycle reaches
-  `published` or `skipped_no_data`. `gate_failed`, `frozen` and any crash leave it where it is, so
-  the next window is a strict **superset** of the failed one — the design-of-record's failed-day
-  merge, obtained structurally rather than by the `_UserState.debt` bookkeeping it demotes. Strike
+- **Watermark advance + the outcome rule.** `last_trained_t` advances **if and only if the cycle
+  PUBLISHES** *(refined 2026-07-27; this bullet carried D18's first draft, which also advanced on
+  `skipped_no_data`, and was the last of four sites to be corrected — see the C10 row above)*. Gate
+  failure, freeze, crash, **no data** and **too little data** all leave it where it is, so the next
+  window is a strict **superset** of the failed one — the design-of-record's failed-day merge,
+  obtained structurally rather than by the `_UserState.debt` bookkeeping it demotes. Strike
   counting is unaffected: each failed night is a distinct (larger) window, so each strikes once, and
   `active_before` still resumes from the last **`active`** entry because a `gate_failed` row never
   enters the activation stack.
@@ -360,7 +387,8 @@ Where a responsibility naturally touches several services, the split is decided 
 | **BWM (base world model)** | The pick is recorded in §Decisions below. Inference owns artifact custody + serving. Continuum pins the base-model hash per adapter (C5) and executes upgrade migrations (fleet retrain) — upgrades are explicit, never hot. |
 | **People/known-faces registry** | Data-processing owns matching/enrichment; storage persists the registry; input owns the curation + consent UX surface. Voice-to-person linking (known-vs-unknown *speakers*) rides the same registry — deferred-vs-v0 is data-processing's call, recorded in its charter. |
 | **Same-day context** | Weights only know up to the last nightly cycle. The recent-context read path (C11) is owned by input's QueryBuilder; the recency/semantic index behind it lives in storage. |
-| **User timezone** (D17, 2026-07-26) | **Two different things, two different owners — conflating them was the original bug.** **(1) The FACT — where the user actually was at a moment:** owned by the **capturing device**, reported per chunk as `device_tz` + `device_utc_offset_minutes` on C1, carried verbatim by data-processing into C2 `source{}`, and persisted by storage beside the UTC instant. The device is the only thing that can know this, and it already does — every capture client computes the local instant and discards the zone converting to UTC. This is what renders an honest local anchor line, and it is **correct under travel** by construction. **(2) The POLICY — when is this user's night?:** owned by **storage**, as a per-user profile value **`home_tz`** (IANA), seeded from the last device-reported zone and user-overridable. Its *only* job is **scheduling** — deciding when a user's nightly consolidation fires — plus serving as the **fallback** when a record carries no `device_tz`. It is not the pipeline's time semantics. **Timestamps stay UTC-canonical everywhere:** UTC is the sole ordering and range-query axis (`GET /context/records?from=&to=` needs no zone at all); the zone is context stored *beside* the instant, never instead of it. **Never store a derived local time** — `device_local_time` is fully recoverable from instant + zone, and persisting it creates two sources of truth that will eventually disagree with no rule for which wins. **Never store abbreviations** (`PST`, `MST`) — ambiguous and DST-sensitive; IANA ids only. |
+| **User timezone** (D17, 2026-07-26) | **Two different things, two different owners — conflating them was the original bug.** **(1) The FACT — where the user actually was at a moment:** owned by the **capturing device**, reported per chunk as `device_tz` + `device_utc_offset_minutes` on C1, carried verbatim by data-processing into C2 `source{}`, and persisted by storage beside the UTC instant. The device is the only thing that can know this, and it already does — every capture client computes the local instant and discards the zone converting to UTC. This is what renders an honest local anchor line, and it is **correct under travel** by construction. **(2) The POLICY — when is this user's night?:** owned by **storage**, as a per-user profile value **`home_tz`** (IANA), **declared, not inferred** — the user sets it; storage never writes it on its own, and a client may only *suggest* the device zone in a UI. It therefore does not move when the user travels (D19, correcting D18's first draft). Its *only* job is **scheduling** — deciding when a user's nightly consolidation fires — plus serving as the **fallback** when a record carries no `device_tz`. It is not the pipeline's time semantics. **Timestamps stay UTC-canonical everywhere:** UTC is the sole ordering and range-query axis (`GET /context/records?from=&to=` needs no zone at all); the zone is context stored *beside* the instant, never instead of it. **Never store a derived local time** — `device_local_time` is fully recoverable from instant + zone, and persisting it creates two sources of truth that will eventually disagree with no rule for which wins. **Never store abbreviations** (`PST`, `MST`) — ambiguous and DST-sensitive; IANA ids only. |
+| **Day-log: representation vs. content** (D20, 2026-07-27) | **Storage owns the day-log's REPRESENTATION outright; its CONTENT is a contract neither service may move alone.** Continuum issues a warrant — `(user_id, window_id)` — and takes what comes back; it has no say in how the artifact is built. **Storage's, to change freely:** `seg_id` labelling, ordering labels, the `content_fingerprint` algorithm, table schema, endpoint shapes, caching, and *when* materialization happens. **NOT storage's, and the distinction is the point:** the block **`text`** and its **`anchors`**. That string *is* the training corpus — it is what the amplifier reads and what replay pools (`blocks_text` joins `b.text`) — so re-shaping the anchor line or the Scene/Heard/World labels changes what the model learns and makes every number measured to date incomparable, **silently and with no error**. A change there is a versioned contract act: bump `daylog_format_version`, and re-run the differential proof. That is precisely why the C10 body carries `daylog_format_version` + `recipe_id` at all — so such a change is *announced*, never shipped as an implementation detail. The rule of thumb: **if the trainer can see it, it is contract; if only storage can see it, it is storage's.** |
 | **Day-log + training-window custody** (D18, 2026-07-26) | **Storage materializes, continuum consumes — the day-log is a derived VIEW over C2, and it lives with C2.** Storage owns: the scheduled materialization (C2 records → ~10 s segment rows → gap-bounded scene blocks → anchored block text), the **retained** day-logs (random-access by `(user_id, window_id)`), the per-user **training-window ledger** + the `ingest_time` watermark, and the sole `window_id` minter. Continuum owns: the **amplifier's** renderer — `Profile.render_block` (`services/continuum/app/morpheus/profiles/`), which is *recipe-coupled* and is the surface locked byte-identical against the research line — plus the trainer-seam file materialization (`segments.jsonl` / `blocks.jsonl` / `day.txt`, `app/renderer.py`). **These are two different renderers and only one of them moves:** `daylog.py:183 _render_block` (the product labeled-lines renderer over C2 records) goes to storage and has never had a research golden; `Profile.render_block` (`morpheus/profiles/speed.py:89`, the 1427/1427 parity surface over 5-min description dicts) **stays**. `morpheus/blocks.py:5-7` already drew this line — *"Keeping that boundary narrow is what lets the day-log move behind a storage client without any kernel noticing."* **The decisive reason for the split is replay, not tidiness:** replay re-reads *prior* day-logs every night, so a continuum-side builder would re-pull every prior day's raw records nightly — O(days²) across the wire to rebuild an artifact storage could simply have kept. Two consequences that are obligations, not notes: the day-log renderer needs both `device_tz` (per record) and `home_tz` (per user, C12), so **materialization depends on the profile contract**; and **the day-log is a second copy of user content, so storage's deletion primitives (M5) must cascade to it** — a retraction that clears `/context` and leaves a materialized day-log standing has deleted nothing. The same cascade binds the reservoir (C14). |
 | **Observability** | **Every service exposes a `/metrics` endpoint and ships its Grafana dashboard JSON** (per-service ownership). Platform runs the ONE shared Prometheus + Grafana + standard exporters and provisions those dashboards. See §Observability. |
 

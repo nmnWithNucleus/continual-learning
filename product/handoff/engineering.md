@@ -918,8 +918,10 @@ Considered and passed, on the record so we don't re-litigate:
   and `tests/parity/` is unaffected because it seeds from its own harness. `w-day5` ruled **a mess,
   not a precedent** (`m0_smoke.py:133` breaks the total order twice over), so the durable output is
   **one minter + one validator**. *(1)* **C12** per-user profile — a *profile*, fenced to
-  system-read policy values, `home_tz` only in v0, **404 on absence**, auto-seeded once and **never
-  auto-updated**. Schema written (`contracts/c12_user_profile.v0.json`); **C13** recipe registry and
+  system-read policy values, `home_tz` only in v0, **404 on absence**, and **declared, not inferred** —
+  the user sets it and storage never writes it unprompted (corrected same day; D18's first
+  draft had storage auto-seed from the first device-reported zone, which would have let a
+  guess masquerade as an answer). Schema written (`contracts/c12_user_profile.v0.json`); **C13** recipe registry and
   **C14** reservoir minted, schemas land with the build slice per `contracts/README.md`'s own rule.
   *(2)* Day-log → storage. The decisive argument is **replay**: it re-reads *prior* day-logs nightly,
   so a continuum-side builder re-pulls every prior day's raw records every night — **O(days²)** to
@@ -995,3 +997,60 @@ Considered and passed, on the record so we don't re-litigate:
   Perfect hunk attribution was not achievable: the two overlapping sessions' edits had merged into
   shared hunks in four docs, so the split is at file granularity and `b96a1b0`'s message says so
   rather than implying a cleanliness it does not have.
+
+- 2026-07-27 (overnight) — **the D18 storage expansion is BUILT, and the storage↔continuum seam is
+  closed.** Three founders' decisions carried it: **D19** (prototype posture + seven calls),
+  **D20** (M9's parity bar narrowed after it failed, plus a *definition of done* — because the
+  original wipe gate, "no defects, no artifacts", is unfalsifiable and would justify reviewing
+  forever). Commits `a5a48fb` storage · `1757efb` continuum · `2698b63` data-processing.
+
+  **What now exists.** Storage owns the day-log, the training-window ledger and the `window_id`
+  minter, and hosts C12/C13/C14; continuum issues a warrant for `(user_id, window_id)` and takes
+  what comes back. `window_for()`, `closed_window_before()`, `Window.local_date` and
+  `ReservoirEntry.local_window_date()` are **deleted**, and with them `cycle.py`'s reconstruction of
+  prior windows under *tonight's* timezone. `nightly.py --tz` is retired for the C12 profile read.
+
+  **Four review rounds ran; every one found something real.** Recorded because the pattern is the
+  lesson, not the individual bugs:
+  | Round | Headline finding |
+  |---|---|
+  | 1 | the day-log stamped a `recipe_id` whose knobs it never used — a night auditable as trained under a recipe it was not |
+  | 2 | a corrected `home_tz` never re-materialized the cached day-log; a naive `now` read as server-local |
+  | 3 | a crash **closed** the window, so a retry minted a *second* `window_id` — measured: full re-train, 2 C5 entries, 2 reservoir admissions |
+  | 3 | the **default** nightly path fed ingest-time bounds into an event-time query — measured result: an empty day-log. The shipped default trained on nothing |
+  | 3 | the M9 proof held only for a **grid-aligned** window origin, which no real window has |
+
+  Round 3's middle finding is the one to remember: the seam had 148 green checks *while the default
+  configuration silently trained on nothing*. Green harnesses proved the paths they exercised, and
+  the default was not one of them.
+
+  **Two corrections to my own prior claims**, both recorded rather than quietly fixed: I reported
+  the parity proof as PASS when it covered only an aligned origin (a stronger claim than the
+  evidence supported), and my watermark refinement reached three of four sites, leaving
+  ARCHITECTURE — the doc named authoritative — contradicting the code.
+
+  **A cross-service coupling nobody knew about.** Deleting `window_for()` broke *data-processing*:
+  `scripts/prompt_ab.py` imported continuum's `app/window.py` across the service boundary. DP's
+  suite caught it (788 → 787). Fixed by building the `Window` value object inline, reproducing the
+  old 04:00Z/24 h semantics exactly, because those numbers are compared across runs.
+
+  **On test staleness (CTO, 2026-07-27):** tests must evolve, and deleting is sometimes right — but
+  "eliminate staleness" collapses into "make it green" unless you can name which case you are in.
+  All four occurred here: *stale assertion* → two storage tests pinning `recipe_id ==
+  "consolidation-v1.0"`, rewritten to assert the contract (`== daylog_recipe_id()`); *deliberate
+  behaviour change* → the crash test, whose assertion was **inverted**; *test right, code broken* →
+  DP's, which deleting would have hidden; *behaviour genuinely gone* → the `window_for` tests.
+
+  **Recipe `consolidation-v1.1`** minted and **both** services re-pinned. It forks v1.0 on exactly
+  one knob — `replay.source` `amp` → `rawlog` — proven by diffing the artifacts. Under `amp` only a
+  user's FIRST night could run over HTTP: amp pools amplified corpus *bodies* and C14 serves a
+  *ledger* by design. v1.0 is **retained**, being the recipe the Phase-1/Phase-3 numbers were
+  produced under. The re-pin is deliberately two-sided — storage stamps the day-log's `recipe_id`,
+  continuum records C5 lineage, so a one-sided re-pin trains under a recipe the artifact is not
+  labelled with.
+
+  **D20's bar, verified by the founders' session rather than relayed:** storage **310** · continuum
+  **251** +7 skipped · recording **144** · data-processing **788** +21 skipped · M9 parity **PASS,
+  31 binding checks over 2 window origins including a misaligned one** (exit 0) · live two-process
+  seam **PASS, 10 steps / 151 checks, zero blockers** (exit 0) · `app/morpheus/` and `tests/parity/`
+  **byte-unchanged**.
