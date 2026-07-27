@@ -690,7 +690,7 @@ def _load_continuum():
             excerpt = int(getattr(mod, "EXCERPT_CHARS", EXCERPT_CHARS_DEFAULT))
     except Exception:
         pass
-    return daylog.build_daylog, window.window_for, excerpt
+    return daylog.build_daylog, window.Window, excerpt
 
 
 def daylog_projection(rows: list[dict], *, segment_seconds: int, block_segments: int,
@@ -706,8 +706,8 @@ def daylog_projection(rows: list[dict], *, segment_seconds: int, block_segments:
     if loaded is None:
         return {"available": False,
                 "why": "continuum service not in this checkout — chars/block unmeasured"}
-    build_daylog, window_for, excerpt_chars = loaded
-    from datetime import date
+    build_daylog, Window, excerpt_chars = loaded
+    from datetime import date, datetime, time, timedelta, timezone
 
     records = [{
         "content": {"kind": r["kind"], "text": r["text"]},
@@ -716,8 +716,22 @@ def daylog_projection(rows: list[dict], *, segment_seconds: int, block_segments:
     if not records:
         return {"available": False, "why": "no records"}
 
+    # The eval window, constructed INLINE (2026-07-27). This used to call continuum's
+    # `window_for(user_id, day, "UTC")`, which the storage/C10 cutover DELETED along with
+    # the rest of the local-date window arithmetic — the cycle window is now storage's
+    # ingest-time watermark and windows are minted by `POST /training/windows`.
+    #
+    # This harness is an OFFLINE PROJECTION, not a consolidation: it needs bounds only so
+    # `build_daylog` can bucket records, and it must never reach a storage service. So it
+    # builds the value object directly, reproducing `window_for`'s old semantics EXACTLY —
+    # a 04:00Z boundary, 24 h wide — because these numbers are compared across runs and a
+    # changed window would silently move every chars-per-block figure this harness reports.
     day = date.fromisoformat(records[0]["t_start"][:10])
-    win = window_for(user_id, day, "UTC")
+    start_utc = datetime.combine(day, time(4, 0), tzinfo=timezone.utc)
+    end_utc = start_utc + timedelta(days=1)
+    win = Window(
+        window_id="w" + end_utc.strftime("%Y%m%dT%H%M%SZ"),  # opaque, storage's minted format
+        user_id=user_id, tz="UTC", start_utc=start_utc, end_utc=end_utc)
     log = build_daylog(records, win, segment_seconds=segment_seconds,
                        block_segments=block_segments)
     lens = [len(b.text) for b in log.blocks]
