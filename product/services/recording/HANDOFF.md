@@ -118,83 +118,17 @@ recording suite **144 tests** (110 + 7 async-seam/redrive/migration + 3 metrics)
 - E2E driver (synthetic phone, clean/gap/dup modes) lives in the session scratchpad —
   rewrite-on-demand; the unit suite covers the same paths hermetically.
 
-## Pinned decisions & glossary (capture path)
+## Pinned decisions & glossary
 
-- **D-M1-5 — client transport (founders × recording lead, 2026-07-19): segmented HTTP
-  upload for ALL v0 surfaces** (phone / extension / mac CLI). Rationale: our capture path
-  is the *archive/training* job, not live viewing — loss-intolerant, offline-resilient,
-  latency-tolerant — which maps onto segmented upload (the Axon-bodycam/dashcam pattern),
-  not persistent-socket streaming (the Ring/Nest *live-view* pattern; note those products
-  run BOTH paths separately). **Continuous streaming ingest is a deferred ADDITIVE leg**:
-  a socket receiver (WebSocket/RTSP/SRT per device) → per-stream continuity buffer →
-  server-side segmenter, terminating in the EXISTING spool→demux→carve→emit machinery —
-  C1/C2 unchanged by design (C1 deliberately begins *after* transport: "chunks exist").
-  Build it only when a surface needs sub-segment latency (live-view is out of v0 scope) or
-  the bodycam firmware demands it; cheaper latency lever first: shrink `SEGMENT_SECONDS`.
-- **D-M1-6 — async `/ingest` reply shape (inter-service wire, decided JOINTLY with
-  data-processing 2026-07-19; OQ4 precedent — decide once, record in BOTH canvases).** DP can
-  now ACK `202 {ok, accepted:true, chunk_id}` with **NO record_ids** (it processes on a worker
-  pool; `INGEST_ASYNC`, off by default). Recording's implications, all built + tested:
-  **(1) provenance is optional-at-accept** — the emitter already coerced `ack.get("record_ids")
-  or []`, so an empty list never crashes; **(2) an accept is recorded as `dp_state='accepted'`
-  (`dp_acked=0`), NOT confirmed** — the invariant `dp_acked=1 ⇔ C2 durably written` is preserved
-  (a 200 with record_ids stays `dp_acked=1, dp_state='processed'`); **(3) the gap report
-  reconciles against DP's additive `/continuity` `processed` + `dead_lettered` fields** — a
-  chunk DP reports processed is lazily `confirm_chunk`'d (persisted, so a DP restart can't
-  un-confirm it), a dead-lettered chunk → verdict `gaps`, an accepted-but-unconfirmed chunk →
-  verdict `recording`; **`leg["dp"]` keeps its frozen 5-key shape** (dead-letter/accepted are
-  sibling leg fields). Net: the "zero silent loss" verdict never reads `clean` for a chunk DP
-  hasn't confirmed. When the fleet sets `INGEST_ASYNC=1`, **`RECORDING_HTTP_TIMEOUT` reverts to
-  30** (the 120 s mitigation is retired). **Founders RATIFIED this wire 2026-07-19 (D16)** — the
-  one ratification condition (a named + drilled re-drive path for accepted-unconfirmed chunks)
-  is satisfied in-slice: **`POST /capture/sessions/{id}/redrive`** (+ `emitter.redrive_accepted_chunks`,
-  callable on restart / periodically) re-pushes each `dp_state='accepted'` chunk's original C1;
-  DP's dedup makes it idempotent (a done chunk short-circuits to 200+record_ids → `confirm_chunk`
-  → `clean`; still-pending re-ACKs 202). Detail: [../data-processing/handoff/ws-async-observability.md](../data-processing/handoff/ws-async-observability.md).
-  - **DP-side alignment (DP v1 + hardening, merged 2026-07-21):** DP now carries a **durable
-    ingest journal** — an accepted chunk survives a DP kill/restart and **auto-recovers on the
-    DP side** (its `/continuity` `processed`/`dead_lettered` sets rehydrate from the journal, so
-    a DP restart can no longer mis-report intact history as a gap). Net: the guarantee is now
-    durable on **both** legs. Recording's `/redrive` stays the belt-and-suspenders (and the
-    means to converge a chunk lost past DP's drain-timeout / a hard kill, which DP's journal
-    marks re-drivable but does not itself re-push to us). No recording change needed; the async
-    seam is unchanged (120 tests at the time; **144** as of 2026-07-27). Flipping `INGEST_ASYNC=1` on the fleet remains the
-    open D16 re-drive-drill decision.
-- **Glossary** (pinned so docs/sessions stay unambiguous): **segment** = client→server
-  upload unit (~10 s self-contained clip; `seq` dense per capture session) · **chunk** =
-  server→DP single-modality unit (one `/raw` blob + one C1 envelope; `sequence` dense per
-  stream) · **stream** = one continuous single-modality flow from one device session
-  (`stream_id` — the identity that crosses service boundaries) · **capture session** = one
-  start→stop on a device (press-record→stop / CLI run→Ctrl-C / extension click→click);
-  first-class in the ledger, **never travels past C1** (C1 carries `stream_id`, not
-  `session_id`) · **record** = one `/context` row conforming to the C2 contract.
-  Disambiguation: a **capture session** (recording) is NOT the serve-loop **chat session**
-  (`session_id` in C3/C4, storage `/sessions`) — qualify the word when both are in frame.
+Moved 2026-07-27, so this canvas can be a board: the two pinned decisions are now [DECISIONS.md](DECISIONS.md)
+(`R-1`/`R-2`, citing founders' [D14](../../DECISIONS.md)/[D16](../../DECISIONS.md)), and the capture-path glossary is
+[CHARTER.md](CHARTER.md) §Glossary.
 
 ## Next
-- ~~Real-phone verification~~ **DONE 2026-07-18** — CTO's iPhone (Safari, tunnel): two
-  sessions 7/7 + 9/9 clean; UI leaks + an ASR auto-language hallucination found and fixed
-  same day (ws-B worklog). *The learn fleet (faster_whisper, `ASR_LANGUAGE=en` via
-  `deploy/learn.env`) + tunnel remain UP on node-7 — restarted 2026-07-18 by the
-  computer-capture lead onto the renamed `/capture/*` wire (tunnel URL unchanged,
-  `/health` + `/client/` + alias re-verified through it). The URL rotates per tunnel
-  restart, so ALWAYS read it from `var/tunnel_url.txt`; `run_learn.sh --status` checks
-  the fleet.*
-- ~~Computer capture surfaces~~ **BUILT + REVIEWED + LIVE-VERIFIED 2026-07-18** (this slice —
-  ws-E extension, ws-F mac CLI; server needed nothing new, as designed).
-- ~~ALPHA TEST~~ **ALPHA COMPLETE 2026-07-19** — the CTO drove all three surfaces per
-  [handoff/alpha-runbook.md](handoff/alpha-runbook.md), each landing verdict `clean` on real
-  hardware with blobs sha256-verified + ffprobe-decoded in storage and real ASR transcripts in
-  `/context`: **phone** (iPhone Safari, mic+camera, 4/4), **extension** (Comet, tab video+audio,
-  7/7 — the run that drove the D-E7 pivot), **mac CLI** (real avfoundation screen+mic, 7/7).
-  Results in the runbook §Worklog + each ws file. The fleet was purged + restarted fresh before
-  the pass so results read from zero; it remains UP on node-7.
-- **THE CAPTURE SURFACES ARE DONE (v0 alpha bar).** ~~Founders' sequenced next: metrics
-  emission (D9)~~ **DONE 2026-07-19 (WS-AO, M6):** `/metrics` (Prometheus text, zero new deps)
-  + `dashboards/recording.json` — segments received/emitted/failed, chunks per modality + DP
-  state, sessions, client-leg missing/dup, received→emitted latency, downstream retry counts.
-  Emission side only (platform scrapes/provisions). Same slice landed the async-ingest seam
-  tolerance (D-M1-6 above).
+
+Open items only. Anything finished moves to [handoff/worklog.md](handoff/worklog.md) in the same
+session — it does not stay here struck through.
+
 - **Later capture surfaces, explicitly recorded**: system/desktop audio for the extension
   (out of this slice by scope); multi-tab simultaneous capture (feasible; deferred — ws-E);
   a mac menu-bar/GUI app (ScreenCaptureKit, visible capture indicator, autostart) — capability
@@ -205,6 +139,6 @@ recording suite **144 tests** (110 + 7 async-seam/redrive/migration + 3 metrics)
   before fleet scale (M5 telemetry work).
 - Consent gate (M2) stays **back-burner (D13)** — the spool+ledger is the designed holdback
   point; nothing here forecloses it.
-- ~~`/metrics` + dashboard JSON (M6/D9) still owed~~ **DONE 2026-07-19 (WS-AO).** `/metrics` +
-  `dashboards/recording.json` ship now; they light up the moment Platform's shared
-  Prometheus/Grafana scrapes + provisions them (emission side is complete + tested).
+- **`INGEST_ASYNC=1` on the fleet** — still the open [D16](../../DECISIONS.md) re-drive-drill decision. DP's durable journal has since made the guarantee durable on both legs; flipping the production default stays a founders' call.
+- **E-1 — `--segment-seconds 10 → 60`** ([../../HANDOFF.md](../../HANDOFF.md) §Escalations): the single largest cost lever (5.8×). It moves the audio leg too, so it is a joint call with DP-audio.
+- **E-6 — auto-retry of `failed` segments** (same escalation table): a 503 is recoverable but becomes terminal in 1.5 s.

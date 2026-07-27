@@ -127,6 +127,25 @@ Worklog entries are `### <date> — <title>` headings, not list items, so every 
 anchor other documents can point at. That is what lets a decision row carry a *pointer* to its
 reasoning instead of a copy of it.
 
+**The same three files, at every level.** The split is fractal — a service node gets exactly what the
+product node gets, and for the same reasons:
+
+| | Product node | Service node |
+|---|---|---|
+| Board (rewrite in place) | `HANDOFF.md` | `services/<key>/HANDOFF.md` |
+| Timeline (prepend) | `handoff/<aspect>.md` §Worklog | `services/<key>/handoff/worklog.md` |
+| Decisions (prepend) | `DECISIONS.md` — `D-n` | `services/<key>/DECISIONS.md` — a service prefix (`C-n`, `R-n`) |
+
+Open a service's `DECISIONS.md` / `handoff/worklog.md` **when there is something to put in it**, not
+pre-emptively — most services have neither and should not.
+
+**Which register a decision belongs in is a question about authority, not topic.** A decision taken
+inside a service's chartered autonomy is service-local and gets a service number. A decision that
+**re-cuts a charter, moves a contract, or binds a sibling service** is not the service's to settle:
+it is proposed in [HANDOFF.md](HANDOFF.md) §Escalations and ratified at the founders' board with a
+**D-number**. A service-local row may *cite* a D-number and record its own implementation of it —
+that is not a restatement, because the implementation is genuinely the service's.
+
 **Rules (inherited from the POCs, now law):**
 
 - **One fact, one home.** Shared truths (infra, contracts, conventions) live once — root

@@ -221,6 +221,22 @@ Eventual sub-teams as the fleet grows:
 
 ---
 
+## Glossary (capture path)
+
+Pinned so docs and sessions stay unambiguous. Moved here from the canvas 2026-07-27: a glossary is
+stable reference, and the canvas is rewritten every session.
+
+**segment** = client→server
+upload unit (~10 s self-contained clip; `seq` dense per capture session) · **chunk** =
+server→DP single-modality unit (one `/raw` blob + one C1 envelope; `sequence` dense per
+stream) · **stream** = one continuous single-modality flow from one device session
+(`stream_id` — the identity that crosses service boundaries) · **capture session** = one
+start→stop on a device (press-record→stop / CLI run→Ctrl-C / extension click→click);
+first-class in the ledger, **never travels past C1** (C1 carries `stream_id`, not
+`session_id`) · **record** = one `/context` row conforming to the C2 contract.
+Disambiguation: a **capture session** (recording) is NOT the serve-loop **chat session**
+(`session_id` in C3/C4, storage `/sessions`) — qualify the word when both are in frame.
+
 ## Related work
 
 - [poc/live_video_chat](../../../poc/live_video_chat/HANDOFF.md) — phone camera/mic → backend
