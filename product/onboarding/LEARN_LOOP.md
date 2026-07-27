@@ -204,10 +204,13 @@ The two load-bearing design choices:
   (version-forward reprocessing — old records are never rewritten in place). The within-chunk
   `discriminator` (`""` for the caption, `"ocr"` for the OCR record, `"translation"`, …) makes a
   chunk's multiple records stable and distinct; empty discriminator reproduces the original
-  two-component v0 id byte-for-byte (`pipeline.py:43-45`). The frozen schema file already
-  mandates the discriminator ("fold a within-chunk discriminator into the id"); only
-  ARCHITECTURE's *prose* summary still says "deterministic on `(chunk_id, pipeline_version)`".
-  The schema is the source of truth, so nothing here is unfrozen — but the two read differently.
+  two-component v0 id byte-for-byte (`pipeline.py:43-45`), so nothing forked when it landed.
+  *(Was §8 item 4-adjacent drift, **closed 2026-07-26 — review item O-4**: the frozen schema file
+  had always mandated the discriminator — "fold a within-chunk discriminator into the id so each is
+  stable and distinct" — while ARCHITECTURE's prose summary still said "deterministic on
+  `(chunk_id, pipeline_version)`". One truth, recorded correctly in the authoritative place and
+  lagged only by its own summary; the summary now matches. **No contract change**, and none was
+  needed — the schema was never wrong.)*
 - **`pipeline_version` is the dialect** — the statement of *which processing produced this text*.
   Continuum must train on a consistent dialect; storage never filters on it (yet), which is
   exactly why the E-2 retraction primitive blocks the clip-pipeline cutover (§6).
@@ -262,10 +265,33 @@ plus an atomic `active.json` serving alias. Semantics verified in code:
 The module's own header says it plainly: *"C5's v0 shape is NOT frozen yet (needs inference at the
 table; founders ratify)"* (`publish.py:3-4`) — hence the directory lives under continuum's
 `var_dir/model_directory/` so the storage-hosted swap-in is "a transport change, not a redesign."
-Note the field is `adapter_version` and the entry carries `adapter_dir` + `recipe_id`, which the
-prose row ("version, base-model hash, training window, eval report, status") doesn't mention yet —
-in ARCHITECTURE §Contracts, in continuum's *and* storage's charters, and in `publish.py`'s own
-docstring. One freeze-time reconciliation, four edits (§8.3).
+
+**The four short descriptions are fixed — review item O-2, closed 2026-07-26.** They previously
+read "version, base-model hash, training window, eval report, status (active/rolled-back)":
+short by `adapter_dir` and `recipe_id`, and — the one that mattered — **missing the `gate_failed`
+status entirely**, i.e. the audit trail for a blocked candidate, exactly the thing a reader most
+needs to know exists. All four now carry the nine fields and the three statuses
+([ARCHITECTURE.md](../ARCHITECTURE.md) §Contracts C5 · [continuum charter](../services/continuum/CHARTER.md)
+C5 row · [storage charter](../services/storage/CHARTER.md) model-directory row · `publish.py`'s
+own docstring).
+
+**The call the founders took, so you know what you are reading:** this is a description of C5 **as
+built, deliberately not a freeze** — every site says so in its own text. C5 stays unfrozen until the
+freeze session with inference at the table; the reasoning was that a known-wrong description should
+not stand while waiting for a session with no date, and that describing is not pinning — but the
+counter-argument (a field list in ARCHITECTURE §Contracts is how things become de-facto frozen
+around here) is answered *inside the wording*, not by withholding it: the "as built, not frozen"
+label rides in the same table cell, so the row cannot be quoted without its caveat.
+
+**What `gate_failed` costs at freeze time, beyond documentation** — written into the storage
+charter's model-directory row, because it lands on storage: storage's `model_directory` table
+today is the trivial C6 row (`user_id, model_id, adapter, adapter_path`, `storage/app/db.py:59-63`)
+with no entries log and no status column, so hosting C5 is a build, not a transport swap. Three
+consequences: `status` must be a **three**-value enum or `record_gate_failure()` has nowhere to
+land; `gate_failed` rows carry **NULL `adapter_dir`/`base_model_hash`**, so those columns cannot be
+`NOT NULL`; and C6 eligibility is a **log replay** (`active` pushes, `rolled_back` pops,
+`gate_failed` does neither) — a "latest row wins" directory would serve a gate-failed candidate,
+which is the ungated swap the gate exists to prevent.
 
 ### C11 — the recent-context read (designed only)
 
@@ -845,9 +871,10 @@ The handful of choices to internalize to reason about this system. Each: decisio
 
 Verified 2026-07-25; re-verified against code in a second independent pass 2026-07-26. None are
 scandals — the reconciled canvases are honest — but a newcomer reading only ARCHITECTURE.md would
-be misled on the first four. **Item 4 (timezone) is no longer a discrepancy: it was decided by the
-founders on 2026-07-26 (D17) and all four documents are corrected — it is kept here, rewritten, as
-the decision record plus one live code caveat.** The rest stand.
+have been misled by several of them. **Three are now closed and kept here as decision records, not
+as live defects: item 4 (timezone → D17), item 3 (C5's field list → review item O-2), and item 12
+(LoRA "all layers" → review item O-3, which turned out to be an intent/build gap rather than an
+error).** Items 1 and 2 remain the two a newcomer is most likely to be misled by. The rest stand.
 
 1. **The model directory is currently TWO unwired things.** ARCHITECTURE's diagram shows
    `continuum —C5→ model directory —C6→ inference` as one store in storage. In code: continuum
@@ -865,15 +892,42 @@ the decision record plus one live code caveat.** The rest stand.
    `/context` range read. The ARCHITECTURE row does flag the evolution as "PROPOSED, pending
    founders' board" — consistent — but the HANDOFF service-board phrasing "C10 day-log fetch" can
    read as landed. It is not.
-3. **C5 as-built ≠ C5 as prose — in four places.** The prose says "adapter version entry: user_id,
-   version, base-model hash, training window, eval report, status". Code writes nine fields
-   (`publish.py:86-90`): `contract, user_id, adapter_version, adapter_dir, base_model_hash,
-   training_window, recipe_id, eval_report, status` — so `adapter_version` (not `version`) plus two
-   the prose omits, `adapter_dir` and `recipe_id`. The short list appears in
+3. **C5 as-built ≠ C5 as prose, in four places — FIXED 2026-07-26 (review item O-2). Kept as the
+   record of what the shape is and what the founders decided about describing it.**
+
+   The prose said "adapter version entry: user_id, version, base-model hash, training window, eval
+   report, status (active/rolled-back)". Code writes **nine fields** (`publish.py:83-99`):
+   `contract, user_id, adapter_version, adapter_dir, base_model_hash, training_window, recipe_id,
+   eval_report, status` — so `adapter_version` (not `version`), plus `adapter_dir` and `recipe_id`.
+   And all four descriptions also **omitted the `gate_failed` status**: the live set is
+   **`active` | `gate_failed` | `rolled_back`**, because `record_gate_failure()` (`publish.py:101-114`)
+   appends a blocked candidate for audit with `adapter_dir`/`base_model_hash` NULL. That omission
+   was the costly one — the audit trail for a blocked candidate is exactly what a reader most needs
+   to know exists.
+
+   **This was an INCOMPLETE description, not a disagreement**: one truth, written down only
+   partially in four places. It was filled in, in all four —
    [ARCHITECTURE.md](../ARCHITECTURE.md) §Contracts C5, continuum's charter contract table,
-   storage's charter model-directory row, **and `publish.py`'s own module docstring** — the freeze
-   session has to fix all four, not one. No `contracts/c5_*.json` exists (expected — "schema files
-   when their slices start").
+   storage's charter model-directory row, and `publish.py`'s own module docstring — rather than
+   held for the freeze session.
+
+   **The judgment call, decided explicitly:** describe as-built **now**, with every site labelled
+   *"as built, not frozen"* in its own text. C5 is deliberately unfrozen (`publish.py:3-4`) and
+   **this session did not freeze it** — inference is not at the table, and the C5 → model directory
+   → C6 → vLLM hot-swap tail is still unwired (§4.6, §8 item 1). The rejected alternative — leave
+   the descriptions wrong until the freeze session — had a real argument (a field list in
+   ARCHITECTURE §Contracts is how things become de-facto frozen around here), and it is answered by
+   the wording rather than by silence: the "not frozen" label sits in the same table cell as the
+   field list, so the row cannot be quoted without its caveat. A known-wrong description should not
+   outlive a session that has no date.
+
+   **The freeze-time consequence beyond documentation** (now written into the storage charter):
+   storage's `model_directory` is still the trivial C6 row (`user_id, model_id, adapter,
+   adapter_path`, `storage/app/db.py:59-63`) — no entries log, no status column — so hosting C5 is
+   a build, not a transport swap, and `gate_failed` constrains it three ways: a three-value enum,
+   nullable `adapter_dir`/`base_model_hash`, and eligibility-by-log-replay rather than latest-row.
+
+   No `contracts/c5_*.json` exists (expected — "schema files when their slices start").
 4. **The user's local timezone — was the review's headline gap; DECIDED AND BUILT 2026-07-26
    (D17). No longer a discrepancy; kept here as the explanation of how time works.**
 
@@ -960,13 +1014,37 @@ the decision record plus one live code caveat.** The rest stand.
 11. **C5's `base_model_hash` is a placeholder label**, not a hash: `"qwen3-vl-32b-instruct"`
     hardcoded at `cycle.py:43`. The charter's "continuum pins the base-model hash per adapter" is
     aspirational until D6's exact variant is pinned.
-12. **"LoRA over all layers" is wrong in three documents.** Code targets only the LLM projection
-    linears and deliberately excludes the vision towers (`morpheus/train.py:29-31`; 252 modules =
-    7 projections × 36 layers, zero vision-tower), which is correct — the day-log reaches the
-    model as text. The stale phrasing sits in [ARCHITECTURE.md](../ARCHITECTURE.md) §Decisions
-    ("LoRA per user, all layers"), continuum's charter mission line, *and* its scope row
-    ("Per-user LoRA over **all layers** of the BWM (v0 decision)") — all three need the same edit.
-    Also: C10's charter description says "watermarked" training-window read; no watermark/late-data
+12. **"LoRA over all layers" — an INTENT/BUILD GAP, now named in all three documents (review item
+    O-3, closed 2026-07-26).** Pass 1 filed this as "wrong in three documents". It isn't wrong; it
+    is **two true statements about different things**, and the defect was that the documents
+    asserted the *intent* in the voice of the *build*, so a newcomer read the charter and believed
+    vision towers were being adapted.
+
+    - **The intent** — "LoRA per user, all layers" — stands, in
+      [ARCHITECTURE.md](../ARCHITECTURE.md) §Decisions. It is sourced to `start.md`, an inherited
+      founding assumption, **never a ratified D-number**, and it remains a research direction the
+      cofounders may exercise.
+    - **The build** — `app/morpheus/train.py:27-32` targets the LLM projection linears only
+      (`LM_PROJECTIONS` = q/k/v/o/gate/up/down, `_LM_SCOPE="language_model"`; selection at
+      `lora_target_modules()`, `:89-100`), **vision towers deliberately excluded**, carrying its
+      own rationale in the source: the day log reaches the model **as text**, so adapting the
+      vision stack spends rank on modules that never see the training signal. Parity-proved
+      **252/252 modules = 7 projections × 36 layers, zero vision-tower**, against the research
+      line's golden adapter tensor keys ([phase-2a-report](../services/continuum/handoff/phase-2a-report.md):60).
+
+    **Note the axis, because "all layers" mis-names it:** v0 *does* adapt every layer — all 36 of
+    them. What it excludes is a **tower**, not a layer. The gap is which stacks are adapted.
+
+    **Two facts recorded next to the gap, so nobody re-derives the argument:** (1) flipping to the
+    towers is **cheap** — a module-name-filter change plus a re-parity run, not an architecture
+    change, so this is an option kept open, not a door closed; (2) the exclusion's premise is
+    **falsifiable and self-expiring** — it holds only while the day log reaches the trainer as
+    text, so if DP ever feeds the trainer pixels, the premise lapses on its own and the answer
+    flips. **No D-number:** nothing was decided or reversed here — a build was documented against a
+    standing intent.
+
+    Also in this item: C10's charter description says "watermarked" training-window read; no
+    watermark/late-data
     semantics exist in `context_reader.py` (charter OQ9, future WS3). And the "5-verb loop" slogan
     is really **6 verbs and 6 journaled stages** — `replay_mix` is its own journaled stage
     (`cycle.py:199-227`), while "fetch recipe" is a verb that is never journaled.

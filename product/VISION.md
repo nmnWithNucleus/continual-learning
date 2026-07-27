@@ -66,7 +66,11 @@ recall but **emergent behaviors** — patterns, skills, preferences that mimic t
 A digital twin, grown rather than configured.
 
 **v0 mechanism (locked):** per-user LoRA over all layers, hot-swapped in vLLM for both
-inference and fine-tuning. Crude but right for a handful of pilot users.
+inference and fine-tuning. Crude but right for a handful of pilot users. *(What v0 has actually
+**built** is narrower than "all layers": the language-model stack only — all 36 LLM layers × 7
+projections — with the vision towers deliberately excluded, since the day log reaches the model as
+text. "All layers" stays the standing intent; the gap is a named open item, and widening back is a
+module-filter change. See the [continuum charter](services/continuum/CHARTER.md) §Scope.)*
 **Research path:** users-as-experts in an MoE — one big network, experts allocated per user,
 routing by identity — unexplored territory and our long-range scaling story. Both live in the
 [continuum service](services/continuum/CHARTER.md).
@@ -101,7 +105,7 @@ graduation criterion — when does it answer solo? — is one of our defining re
 |---|---|
 | Users | A handful of pilots, hands-on |
 | Devices | Computer capture + wearable body cam; **no mobile capture** |
-| Personalization | LoRA-per-user, all layers, vLLM hot-swap |
+| Personalization | LoRA-per-user, all layers *(intent; as built = LLM stack only, vision towers excluded — above)*, vLLM hot-swap |
 | Learning cadence | Periodic (nightly-ish), gated by evals — not realtime |
 | Assistant posture | Reactive assistant with mentor support — coach/nudge comes later |
 | Trust | Consent controls, per-user isolation, deletion are day-one requirements, not v1 polish |

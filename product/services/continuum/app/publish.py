@@ -2,10 +2,22 @@
 
 C5's v0 shape is NOT frozen yet (needs inference at the table; founders
 ratify). Until then this module maintains the full lifecycle locally under
-var_dir/model_directory/ — an append-only entries.jsonl (C5-shaped rows:
-user_id, adapter_version, base_model_hash, training_window, eval_report,
-status) plus an atomic active.json alias and N-version snapshot retention —
-so the storage-hosted model directory swap-in is a transport change, not a
+var_dir/model_directory/ — an append-only entries.jsonl of C5-shaped rows,
+nine fields:
+
+    contract="C5", user_id, adapter_version, adapter_dir, base_model_hash,
+    training_window, recipe_id, eval_report, status
+
+status is a THREE-value enum: "active" | "gate_failed" | "rolled_back".
+gate_failed is the audit row for a candidate the gate blocked — appended for
+lineage by record_gate_failure() with adapter_dir and base_model_hash NULL,
+never eligible to serve. Eligibility is a replay of this log (active pushes,
+rolled_back pops the matching top, gate_failed does neither — _active_stack),
+NOT "latest row wins"; whoever hosts these rows next must preserve that, or a
+gate-failed candidate becomes servable.
+
+Plus an atomic active.json alias and N-version snapshot retention — so the
+storage-hosted model directory swap-in is a transport change, not a
 redesign. Retention default 14 mirrors the research design (sized for
 rollback AND the ≤14-night hard-delete replay).
 

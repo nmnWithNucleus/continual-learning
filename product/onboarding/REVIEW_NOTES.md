@@ -9,7 +9,34 @@ Every `file:line` citation resolved and read; every quoted measurement traced to
 computable value computed. **Pass 1 fixes applied to LEARN_LOOP.md: 2026-07-26.**
 
 **Closed and removed from this file (the record lives where the decision lives, not here):**
-the pass-1 doc-defect table (all ten fixed in LEARN_LOOP.md) and **O-1, timezone** — decided *and
+
+**O-2 · O-3 · O-4 — closed 2026-07-26**, in one session but at **three different ceremony levels**,
+which was the point of batching them:
+- **O-2** (C5's field list short in four places, and missing the `gate_failed` status) — an
+  **incomplete description**: one truth written down only partially. Filled in at all four sites,
+  each labelled **"as built, not frozen"** in its own text. **C5 was NOT frozen** — that session
+  still needs inference at the table. The `gate_failed` consequences that outlive documentation
+  (three-value enum · nullable `adapter_dir`/`base_model_hash` · eligibility-by-log-replay) are
+  written into the [storage charter](../services/storage/CHARTER.md) model-directory row, since
+  storage is where they land. No D-number.
+- **O-3** ("LoRA over all layers") — an **intent/build gap**, not an error: the intent stands in
+  [ARCHITECTURE.md](../ARCHITECTURE.md) §Decisions, the build (LLM projections only, vision towers
+  excluded, 252/252 parity) is stated in [continuum's charter](../services/continuum/CHARTER.md),
+  and the gap is named as a deliberate open item — with the two facts that shape any revisit
+  (flipping back is cheap; the exclusion's premise expires if DP ever feeds the trainer pixels).
+  No D-number: a build was documented against a standing intent, nothing decided or reversed.
+  **The O-3 inventory was short by two:** [VISION.md](../VISION.md):68 and :104 also said "all
+  layers", and :68 — *"v0 mechanism (**locked**)"* — was the strongest as-though-built assertion in
+  the repo. Both fixed in the same pass. A `grep -rn "all layers" --include=*.md` would have caught
+  them at pass 1; pass-2 inventories should sweep the repo, not just the engineering docs.
+- **O-4** (C2 `record_id` discriminator) — **prose lagging its own authoritative schema**. The
+  frozen schema was already correct; only ARCHITECTURE's summary lagged. **Not a contract change**,
+  and not ceremonied as one. No D-number.
+
+Full write-ups in LEARN_LOOP §3 (C2 + C5) and §8 items 3 and 12; session record in
+[handoff/engineering.md](../handoff/engineering.md).
+
+Also closed: the pass-1 doc-defect table (all ten fixed in LEARN_LOOP.md) and **O-1, timezone** — decided *and
 built* on 2026-07-26 as **D17**: the capturing device reports `device_tz` per chunk on C1 → carried
 verbatim by DP into C2 → storage columns → continuum's renderer; storage's per-user `home_tz` is
 scheduling + fallback only; UTC stays canonical. See [HANDOFF.md](../HANDOFF.md) Decisions log
@@ -20,39 +47,6 @@ premise.
 **Suite numbers, current as of 2026-07-26 post-D17 — quote these, not older figures:**
 DP **770 passed + 21 skipped** · continuum **189 passed + 7 skipped** · recording **144** ·
 storage **32** · extension deno **11**.
-
----
-
-## ⬜ OPEN — doc fixes waiting on the C5 freeze session
-
-Both are "one phrase, several files". Cash them together when C5 freezes.
-
-### O-2 — C5's field list is short in four places
-
-Code writes nine fields (`publish.py:86-90`): `contract, user_id, adapter_version, adapter_dir,
-base_model_hash, training_window, recipe_id, eval_report, status`.
-
-| File | Current text |
-|---|---|
-| [ARCHITECTURE.md](../ARCHITECTURE.md) C5 row | "user_id, version, base-model hash, training window, eval report, status" |
-| [continuum/CHARTER.md:68](../services/continuum/CHARTER.md) | "user_id, adapter version, base-model hash, training window, eval report, status" |
-| [storage/CHARTER.md:46](../services/storage/CHARTER.md) | "version, base-model hash, training window, eval report, active/rolled-back" |
-| [continuum/app/publish.py:5-7](../services/continuum/app/publish.py#L5-L7) | its own docstring omits `adapter_dir` + `recipe_id` |
-
-### O-3 — "LoRA over all layers" is wrong in three places
-
-Code targets only the LLM projection linears, vision towers excluded (252 modules = 7 projections
-× 36 layers) — [morpheus/train.py:29-31](../services/continuum/app/morpheus/train.py#L29-L31).
-
-- [ARCHITECTURE.md](../ARCHITECTURE.md) §Decisions — "Personalization | **LoRA per user, all layers**"
-- [continuum/CHARTER.md](../services/continuum/CHARTER.md) mission line 20 — "a LoRA job over all layers of the BWM"
-- [continuum/CHARTER.md](../services/continuum/CHARTER.md) scope line 38 — "Per-user LoRA over **all layers** of the BWM (v0 decision)"
-
-### O-4 — ARCHITECTURE's C2 prose omits the discriminator (minor)
-
-The frozen schema already mandates it; only the prose summary still says "deterministic on
-`(chunk_id, pipeline_version)`". Schema is authoritative, so nothing is unfrozen — fold this edit
-in with O-2.
 
 ---
 
