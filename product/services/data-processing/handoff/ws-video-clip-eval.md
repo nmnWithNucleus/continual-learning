@@ -27,7 +27,7 @@ skipped*.
 | `scripts/prompt_ab.py` | the A/B driver + the arm worker + every scorer + the O-8 gate + the pre-push `--check` gates. |
 | `scripts/oracle_gemini.py` | the blind pairwise LLM judge (O-4's rubric) and the frontier-model oracle. Needs a Vertex/Gemini credential; exits 4, loudly, without one. |
 | `app/vision/prompts/experimental/screen-clip-blind-v1.prompt.md` | arm **B** — the captioner sees frames only. |
-| `app/vision/prompts/experimental/screen-clip-hint-v1.prompt.md` | arm **D** — OCR usable for the app NAME only (the ratified fallback). |
+| `app/vision/prompts/experimental/screen-clip-hint-v1.prompt.md` | arm **D** — OCR usable for the app *name* only (the ratified fallback). |
 | `tests/fixtures/chunksets/smoke-v1/` | the committed 12-chunk headless corpus (no binaries). |
 | `tests/test_eval_scorers.py` | 37 tests: the scorers, the O-8 decision table, the arm fork, and the two safety guards. |
 | `app/main.py` (one guard) | `DP_OFFLINE_EVAL=1` ⇒ `create_app()` raises. |
@@ -62,7 +62,7 @@ export VERTEX_API_KEY=...
 ```
 
 Exit codes: `0` ok · `1` a `--check` gate failed · `2` misuse (missing `DP_OFFLINE_EVAL`,
-unknown arm) · `3` the O-8 gate returned UNDECIDED · `4` (oracle) no credential.
+unknown arm) · `3` the O-8 gate returned `UNDECIDED` · `4` (oracle) no credential.
 
 ---
 
@@ -74,10 +74,11 @@ Three independent mechanisms, none of which is a comment:
    `ingest_core.py`'s per-unit loop is the only `/context` writer in the system and it lives
    *above* the processor seam. No FastAPI, no `StorageClient`.
 2. **Enforced, not asserted.** `_forbid_storage()` poisons `StorageClient.__init__` **and**
-   `ingest_core.process_chunk` in the arm worker before a single stage is imported. (The
-   class object *is* reachable — `executor` imports `ingest_core` for `ProcessingError` —
-   so "we simply never call it" was not good enough.) A future refactor that reaches for
-   storage from below the seam fails here, in an eval, instead of quietly minting
+   `ingest_core.process_chunk` in the arm worker before a single stage is imported.
+   - The class object *is* reachable — `executor` imports `ingest_core` for `ProcessingError` —
+     so "we simply never call it" was not good enough.
+   - A future refactor that reaches for storage from below the seam fails here, in an eval,
+     instead of quietly minting
    experimental records in a real corpus.
 3. **The mirror guard.** `DP_OFFLINE_EVAL=1` is required by the harness and makes
    `app/main.py:create_app()` raise. *The flag that enables experiments is the flag that
@@ -160,8 +161,8 @@ All mechanical. All pure functions in `scripts/prompt_ab.py`, all unit-tested.
 | parse-fallback rate | fraction of chunks whose `ClipDesc.parsed` is false |
 | `app != "unknown"` rate | fraction with a non-empty, non-`unknown` `app` |
 | change-verb rate | fraction of captions containing a verb from a frozen 40-word vocabulary — the mechanical proxy for "did this reason across frames" (O-4's headline) |
-| **`ungrounded_quote_rate`** | the NARROW measure the shipped counter implements: double-quoted spans absent from the chunk's OCR text |
-| **`ungrounded_named_rate`** | the **WIDENED** measure (addendum edit #2): *all* named ≥4-char strings |
+| **`ungrounded_quote_rate`** | the `NARROW` measure the shipped counter implements: double-quoted spans absent from the chunk's OCR text |
+| **`ungrounded_named_rate`** | the **`WIDENED`** measure (addendum edit #2): *all* named ≥4-char strings |
 | `named_entity_recall` | ground-truth entities recovered by the caption (lenient substring, casefolded) |
 | `app_correct` | the caption's `app` matches the chunk's truth app (either containing the other) |
 | `propagation_rate` | fraction of chunks whose caption contains a string the corrupted-OCR arm **falsified** |
@@ -198,7 +199,7 @@ supposed to make injection safe was, on every caption we produced, measuring an 
 
 | | status |
 |---|---|
-| mechanical scorers, headless corpus | **run** — 12 chunks × 2 arms, 2.5 s, all four gates PASS |
+| mechanical scorers, headless corpus | **run** — 12 chunks × 2 arms, 2.5 s, all four gates `PASS` |
 | mechanical scorers, labelled corpus with real pixels | **run** — 40 chunks × 4 arms, 14.6 s |
 | the O-8 gate, end to end, against a captioner whose output is a function of its prompt | **run against a stub endpoint** (see 6.3) — the gate discriminates and rules |
 | the O-8 gate against the real Qwen3-VL | **NOT run** — no served endpoint in this build (E-3(a)) |

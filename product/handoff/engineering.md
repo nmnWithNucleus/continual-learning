@@ -102,12 +102,13 @@ outgrown its row became a card below it, following [ARCHITECTURE.md](../ARCHITEC
 finished items were retired verbatim into a new `handoff/worklog.md`.
 
 **Now** — charters 374 → 185, service boards 255 → 145,
-[LEARN_LOOP.md](../onboarding/LEARN_LOOP.md) 166 → 136, and the seven cited ws-files 712 → 272.
-Corpus 2,908 → 2,200. No file gained findings, and the baseline is rewritten.
+[LEARN_LOOP.md](../onboarding/LEARN_LOOP.md) 166 → 123, and the cited ws-files plus their two
+siblings 771 → 317. Corpus 2,908 → 2,173. No file gained findings, and the baseline is rewritten.
 
 **Payoff** — the cold-start path reads as cards with the details on top of each section, rather
-than as paragraphs a reader has to mine. Cost accepted: LEARN_LOOP's 28-to-60-word bullets are a
-long tail nobody has swept, and the ~83 service-internal ws-worklogs are untouched by design.
+than as paragraphs a reader has to mine. Cost accepted: the ~83 service-internal ws-worklogs are
+untouched by design, and LEARN_LOOP keeps a residue of 40-to-60-word bullets that are one idea
+each and would only get worse if split further.
 
 **Watch out for**
 
@@ -116,9 +117,14 @@ long tail nobody has swept, and the ~83 service-internal ws-worklogs are untouch
   masking four findings, now fixed rather than baselined.
 - **Rule 6's 60-word reasoning allowance never fired in the checker.** The guard stopping a list
   item from setting the section also excluded bold section headings, since both start with `*`.
-- **[LEARN_LOOP.md](../onboarding/LEARN_LOOP.md) §4.5 is stale on content, not on form.** Its
-  heading still says the day-log is continuum-side. It carries a *(pre-cutover)* marker now;
-  correcting it needs a session that can verify what actually runs.
+- **[LEARN_LOOP.md](../onboarding/LEARN_LOOP.md) §4.5 was stale on content, not on form** — it
+  still had the day-log continuum-side, local-date windows, and no dialect filter.
+- Corrected 2026-07-28 against the code, not from memory: `window_for()`, `closed_window_before()`
+  and `Window.local_date` are gone, and `storage/app/daylog.py:250-272` implements the one-dialect
+  rule. The heading was wrong too, and no document linked its anchor.
+- **That correction deliberately drops tokens**, which is the one place in this pass where a fact
+  left rather than moved: `04:00-local`, `w2026-07-21`, `app/window.py:52-88` and
+  `daylog.py:72-141` all described a world the cutover deleted.
 - **STYLE.md's §Was / Changed / Now / Payoff was trimmed**, 331 → 246 tokens, a founders' act this
   session. The file sits at ~1,820 against D21's 1,500 ceiling, and the founders retired the
   ceiling rather than the content: richer, not verbose.

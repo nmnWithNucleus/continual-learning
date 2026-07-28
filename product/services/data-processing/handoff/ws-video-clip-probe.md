@@ -162,12 +162,14 @@ the backend**:
 - **768×480 → 360.** `smart_resize` rounds each edge to a multiple of 32: 768→768, 480→480 (already
   exact); area 368,640 px is within `[min,max]` so it is **unchanged**. Patches `48×30 = 1,440`; merged
   tokens `1,440 // 2² = 360`. Reproduced locally by `vlm_probe._smart_resize(768,480,32) = 360`.
-- **`size` is AREA (min/max pixels), not edge length.** `preprocessor_config.json`
-  `size={shortest_edge:65536, longest_edge:16777216}` = `min_pixels 65,536 (256²)`, `max_pixels
-  16,777,216 (4096² = 16 Mpx)`; passed straight into the area comparison
-  (`image_processing_qwen2_vl.py:175-176`; vLLM mirror `qwen3_vl.py:911-913`). A 768×480 frame
-  (368,640 px) is ~45× below the cap ⇒ **not downscaled**; ~5.6× above the floor ⇒ not upscaled. A
-  silent downscale would need > 16.78 Mpx. **The "materially lower / clamping" branch does not fire.**
+- **`size` is an *area* (min/max pixels), not an edge length.**
+  `size={shortest_edge:65536, longest_edge:16777216}` in `preprocessor_config.json` means
+  `min_pixels 65,536 (256²)` and `max_pixels 16,777,216 (4096² = 16 Mpx)`.
+- It is passed straight into the area comparison (`image_processing_qwen2_vl.py:175-176`; vLLM
+  mirror `qwen3_vl.py:911-913`).
+- A 768×480 frame (368,640 px) is ~45× below the cap, so **not downscaled**, and ~5.6× above the
+  floor, so not upscaled. A silent downscale would need > 16.78 Mpx.
+- **The "materially lower / clamping" branch does not fire.**
 - Width sweep (predicted, image path): **1024×640 → 640 tok**, **1280×800 → 1000 tok** — i.e. 1280 is
   **2.78×** the tokens of 768 (matches A-16's cost-blowup warning). `vlm_probe.py --sweep 768,1024,1280`
   measures these live.
@@ -259,16 +261,16 @@ VIDEO_VLM_URL=http://<node>:8000 ./.venv/bin/python scripts/vlm_probe.py \
 ```
 `vlm_probe.py` speaks the exact wire `app/vision/vlm.py` speaks (same `/v1/chat/completions`, same
 `image_url` data part, same `VIDEO_VLM_*` env config), needs only stdlib + `httpx`, synthesises its own
-768×480 PNG (no PIL in the DP venv), and — reachable or not — prints PASS/FAIL/SKIP per probe and the
+768×480 PNG (no PIL in the DP venv), and — reachable or not — prints `PASS`/`FAIL`/`SKIP` per probe and the
 launch flags. Exit `0` = all requested probes ran & passed; `2` = endpoint unreachable; `1` = a live
-FAIL. A green run here is the 60-second confirmation that turns every `[SRC]` above into `[VERIFIED-LIVE]`.
+`FAIL`. A green run here is the 60-second confirmation that turns every `[SRC]` above into `[VERIFIED-LIVE]`.
 
 ---
 
 ## 9. OCR serving probe (`scripts/ocr_probe.py`) — for WS-C  `[SKIP]`
 
 **No OCR runtime exists on this box** (scanned every conda env: no `paddleocr`, no `rapidocr`), and the
-`sidecars/ocr/` service is WS-C's to build, so the OCR serving assumptions are **UNVERIFIED-LIVE**. The
+`sidecars/ocr/` service is WS-C's to build, so the OCR serving assumptions are **unverified live**. The
 probe SKIPs honestly (exit 2) and states the contract WS-C must expose and the assumption it must measure:
 - `GET /health` → `{det_sha256, rec_sha256, ort_version, ep:"CPU", …}`, which DP asserts against config
   **at graph resolution** and fails loud on mismatch (D-06; WS-C exit criteria). The probe checks these

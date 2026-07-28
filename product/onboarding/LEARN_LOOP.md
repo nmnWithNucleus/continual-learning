@@ -229,12 +229,12 @@ The two load-bearing design choices:
   `"translation"`, …) makes a chunk's multiple records stable and distinct.
 - An empty discriminator reproduces the original two-component v0 id byte-for-byte
   (`pipeline.py:43-45`), so nothing forked when it landed.
-  *(Was §8 item 4-adjacent drift, **closed 2026-07-26 — review item O-4**: the schema file
-  had always mandated the discriminator — "fold a within-chunk discriminator into the id so each is
-  stable and distinct" — while ARCHITECTURE's prose summary still said "deterministic on
-  `(chunk_id, pipeline_version)`". One truth, recorded correctly in the authoritative place and
-  lagged only by its own summary; the summary now matches. **No contract change**, and none was
-  needed — the schema was never wrong.)*
+- *Was §8 item 4-adjacent drift, **closed 2026-07-26** as review item O-4.* The schema file had
+  always mandated the discriminator — *"fold a within-chunk discriminator into the id so each is
+  stable and distinct"* — while ARCHITECTURE's prose summary still said "deterministic on
+  `(chunk_id, pipeline_version)`".
+- One truth, recorded correctly in the authoritative place and lagged only by its own summary. The
+  summary now matches. **No contract change**, and none was needed: the schema was never wrong.
 - **`pipeline_version` is the dialect** — the statement of *which processing produced this text*.
   Continuum must train on a consistent dialect; storage never filters on it (yet), which is
   exactly why the E-2 retraction primitive blocks the clip-pipeline cutover (§6).
@@ -634,30 +634,42 @@ trainer ever sees is the block anchor, `app/daylog.py:156-158`; OCR dedup; rende
 recipe fork to `segment_seconds=60`); the failed-day merge (fold day N into night N+1) tracked as
 debt, not wired.
 
-### 4.5 The day-log (currently continuum-side; storage's after ratification)
+### 4.5 The day-log — storage materializes it, continuum is the parity reference
 
-> *(pre-cutover)* — the heading is as-written-then. Since **2026-07-27** the day-log is
-> **storage's**, the window is a watermark over storage's `ingest_time`, and `window_id` is an
-> opaque token. This section is kept because the reasoning is still the best explanation of the
-> seam; read the amendment at the top of this file for what actually runs.
+> **The heading is as-written-then and the body is corrected.** Since **2026-07-27** the day-log
+> is **storage's**: `storage/app/daylog.py` materializes it, and `continuum/app/daylog.py` survives
+> as the **parity reference** that storage's `materialize_daylog` is diffed against (storage
+> CHARTER M9). The construction rules below are true of both, because that is what the diff proves.
+> Verified against the code 2026-07-28.
 
 The day-log is **the only interface between ingest and consolidation** (the research design's
-pinned-schema rule — `continuum/app/daylog.py:3-8`). How `/context` records become training
-blocks (`daylog.py:72-141`):
+pinned-schema rule — `continuum/app/daylog.py:1-8`). How `/context` records become training blocks:
 
-- **Window** = 04:00→04:00 **user-local** (never a calendar day), `window_id` = `w2026-07-21` (the
-  local date the window starts on); records attributed by `t_start`, half-open
-  (`app/window.py:52-88`). The boundary tz is the user's **policy** value (`home_tz`, D17),
-  supplied today by `nightly.py --tz`, which is now **required** — there is no default timezone
-  anywhere in the system. D17 records an intent to move the cycle window to C10's watermark range
-  `[last_trained_t, now)`; **that part is decided, not built** — `window.py` still says "moving to"
-  and `nightly.py` still builds local-date windows.
+- **Window** = `[last_trained_t, now−δ)` on **storage's `ingest_time` axis**, not a local day.
+  `window_id` is an opaque `w<YYYYMMDD>T<HHMMSS>Z` derived from the window's *end* instant, minted
+  in exactly one place and parsed by nobody.
+- Storage owns the per-user watermark and mints the window durably and idempotently, so a retry
+  gets the *same* window back. Continuum fetches; it does not derive.
+- **`window_for()`, `closed_window_before()` and `Window.local_date` are deleted**
+  (`continuum/app/window.py:9-27` records why each deletion is load-bearing). `nightly.py --tz` is
+  retired for the C12 profile read.
+- **`home_tz` survives with a narrowed job:** it is a *render fallback* only — the zone a block is
+  written in when no contributing record carried a `device_tz`. That is D17's fact/policy split;
+  the record's own zone wins, because it is a fact about where the user physically was.
+- **Membership is by `ingest_time`; bucketing is by `t_start`**, and the bucket grid is **global,
+  not window-relative** (`continuum/app/daylog.py:15-22`, adopted 2026-07-27). A window-relative
+  grid made the M9 diff true only for a window whose origin happened to sit on a segment boundary,
+  and real windows are second-granular, so nine origins in ten are misaligned.
 - **Segments**: every C2 record in the window lands in a `segment_seconds` (10 s) bucket by its
   `t_start`. Routing is by `content.kind`: `transcript` → the `asr` channel — with **diarized
   sub-spans placed by their own `t_start`**, so a VAD chunk straddling the boundary can't drag
   in-window speech out (`daylog.py:94-107`); `ocr` → the `ocr` channel; `caption`/`text` → the
-  `caption` channel (`daylog.py:115-120`). **No filter on `kind` or `pipeline_version` exists** —
-  the E-2 double-count risk is real and verified.
+  `caption` channel (`daylog.py:115-120`).
+- **One dialect per record, latest `ingest_time` wins**, keyed `(chunk_id, content.kind,
+  discriminator)` (`storage/app/daylog.py:250-272`). This closed the re-consolidation double-count,
+  and it is why E-2 stopped being a cutover blocker (D18).
+- It keys on `ingest_time` because `pipeline_version` is a *composed* string and not orderable, and
+  on `content.kind` because Phase-3 proved captions and transcripts can share one.
 - **Blocks**: runs of ≤ `block_segments` (12) temporally-adjacent non-empty segments; a gap >
   6×segment_seconds (60 s — camera-off) starts a new block so one anchor line never spans hours of
   silence (`daylog.py:125-139`).
@@ -781,19 +793,20 @@ sequenceDiagram
      `ClipDesc{app, activity, description, sensitive}`; emits **1 unit** `kind='caption'`,
      discriminator `""` (`clipcap.py:58-74`).
 6. **Exactly two C2 records**, both with the C1 span verbatim (`pipeline.py:79-80`), both stamped
-   the same composed dialect — empirically resolved with the production backends
-   (`VIDEO_BACKEND=vlm`, `VIDEO_OCR_BACKEND=ppocr`):
-   `vidclip-vlm-v1@screen-clip-v1.p1.565066a0#04651d47+cp-v1+ocr-ppv4-cpu-v1`
-   (primary base + pack id/version/digest + cfg allowlist sha + clipprep + OCR fragments; the
-   design doc's example `@p1.7f3a9c21…` omits the pack id and names ppv6 — see §8), and
-   `record_id = sha256(chunk_id ␀ pipeline_version ␀ discriminator)` (`pipeline.py:33-46`).
-   `POST /context/records` upserts them idempotently (`storage/app/main.py:149-162`).
-7. **Day-log.** After the next 04:00-local boundary, continuum's cycle fetches the window's
-   records via the C10 range read (`context_reader.py:23-41`) and builds the day-log: the caption
-   and OCR land (by `t_start`) in one 10 s segment's `caption`/`ocr` channels, the ASR sibling in
-   `asr`; ≤12 consecutive non-empty segments render into one ~2-min block —
-   `On 2026-07-21, around 13:02–13:04 local time: / Scene: … / Heard: … / World text (OCR): …`
-   (`daylog.py:144-172`).
+   the same composed dialect.
+   - Empirically resolved with the production backends (`VIDEO_BACKEND=vlm`,
+     `VIDEO_OCR_BACKEND=ppocr`):
+     `vidclip-vlm-v1@screen-clip-v1.p1.565066a0#04651d47+cp-v1+ocr-ppv4-cpu-v1`.
+   - That is the primary base, plus pack id/version/digest, plus the cfg allowlist sha, plus the
+     clipprep and OCR fragments.
+   - The design doc's example `@p1.7f3a9c21…` omits the pack id and names ppv6 — see §8.
+   - `record_id = sha256(chunk_id ␀ pipeline_version ␀ discriminator)` (`pipeline.py:33-46`), and
+     `POST /context/records` upserts them idempotently (`storage/app/main.py:149-162`).
+7. **Day-log.** When the window closes, storage materializes it: the caption and OCR land, by
+   `t_start`, in one 10 s segment's `caption`/`ocr` channels, and the ASR sibling in `asr`.
+   - Up to 12 consecutive non-empty segments render into one ~2-min block:
+     `On 2026-07-21, around 13:02–13:04 local time: / Scene: … / Heard: … / World text (OCR): …`
+     (`daylog.py:144-172`). Continuum fetches the rendered result over C10.
 8. **Consolidation corpus.** Each eligible block is retold ~48× (facts + on-screen text verbatim,
    no invention) + 15 % negation calibration; ~30 % replay from prior nights' reservoir corpora is
    mixed in (`cycle.py:179-227`).
@@ -801,16 +814,21 @@ sequenceDiagram
    — LoRA r128/α256 over the LLM linears, 3 epochs on 1024-token chunks at lr 1e-4, on the pinned
    32B base (`morpheus.py:74-108`, `cycle.py:229-246`).
 10. **Gate → C5.** Policy v1.1's four checks run against judge-scored probes with a same-run base
-    control; on pass, a `{contract:"C5", adapter_version:"a-…", adapter_dir, base_model_hash,
-    training_window:"w20260721T110000Z", recipe_id, eval_report, status:"active"}` row appends to
-    `entries.jsonl`, `active.json` flips forward-only, the night's corpus is admitted to the
-    reservoir. **Since 2026-07-27 that whole tail is idempotent**: `publish()` keeps at most ONE
-    live activation per `training_window`, superseding rather than stacking, and a reservoir
-    conflict is non-fatal. Before that, a mid-tail failure left two `active` rows for one window and
-    a `rollback()` that flipped the alias to the *same* adapter — the only safety net a bad adapter
-    has, silently dead. On fail: recorded candidate, strike (**once per window**, however often it
-    is re-consolidated), freeze at 2. The chunk's ten seconds of screen life are now weights — and tomorrow's serve
-    loop *will* pick that adapter up once the C5→C6 wiring lands (§4.6).
+    control.
+    - On pass, a `{contract:"C5", adapter_version:"a-…", adapter_dir, base_model_hash,
+      training_window:"w20260721T110000Z", recipe_id, eval_report, status:"active"}` row appends to
+      `entries.jsonl`, `active.json` flips forward-only, and the night's corpus is admitted to the
+      reservoir.
+    - **Since 2026-07-27 that whole tail is idempotent**: `publish()` keeps at most one live
+      activation per `training_window`, superseding rather than stacking, and a reservoir conflict
+      is non-fatal.
+    - Before that, a mid-tail failure left two `active` rows for one window and a `rollback()` that
+      flipped the alias to the *same* adapter — the only safety net a bad adapter has, silently
+      dead.
+    - On fail: a recorded candidate, a strike (**once per window**, however often it is
+      re-consolidated), and a freeze at 2.
+    - The chunk's ten seconds of screen life are now weights, and tomorrow's serve loop *will* pick
+      that adapter up once the C5→C6 wiring lands (§4.6).
 
 ---
 
@@ -867,7 +885,9 @@ sequenceDiagram
 
 ## 7. The decisions that shaped it
 
-The handful of choices to internalize to reason about this system. Each: decision — alternative — why.
+The handful of choices to internalize to reason about this system.
+
+**Why it's this way** — each entry is decision, then alternative, then why.
 
 > **Added 2026-07-27 (D18 · D19 · D20) — four choices that reshaped the storage↔continuum seam:**
 >
@@ -934,7 +954,8 @@ The handful of choices to internalize to reason about this system. Each: decisio
    entirely (fuse at consolidation). Why: the nightly loop's only model is *instructed not to
    fuse* — so string→action binding ("wrote to Sarah about the Q3 deck") must be written **once,
    at caption time**, where pixels+PTS+regions live; and OCR text as a separate `kind='ocr'`
-   record keeps a machine-checkable, independently-filterable channel. The injection premise is
+   record keeps a machine-checkable, independently-filterable channel.
+   - The injection premise is
    honest enough to be *measured* (O-8) rather than argued.
 8. **One code path for stream + interactive (C8).** Alternative: a separate interactive
    normalizer. Why: a user's typed/snapped request must be normalized *identically* to their life
@@ -949,9 +970,11 @@ The handful of choices to internalize to reason about this system. Each: decisio
     adapter.** Alternatives: train-on-raw-logs (fails — the research line's whole point);
     per-night fresh adapters (loses lineage); thresholds inside the recipe (a threshold edit would
     re-run a night of GPU and fork artifact identity — `app/policy.py:15-19`). Why: retelling ×48
-    is what makes one day learnable; replay is what keeps yesterday from erasing; the gate is a
-    *shipping* decision on its own clock; publish is monotone with first-class rollback and a
-    2-strike freeze so a bad run degrades to "serve stale," never to "serve broken."
+    is what makes one day learnable.
+    - Replay is what keeps yesterday from erasing, and the gate is a *shipping* decision on its
+      own clock.
+    - Publish is monotone, with first-class rollback and a 2-strike freeze, so a bad run degrades
+      to "serve stale", never to "serve broken."
 11. **POCs are reference, not source** (D7). Everything above was re-derived and re-written fresh
     (Morpheus is a clean reimplementation, parity-proven against the research line) — the POC code
     answered questions; the product code answers to the contracts.
@@ -997,22 +1020,26 @@ disagreeing with the code, or with another document. None was caught by a test. 
 green *while asserting a defect as correct behaviour*. Read this section as evidence for how much
 that costs, not as a list to tick off.
 
-1. **The model directory is currently TWO unwired things.** ARCHITECTURE's diagram shows
+**How it got here** — the items, kept as records rather than as a live defect list.
+
+1. **The model directory is currently two unwired things.** ARCHITECTURE's diagram shows
    `continuum —C5→ model directory —C6→ inference` as one store in storage. In code: continuum
    publishes C5 entries to **its own** `var_dir/model_directory/` (`continuum/app/publish.py:49`),
    while storage serves C6 from **its own** seeded `model_directory` table
-   (`storage/app/db.py:176-202`) that nothing in continuum writes. Inference's C6 client works
-   (`inference/app/storage_client.py:28-43`) but its vLLM backend passes no adapter
-   (`inference/app/backends/vllm.py:24-31`). The M0 "served in vLLM" claim is true but was proven
+   (`storage/app/db.py:176-202`) that nothing in continuum writes.
+   - Inference's C6 client works (`inference/app/storage_client.py:28-43`) but its vLLM backend
+     passes no adapter (`inference/app/backends/vllm.py:24-31`).
+   - The M0 "served in vLLM" claim is true but was proven
    continuum-side (adapter load check), not through the C6 path. This is *known* pending the C5
    pin — but the system diagram reads as if the wire exists.
 2. **The day-log, recipe registry, and reservoir live in continuum, not storage.**
    ARCHITECTURE's C10 row and the storage charter expansion describe storage materializing the
    day-log; as built, `build_daylog` runs in-process in continuum behind `LocalDayLogClient`
    (`continuum/app/clients/daylog_client.py:65+`), and C10-as-consumed is storage's beta
-   `/context` range read. The ARCHITECTURE row does flag the evolution as "proposed, pending
-   founders' board" — consistent — but the HANDOFF service-board phrasing "C10 day-log fetch" can
-   read as landed. It is not.
+   `/context` range read.
+   - The ARCHITECTURE row does flag the evolution as "proposed, pending founders' board", which is
+     consistent, but the HANDOFF service-board phrasing "C10 day-log fetch" can read as landed. It
+     is not.
 3. **C5 as-built ≠ C5 as prose, in four places — fixed 2026-07-26 (review item O-2). Kept as the
    record of what the shape is and what the founders decided about describing it.**
 
@@ -1128,11 +1155,11 @@ that costs, not as a list to tick off.
    property is eval-only. The one §8 item worth acting on before the pilot.
 10. **Two continuum policy/recipe knobs are parsed but dead.** `decay_retention_min` (0.5) is
     loaded into `GatePolicy` (`policy.py:58`) but `run_gate` never reads it (the decay spot-check
-    is one of the three declared-skipped checks); and `replay.neg_boost` is implemented in
-    `morpheus/replay.py:55-85` but the nightly replay path goes through
-    `reservoir.sample_pooled`, which has no neg_boost parameter — a recipe fork setting
-    `neg_boost > 0` would be silently ignored by `run_cycle`. Harmless at today's defaults, real
-    traps later.
+    is one of the three declared-skipped checks).
+    - `replay.neg_boost` is implemented in `morpheus/replay.py:55-85`, but the nightly replay path
+      goes through `reservoir.sample_pooled`, which has no `neg_boost` parameter.
+    - So a recipe fork setting `neg_boost > 0` would be silently ignored by `run_cycle`. Harmless
+      at today's defaults, real traps later.
 11. **C5's `base_model_hash` is a placeholder label**, not a hash: `"qwen3-vl-32b-instruct"`
     hardcoded at `cycle.py:43`. The charter's "continuum pins the base-model hash per adapter" is
     aspirational until D6's exact variant is pinned.
@@ -1150,9 +1177,10 @@ that costs, not as a list to tick off.
       (`LM_PROJECTIONS` = q/k/v/o/gate/up/down, `_LM_SCOPE="language_model"`; selection at
       `lora_target_modules()`, `:89-100`), **vision towers deliberately excluded**, carrying its
       own rationale in the source: the day log reaches the model **as text**, so adapting the
-      vision stack spends rank on modules that never see the training signal. Parity-proved
-      **252/252 modules = 7 projections × 36 layers, zero vision-tower**, against the research
-      line's golden adapter tensor keys ([phase-2a-report](../services/continuum/handoff/phase-2a-report.md):60).
+      vision stack spends rank on modules that never see the training signal.
+    - Parity-proved **252/252 modules = 7 projections × 36 layers, zero vision-tower**, against the
+      research line's golden adapter tensor keys
+      ([phase-2a-report](../services/continuum/handoff/phase-2a-report.md):60).
 
     **Note the axis, because "all layers" mis-names it:** v0 *does* adapt every layer — all 36 of
     them. What it excludes is a **tower**, not a layer. The gap is which stacks are adapted.
@@ -1173,9 +1201,11 @@ that costs, not as a list to tick off.
 13. **Recording scope items that read as shipped but aren't:** device auth-token issuance
     (CHARTER M0 exit row) and pairing are unbuilt — `/capture/segments` is unauthenticated and
     `device_id` is self-minted client-side; C1's optional `device_location`/`device_clock` are
-    never filled by any client. And the "120 tests" figure was stale in **both** places it appeared (**fixed 2026-07-27, review item O-10 — recording is 144**) —
-    the founders' board service row *and* recording's own canvas status line (133 collected
-    — the delta is the Phase-3 replay-source tests).
+    never filled by any client.
+    - The "120 tests" figure was stale in **both** places it appeared, and was fixed 2026-07-27 as
+      review item O-10 — recording is 144.
+    - Those places were the founders' board service row *and* recording's own canvas status line,
+      which collected 133. The delta is the Phase-3 replay-source tests.
 
 **Verification limits.** Suites re-run independently on 2026-07-26: **DP 765 passed + 21 skipped**
 (786 collected), **continuum 185 passed + 7 skipped** (192 collected: 108 non-parity + 84 parity),
