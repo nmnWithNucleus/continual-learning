@@ -102,12 +102,12 @@ outgrown its row became a card below it, following [ARCHITECTURE.md](../ARCHITEC
 finished items were retired verbatim into a new `handoff/worklog.md`.
 
 **Now** — charters 374 → 185, service boards 255 → 145,
-[LEARN_LOOP.md](../onboarding/LEARN_LOOP.md) 166 → 136, corpus 2,908 → 2,432. No file gained
-findings, and the baseline is rewritten.
+[LEARN_LOOP.md](../onboarding/LEARN_LOOP.md) 166 → 136, and the seven cited ws-files 712 → 272.
+Corpus 2,908 → 2,200. No file gained findings, and the baseline is rewritten.
 
 **Payoff** — the cold-start path reads as cards with the details on top of each section, rather
-than as paragraphs a reader has to mine. Cost accepted: the seven cited ws-files are untouched, and
-LEARN_LOOP's 28-to-60-word bullets are a long tail nobody has swept.
+than as paragraphs a reader has to mine. Cost accepted: LEARN_LOOP's 28-to-60-word bullets are a
+long tail nobody has swept, and the ~83 service-internal ws-worklogs are untouched by design.
 
 **Watch out for**
 
@@ -122,6 +122,12 @@ LEARN_LOOP's 28-to-60-word bullets are a long tail nobody has swept.
 - **STYLE.md's §Was / Changed / Now / Payoff was trimmed**, 331 → 246 tokens, a founders' act this
   session. The file sits at ~1,820 against D21's 1,500 ceiling, and the founders retired the
   ceiling rather than the content: richer, not verbose.
+- **[ws-video-clip.md](../services/data-processing/handoff/ws-video-clip.md) was 2,513 lines, 1,207
+  of them appended build logs.** They rolled to a companion file under §Growing a worklog, which is
+  most of that file's 458 → 106.
+- **Rule 6's 27-word cap fights record-style documents.** Splitting a 202-word bullet into six
+  well-formed 35-word ones *raises* the finding count, because only Why it's this way, Watch out
+  for and How it got here get 60. Worth a founders' look before anyone optimises the number.
 
 ### 2026-07-28 — the style pass over `handoff/*` (D21)
 > review · docs, all nodes · [D21](../DECISIONS.md)
