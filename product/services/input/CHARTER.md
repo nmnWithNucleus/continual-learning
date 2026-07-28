@@ -12,7 +12,7 @@
 > and re-collecting stored data rather than migrating it; deferring durability work with the
 > reason written down.
 > **Not licensed:** skipping [ORG.md](../../ORG.md)'s contract-edit order, leaving a decision
-> unrecorded, silent breakage, or calling a thing BUILT when it is only DECIDED.
+> unrecorded, silent breakage, or calling a thing BUILT when it is only ratified.
 > Full posture + what changes at dev/prod: [ARCHITECTURE.md](../../ARCHITECTURE.md) §Stage.
 
 

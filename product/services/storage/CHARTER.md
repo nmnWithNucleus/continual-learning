@@ -69,10 +69,10 @@ trains no models; it keeps what others produce safe, ordered, and fast to read.
 | In | `/context` store | processed life-stream records; storing side of C2 | — |
 | In | `/sessions` store | conversations → sessions → turns, incl. full mentor + tool traces; storing side of C4 | — |
 | In | Model directory | per-user adapter registry behind C5/C6. Hosting deferred ([D19](../../DECISIONS.md)) | [↓](#the-model-directory) |
-| In | People/known-faces registry persistence | data-processing matches, input curates the UX, storage persists; split in ARCHITECTURE | — |
+| In | People/known-faces registry persistence | data-processing matches/enriches, input curates the UX, storage persists | — |
 | In | Schemas + indexing | canonical record schemas; every store indexed by (user_id, time) | — |
 | In | Time-ranged retrieval | per-user time-window reads (recall queries); producing side of C10 | — |
-| In | Recency/semantic index | over `/context` + `/sessions`; producing side of C11, consumed by input's QueryBuilder | — |
+| In | Recency/semantic index | over `/context` + `/sessions`; producing side of C11, for input's same-day grounding | — |
 | In | Per-user isolation | hard namespace per user; cross-user access fails closed | — |
 | In | Encryption at rest | all stores and backups | — |
 | In | Retention + deletion primitives | full-user delete (incl. `/raw` + adapter artifacts) and time-slice delete, auditable | — |
@@ -296,7 +296,7 @@ redefined.
 | C4 | inference → `/sessions` | serve the write path: persist turn records incl. traces, keyed conversation → session → turn |
 | C5 | continuum → model directory | host the registry: accept adapter version entries; one active adapter per user; rollback kept |
 | C6 | inference ↔ model directory | serve the hot read path: resolve the active adapter per request, within a tight budget |
-| C10 | storage → continuum | serve the training-window read: a day-log fetch by `(user_id, window_id)`, plus the ledger writes |
+| C10 | storage → continuum | serve the training-window read: a day-log fetch by `(user_id, window_id)`, plus window-ledger open/close |
 | C12 | storage → continuum *(later inference/input)* | serve the per-user profile read (`home_tz`); the write surface is ours, prose-pinned on D11's precedent |
 | C13 | storage → continuum + inference | host + serve the recipe registry: versioned recipes, and the separately-versioned gate policy |
 | C14 | continuum ↔ storage | host the reservoir: accept amplified-corpus writes, serve the ledger |
@@ -542,7 +542,7 @@ Engineering:
      and filesystem, including for the four new stores (day-log, window ledger, reservoir,
      profile).
    - **The target is unchanged and is option (c)**: metadata in Postgres, day-logs and corpora in
-     GCS. It is near the top of the list the moment we leave prototype, because days-logs-forever is
+     GCS. It is near the top of the list the moment we leave prototype, because day-logs-forever is
      the first store that grows without bound.
    - **What keeps that migration cheap is a rule, not foresight:** every new store goes behind a
      **narrow interface** in storage from day one, so the swap is a backend change rather than a
@@ -670,7 +670,7 @@ lives here; a full-user delete cascades `/raw`, because the blobs are our store 
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Breach of life-stream data | product-ending trust loss | encryption at rest everywhere; hard per-user isolation; fail-closed access tests (M4); least-privilege creds |
-| Time-index defects (skew, tz, ordering) | training windows and recall queries silently wrong | UTC-only storage; `ingest_time` audit column; C2 validation rejects absurd timestamps; ordering test in M1 |
+| Time-index defects (skew, tz, ordering) | training windows and recall queries silently wrong | UTC-only storage; `ingest_time` audit column; C2 validation rejects non-monotonic/absurd timestamps; a cross-device ordering test in M1 |
 | C6 sits on the request path | adds latency to every user turn | cached resolution; an explicit budget agreed with inference; fallback to base model if unreachable |
 | Incomplete deletion (backups, raw blobs, adapters) | right-to-be-forgotten violated | the manifest enumerates every store; backup expiry policy; per-user LoRA keeps adapter delete clean |
 | Unbounded stream growth | cost blowup + degraded queries | metadata/bulk split (DB vs GCS) from M0; retention hooks from day one; per-user growth tracked |
