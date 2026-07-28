@@ -257,34 +257,43 @@ carries only genuinely-open items and is rewritten in place each session ([ORG.m
 >   ops item with platform.*
 >
 ### 2026-07-27 (close-out) — seam shipped, fleet live, review backlog empty
+> review · continuum × storage · [D20](../DECISIONS.md)
 
-2026-07-27 (close-out) — **the seam is shipped, the fleet is live, and the review backlog is
-empty.** Final round fixed three defects an adversarial pass proved against the real services and
-no suite caught: **H1** the publish tail was not atomic (two `active` C5 rows for one window, and
-one `rollback()` flipping the alias to the *same* adapter — the only safety net a bad adapter has,
-silently dead; worse branch, a C14 append-only 409 that stranded a night forever); **H2** the
-replay pool filtered on ledger *state* and never *outcome*, so nights that never entered the
-adapter were rehearsed — measured at 50% of a night's budget re-teaching text already in that
-night's fresh corpus; **M1** one window could strike twice and freeze a user. Fixed at the source:
-`publish()` idempotent with one live activation per window, a reservoir conflict non-fatal,
-`prior_windows` published-only, `debt` membership as the strike guard. 11 tests, each proven to
-fail without its fix.
+**Was** — an adversarial pass against the real services proved three defects no suite caught.
 
-**`seam_check` was asserting H2 as correct behaviour** — green while pinning the bug. That is the
-second harness this week to bless a defect (the `recipe_id` test did it first), and it is the
-reason the review rounds kept finding what the suites could not.
+- **H1** — the publish tail was not atomic: two `active` C5 rows for one window, and one
+  `rollback()` flipping the alias to the *same* adapter, leaving the only safety net a bad adapter
+  has silently dead. The worse branch was a C14 append-only 409 stranding a night forever.
+- **H2** — the replay pool filtered on ledger *state* and never *outcome*, so nights that never
+  entered the adapter were rehearsed. Measured at 50% of a night's budget, re-teaching text already
+  in that night's fresh corpus.
+- **M1** — one window could strike twice and freeze a user.
 
-**Fleet cut over:** stopped → three stores backed up and *verified restorable* → cleared →
-restarted on the new code. Proven live rather than in tests: real capture through faster-whisper
-into `/context`; a C12 profile set and a missing one 404'd; a nightly to **published** over HTTP;
-the watermark advancing **only** on `published`; **exactly one** active C5 row.
+**Changed** — fixed at the source, not at the call sites: `publish()` idempotent with one live
+activation per window · a reservoir conflict non-fatal · `prior_windows` published-only · `debt`
+membership as the strike guard. 11 tests, each proven to fail without its fix.
 
-**Doc close-out:** all eleven accuracy-review items are closed (O-1 → D17, O-2/3/4 → 07-26,
-O-5…O-11 → today), storage OQ7 resolved, OQ9 re-scoped now that `day_logs` is a real table, and
-**two false claims of my own retracted** — D19's "the min-data-floor mechanism exists" (it appears
-nowhere in the repo) and the parity pass I reported before it covered a misaligned origin. Both
-were caught by adversarial rounds rather than tests, which is the week's actual lesson: every
-serious defect started as a document disagreeing with the code.
+**Now** — the fleet is cut over: stopped, three stores backed up and *verified restorable*,
+cleared, restarted on the new code. Proven live rather than in tests:
+
+- real capture through faster-whisper into `/context`;
+- a C12 profile set, and a missing one 404'd;
+- a nightly to **published** over HTTP, with the watermark advancing only on `published`;
+- exactly one active C5 row.
+
+All eleven accuracy-review items are closed (O-1 → D17, O-2/3/4 → 07-26, O-5…O-11 today), storage
+OQ7 is resolved, and OQ9 is re-scoped now that `day_logs` is a real table.
+
+**Payoff** — the review backlog is empty, and two false claims of my own are retracted rather than
+caveated: D19's "the min-data-floor mechanism exists", which appears nowhere in the repo, and a
+parity pass I reported before it covered a misaligned origin.
+
+**Watch out for**
+
+- `seam_check` was asserting H2 as correct behaviour — green while pinning the bug. That is the
+  second harness this week to bless a defect, after the `recipe_id` test, and it is why the review
+  rounds kept finding what the suites could not.
+- Every serious defect this week started as a document disagreeing with the code.
 
 ### 2026-07-27 (overnight) — the D18 storage expansion is BUILT; the seam is closed
 
@@ -926,37 +935,42 @@ and therefore forks adapter lineage, which is a board call, not a refactor. Belo
 storage/C10 board session with the day-log move
 
 ### 2026-07-25 — continuum: THE LEARN LOOP IS CLOSED
+> build · continuum × data-processing · [D15](../DECISIONS.md)
+
+**Now** — the D15 continuum kickoff ran to completion. Morpheus is parity-proven against the
+research line, M0 served a 32B life adapter our own pipeline trained, and the Phase-3 dogfood
+reproduced the baseline separation through the real services. Verdict: the pipeline is sound.
 
 **Board view** — *merged 2026-07-27 from the retired `HANDOFF.md §Current state`, which had become a second worklog. Kept verbatim; consolidation with the text above is a later pass.*
 
-2026-07-25 (continuum — **the learn loop is closed**): the D15 continuum kickoff ran to
-completion. The nightly-consolidation core (**"Morpheus"**, our nomenclature; methods
-reimplemented cleanly from the research consolidation line `b3c58e1`, parity-proven by a
-differential harness — `render_block` byte-identical, LoRA targets 252/252, judge exact,
-ensemble indistinguishable at n=8/10, p=0.82) sits behind a `TRAINER_BACKEND` seam (mock
-default). **M0 met:** a 32B life adapter *our* pipeline trained → publish-gate v1.1 → C5 →
-**served in vLLM** (32B training needs ≥2 GPUs — a measured hard limit). Continuum was slimmed
-to a lean **5-verb loop** (fetch recipe · fetch day-log · amplify · finetune · gate · publish)
-over three storage **client seams** (local now, HTTP-to-storage later). Then the **Phase-3 DP
-dogfood** routed real Speed data (209.7 h of audio, 629 chunks) through the **actual
-recording→DP→storage→continuum services** — a replay `ChunkSource` + an injected-caption DP
-sidecar (~2 net-new files, no contract changes; test-type = config profile + `replay-speed`
-naming, not a contract field). The 1-min rule-bend collapsed recall on **dose** (fixed 48
-retellings now spread over 4.1× the block text); the **decomposition run with parity block
-content reproduced the baseline separation** (0.137 vs 0.179, permutation p=0.148 — same
-distribution; p=0.018 above the no-consolidation control). **Verdict: Pipeline sound — our real
-services carry the learn loop without losing learnability.** Suites green: continuum 185 ·
-storage 26 · recording 133 · DP 173. Detail: continuum canvas + [ws-morpheus-port](../services/continuum/handoff/ws-morpheus-port.md) · [ws-phase3-dogfood](../services/continuum/handoff/ws-phase3-dogfood.md).
-**Two founder-level follow-ups, neither an integration defect:** (a) a **recipe/dose finding for
-Gnandeep** — amplification dose is fixed *per block* but recall depends on retellings *per unit
-of text*, so at our native cadence dose must scale with block-text volume (cofounder to raise);
-(b) a **storage/C10 board session** — ratify the storage charter expansion (day-log
-materialization + recipe registry + reservoir custody) and the **C10 evolution** from a raw
-range-read to a **day-log fetch, random-access by `(user, window_id)`** (six cross-service
-friction notes captured in the Phase-3 report; new recipe-registry + reservoir contract IDs
-minted at ratification). **Gate policy v1.1** (traps ≥0.15/0.25, heldout exact-test vs each run's
-own base control, `min_probes` 148) was split from the training recipe so a threshold change
-never forks `recipe_id`.
+> 2026-07-25 (continuum — **the learn loop is closed**): the D15 continuum kickoff ran to
+> completion. The nightly-consolidation core (**"Morpheus"**, our nomenclature; methods
+> reimplemented cleanly from the research consolidation line `b3c58e1`, parity-proven by a
+> differential harness — `render_block` byte-identical, LoRA targets 252/252, judge exact,
+> ensemble indistinguishable at n=8/10, p=0.82) sits behind a `TRAINER_BACKEND` seam (mock
+> default). **M0 met:** a 32B life adapter *our* pipeline trained → publish-gate v1.1 → C5 →
+> **served in vLLM** (32B training needs ≥2 GPUs — a measured hard limit). Continuum was slimmed
+> to a lean **5-verb loop** (fetch recipe · fetch day-log · amplify · finetune · gate · publish)
+> over three storage **client seams** (local now, HTTP-to-storage later). Then the **Phase-3 DP
+> dogfood** routed real Speed data (209.7 h of audio, 629 chunks) through the **actual
+> recording→DP→storage→continuum services** — a replay `ChunkSource` + an injected-caption DP
+> sidecar (~2 net-new files, no contract changes; test-type = config profile + `replay-speed`
+> naming, not a contract field). The 1-min rule-bend collapsed recall on **dose** (fixed 48
+> retellings now spread over 4.1× the block text); the **decomposition run with parity block
+> content reproduced the baseline separation** (0.137 vs 0.179, permutation p=0.148 — same
+> distribution; p=0.018 above the no-consolidation control). **Verdict: Pipeline sound — our real
+> services carry the learn loop without losing learnability.** Suites green: continuum 185 ·
+> storage 26 · recording 133 · DP 173. Detail: continuum canvas + [ws-morpheus-port](../services/continuum/handoff/ws-morpheus-port.md) · [ws-phase3-dogfood](../services/continuum/handoff/ws-phase3-dogfood.md).
+> **Two founder-level follow-ups, neither an integration defect:** (a) a **recipe/dose finding for
+> Gnandeep** — amplification dose is fixed *per block* but recall depends on retellings *per unit
+> of text*, so at our native cadence dose must scale with block-text volume (cofounder to raise);
+> (b) a **storage/C10 board session** — ratify the storage charter expansion (day-log
+> materialization + recipe registry + reservoir custody) and the **C10 evolution** from a raw
+> range-read to a **day-log fetch, random-access by `(user, window_id)`** (six cross-service
+> friction notes captured in the Phase-3 report; new recipe-registry + reservoir contract IDs
+> minted at ratification). **Gate policy v1.1** (traps ≥0.15/0.25, heldout exact-test vs each run's
+> own base control, `min_probes` 148) was split from the training recipe so a threshold change
+> never forks `recipe_id`.
 
 ### 2026-07-21 — DP hardening consumed + verified; docs aligned
 
@@ -1021,49 +1035,66 @@ the async production default stays a founders' call after the **D16 re-drive dri
 the one open gate). Detail: [ws-dp-hardening](../services/data-processing/handoff/ws-dp-hardening.md).
 
 ### 2026-07-20 — DP v1 consumed + verified
+> review · data-processing · [D16](../DECISIONS.md)
 
-2026-07-20 — **DP v1 consumed + verified (founders).** The DP team shipped the durable
-ingest journal + stage-graph pipeline (`86acb95`, pushed; commit attribution-free).
-Founders' verification: suites re-run independently (**DP 128 / recording 120 / storage
-26** green), refs `main`=`dev`=origin confirmed, `INGEST_ASYNC` still 0-default, the
-fairness-knob startup warning present in code (`ingest_queue.py:88`). **The D16-era
-deferred false-`gaps` caveat is closed** (journal rehydration), so the async-trust rider
-is now satisfiable — the `INGEST_ASYNC` fleet flip is a live decision. Founders' caveat
-inventory prepared for a drill: (1) `INGEST_MODALITY_LIMITS` HOL-block; (2) a mutate-ordering
-rule in `resolve` as a hard prerequisite for any second mutate stage (the ws drop-in table's
-own speaker-ID example would trip finding #7); (3) fingerprint-guard order-dependence (LOW).
-Also flagged: Architecture-Atlas custody vs the D2 single-doc protocol; the journal's
-`pipeline_version`-staleness reprocess mechanics as the first real OQ5 code (continuum input);
-`processed` retention; fleet behind (restart pending). Board synced.
+**Was** — the DP team shipped v1: the durable ingest journal and the stage-graph pipeline
+(`86acb95`, pushed, commit attribution-free). Founders had not verified it.
+
+**Changed** — suites re-run independently, refs and flags checked in code rather than taken on
+report.
+
+**Now** — DP 128 · recording 120 · storage 26 green; `main`=`dev`=origin confirmed; `INGEST_ASYNC`
+still 0-default; the fairness-knob startup warning present at `ingest_queue.py:88`.
+
+**Payoff** — the D16-era deferred false-`gaps` caveat is closed by journal rehydration, so the
+async-trust rider is now satisfiable and the `INGEST_ASYNC` fleet flip becomes a live decision.
+
+**Watch out for**
+
+- A caveat inventory is prepared for a drill: `INGEST_MODALITY_LIMITS` HOL-block · a mutate-ordering
+  rule in `resolve` as a hard prerequisite for any second mutate stage, since the ws drop-in table's
+  own speaker-ID example would trip finding #7 · fingerprint-guard order-dependence (low).
+- Also flagged: Architecture-Atlas custody against the D2 single-doc protocol; the journal's
+  `pipeline_version`-staleness reprocess mechanics as the first real OQ5 code, which is continuum
+  input; `processed` retention; the fleet is behind, restart pending.
 
 **Board view** — *merged 2026-07-27 from the retired `HANDOFF.md §Current state`, which had become a second worklog. Kept verbatim; consolidation with the text above is a later pass.*
 
-2026-07-20 (DP v1): **the DP team shipped v1 — durable ingest journal + stage-graph
-pipeline** (`86acb95`, single clean commit, pushed; `main`=`dev`=origin verified). Layer A
-journals async accepts before the 202 (kill -9 auto-recovers at startup; continuity
-rehydrates from the journal → **the D16-era deferred false-`gaps` caveat is closed**;
-durable dedup backstop with a `pipeline_version` staleness check — receipts written in
-Both modes, so inline gains restart-safe dedup too; epochs guard stale workers; bounded
-per-attempt re-drive breaks crash-loops visibly). Layer B turns every processing step into
-a **drop-in stage file** (readiness DAG runs independent stages concurrently; composed
-`pipeline_version` where a mutate stage's enabledness is its version fragment — the
-silent-overwrite class dies by construction); audio+video ported byte-identically, real
-backends re-validated through the graph on node-7. Two adversarial rounds (9 confirmed →
-2 fix-before-merge fixed). Founders re-verified: **DP 128 · recording 120 · storage 26
-green**, refs + attribution-free commit + off-by-default knobs + the fairness-knob startup
-warning all checked in code. (The 3 tracked v1 follow-ups — `INGEST_MODALITY_LIMITS`
-HOL-block, mutate-overlap race, order-dependent fingerprint guard — were then **closed by
-the hardening slice below**, so the v1 caveat drill was overtaken by that work rather than
-held separately.)
+> 2026-07-20 (DP v1): **the DP team shipped v1 — durable ingest journal + stage-graph
+> pipeline** (`86acb95`, single clean commit, pushed; `main`=`dev`=origin verified). Layer A
+> journals async accepts before the 202 (kill -9 auto-recovers at startup; continuity
+> rehydrates from the journal → **the D16-era deferred false-`gaps` caveat is closed**;
+> durable dedup backstop with a `pipeline_version` staleness check — receipts written in
+> Both modes, so inline gains restart-safe dedup too; epochs guard stale workers; bounded
+> per-attempt re-drive breaks crash-loops visibly). Layer B turns every processing step into
+> a **drop-in stage file** (readiness DAG runs independent stages concurrently; composed
+> `pipeline_version` where a mutate stage's enabledness is its version fragment — the
+> silent-overwrite class dies by construction); audio+video ported byte-identically, real
+> backends re-validated through the graph on node-7. Two adversarial rounds (9 confirmed →
+> 2 fix-before-merge fixed). Founders re-verified: **DP 128 · recording 120 · storage 26
+> green**, refs + attribution-free commit + off-by-default knobs + the fairness-knob startup
+> warning all checked in code. (The 3 tracked v1 follow-ups — `INGEST_MODALITY_LIMITS`
+> HOL-block, mutate-overlap race, order-dependent fingerprint guard — were then **closed by
+> the hardening slice below**, so the v1 caveat drill was overtaken by that work rather than
+> held separately.)
 
 ### 2026-07-19 (later) — deep session landed + merged (`0ce4941`)
+> review · data-processing × recording × storage · [D15](../DECISIONS.md)
 
-2026-07-19 (later) — **deep session landed + merged (`0ce4941`).** Founders' merge review:
-all three suites re-run independently (DP **98** / recording **120** / storage **26**
-green); D16 condition verified in code + drill tests; OQ3/OQ13 records confirmed in the
-charters. `dev` fast-forwarded with `main`. Board synced — **D15 is now the active
-sequence**: continuum kickoff (C10 freeze gate) + platform D9 backbone; fleet restart
-pending to begin emitting `/metrics`.
+**Was** — the deep session's work was merged but unverified by founders.
+
+**Changed** — a founders' merge review: all three suites re-run independently, the D16 condition
+checked in code and in drill tests, OQ3 and OQ13 records confirmed in the charters.
+
+**Now** — DP 98 · recording 120 · storage 26 green; `dev` fast-forwarded with `main`; board synced.
+**D15 is the active sequence**: continuum kickoff behind the C10 freeze gate, plus the platform D9
+backbone.
+
+**Payoff** — the merge is trusted rather than assumed.
+
+**Watch out for**
+
+- Fleet restart is pending before anything begins emitting `/metrics`.
 
 ### 2026-07-19 — post-capture-alpha sequencing; the async-`/ingest` bar → D16
 
@@ -1108,73 +1139,96 @@ Founders' merge review re-ran all three suites independently (**98/120/26 green*
 verified the D16 condition + OQ3/OQ13 records in the diff. D15 is now the active sequence.
 
 ### 2026-07-18→19 — recording-led capture M1 + computer surfaces: ALPHA COMPLETE
+> build · recording × data-processing · [D14](../DECISIONS.md)
+
+**Now** — recording is wrapped to the alpha bar: the checked zero-silent-loss guarantee, the
+fuller ASR pipeline, VAD-cut variable chunking, and three real capture clients on one
+client-agnostic wire, all verified `clean` end to end on real hardware.
 
 **Board view** — *merged 2026-07-27 from the retired `HANDOFF.md §Current state`, which had become a second worklog. Kept verbatim; consolidation with the text above is a later pass.*
 
-2026-07-18→19 (recording-led capture M1 + computer surfaces): **the recording service is
-wrapped to the alpha bar.** M1 built the checked "zero silent loss" guarantee (SQLite
-continuity ledger + a DP-side break/dup detector on `/ingest` + a two-leg gap report with a
-`clean|gaps|recording` verdict), the **fuller ASR pipeline** (faster-whisper standing with a
-VAD gate that turns silence into an honest empty transcript; diarize/translate/acoustic-event
-stubs behind the Processor seam), and **VAD-cut variable chunking** (OQ4 → D-M1-2). Then
-**three real capture clients** landed behind the same `/capture/*` wire (client wire renamed
-from `/ingest/*` so `/ingest` is uniquely DP's C1 receiver): **phone web** (mic+camera),
-**Chrome-MV3 extension** (passive active-tab capture — pivoted to `tabCapture` per D-E7 after
-the desktop picker proved fragile on real browsers), **mac CLI** (ffmpeg avfoundation). Each
-demuxes to per-modality C1 streams; **zero server changes for the two new clients** (the wire
-is client-agnostic, by design). **Alpha complete 2026-07-19** — all three verified `clean`
-end-to-end on real hardware (blobs sha256+ffprobe-checked in storage, real ASR transcripts in
-`/context`). Multiple adversarial review rounds + a fresh-eyes runbook-accuracy pass hardened
-it (110 recording tests). **D14** (segmented-HTTP transport; streaming ingest deferred additive)
-recorded. Detail: [services/recording/HANDOFF.md](../services/recording/HANDOFF.md) +
-[alpha-runbook](../services/recording/handoff/alpha-runbook.md).
+> 2026-07-18→19 (recording-led capture M1 + computer surfaces): **the recording service is
+> wrapped to the alpha bar.** M1 built the checked "zero silent loss" guarantee (SQLite
+> continuity ledger + a DP-side break/dup detector on `/ingest` + a two-leg gap report with a
+> `clean|gaps|recording` verdict), the **fuller ASR pipeline** (faster-whisper standing with a
+> VAD gate that turns silence into an honest empty transcript; diarize/translate/acoustic-event
+> stubs behind the Processor seam), and **VAD-cut variable chunking** (OQ4 → D-M1-2). Then
+> **three real capture clients** landed behind the same `/capture/*` wire (client wire renamed
+> from `/ingest/*` so `/ingest` is uniquely DP's C1 receiver): **phone web** (mic+camera),
+> **Chrome-MV3 extension** (passive active-tab capture — pivoted to `tabCapture` per D-E7 after
+> the desktop picker proved fragile on real browsers), **mac CLI** (ffmpeg avfoundation). Each
+> demuxes to per-modality C1 streams; **zero server changes for the two new clients** (the wire
+> is client-agnostic, by design). **Alpha complete 2026-07-19** — all three verified `clean`
+> end-to-end on real hardware (blobs sha256+ffprobe-checked in storage, real ASR transcripts in
+> `/context`). Multiple adversarial review rounds + a fresh-eyes runbook-accuracy pass hardened
+> it (110 recording tests). **D14** (segmented-HTTP transport; streaming ingest deferred additive)
+> recorded. Detail: [services/recording/HANDOFF.md](../services/recording/HANDOFF.md) +
+> [alpha-runbook](../services/recording/handoff/alpha-runbook.md).
 
 ### 2026-07-18 — return sync (founders)
+> decision · all services · [D12](../DECISIONS.md)
 
-2026-07-18 — **return sync (founders).** Cluster custody clarified: the vacation-week jobs
-are Gnandeep's continuum-side experiments; product keeps node-7 (agenda item 2 note). All
-repos committed + pushed (umbrella `main`, both POC submodules; `poc/live_video_chat` now
-tracked in the umbrella). Doc-hygiene pass over stale canvases (inference/storage/recording
-HANDOFFs, ARCHITECTURE/ORG ratification remnants, root README). Fleet on node-7 verified
-down — stale "Live now" note removed from the founders' board. **D12 recorded: branching +
-beta model** — service branches → `main` when solid; standing `dev` branch as the beta
-playground. First beta: Gnandeep drives the serve + learn loops against his fine-tunable
-model; storage's `/context` range read (`GET /context/records?user_id=&from=&to=`, half-open
-`[from,to)` — deliberately C10's read shape) is his training-window feed until C10 lands.
-**Next slice pinned: recording-led capture M1** (see agenda item 0 sequencing).
+**Was** — a week's gap (2026-07-10 → 07-17) left repos unpushed and canvases stale. The founders'
+board still carried a "Live now" note for a fleet that was down.
+
+**Changed** — a return sync: everything committed and pushed, and every stale canvas trued up
+against reality.
+
+**Now**
+
+- Cluster custody is clarified: the vacation-week jobs are Gnandeep's continuum-side experiments,
+  and product keeps node-7.
+- All repos are pushed — umbrella `main` and both POC submodules, with `poc/live_video_chat` now
+  tracked in the umbrella.
+- Doc hygiene done over the inference, storage and recording canvases, the ARCHITECTURE and ORG
+  ratification remnants, and the root README.
+- The fleet on node-7 is verified down and the stale note is gone.
+
+**Payoff** — **D12 recorded**: service branches merge to `main` when solid, and a standing `dev`
+branch is the beta playground. First beta is Gnandeep driving both loops against his fine-tunable
+model, with storage's range read `GET /context/records?user_id=&from=&to=` — half-open `[from,to)`,
+deliberately C10's read shape — as his training-window feed until C10 lands.
+
+**Watch out for**
+
+- Next slice pinned: recording-led capture M1.
 
 **Board view** — *merged 2026-07-27 from the retired `HANDOFF.md §Current state`, which had become a second worklog. Kept verbatim; consolidation with the text above is a later pass.*
 
-2026-07-18 (return sync): **repos pushed + docs trued up** after the 2026-07-10→07-17 gap (no
-repo changes during it; the cluster ran Gnandeep's continuum-side model-stabilization
-experiments throughout — no conflict, product work keeps to node-7). Pushed: umbrella `main`;
-`live_stream_stability` (June Phase-3.1/3.2 work committed: replay-mixture tooling, eval
-harness, frozen holdout, Day-0 baseline rows, `phase_N` dir renames); `recursive_finetuning_
-stability` (`phase-3-recursive-loop` — 20 commits, Phases 1–3 + the running V4 matrix —
-pushed and fast-forwarded into `main`). `poc/live_video_chat` brought under umbrella tracking
-(+ post-V0 addendum in its HANDOFF); `start.md` committed; root `.gitignore` + rewritten root
-`README.md` added. Stale service canvases synced to reality (inference real-model closure;
-storage/recording integration + seam state; ARCHITECTURE/ORG ratification remnants). Serve
-fleet on node-7 verified **down** — the week-old "Live now" note was stale; nothing to tear
-down. **D12** (branching + beta model) recorded; next slice pinned: **recording-led capture
-M1** (gap-detection + ASR pipeline priority).
+> 2026-07-18 (return sync): **repos pushed + docs trued up** after the 2026-07-10→07-17 gap (no
+> repo changes during it; the cluster ran Gnandeep's continuum-side model-stabilization
+> experiments throughout — no conflict, product work keeps to node-7). Pushed: umbrella `main`;
+> `live_stream_stability` (June Phase-3.1/3.2 work committed: replay-mixture tooling, eval
+> harness, frozen holdout, Day-0 baseline rows, `phase_N` dir renames); `recursive_finetuning_
+> stability` (`phase-3-recursive-loop` — 20 commits, Phases 1–3 + the running V4 matrix —
+> pushed and fast-forwarded into `main`). `poc/live_video_chat` brought under umbrella tracking
+> (+ post-V0 addendum in its HANDOFF); `start.md` committed; root `.gitignore` + rewritten root
+> `README.md` added. Stale service canvases synced to reality (inference real-model closure;
+> storage/recording integration + seam state; ARCHITECTURE/ORG ratification remnants). Serve
+> fleet on node-7 verified **down** — the week-old "Live now" note was stale; nothing to tear
+> down. **D12** (branching + beta model) recorded; next slice pinned: **recording-led capture
+> M1** (gap-detection + ASR pipeline priority).
 
 ### 2026-07-10 — modality seam: data-processing goes multi-modal
+> build · data-processing × recording
+
+**Now** — data-processing is modality-agnostic behind a `Processor` plugin seam, so parallel
+sessions can each own a modality. All four `content.kind`s are proven end to end into `/context`.
 
 **Board view** — *merged 2026-07-27 from the retired `HANDOFF.md §Current state`, which had become a second worklog. Kept verbatim; consolidation with the text above is a later pass.*
 
-2026-07-10 (modality seam): **data-processing made modality-agnostic** so parallel sessions can
-each own a modality. DP refactored to a core + `Processor` plugin seam (self-registering,
-**one file to add a modality, zero core edits**; `process()` returns a **list** so one chunk → many
-records is native); audio moved behind the seam unchanged (`record_id` byte-identical);
-image/video/text **stub** processors + fixtures; recording carver generalized to a `ChunkSource`
-seam. **All 4 `content.kind`s proven E2E to `/context`** (incl. video's 3-keyframe fan-out),
-verified live + adversarially (**84 tests**: storage 26 · DP 24 · recording 34). The verifier
-caught a real live regression — DP's `/ingest` reshape (`record_id`→`record_ids[]`) 500'd
-recording's `/capture/run`, masked by stale test fakes — **fixed + re-verified 200 live**. Two
-C2-additive gaps surfaced (video per-keyframe timing, image OCR bbox) — **both deferred to the
-modality sessions, no version bump; frozen C2 untouched.** Detail + seam handoff:
-[handoff/engineering.md](../handoff/engineering.md) "Modality seam".
+> 2026-07-10 (modality seam): **data-processing made modality-agnostic** so parallel sessions can
+> each own a modality. DP refactored to a core + `Processor` plugin seam (self-registering,
+> **one file to add a modality, zero core edits**; `process()` returns a **list** so one chunk → many
+> records is native); audio moved behind the seam unchanged (`record_id` byte-identical);
+> image/video/text **stub** processors + fixtures; recording carver generalized to a `ChunkSource`
+> seam. **All 4 `content.kind`s proven E2E to `/context`** (incl. video's 3-keyframe fan-out),
+> verified live + adversarially (**84 tests**: storage 26 · DP 24 · recording 34). The verifier
+> caught a real live regression — DP's `/ingest` reshape (`record_id`→`record_ids[]`) 500'd
+> recording's `/capture/run`, masked by stale test fakes — **fixed + re-verified 200 live**. Two
+> C2-additive gaps surfaced (video per-keyframe timing, image OCR bbox) — **both deferred to the
+> modality sessions, no version bump; frozen C2 untouched.** Detail + seam handoff:
+> [handoff/engineering.md](../handoff/engineering.md) "Modality seam".
 
 ### 2026-07-09 — build order locked; BWM, mobile, POC-provenance recorded
 
@@ -1231,27 +1285,26 @@ emit-side only (not enforced)**, no consent gate, mock+file-source (no real mic)
 [handoff/engineering.md](../handoff/engineering.md) "Learn-loop capture M0 — build result".
 
 ### 2026-07-08 — thread seeded at product-structure standup
+> design · all services
 
-2026-07-08 — thread seeded at product-structure standup.
-
----
+**Now** — thread seeded at the product-structure standup.
 
 **Board view** — *merged 2026-07-27 from the retired `HANDOFF.md §Current state`, which had become a second worklog. Kept verbatim; consolidation with the text above is a later pass.*
 
-2026-07-08: `product/` structure stood up — vision/architecture/org/prompts written,
-all 8 services chartered with seeded canvases, contracts **C1–C11** pinned in
-[ARCHITECTURE.md](../ARCHITECTURE.md). A two-critic review pass (seam consistency + narrative
-coverage, 22 findings) drove: three new contracts minted (C9 response stream, C10
-training-window read, C11 recent-context read), an §Ownership splits section deciding the
-contested seams (wearable device, deletion, consent, BWM custody, people registry,
-same-day context, `/raw` custody), and per-charter amendments. No implementation started
-anywhere. POCs (`poc/live_stream_stability`, `poc/recursive_finetuning_stability`,
-`poc/live_video_chat`) continue as continuum/inference research feeders.
-
-## Archive — delivered slices
-
-> Design + build records for slices that are **done**. Kept verbatim for the reasoning;
-> nothing here is live work. Current state of any service lives in its own canvas.
+> 2026-07-08: `product/` structure stood up — vision/architecture/org/prompts written,
+> all 8 services chartered with seeded canvases, contracts **C1–C11** pinned in
+> [ARCHITECTURE.md](../ARCHITECTURE.md). A two-critic review pass (seam consistency + narrative
+> coverage, 22 findings) drove: three new contracts minted (C9 response stream, C10
+> training-window read, C11 recent-context read), an §Ownership splits section deciding the
+> contested seams (wearable device, deletion, consent, BWM custody, people registry,
+> same-day context, `/raw` custody), and per-charter amendments. No implementation started
+> anywhere. POCs (`poc/live_stream_stability`, `poc/recursive_finetuning_stability`,
+> `poc/live_video_chat`) continue as continuum/inference research feeders.
+>
+> ## Archive — delivered slices
+>
+> > Design + build records for slices that are **done**. Kept verbatim for the reasoning;
+> > nothing here is live work. Current state of any service lives in its own canvas.
 
 ### Serve-loop MVP slice (v0.0) — the walking skeleton
 
