@@ -57,6 +57,14 @@ What we tried, what stopped us, and what won instead. A learning that binds a li
 learned already lives that way, in [../ARCHITECTURE.md](../ARCHITECTURE.md) and
 [../ORG.md](../ORG.md). These are the ones that bind nothing specific.
 
+- **A gate that only ever over-reports is invisible.** `style_check.py` mis-parsed its own rule 6
+  for a week: 136 of 2,908 findings were the tool wrong, 64 in a document that already complied.
+  Nobody looked, because a checker that flags too much still reads as strict.
+  ([2026-07-28](#2026-07-28-later--the-style-pass-reaches-the-service-documents))
+- **A pass that reflows blockquotes can silently swallow a heading.** Quoting a snapshot took the
+  `## Archive` heading with it and broke a link, one commit into this very effort. The heading-set
+  diff catches it in seconds, which is why it is in the exit bar and not in a reviewer's head.
+  ([2026-07-28](#2026-07-28-later--the-style-pass-reaches-the-service-documents))
 - **A ratification prompt that states its own premises gets them corrected.** D18's prompt asserted
   a `render_block` parity constraint that was wrong — it conflated two functions of the same name.
   Saying it out loud is what got it caught rather than inherited, and the habit is now
@@ -80,6 +88,40 @@ learned already lives that way, in [../ARCHITECTURE.md](../ARCHITECTURE.md) and
 > **Newest first.** New entries are *prepended* directly under this heading, never appended
 > at the bottom (ORG.md §Documentation protocol). Each entry is a `###` anchor so [DECISIONS.md](../DECISIONS.md)
 > and the service canvases can point at the reasoning behind a decision by name.
+
+### 2026-07-28 (later) — the style pass reaches the service documents
+> review · all services · [D21](../DECISIONS.md)
+
+**Was** — [STYLE.md](../STYLE.md) binds every node, but only the founder-level documents and
+`handoff/*` had been brought under it. The service charters and boards carried 629 of the corpus's
+2,908 findings, and they are what a new session or a new hire reads first.
+
+**Changed** — the eight charters and eight boards were restructured. A table cell that had
+outgrown its row became a card below it, following [ARCHITECTURE.md](../ARCHITECTURE.md)
+§Contracts. Data-processing's board had the same append-only defect the founders' board had, so its
+finished items were retired verbatim into a new `handoff/worklog.md`.
+
+**Now** — charters 374 → 185, service boards 255 → 145,
+[LEARN_LOOP.md](../onboarding/LEARN_LOOP.md) 166 → 136, corpus 2,908 → 2,432. No file gained
+findings, and the baseline is rewritten.
+
+**Payoff** — the cold-start path reads as cards with the details on top of each section, rather
+than as paragraphs a reader has to mine. Cost accepted: the seven cited ws-files are untouched, and
+LEARN_LOOP's 28-to-60-word bullets are a long tail nobody has swept.
+
+**Watch out for**
+
+- **`## Archive — delivered slices` had been swallowed into a blockquote** by the previous commit
+  in this same effort, which broke the section link at the top of this file. Restored. It had been
+  masking four findings, now fixed rather than baselined.
+- **Rule 6's 60-word reasoning allowance never fired in the checker.** The guard stopping a list
+  item from setting the section also excluded bold section headings, since both start with `*`.
+- **[LEARN_LOOP.md](../onboarding/LEARN_LOOP.md) §4.5 is stale on content, not on form.** Its
+  heading still says the day-log is continuum-side. It carries a *(pre-cutover)* marker now;
+  correcting it needs a session that can verify what actually runs.
+- **STYLE.md's §Was / Changed / Now / Payoff was trimmed**, 331 → 246 tokens, a founders' act this
+  session. The file sits at ~1,820 against D21's 1,500 ceiling, and the founders retired the
+  ceiling rather than the content: richer, not verbose.
 
 ### 2026-07-28 — the style pass over `handoff/*` (D21)
 > review · docs, all nodes · [D21](../DECISIONS.md)

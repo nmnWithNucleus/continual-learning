@@ -105,6 +105,19 @@ That is expected, and this register is built for it:
 
 - **The file is ratified, not a revision of it.** Under D19 its content is expected to evolve, and
   an edit to STYLE.md is itself a founders' act.
+- **The 1,500-token ceiling is retired.** STYLE.md sits at ~1,820 and the founders accepted that
+  on 2026-07-28: richer, not verbose. Do not trim it to hit a number; trim it when a passage stops
+  earning its read.
+
+**How it got here**
+
+- **2026-07-28 — §Was / Changed / Now / Payoff trimmed, 331 → 246 tokens.**
+  - **Was** — the section carried a worked example, three bullets glossing what that example
+    already showed, and a second fenced block duplicating the first with its labels elided.
+  - **Changed** — the glosses went, and the two blocks merged into one that keeps the status line.
+  - **Now** — the shape is *shown* in full rather than described twice. No rule changed.
+  - **Payoff** — STYLE.md went 1,950 → ~1,820. The remaining weight is §The ten rules, which is
+    the standard itself, so further trimming means dropping a rule.
 
 ### D20 — the cutover exit bar
 
