@@ -27,6 +27,8 @@ CAPS_OK = {
     "CHARTER", "README", "STYLE", "HTTP", "HTTPS", "JSON", "NULL", "IANA",
     "CUDA", "POST", "SLURM", "ASCII", "ASGI", "HTML", "CORS", "TODO",
     "BUILT", "RETIRED", "PROTOTYPE", "CAPS",
+    # Names and acronyms, not emphasis.
+    "GDPR", "CCPA", "PEFT", "SISA", "FIFO", "TTFT", "CTRL", "SIGKILL",
 }
 # Rule 6: reasoning sections get 60 words, everything else 25 (27 with slack).
 REASONING = {"Why it's this way", "Watch out for", "How it got here"}

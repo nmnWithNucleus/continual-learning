@@ -44,10 +44,10 @@ No capture fidelity is worth a consent violation.
 | **In** | Chunking, retry, offline queueing on all clients | recording |
 | **In** | Device pairing + device auth | recording |
 | **In** | Device location capture where hardware allows — fills C1's optional location field (data-processing's geo-enrichment source) | recording |
-| **In** | **Civil-time capture (D17, 2026-07-26)** — every capture client reports the device's **IANA timezone** (`device_tz`) and **UTC offset in minutes** (`device_utc_offset_minutes`) alongside each chunk's UTC `t_start`/`t_end`. **We are the only service that can know these**: the zone is a fact about where the user physically was at that instant, and our clients already compute the local time and discard the zone converting to UTC. One line per client (`Intl.DateTimeFormat().resolvedOptions().timeZone` in the browser clients). Downstream nobody derives or guesses it — data-processing passes it through, storage persists it, continuum renders from it | recording |
+| **In** | **Civil-time capture** — every client reports the device's zone and UTC offset alongside each chunk ([↓](#civil-time-capture)) | recording |
 | **In** | On-device consent **enforcement**: pause / mute / delete-last-N-minutes; visible capture indicator | recording |
 | **In** | Capture-health telemetry (per-device uptime, gaps, queue depth, battery) | recording |
-| **In** | Observability: expose `/metrics` (request rate/latency/errors **+ ingest rate, capture-health, consent-gate rejections**) + own Grafana dashboard JSON in `dashboards/*.json`; Platform runs the shared Prometheus/Grafana — [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability | recording |
+| **In** | Observability: expose `/metrics` and own the Grafana dashboard JSON; Platform runs the shared backbone ([↓](#observability)) | recording |
 | **Out** | Interpreting/enriching the stream (ASR, diarization, timestamp injection, world data) | data-processing |
 | **Out** | Interactive chat requests + their capture devices | input |
 | **Out** | Consent policy + the consent-record store/gate ("no consent record ⇒ no ingest") — [ARCHITECTURE.md](../../ARCHITECTURE.md) §Ownership splits | platform (recording is fallback owner if platform isn't ratified) |
@@ -58,6 +58,58 @@ No capture fidelity is worth a consent violation.
 
 ---
 
+### Civil-time capture
+> `built` 2026-07-26 · [D17](../../DECISIONS.md)
+
+**In one line.** Every capture client reports the device's IANA timezone (`device_tz`) and its UTC
+offset in minutes (`device_utc_offset_minutes`) alongside each chunk's UTC `t_start`/`t_end`.
+
+**Rules**
+
+- One line per client — `Intl.DateTimeFormat().resolvedOptions().timeZone` in the browser clients.
+- Downstream nobody derives or guesses it: data-processing passes it through, storage persists it,
+  and continuum renders from it.
+
+**Why it's this way**
+
+- **We are the only service that can know these.** The zone is a fact about where the user
+  physically was at that instant, and our clients already compute the local time and discard the
+  zone converting to UTC.
+
+### Observability
+> `built` (M6) · [D9](../../DECISIONS.md)
+
+**In one line.** We expose `/metrics` and own the Grafana dashboard JSON in `dashboards/*.json`;
+Platform runs the shared Prometheus/Grafana backbone.
+
+**Rules**
+
+- Emit request rate, latency and errors, **plus** ingest rate, capture-health, and consent-gate
+  rejections.
+- Shape: [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability.
+
+### C1 — the producing side
+> `built` · v0 pinned by [D11](../../DECISIONS.md) · `device_tz` additive 2026-07-26 ([D17](../../DECISIONS.md))
+
+**In one line.** We write the bytes to storage first, then push an envelope telling
+data-processing where they landed.
+
+**Shape** — two legs.
+
+- **Blob leg** — we `PUT` the raw bytes to storage `/raw` **first**, and storage mints an opaque
+  `blob_ref`.
+- **Envelope leg** — we **push** the C1 envelope to data-processing: `user_id`, `device_id`,
+  `stream_id`, `sequence`, `chunk_id`, modality, codec, wall-clock `t_start`/`t_end`, `blob_ref`
+  plus sha256 and bytes, optional device location and clock, and the optional `device_tz` +
+  `device_utc_offset_minutes` added by D17.
+
+**Rules**
+
+- Delivery is **at-least-once**; dedup on `chunk_id`.
+- Gaps are detected via dense `(stream_id, sequence)`. The `sequence` is zero-based and dense per
+  `stream_id`, and it is for gap/continuity only — it is *not* the dedup key.
+- **Blob-first**, always: the bytes are durable before anything claims they exist.
+
 ## Position in the system
 
 Head of the pipeline: nothing upstream but the user. Downstream, data-processing consumes
@@ -65,7 +117,7 @@ our output; everything past that is theirs.
 
 | Contract | Our role | One-line role |
 |---|---|---|
-| **C1** recording → data-processing | **We own the producing side** | **v0 pinned (D11).** Two legs: (1) blob leg — we `PUT` the raw bytes to storage `/raw` **first**, storage mints an opaque `blob_ref`; (2) envelope leg — we **push** the C1 envelope (user_id, device_id, `stream_id`, `sequence`, `chunk_id`, modality, codec, wall-clock t_start/t_end, `blob_ref`+sha256+bytes, optional device location/clock, **optional `device_tz` + `device_utc_offset_minutes` — additive 2026-07-26, D17**) to data-processing. **at-least-once, dedup on `chunk_id`, gaps via dense `(stream_id, sequence)`, blob-first.** |
+| **C1** recording → data-processing | **We own the producing side** | **v0 pinned (D11).** Blob first, then the envelope ([↓](#c1--the-producing-side)) |
 | C3 / C8 | none — boundary marker | Interactive requests go through input/QueryBuilder, never through us; we carry only the passive life stream |
 
 Contract payloads are defined in [../../ARCHITECTURE.md](../../ARCHITECTURE.md) § Contracts —
@@ -80,13 +132,13 @@ Ordered; each milestone ships client and/or ingest pieces together with its exit
 
 | M | Deliverable | Exit criterion |
 |---|---|---|
-| M0 | **Ingest spine**: chunked upload → **`PUT` blob to storage `/raw` first** (storage mints the `blob_ref`) → **push** the C1 envelope to data-processing; idempotent retry (**dedupe on `chunk_id`**; dense zero-based `sequence` per `stream_id` for gap/continuity — *not* the dedup key); device auth token issuance | Synthetic client streams 24 h across forced disconnects/restarts: zero loss, zero dupes, all envelopes validate against the C1 schema + fixtures shared with data-processing |
+| M0 | **Ingest spine**: chunked upload → blob to storage `/raw` first → push the C1 envelope; idempotent retry; device auth token issuance | a synthetic client streams 24 h across forced disconnects and restarts: zero loss, zero dupes, every envelope validates against the C1 schema |
 | M1 | **Computer capture v0**: screen recording app + mic + webcam for the pilot desktop OS; local chunker, offline queue, pairing flow | One full pilot workday captured end-to-end (screen, mic, webcam frames — data-processing M2's input); blobs replayable from `/raw`; gap report empty or every gap explained |
-| M2 | **Consent controls v0**: on-device enforcement — pause / mute / delete-last-N-minutes on every client; upload holdback buffer so deletes execute on-device; always-visible capture indicator; ingest backed by platform's consent-record gate (§Ownership splits) | Red-team test: delete-last-10-min leaves zero bytes server-side; pause takes effect ≤ 2 s and is visibly indicated; no capture path bypasses the controls; ingest refuses streams with no consent record |
-| M3 | **Wearable body cam v0**: hardware pick (**camera + mic; no speaker** — speech output routes to the mobile app, §Ownership splits) + capture client, on-device buffer sized for offline hours, opportunistic Wi-Fi upload, pairing | Full-day wear test by a pilot user: footage lands with correct wall-clock timestamps; battery + thermal + gap numbers published |
+| M2 | **Consent controls v0**: on-device pause / mute / delete-last-N-minutes on every client; an upload holdback buffer; an always-visible capture indicator | a red-team test: delete-last-10-min leaves zero bytes server-side; pause takes effect ≤ 2 s; no capture path bypasses the controls |
+| M3 | **Wearable body cam v0**: hardware pick (camera + mic, no speaker) plus capture client, on-device buffer, opportunistic Wi-Fi upload, pairing | a full-day wear test by a pilot user: footage lands with correct wall-clock timestamps; battery, thermal and gap numbers published |
 | M4 | **Browser extension**: in-browser capture complementing the screen recorder (page/tab context the OS-level recorder can't attribute) | Extension stream flows through the same chunk/retry/consent path as M1; C1 envelopes carry the browser device_id/modality |
 | M5 | **Fleet telemetry + pilot hardening**: capture-health dashboard, automatic gap/staleness alerting, crash watchdogs | Handful-of-users pilot fleet streaming for 7 consecutive days with measured per-device uptime; every gap auto-flagged, none discovered manually |
-| M6 | **Metrics + dashboard** (D9, [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability): `/metrics` endpoint + `dashboards/*.json`; Platform owns the shared Prometheus/Grafana backbone | Service `/metrics` scraped by the shared Prometheus; dashboard shows request rate/latency/errors + ingest rate, capture-health, consent-gate rejections |
+| M6 | **Metrics + dashboard** (D9): a `/metrics` endpoint plus `dashboards/*.json`; Platform owns the shared backbone | `/metrics` scraped by the shared Prometheus; the dashboard shows request and ingest metrics ([↓](#observability)) |
 
 ~~Consent (M2) intentionally lands **before** the wearable (M3)~~ — **re-sequenced 2026-07-18
 (D13, founders):** consent controls move to the back-burner while the capture surfaces + learn
@@ -131,53 +183,84 @@ deferred additive leg — recorded on the founders' board as D14).
    (2026-07-19):** mac screen video at the CLI default (`--max-width 1728`, CRF 28) is readable
    but soft on fine text — `--max-width 2560+` is the current user lever; per-modality fidelity
    targets remain this open joint decision, not a per-client flag.
-   **RESOLVED per-modality (2026-07-19, joint recording × data-processing — now with the REAL
-   pipelines: faster-whisper ASR / pyannote diarization / AST acoustic / Qwen3-VL keyframe
-   captioning + OCR, all node-7-verified):**
+   **Resolved per-modality (2026-07-19, joint recording × data-processing)**, with the real
+   pipelines standing: faster-whisper ASR, pyannote diarization, AST acoustic and Qwen3-VL
+   keyframe captioning plus OCR, all node-7-verified.
+
+   **Why it's this way**
+
    - **Audio → 16 kHz mono is the fidelity ceiling that matters.** ASR (Whisper), diarization
-     (pyannote), and acoustic tagging (AST) are ALL 16 kHz-native — a higher sample rate or
-     bitrate buys the models nothing. Recording already demuxes to `audio/wav` 16 kHz mono
-     s16le (ASR-native), which is exactly right; **no audio bitrate ladder is needed.** Capture
-     can use whatever codec the device prefers (webm/opus, m4a/aac) — the demux normalizes it.
-   - **Video → resolution-bound, not bitrate-bound; DP wants container-copy at capture
-     quality.** Keyframe VLM captioning downscales frames to `VIDEO_FRAME_MAX_WIDTH=768` before
-     the caption, so body-cam/webcam video is caption-bound and 768-px-sufficient — no high
-     bitrate helps. The **exception is OCR-heavy screen capture**: the OCR-strong VL pass reads
-     on-screen text from keyframes, and fine text needs enough *capture* resolution (the alpha's
-     `--max-width 1728` is soft on small text; **`--max-width ~2560` for text-dense screens**).
-     So DP's ask is **no re-encode (container-copy, avoiding generational loss) + high capture
-     resolution for screens**; the per-user-day COST dial is keyframe **cadence**
-     (`VIDEO_KEYFRAME_INTERVAL_S` / `VIDEO_MAX_KEYFRAMES`), not video bitrate.
-   Net: no multi-rung "ladder" — one sensible per-modality target (16 kHz mono audio;
-   container-copy screen at ≥2560-px, body-cam at capture default). Revisit only if a real
-   OCR-quality-vs-cost measurement on pilot screen-hours moves the screen resolution target.
-4. ~~Chunk duration for C1~~ **DECIDED 2026-07-18 (D-M1-2, recording × data-processing —
-   [handoff/ws-d-vad-carve.md](handoff/ws-d-vad-carve.md)):** per client/source — continuous
-   audio the server owns: **variable-length chunks cut at VAD speech pauses within [5 s, 30 s]**
-   (pause-aligned cuts supersede the 2026-07-09 "20–30 s + overlap" lean; exact
-   `t_end[n]==t_start[n+1]` adjacency becomes a second continuity signal); phone web client:
-   **fixed ~10 s edge segments** (recorder restart — MediaRecorder fragments aren't
-   self-contained); video/screen streams: **fixed windows**. C1 untouched (shape already pinned
-   supports variable length). DP's side of the pair: a VAD gate before ASR.
-5. Pilot desktop OS: which OS(es) do the actual pilot users run? Pin the fleet; don't build
-   three clients for a handful of users. **Alpha (2026-07-19) ran on macOS** (mac CLI) +
-   **Chromium/Comet** (extension) + **iOS Safari** (phone) — the current tester's stack; not
-   yet pinned as THE pilot fleet (a Windows desktop client, if pilots need it, is unbuilt).
+     (pyannote) and acoustic tagging (AST) are all 16 kHz-native, so a higher sample rate or
+     bitrate buys the models nothing.
+   - Recording already demuxes to `audio/wav` 16 kHz mono s16le, which is ASR-native and exactly
+     right, so **no audio bitrate ladder is needed**. Capture can use whatever codec the device
+     prefers — webm/opus, m4a/aac — because the demux normalizes it.
+   - **Video → resolution-bound, not bitrate-bound**, and data-processing wants container-copy at
+     capture quality. Keyframe VLM captioning downscales frames to `VIDEO_FRAME_MAX_WIDTH=768`
+     before the caption, so body-cam and webcam video is caption-bound and 768-px-sufficient.
+   - The **exception is OCR-heavy screen capture**: the OCR-strong VL pass reads on-screen text
+     from keyframes, and fine text needs enough *capture* resolution. The alpha's
+     `--max-width 1728` is soft on small text, so **`--max-width ~2560` for text-dense screens**.
+   - So data-processing's ask is **no re-encode** — container-copy, avoiding generational loss —
+     **plus high capture resolution for screens**. The per-user-day cost dial is keyframe
+     **cadence** (`VIDEO_KEYFRAME_INTERVAL_S` / `VIDEO_MAX_KEYFRAMES`), not video bitrate.
+   - Net: no multi-rung "ladder", just one sensible per-modality target — 16 kHz mono audio,
+     container-copy screen at ≥2560-px, body-cam at capture default.
+
+   **Watch out for**
+
+   - Revisit only if a real OCR-quality-vs-cost measurement on pilot screen-hours moves the screen
+     resolution target.
+4. ~~Chunk duration for C1~~ **Ratified 2026-07-18** (D-M1-2, recording × data-processing —
+   [handoff/ws-d-vad-carve.md](handoff/ws-d-vad-carve.md)). It is per client and source.
+
+   **Rules**
+
+   - Continuous audio the server owns: **variable-length chunks cut at VAD speech pauses within
+     [5 s, 30 s]**.
+   - Phone web client: **fixed ~10 s edge segments**, because a recorder restart means
+     MediaRecorder fragments are not self-contained.
+   - Video and screen streams: **fixed windows**.
+   - Data-processing's side of the pair is a VAD gate before ASR.
+
+   **Why it's this way**
+
+   - Pause-aligned cuts supersede the 2026-07-09 "20–30 s + overlap" lean, and exact
+     `t_end[n]==t_start[n+1]` adjacency becomes a second continuity signal.
+   - C1 is untouched: the pinned shape already supports variable length.
+5. Pilot desktop OS: which OS(es) do the actual pilot users run? Pin the fleet; do not build
+   three clients for a handful of users.
+
+   **Watch out for**
+
+   - **The alpha (2026-07-19) ran on macOS** (mac CLI), **Chromium/Comet** (extension) and **iOS
+     Safari** (phone) — the current tester's stack.
+   - That is *not* yet pinned as the pilot fleet. A Windows desktop client, if pilots need one, is
+     unbuilt.
 6. Device identity/auth: platform-owned identity with device-scoped tokens, or self-issued
    until platform exists? Needs platform charter alignment.
 7. Bystander audio/video: policy is platform's call (§Ownership splits — platform decides,
    we enforce): two-party-consent jurisdictions, default mute zones, wearable indicator
    brightness/placement. Needs platform's decision before M3 wear tests.
-8. Raw-blob upload path to `/raw` (storage owns the bucket/custody; we are the writer). **M0**
-   proxies bytes through storage's `PUT /raw/blobs`. **Prod lean (2026-07-09):** storage mints a
-   **signed GCS URL**, we upload the bytes **directly to GCS** (so storage isn't a bandwidth
-   bottleneck for tens-of-GB/day/user), then `blob_ref` points at that object (the POC "GCS is
-   source of truth, signed URLs" pattern). Uploads run **async / concurrent** — a new chunk starts
-   uploading immediately; the C1 push fires on that chunk's **upload-complete callback**, so capture
-   is never blocked on an upload. Settle the mint→upload→confirm handshake with storage + platform.
-   Also: the wearable sends **combined A/V** on the device→backend link; **we demux** into
-   per-modality C1 streams (each its own `stream_id`, same `device_id`, wall-clock-aligned) — C1's
-   `modality` is per-envelope, so the split happens **here**, before emission.
+8. Raw-blob upload path to `/raw`. Storage owns the bucket and custody; we are the writer. Settle
+   the mint→upload→confirm handshake with storage and platform.
+
+   **Rules**
+
+   - **M0** proxies bytes through storage's `PUT /raw/blobs`.
+   - The wearable sends **combined A/V** on the device→backend link, and **we demux** into
+     per-modality C1 streams — each its own `stream_id`, same `device_id`, wall-clock-aligned.
+   - C1's `modality` is per-envelope, so that split happens **here**, before emission.
+
+   **Why it's this way**
+
+   - **Prod lean (2026-07-09):** storage mints a **signed GCS URL**, we upload the bytes directly
+     to GCS, and `blob_ref` points at that object. That is the POC's "GCS is source of truth,
+     signed URLs" pattern.
+   - Direct upload keeps storage from being a bandwidth bottleneck for tens-of-GB/day/user.
+   - Uploads run **async and concurrent**: a new chunk starts uploading immediately, and the C1
+     push fires on that chunk's **upload-complete callback**, so capture is never blocked on an
+     upload.
    **STATUS (2026-07-19):** the **demux half is BUILT + proven** (`app/demux.py`, ffmpeg;
    exercised by all three alpha clients — muxed mp4/webm → separate audio + video C1 streams).
    The **transport is decided (D-M1-5 / founders' D14): segmented HTTP upload** for all v0

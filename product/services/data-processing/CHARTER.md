@@ -154,11 +154,11 @@ or nothing.**
 
 | Test | Question | If it fires |
 |---|---|---|
-| **T1 DERIVABLE** | Pure function of *this* chunk's bytes + config? | **No → not a DP record** (cross-chunk work is continuum's). |
-| **T2 REACHABLE** | Reaches a consumer that exists **today**? (`enrichments` is read nowhere yet) | **No → do not emit.** Store nothing you cannot spend; re-apply when a consumer lands. |
-| **T3 SPINE** | The modality's answer to "what happened in these bytes"? | **PRIMARY** unit(s); its fragment is the base dialect. |
-| **T4 EDITS** | Changes bytes a record already claims? | **Structure-fill → MUTATE** (declares `writes`, mandatory fragment). **String-change → FORBIDDEN**: refine inside the stage before assembly, or fork `pipeline_version`. |
-| **T5 CHANNEL/SPAN** | Owns a pinned `kind`/day-log line or an independently addressable span? | **NEW RECORD** with its own discriminator. |
+| **T1 `DERIVABLE`** | Pure function of *this* chunk's bytes + config? | **No → not a DP record** (cross-chunk work is continuum's). |
+| **T2 `REACHABLE`** | Reaches a consumer that exists **today**? (`enrichments` is read nowhere yet) | **No → do not emit.** Store nothing you cannot spend; re-apply when a consumer lands. |
+| **T3 `SPINE`** | The modality's answer to "what happened in these bytes"? | **`PRIMARY`** unit(s); its fragment is the base dialect. |
+| **T4 `EDITS`** | Changes bytes a record already claims? | **Structure-fill → `MUTATE`** (declares `writes`, mandatory fragment). **String-change → `FORBIDDEN`**: refine inside the stage before assembly, or fork `pipeline_version`. |
+| **T5 `CHANNEL/SPAN`** | Owns a pinned `kind`/day-log line or an independently addressable span? | **`NEW RECORD`** with its own discriminator. |
 
 Fallthrough → **enrichment** (subject to T2) or **stage input**.
 
