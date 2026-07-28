@@ -8,9 +8,10 @@
 > ### ⚠️ STAGE: PROTOTYPE (pre-dev, pre-production) — D19, 2026-07-27
 > This charter is written in a production voice. **It is aspirational, not a commitment.** We are
 > building one end-to-end product that genuinely works, as fast as we can honestly get there.
-> **Licensed:** re-cutting contracts rather than versioning them (*"v0 frozen" means stable enough
-> to build against today, not immutable*); wiping and re-collecting stored data rather than
-> migrating it; deferring durability work with the reason written down.
+> **Licensed:** re-cutting contracts rather than versioning them (a pinned shape is stable enough
+> to build against today, never immutable — which is why we no longer call one *frozen*); wiping
+> and re-collecting stored data rather than migrating it; deferring durability work with the
+> reason written down.
 > **Not licensed:** skipping [ORG.md](../../ORG.md)'s contract-edit order, leaving a decision
 > unrecorded, silent breakage, or calling a thing BUILT when it is only DECIDED.
 > Full posture + what changes at dev/prod: [ARCHITECTURE.md](../../ARCHITECTURE.md) §Stage.
@@ -35,7 +36,7 @@ mentorship.
 
 | Area | v0 shape |
 |---|---|
-| Model serving | vLLM hosting the base BWM — **BWM artifact custody, hosting, and serving are ours** (pinned in [ARCHITECTURE §Ownership splits](../../ARCHITECTURE.md); the pick itself is recorded in §Decisions; upgrade migrations are continuum-executed, never hot); per-user LoRA resolved through the model directory (C6), hot-swapped per request; clean fallback to base when no eligible adapter |
+| Model serving | vLLM hosting the base BWM — **BWM artifact custody, hosting, and serving are ours** (pinned in [ARCHITECTURE §Ownership splits](../../ARCHITECTURE.md); the pick itself is [D6](../../DECISIONS.md); upgrade migrations are continuum-executed, never hot); per-user LoRA resolved through the model directory (C6), hot-swapped per request; clean fallback to base when no eligible adapter |
 | Prompt assembly | System prompt + UserPrompt (C3) → one model request |
 | Agentic harness | Think/act/observe loop: tool registry, code sandbox, loop control (step caps, timeouts); tool traces recorded |
 | Mentor protocol (C7) | When-to-consult policy; assistance-prompt generation (user prompt + system prompt + everything the model knows about the user); invoking Claude/GPT/Gemini; relaying mentors' clarification questions through our model to the user and back; integrating the handoff into a final grounded response |

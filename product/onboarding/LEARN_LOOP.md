@@ -6,7 +6,7 @@
 > claim was spot-checked against code, twice independently (2026-07-25, 2026-07-26); where a doc
 > and the code disagree, the code wins and the discrepancy is flagged in §8. Companion docs:
 > [ARCHITECTURE.md](../ARCHITECTURE.md) (the contract spine's home), each service's `CHARTER.md`
-> + `HANDOFF.md`, and the frozen schemas in [contracts/](../contracts/).
+> + `HANDOFF.md`, and the schemas in [contracts/](../contracts/).
 
 **Last verified against code:** 2026-07-26 (second independent pass; citations re-resolved, suites
 re-run, the composed clip dialect re-derived by execution). **Amended 2026-07-26 (later):** the founders decided
@@ -143,7 +143,7 @@ flowchart LR
   CTX -- "C10 EVOLVED: GET /training/daylog<br/>?user_id&window_id (storage renders)" --> DLC
   CTX -- "C10 legacy range read: GET /context/records<br/>?user_id&from&to (kept — D12 beta feed)" --> DLC
   SMD -- "C6 resolve (base only today)" --> INF
-  CMD -. "C5 target: storage-hosted directory<br/>(freeze DEFERRED — D19; consumer is inference)" .-> SMD
+  CMD -. "C5 target: storage-hosted directory<br/>(shape NOT PINNED — D19; consumer is inference)" .-> SMD
   SMD -- "C12 profile: GET /users/{id}/profile<br/>home_tz — scheduling + render fallback" --> DLC
   SMD -- "C13 recipe + gate policy · C14 reservoir" --> DLC
 ```
@@ -163,17 +163,17 @@ loop rides **eight** of them as of 2026-07-27 (five before the cutover). Status 
 
 | Contract | Producer → Consumer | Status | Machine schema |
 |---|---|---|---|
-| C1 | recording → data-processing (+ blob leg → storage `/raw`) | **v0 FROZEN** (2026-07-09) | [c1_raw_stream_envelope.v0.json](../contracts/c1_raw_stream_envelope.v0.json) |
-| C2 | data-processing → storage `/context` | **v0 FROZEN** (2026-07-09) | [c2_processed_record.v0.json](../contracts/c2_processed_record.v0.json) |
+| C1 | recording → data-processing (+ blob leg → storage `/raw`) | **v0 pinned** (2026-07-09) | [c1_raw_stream_envelope.v0.json](../contracts/c1_raw_stream_envelope.v0.json) |
+| C2 | data-processing → storage `/context` | **v0 pinned** (2026-07-09) | [c2_processed_record.v0.json](../contracts/c2_processed_record.v0.json) |
 | C2 `discriminator` | data-processing → storage | **additive-optional, added 2026-07-27** — surfaces the within-chunk discriminator that had fed `record_id` since v0 but lived only inside the hash. `record_id` unchanged; nothing re-keyed | same C2 schema |
 | C10 | storage → continuum | **EVOLVED + BUILT (D18, 2026-07-27)** — a day-log fetch by `(user_id, window_id)` plus the training-window ledger, over an **ingest-time watermark**. The legacy range read is **kept**, not retired | [c10_daylog.v1.json](../contracts/c10_daylog.v1.json) · [c10_training_window.v1.json](../contracts/c10_training_window.v1.json) |
 | C12 | storage → continuum | **BUILT** — per-user profile; `home_tz` only in v0 | [c12_user_profile.v0.json](../contracts/c12_user_profile.v0.json) |
 | C13 | storage → continuum + inference | **BUILT** — recipe registry + the separately-versioned gate policy | [c13_recipe.v0.json](../contracts/c13_recipe.v0.json) · [c13_gate_policy.v0.json](../contracts/c13_gate_policy.v0.json) |
 | C14 | continuum ↔ storage | **BUILT** — append-only reservoir ledger; audit/provenance, **not** the replay path | [c14_reservoir_ledger.v0.json](../contracts/c14_reservoir_ledger.v0.json) |
-| C5 | continuum → model directory | **built continuum-local; freeze DEFERRED (D19)** — its only consumer is inference via C6, which is not being built | none yet |
+| C5 | continuum → model directory | **built continuum-local; shape not pinned (D19)** — its only consumer is inference via C6, which is not being built | none yet |
 | C11 | storage → input (QueryBuilder) | **designed only; zero code** | none yet |
 
-### C1 — the raw-stream envelope (frozen)
+### C1 — the raw-stream envelope (pinned)
 
 Two legs. **Blob leg:** recording `PUT`s the chunk bytes to storage `/raw/blobs` *first*; storage
 verifies sha256 + byte count (`storage/app/main.py:108-128`) and mints an opaque `blob_ref`,
@@ -187,7 +187,7 @@ deterministic on `(user_id, chunk_id)` so a retry re-mints the same ref
  blob_ref, blob_sha256, blob_bytes, device_location?, device_clock?}
 ```
 
-Why it is shaped this way (all frozen as delivery semantics, not just fields):
+Why it is shaped this way (all pinned as delivery semantics, not just fields):
 
 - **Push, at-least-once; `chunk_id` is the dedup key** — a client-minted ULID
   (`recording/app/ids.py:27-31`), constant across retries; DP and `/raw` are both idempotent on it.
@@ -200,7 +200,7 @@ Why it is shaped this way (all frozen as delivery semantics, not just fields):
   feature).
 - One envelope format for all four modalities, so vision/text never reshaped the wire.
 
-### C2 — the processed record (frozen)
+### C2 — the processed record (pinned)
 
 What DP writes to `/context` (`POST /context/records`, schema-gated at
 `storage/app/main.py:149-162`):
@@ -223,7 +223,7 @@ The two load-bearing design choices:
   `discriminator` (`""` for the caption, `"ocr"` for the OCR record, `"translation"`, …) makes a
   chunk's multiple records stable and distinct; empty discriminator reproduces the original
   two-component v0 id byte-for-byte (`pipeline.py:43-45`), so nothing forked when it landed.
-  *(Was §8 item 4-adjacent drift, **closed 2026-07-26 — review item O-4**: the frozen schema file
+  *(Was §8 item 4-adjacent drift, **closed 2026-07-26 — review item O-4**: the schema file
   had always mandated the discriminator — "fold a within-chunk discriminator into the id so each is
   stable and distinct" — while ARCHITECTURE's prose summary still said "deterministic on
   `(chunk_id, pipeline_version)`". One truth, recorded correctly in the authoritative place and
@@ -254,7 +254,7 @@ carried verbatim from C1. Timestamps stay UTC-canonical; the zone rides beside t
 > may parse**. The decisive argument for moving materialization was replay: it re-reads *prior*
 > day-logs nightly, so a continuum-side builder would re-pull every prior day's raw records every
 > night — O(days²) to rebuild what storage could have kept. Full statement:
-> [ARCHITECTURE.md](../ARCHITECTURE.md) §Contracts → *C10 evolved*.
+> [ARCHITECTURE.md](../ARCHITECTURE.md) §Contracts → the *C10 card*.
 >
 > **The legacy range read is NOT retired.** `GET /context/records?user_id=&from=&to=` remains
 > first-class — it is D12's beta training feed, the debugging path, and C11-adjacent.
@@ -278,7 +278,7 @@ rendered day-log*, not the raw records (`daylog_client.py:35-48`) — deliberate
 storage-side materialization does not invalidate anything. **Not pinned until ratified** —
 [ARCHITECTURE.md](../ARCHITECTURE.md) C10 row says the same.
 
-### C5 — the adapter publish (built; not frozen)
+### C5 — the adapter publish (built; shape not pinned)
 
 **As built** (`continuum/app/publish.py:83-99`), the entry appended to the model directory's
 per-user `entries.jsonl`:
@@ -314,14 +314,14 @@ C5 row · [storage charter](../services/storage/CHARTER.md) model-directory row 
 own docstring).
 
 **The call the founders took, so you know what you are reading:** this is a description of C5 **as
-built, deliberately not a freeze** — every site says so in its own text. C5 stays unfrozen until the
-freeze session with inference at the table; the reasoning was that a known-wrong description should
+built, deliberately not a pin** — every site says so in its own text. C5 stays unpinned until the
+pinning session with inference at the table; the reasoning was that a known-wrong description should
 not stand while waiting for a session with no date, and that describing is not pinning — but the
-counter-argument (a field list in ARCHITECTURE §Contracts is how things become de-facto frozen
-around here) is answered *inside the wording*, not by withholding it: the "as built, not frozen"
+counter-argument (a field list in ARCHITECTURE §Contracts is how things become de-facto pinned
+around here) is answered *inside the wording*, not by withholding it: the "as built, not pinned"
 label rides in the same table cell, so the row cannot be quoted without its caveat.
 
-**What `gate_failed` costs at freeze time, beyond documentation** — written into the storage
+**What `gate_failed` costs at pin time, beyond documentation** — written into the storage
 charter's model-directory row, because it lands on storage: storage's `model_directory` table
 today is the trivial C6 row (`user_id, model_id, adapter, adapter_path`, `storage/app/db.py:59-63`)
 with no entries log and no status column, so hosting C5 is a build, not a transport swap. Three
@@ -433,7 +433,7 @@ flowchart TB
   C1IN["C1 video chunk (10 s screen recording)"] --> MODE{"VIDEO_PIPELINE<br/>(unknown → keyframe)"}
 
   subgraph legacy["keyframe — shipped legacy, byte-identical, DEFAULT"]
-    KF["keyframes (sidecar, order 0)<br/>6 ffmpeg subprocs, scene detect + grid<br/>fragment: '' (frozen exemption)"]
+    KF["keyframes (sidecar, order 0)<br/>6 ffmpeg subprocs, scene detect + grid<br/>fragment: '' (fixed exemption)"]
     CAPS["captions (primary, order 10)<br/>N independent single-image VLM calls<br/>OCR woven into caption text"]
     KF --> CAPS
     CAPS --> R1["≈4 × kind='caption' C2 records / 10 s chunk<br/>(+4 ocr with VIDEO_OCR_RECORDS=1)<br/>dialect: vidproc-vlm-v0"]
@@ -492,7 +492,7 @@ while `pipeline_version` stayed constant — a silent `/context` overwrite under
   every `VisionSettings` field — asserted in `tests/test_prompt_pack.py:97-98` (the emission-law
   matrix in `tests/test_emission_law.py` polices the riders, not the allowlist), so **a new knob
   cannot be added without being classified**.
-- The legacy `keyframes` stage carries a `""` fragment as a **single-entry frozen exemption** so
+- The legacy `keyframes` stage carries a `""` fragment as a **single-entry fixed exemption** so
   the legacy dialect reproduces `vidproc-vlm-v0` byte-for-byte; no new stage may join it (D-14).
 
 #### The record-vs-mutation law
@@ -628,7 +628,7 @@ debt, not wired.
 ### 4.5 The day-log (currently continuum-side; storage's after ratification)
 
 The day-log is **the only interface between ingest and consolidation** (the research design's
-frozen-schema rule — `continuum/app/daylog.py:3-8`). How `/context` records become training
+pinned-schema rule — `continuum/app/daylog.py:3-8`). How `/context` records become training
 blocks (`daylog.py:72-141`):
 
 - **Window** = 04:00→04:00 **user-local** (never a calendar day), `window_id` = `w2026-07-21` (the
@@ -684,7 +684,7 @@ incompatibility — `continuum/handoff/ws-morpheus-port.md`) — but that servin
 continuum's own offline `vllm.LLM(enable_lora=True)` smoke (`continuum/scripts/m0_smoke.py:151-156`,
 `scripts/vllm_load_check.py`), never through the inference service; inference's `/infer` handler
 drops `adapter_path` on the floor after resolve (`inference/app/main.py:74-76`). Closing C5→model directory→C6→vLLM-hot-swap as one wired path is exactly what the
-pending C5 freeze ("needs inference at the table") is for.
+pending C5 shape pin ("needs inference at the table") is for.
 
 ### 4.7 Platform — the substrate (where it matters here)
 
@@ -826,7 +826,7 @@ sequenceDiagram
 | **O-8** — blind-vs-injected A/B | the OCR→caption *injection* architecture (A) vs the minimal-hint fallback (D) | pre-registered rule: ship A iff entity-recall gain > 0.25 AND corrupted-OCR propagation < 0.10; needs a real VLM endpoint → E-3 |
 | ~~**E-2**~~ **DEMOTED (D18)** — the day-log's one-dialect rule (latest `ingest_time` wins per `(chunk_id, kind, discriminator)`) fixes the double-render at *render* time, so the cutover no longer waits on a delete. E-2 is still wanted as the retraction/privacy/space primitive, and it **grew**: deletion must now cascade to the day-log and reservoir too. The 2026-07-27 fleet cutover hit its absence directly — clearing verification rows needed a full re-wipe | *(was)* **the clip cutover itself** | without `DELETE /context/records?…&kind=`, any day re-consolidated across the dialect flip double-counts both dialects. Until then: forward-only cutover at a UTC day boundary on a fresh `user_id`, `DP_DIALECT_FREEZE=1`, never backfill |
 | ~~**C10 evolution + storage charter expansion**~~ **BUILT + LIVE 2026-07-27 (D18/D19/D20)** — no longer a gate | *(was)* storage-owned day-log, recipe registry, reservoir; the HTTP client seams | the pending storage/C10 founders' board session ratifies; contract IDs for registry/reservoir minted then |
-| **C5 freeze** — **DEFERRED on purpose (D19)**, since its only consumer is inference via C6 and inference is not being built. Free to defer *because* C5 is unfrozen: D18 changed `training_window`'s format at no cost. One standing rule for whoever freezes it — **freeze `training_window` as an OPAQUE token, never as a date**, or the parsing D18 deleted grows back | the wired C5 → storage model directory → C6 → vLLM per-user hot-swap tail | a founders' ratification "with inference at the table"; publish.py is deliberately transport-swappable |
+| **C5 shape pin** — **DEFERRED on purpose (D19)**, since its only consumer is inference via C6 and inference is not being built. Free to defer *because* C5 is unpinned: D18 changed `training_window`'s format at no cost. One standing rule for whoever pins it — **pin `training_window` as an OPAQUE token, never as a date**, or the parsing D18 deleted grows back | the wired C5 → storage model directory → C6 → vLLM per-user hot-swap tail | a founders' ratification "with inference at the table"; publish.py is deliberately transport-swappable |
 | D16 async default | `INGEST_ASYNC=1` as production default | founders' call after the re-drive drill posture holds (drill landed in-slice) |
 
 ### Designed / open (no code, or explicitly deferred)
@@ -893,7 +893,7 @@ The handful of choices to internalize to reason about this system. Each: decisio
    over a context store, or live training. Why: the bet *is* weights ("the model knows
    yesterday"); nightly cadence + eval gates is the only shape that survives the POC forgetting
    results. Never trained live into serving.
-2. **Contracts before fan-out; the spine is frozen JSON Schema.** Alternative: shared libraries /
+2. **Contracts before fan-out; the spine is pinned JSON Schema.** Alternative: shared libraries /
    informal seams. Why: parallel agent sessions can only build safely against pinned wire shapes;
    C1/C2 interoperated first-try across four independently-built services at M0 ("zero seam
    fixes").
@@ -927,9 +927,9 @@ The handful of choices to internalize to reason about this system. Each: decisio
    normalizer. Why: a user's typed/snapped request must be normalized *identically* to their life
    stream, or serve-time and learn-time diverge into two dialects of the same person. C8 is
    pinned, unbuilt; DP's inline sync path is deliberately kept as its skeleton.
-9. **Day-log as the ingest↔consolidation interface** (frozen segment/block schema, time-window
+9. **Day-log as the ingest↔consolidation interface** (pinned segment/block schema, time-window
    join by `t_start`). Alternative: continuum reads raw C2 (or raw blobs) ad hoc. Why: one
-   frozen surface lets DP and continuum evolve independently; the join is time-bucketed (not
+   pinned surface lets DP and continuum evolve independently; the join is time-bucketed (not
    per-chunk) because concurrent devices must align on the clock; content-hash caching makes the
    storage-side materialization move a pure transport change (C10 evolution).
 10. **Nightly consolidation with amplification + replay, gate-split-from-recipe, one resumed life
@@ -992,7 +992,7 @@ that costs, not as a list to tick off.
    (`inference/app/storage_client.py:28-43`) but its vLLM backend passes no adapter
    (`inference/app/backends/vllm.py:24-31`). The M0 "served in vLLM" claim is true but was proven
    continuum-side (adapter load check), not through the C6 path. This is *known* pending the C5
-   freeze — but the system diagram reads as if the wire exists.
+   pin — but the system diagram reads as if the wire exists.
 2. **The day-log, recipe registry, and reservoir live in continuum, not storage.**
    ARCHITECTURE's C10 row and the storage charter expansion describe storage materializing the
    day-log; as built, `build_daylog` runs in-process in continuum behind `LocalDayLogClient`
@@ -1017,19 +1017,19 @@ that costs, not as a list to tick off.
    partially in four places. It was filled in, in all four —
    [ARCHITECTURE.md](../ARCHITECTURE.md) §Contracts C5, continuum's charter contract table,
    storage's charter model-directory row, and `publish.py`'s own module docstring — rather than
-   held for the freeze session.
+   held for the pinning session.
 
    **The judgment call, decided explicitly:** describe as-built **now**, with every site labelled
-   *"as built, not frozen"* in its own text. C5 is deliberately unfrozen (`publish.py:3-4`) and
-   **this session did not freeze it** — inference is not at the table, and the C5 → model directory
+   *"as built, not pinned"* in its own text. C5 is deliberately unpinned (`publish.py:3-4`) and
+   **this session did not pin it** — inference is not at the table, and the C5 → model directory
    → C6 → vLLM hot-swap tail is still unwired (§4.6, §8 item 1). The rejected alternative — leave
-   the descriptions wrong until the freeze session — had a real argument (a field list in
-   ARCHITECTURE §Contracts is how things become de-facto frozen around here), and it is answered by
-   the wording rather than by silence: the "not frozen" label sits in the same table cell as the
+   the descriptions wrong until the pinning session — had a real argument (a field list in
+   ARCHITECTURE §Contracts is how things become de-facto pinned around here), and it is answered by
+   the wording rather than by silence: the "not pinned" label sits in the same table cell as the
    field list, so the row cannot be quoted without its caveat. A known-wrong description should not
    outlive a session that has no date.
 
-   **The freeze-time consequence beyond documentation** (now written into the storage charter):
+   **The pin-time consequence beyond documentation** (now written into the storage charter):
    storage's `model_directory` is still the trivial C6 row (`user_id, model_id, adapter,
    adapter_path`, `storage/app/db.py:59-63`) — no entries log, no status column — so hosting C5 is
    a build, not a transport swap, and `gate_failed` constrains it three ways: a three-value enum,
@@ -1130,7 +1130,7 @@ that costs, not as a list to tick off.
     vision towers were being adapted.
 
     - **The intent** — "LoRA per user, all layers" — stands, in
-      [ARCHITECTURE.md](../ARCHITECTURE.md) §Decisions. It is sourced to `start.md`, an inherited
+      [ARCHITECTURE.md](../ARCHITECTURE.md) §Founding posture. It is sourced to `start.md`, an inherited
       founding assumption, **never a ratified D-number**, and it remains a research direction the
       cofounders may exercise.
     - **The build** — `app/morpheus/train.py:27-32` targets the LLM projection linears only

@@ -11,6 +11,7 @@
 1. [VISION.md](VISION.md) — what we're building and why.
 2. [ARCHITECTURE.md](ARCHITECTURE.md) — the v0 system: the two loops, components, services and **§Contracts**.
 3. [ORG.md](ORG.md) — how we work: doc protocol, session mechanics, growth rules.
+3b. [STYLE.md](STYLE.md) — how we write it down: the card template, the change format, status words.
 4. [HANDOFF.md](HANDOFF.md) — the board: service status, escalations, what's next. Rewritten each session.
 5. [DECISIONS.md](DECISIONS.md) — every ratified founders' decision, numbered. Cited everywhere, restated nowhere.
 6. [PROMPTS.md](PROMPTS.md) — sample copy-paste prompt templates to launch any kind of session.
@@ -23,14 +24,15 @@ A service lead only needs 1–2 above plus their own `services/<key>/CHARTER.md`
 product/
 ├── README.md            ← you are here
 ├── VISION.md            why (stable)
-├── ARCHITECTURE.md      system + contracts C1–C11 (stable)
+├── ARCHITECTURE.md      system + contracts C1–C14, one card each (stable)
 ├── STACK.md             stack registry: shared runtime, serving stack, per-service manifests (stable)
 ├── ORG.md               operating model + doc protocol (stable)
+├── STYLE.md             document style: cards, change format, status vocabulary (stable)
 ├── PROMPTS.md           session launch prompt templates (stable)
 ├── DECISIONS.md         ratified founders' decisions D1..Dn (register, newest first)
 ├── HANDOFF.md           founders' board: status · escalations · next (rewritten each session)
 ├── onboarding/          new joinee's workbook to ramp-up on the product landscape (stable)
-├── contracts/           frozen machine-readable payload schemas (C1/C2/C3 ... with versioning)
+├── contracts/           machine-readable payload schemas (C1…C14, versioned)
 ├── handoff/             founders' aspect threads: `engineering`, `research`, `design`, `hiring-ops`
 └── services/            one node per service. Contains CHARTER.md (stable) + HANDOFF.md (volatile)
     ├── recording/         life capture: wearable + computer → ingest

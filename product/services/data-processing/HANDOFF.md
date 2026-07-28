@@ -60,7 +60,7 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
 - **`process` returns a LIST (≥1)**: audio/image/text → 1 unit; **video → many** (one keyframe →
   one unit, `discriminator = keyframe index`). `discriminator=''` is the 1:1 case.
 - **`ProcessedUnit`** = `{content{kind,text,language?,segments?}, enrichments{speakers,faces,places,objects}, discriminator}`.
-  `content.kind` ∈ frozen C2 enum `transcript|caption|ocr|text`. Emit `segments` already in C2 shape
+  `content.kind` ∈ the C2 enum `transcript|caption|ocr|text`. Emit `segments` already in C2 shape
   (absolute RFC3339); the core assembles content verbatim.
 - **`record_id = sha256(chunk_id \0 pipeline_version [\0 discriminator])`** (discriminator folded in
   only when non-empty, so audio's 1:1 id is **byte-identical to the pre-seam v0 id** → reprocess is
@@ -72,7 +72,7 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
 
 ## Current state
 - **M0 built (`:8085`).** `POST /ingest` receives a pushed **C1** envelope → schema-validates it
-  (frozen `c1_raw_stream_envelope.v0.json`, 422 on bad) → dedups on `chunk_id` (in-flight lock +
+  (`c1_raw_stream_envelope.v0.json`, 422 on bad) → dedups on `chunk_id` (in-flight lock +
   processed map) → pulls the blob from storage `GET /raw/blobs?ref=` → runs ASR → builds a **C2** →
   `POST`s it to storage `/context/records` → returns `{ok, record_id}`. `GET /health` →
   `{ok, asr_backend}`.

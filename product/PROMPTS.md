@@ -41,7 +41,7 @@ PHASE 1 — Kickoff brief, then STOP and wait for me. Produce, as a message (do 
      and list the ones that must be decided before M0 can be built. For EACH: a one-line
      recommendation + the trade-off, so I can just approve or redirect.
   c) Cross-service flags — if M0 needs a contract in ARCHITECTURE.md §Contracts refined, or
-     needs other service leads (e.g. M0 is a joint interface-freeze), say so; do NOT pin a
+     needs other service leads (e.g. M0 is a joint interface-pin), say so; do NOT pin a
      contract unilaterally.
 Then STOP. Do not write ws files, code, or scaffolding yet. Wait for my answers.
 

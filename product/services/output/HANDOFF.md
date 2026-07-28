@@ -26,7 +26,7 @@
   static browser client at `/static/*`. NOT on the web MVP hot path (input relays directly) — it
   proves the delivery service boundary for future non-web surfaces + the proactive channel.
 - **Tests (46, all green)**: `tests/test_c9_parse.py` (parser correctness incl. chunk-boundary +
-  multibyte + malformed; end frame validated against the frozen `c9_response_stream.v0.json`),
+  multibyte + malformed; end frame validated against `c9_response_stream.v0.json`),
   `tests/test_markdown.py` (HTML-escaping / no-XSS + formatting), `tests/test_relay.py` (relay
   proxies unchanged + ack, upstream-error → schema-valid C9 error frame; upstream faked with
   `httpx.MockTransport`).

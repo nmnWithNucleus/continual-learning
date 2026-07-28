@@ -7,9 +7,10 @@
 > ### ⚠️ STAGE: PROTOTYPE (pre-dev, pre-production) — D19, 2026-07-27
 > This charter is written in a production voice. **It is aspirational, not a commitment.** We are
 > building one end-to-end product that genuinely works, as fast as we can honestly get there.
-> **Licensed:** re-cutting contracts rather than versioning them (*"v0 frozen" means stable enough
-> to build against today, not immutable*); wiping and re-collecting stored data rather than
-> migrating it; deferring durability work with the reason written down.
+> **Licensed:** re-cutting contracts rather than versioning them (a pinned shape is stable enough
+> to build against today, never immutable — which is why we no longer call one *frozen*); wiping
+> and re-collecting stored data rather than migrating it; deferring durability work with the
+> reason written down.
 > **Not licensed:** skipping [ORG.md](../../ORG.md)'s contract-edit order, leaving a decision
 > unrecorded, silent breakage, or calling a thing BUILT when it is only DECIDED.
 > Full posture + what changes at dev/prod: [ARCHITECTURE.md](../../ARCHITECTURE.md) §Stage.
@@ -69,7 +70,7 @@ envelope and hit data-processing only via C8.
 
 | M | Deliverable | Exit criterion |
 |---|---|---|
-| M0 | **Interface freeze.** Pin C3 (UserPrompt schema, template/tag/capability vocab, versioning) and C8 (call shape, latency budget) with inference + data-processing leads; envelope v1 spec | Both sibling leads sign off; schemas versioned in ARCHITECTURE.md § Contracts |
+| M0 | **Interface pin.** Pin C3 (UserPrompt schema, template/tag/capability vocab, versioning) and C8 (call shape, latency budget) with inference + data-processing leads; envelope v1 spec | Both sibling leads sign off; schemas versioned in ARCHITECTURE.md § Contracts |
 | M1 | **Text thin slice.** Computer-app chat box → envelope → QueryBuilder (C8 text pass) → C3 UserPrompt accepted by inference; session/turn ids minted | A pilot user sends a text turn and gets a model response end-to-end on the dev stack |
 | M2 | **QueryBuilder v1.** All four modalities normalized via C8 (speech→transcript, image, video clip); chat template + tags v1; client capabilities populated; template version stamped into every C3 payload | Golden-payload fixture suite green for all 4 modalities; interactive C8 round-trip inside the M0 latency budget (p95) |
 | M3 | **All surfaces.** Browser extension chat, mobile app (chat + speech-output playback surface for output), and wearable push-to-talk voice, all emitting the identical envelope; surface-specific code limited to capture + display/playback | The same turn succeeds from all four surfaces against one unchanged backend |

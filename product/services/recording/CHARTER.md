@@ -8,9 +8,10 @@
 > ### ⚠️ STAGE: PROTOTYPE (pre-dev, pre-production) — D19, 2026-07-27
 > This charter is written in a production voice. **It is aspirational, not a commitment.** We are
 > building one end-to-end product that genuinely works, as fast as we can honestly get there.
-> **Licensed:** re-cutting contracts rather than versioning them (*"v0 frozen" means stable enough
-> to build against today, not immutable*); wiping and re-collecting stored data rather than
-> migrating it; deferring durability work with the reason written down.
+> **Licensed:** re-cutting contracts rather than versioning them (a pinned shape is stable enough
+> to build against today, never immutable — which is why we no longer call one *frozen*); wiping
+> and re-collecting stored data rather than migrating it; deferring durability work with the
+> reason written down.
 > **Not licensed:** skipping [ORG.md](../../ORG.md)'s contract-edit order, leaving a decision
 > unrecorded, silent breakage, or calling a thing BUILT when it is only DECIDED.
 > Full posture + what changes at dev/prod: [ARCHITECTURE.md](../../ARCHITECTURE.md) §Stage.
@@ -64,7 +65,7 @@ our output; everything past that is theirs.
 
 | Contract | Our role | One-line role |
 |---|---|---|
-| **C1** recording → data-processing | **We own the producing side** | **v0 FROZEN (D11).** Two legs: (1) blob leg — we `PUT` the raw bytes to storage `/raw` **first**, storage mints an opaque `blob_ref`; (2) envelope leg — we **push** the C1 envelope (user_id, device_id, `stream_id`, `sequence`, `chunk_id`, modality, codec, wall-clock t_start/t_end, `blob_ref`+sha256+bytes, optional device location/clock, **optional `device_tz` + `device_utc_offset_minutes` — additive 2026-07-26, D17**) to data-processing. **at-least-once, dedup on `chunk_id`, gaps via dense `(stream_id, sequence)`, blob-first.** |
+| **C1** recording → data-processing | **We own the producing side** | **v0 pinned (D11).** Two legs: (1) blob leg — we `PUT` the raw bytes to storage `/raw` **first**, storage mints an opaque `blob_ref`; (2) envelope leg — we **push** the C1 envelope (user_id, device_id, `stream_id`, `sequence`, `chunk_id`, modality, codec, wall-clock t_start/t_end, `blob_ref`+sha256+bytes, optional device location/clock, **optional `device_tz` + `device_utc_offset_minutes` — additive 2026-07-26, D17**) to data-processing. **at-least-once, dedup on `chunk_id`, gaps via dense `(stream_id, sequence)`, blob-first.** |
 | C3 / C8 | none — boundary marker | Interactive requests go through input/QueryBuilder, never through us; we carry only the passive life stream |
 
 Contract payloads are defined in [../../ARCHITECTURE.md](../../ARCHITECTURE.md) § Contracts —
@@ -156,7 +157,7 @@ deferred additive leg — recorded on the founders' board as D14).
    (pause-aligned cuts supersede the 2026-07-09 "20–30 s + overlap" lean; exact
    `t_end[n]==t_start[n+1]` adjacency becomes a second continuity signal); phone web client:
    **fixed ~10 s edge segments** (recorder restart — MediaRecorder fragments aren't
-   self-contained); video/screen streams: **fixed windows**. C1 untouched (frozen shape already
+   self-contained); video/screen streams: **fixed windows**. C1 untouched (shape already pinned
    supports variable length). DP's side of the pair: a VAD gate before ASR.
 5. Pilot desktop OS: which OS(es) do the actual pilot users run? Pin the fleet; don't build
    three clients for a handful of users. **Alpha (2026-07-19) ran on macOS** (mac CLI) +

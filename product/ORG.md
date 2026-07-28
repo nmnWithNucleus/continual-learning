@@ -1,46 +1,37 @@
 # Nucleus v0 — Organization & Operating Model
 
-> How we split the work, run parallel sessions, and keep everyone (human or agent) in context. Launch prompts live in [PROMPTS.md](PROMPTS.md); live status in[HANDOFF.md](HANDOFF.md).
+> How we split the work, run parallel sessions, and keep everyone (human or agent) in context. 
+> Launch prompts live in [PROMPTS.md](PROMPTS.md); live status in[HANDOFF.md](HANDOFF.md).
 
 **Last updated:** 2026-07-08
 
 ---
 
-## The structure (and the v0 simplification)
+## The structure
 
-The target hierarchy — the one we scale into — is four layers:
+The target hierarchy which we scale into is four layers:
 
 ```
-CTO + AI co-founder
-  └─ Senior manager, one per service        (deep in their service, aware of siblings)
+CTO + AI co-founder + Founders
+  └─ Directors, one per service             (deep in their service, aware of siblings)
        └─ Sub-team managers, one per craft  (backend, UI, research, CI/CD, security…)
             └─ Sub-team members             (agents now, humans as we hire)
 ```
 
-**For v0 we run exactly two of those layers, and grow the other two on demand:**
+**[v0-simplification] For v0 we run exactly two of those layers, and grow the other two on demand:**
 
 | Layer | v0 reality | Instrument |
 |---|---|---|
 | Founders | CTO + AI co-founder, working sessions by aspect | [HANDOFF.md](HANDOFF.md) + `handoff/<aspect>.md` |
-| Service lead (= "senior manager") | **One session launched with the service's charter** — the role is the session, not a standing entity | `services/<key>/CHARTER.md` + `HANDOFF.md` |
-| Sub-team manager | **Deferred** — created only when a service's canvas shows sustained parallel workstreams | `services/<key>/handoff/wsN-*.md` (ws pattern) |
+| Service lead (= "director") | **One session launched with the service's charter** — the role is the session, not a standing entity | `services/<key>/CHARTER.md` + `HANDOFF.md` |
+| Sub-team manager | **Deferred** — created only when a service's canvas shows sustained parallel workstreams | `services/<key>/handoff/wsN-*.md` (workstream pattern) |
 | Sub-team member | Worker agents spawned by a lead for scoped tasks | Same ws file, Worklog section |
 
-Why the simplification (this is the "simpler solution" answer):
+Why the simplification:
 
-1. **A role with no work queue is overhead.** With 8 services and zero humans, a standing
-   cast of 15 senior managers + N sub-team managers is fiction to maintain. A "senior
-   manager" *is* a session reading its charter + canvas cold; it exists while work exists.
-   This was proven in the POCs: `live_video_chat` shipped with 6 parallel workstream agents
-   + 1 integrator, coordinated purely by pinned contracts and ws-files — no managers at all.
-2. **Documents are the org chart.** Reporting lines are reads/writes on handoff files, not
-   meetings. A superior "checks in" by reading the canvas; a subordinate "reports" by
-   updating it and flipping its status row. This survives session death, model swaps, and
-   (later) humans joining.
-3. **Contracts before fan-out.** The only rule that makes parallelism safe: a piece of work
-   may be parallelized only after the interfaces it touches are pinned in
-   [ARCHITECTURE.md §Contracts](ARCHITECTURE.md). Change a contract → edit that section
-   first, then note it in both affected services' canvases.
+1. **An org-role with no work queue is an overhead. Thus, directors are just pure agent sessions**
+2. **Documents are the org chart.** Reporting lines are reads/writes on handoff files rather than meetings. A superior "checks in" by reading the canvas. A subordinate "reports" by updating it and flipping its status row. This survives session death, model swaps, and humans employees joining later.
+3. **Contracts before fan-out.** The only rule that makes parallelism safe: a piece of work may be parallelized only after the interfaces it touches are pinned in [ARCHITECTURE.md §Contracts](ARCHITECTURE.md). Change a contract -> edit that section first, then note it in both affected services' canvases.
 
 ## Stage: PROTOTYPE (pre-dev, pre-production)
 
@@ -150,6 +141,11 @@ that is not a restatement, because the implementation is genuinely the service's
   docs or the owning charter — everything else links. Never restate a sibling's internals.
   **Ratified decisions live in [DECISIONS.md](DECISIONS.md) and are cited by D-number** — if a
   decision is written out in full anywhere else, that copy is the bug.
+- **A table is not an essay.** This file decides *which* document a fact belongs in;
+  [STYLE.md](STYLE.md) decides what that document reads like — the card template, the
+  Was/Changed/Now/Payoff change format, and the status vocabulary. It binds every node, for the
+  same reason the doc protocol does: when a rule has nowhere to go but the end of the paragraph it
+  is already in, the next session appends, and four appends later the copies disagree.
 - **Stamp your work.** Every canvas edit updates *Last updated* + owner session; finishing a
   workstream flips its status row in the index table.
 - **Don't scatter.** No stray READMEs/notes in working directories; everything routes
@@ -169,7 +165,7 @@ that is not a restatement, because the implementation is genuinely the service's
   with recommendations — and **stops for founder answers before designing or building.** Every
   **resume (Prompt B) is autonomous**: proceed from the canvas's Next, make + document decisions,
   escalate only true blockers. Cross-service / contract questions are *never* decided by one
-  service session — they route to a founders' session (or a joint interface-freeze), regardless
+  service session — they route to a founders' session (or a joint interface-pin), regardless
   of A vs B.
 - **Lead plans and dispatches; workers advance ws files.** An A/B lead decomposes M0 into
   `handoff/wsN-*.md` files and may either build inline or fan out workers. **Prompt C** is a
@@ -185,7 +181,7 @@ that is not a restatement, because the implementation is genuinely the service's
 - **Parallelism discipline:** fan out only what has pinned contracts (rule 3 above). The
   integrator role (a session that wires parallel outputs together, like `live_video_chat`
   WS6) is opened per fan-out, not standing.
-- **POCs are reference, not source** (CTO decision, [ARCHITECTURE.md §Decisions](ARCHITECTURE.md)).
+- **POCs are reference, not source** ([D7](DECISIONS.md)).
   The `poc/` projects were built to answer research questions fast, not to production standard.
   Sessions mine them for **learnings, contracts, and de-risking** — never lift-and-shift their
   code. Every production path is written fresh, to fit this product's architecture. Cite a POC

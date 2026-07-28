@@ -14,7 +14,7 @@ pair and `/health` re-hashes it.
 
 ---
 
-## THE WIRE CONTRACT (frozen)
+## THE WIRE CONTRACT (pinned)
 
 **DP (tab C2) codes against THIS section, never against `app.py`.** The two are
 kept in lockstep. Requests and responses are JSON over HTTP/1.1 on loopback.
@@ -159,7 +159,7 @@ one `exec`, fail loud on a misconfigured real backend.
 |---|---|---|
 | `OCR_MODE` | `mock` | `mock` \| `ppocr` |
 | `OCR_HOST` | `127.0.0.1` | bind host (loopback for the co-located loop) |
-| `OCR_PORT` | `8091` | bind port (**frozen default**; keep DP's `VIDEO_OCR_URL` in sync) |
+| `OCR_PORT` | `8091` | bind port (**fixed default**; keep DP's `VIDEO_OCR_URL` in sync) |
 | `OCR_EP` | `CPUExecutionProvider` | ORT execution provider; reported at `/health` |
 | `OCR_THREADS` | `4` | ORT intra-op threads |
 | `OCR_DET_MODEL` | *(bundled)* | path to the detection ONNX file |

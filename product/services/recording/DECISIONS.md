@@ -32,7 +32,7 @@ or []`, so an empty list never crashes; **(2) an accept is recorded as `dp_state
 reconciles against DP's additive `/continuity` `processed` + `dead_lettered` fields** — a
 chunk DP reports processed is lazily `confirm_chunk`'d (persisted, so a DP restart can't
 un-confirm it), a dead-lettered chunk → verdict `gaps`, an accepted-but-unconfirmed chunk →
-verdict `recording`; **`leg["dp"]` keeps its frozen 5-key shape** (dead-letter/accepted are
+verdict `recording`; **`leg["dp"]` keeps its pinned 5-key shape** (dead-letter/accepted are
 sibling leg fields). Net: the "zero silent loss" verdict never reads `clean` for a chunk DP
 hasn't confirmed. When the fleet sets `INGEST_ASYNC=1`, **`RECORDING_HTTP_TIMEOUT` reverts to
 30** (the 120 s mitigation is retired). **Founders RATIFIED this wire 2026-07-19 (D16)** — the

@@ -32,10 +32,10 @@ Apply to any signal **S** derived from one C1 chunk.
 | Test | Question | If it fires |
 |---|---|---|
 | **T1 DERIVABLE** | Is S a pure function of *this* chunk's bytes + config? | **No → not a DP record.** DP's ingest is per-chunk end to end; a cross-chunk summary is continuum's job. |
-| **T2 REACHABLE** | Does S reach a consumer that exists **today**? (`content.text` of a frozen `kind` does; `content.segments` only for `kind='transcript'`; `enrichments` is read nowhere) | **Neither reachable nor read → do not emit.** Store nothing you cannot spend. Re-apply when a consumer lands — a gate on *when*, not a veto. |
+| **T2 REACHABLE** | Does S reach a consumer that exists **today**? (`content.text` of a pinned `kind` does; `content.segments` only for `kind='transcript'`; `enrichments` is read nowhere) | **Neither reachable nor read → do not emit.** Store nothing you cannot spend. Re-apply when a consumer lands — a gate on *when*, not a veto. |
 | **T3 SPINE** | Is S the modality's answer to "what happened in these bytes"? | **PRIMARY unit(s)** from `assemble()`. Exactly one enabled primary per modality; its fragment is the base dialect and is non-empty. |
 | **T4 EDITS** | Does producing S change bytes a record already claims? | **Structure-fill** (fills a field the parent declared and left empty) → **MUTATE**: `kind='mutate'`, `writes ⊆ primary.mutable_slots`, non-empty `version_fragment` mandatory. **String-change** (`content.text` would differ from a previous run's) → **FORBIDDEN**: refine *inside* the producing stage before assembly, or fork `pipeline_version` and mint a new record. *Mechanical test: could two workers on different config both honestly claim to be right? If yes → fork, not edit.* |
-| **T5 CHANNEL/SPAN** | Does S own a frozen `kind` routing to its own day-log line, or an independently addressable span? | **NEW RECORD** with its own discriminator. |
+| **T5 CHANNEL/SPAN** | Does S own a pinned `kind` routing to its own day-log line, or an independently addressable span? | **NEW RECORD** with its own discriminator. |
 
 Fallthrough → **ENRICHMENT** (subject to T2) or **stage input**.
 
@@ -82,7 +82,7 @@ Settings do not exist at import, which is exactly why the raise cannot be the wh
 *declares* a resolver and returns `''` for the configuration in which it is enabled is caught by the
 CI layer and nowhere else.
 
-## The one frozen exemption
+## The one fixed exemption
 
 `video/keyframes` — a sidecar with a non-empty `provides` and an empty `version_fragment`. It exists
 solely to reproduce the retired `vidproc-*-v0` record_ids byte-for-byte (D-14) and is named, once, in

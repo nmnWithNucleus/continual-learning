@@ -26,7 +26,7 @@
 | Language | **Python 3.11/3.12** | services target 3.11; the on-node envs are 3.12 |
 | Web framework | **FastAPI + uvicorn** | one per backend service |
 | HTTP client | **httpx** | inter-service calls |
-| Models/validation | **pydantic** + **jsonschema** | pydantic models mirror the frozen `contracts/*.json`; jsonschema validates against them in tests |
+| Models/validation | **pydantic** + **jsonschema** | pydantic models mirror the `contracts/*.json` schemas; jsonschema validates against them in tests |
 | Tests | **pytest** | each service ships its own suite |
 | Surfaces | static HTML/CSS/JS, **no build step** (v0) | served by input; a build step arrives with the real frontends |
 

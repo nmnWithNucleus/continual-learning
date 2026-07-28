@@ -8,9 +8,10 @@
 > ### ⚠️ STAGE: PROTOTYPE (pre-dev, pre-production) — D19, 2026-07-27
 > This charter is written in a production voice. **It is aspirational, not a commitment.** We are
 > building one end-to-end product that genuinely works, as fast as we can honestly get there.
-> **Licensed:** re-cutting contracts rather than versioning them (*"v0 frozen" means stable enough
-> to build against today, not immutable*); wiping and re-collecting stored data rather than
-> migrating it; deferring durability work with the reason written down.
+> **Licensed:** re-cutting contracts rather than versioning them (a pinned shape is stable enough
+> to build against today, never immutable — which is why we no longer call one *frozen*); wiping
+> and re-collecting stored data rather than migrating it; deferring durability work with the
+> reason written down.
 > **Not licensed:** skipping [ORG.md](../../ORG.md)'s contract-edit order, leaving a decision
 > unrecorded, silent breakage, or calling a thing BUILT when it is only DECIDED.
 > Full posture + what changes at dev/prod: [ARCHITECTURE.md](../../ARCHITECTURE.md) §Stage.
@@ -139,7 +140,7 @@ v0 = **one lead session + on-demand workstream agents** (matching the org model 
 ## Related work
 
 - [../../../poc/live_video_chat/HANDOFF.md](../../../poc/live_video_chat/HANDOFF.md) —
-  **reference only, not code to lift** ([§Decisions: code provenance](../../ARCHITECTURE.md)).
+  **reference only, not code to lift** ([D7](../../DECISIONS.md) — code provenance).
   Useful precedent for M1: token streaming shape (chunked `text/plain` over a fetch reader,
   metrics tail frame, `[error]`-line convention, markdown render on the client). Study the
   learnings; write the production path fresh.
