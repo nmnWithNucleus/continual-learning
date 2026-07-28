@@ -1,0 +1,27 @@
+name: docs-style
+
+# STYLE.md (D21) is binding on every document edit in product/.
+# This runs its mechanical rules so a founder does not have to read every diff.
+# It is a ratchet: it fails only when a file gains findings against the
+# baseline in product/scripts/style_baseline.json.
+
+on:
+  push:
+    paths:
+      - 'product/**/*.md'
+      - 'product/scripts/style_check.py'
+      - 'product/scripts/style_baseline.json'
+  pull_request:
+    paths:
+      - 'product/**/*.md'
+
+jobs:
+  style:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check documents against STYLE.md
+        run: python3 product/scripts/style_check.py

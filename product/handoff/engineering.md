@@ -50,6 +50,31 @@ and when, is in [§Worklog](#worklog).
 
 ---
 
+## Learnings
+
+What we tried, what stopped us, and what won instead. A learning that binds a live component is a
+**Watch out for** bullet on that component's card, not an entry here — most of what this thread has
+learned already lives that way, in [../ARCHITECTURE.md](../ARCHITECTURE.md) and
+[../ORG.md](../ORG.md). These are the ones that bind nothing specific.
+
+- **A ratification prompt that states its own premises gets them corrected.** D18's prompt asserted
+  a `render_block` parity constraint that was wrong — it conflated two functions of the same name.
+  Saying it out loud is what got it caught rather than inherited, and the habit is now
+  [../PROMPTS.md](../PROMPTS.md) §D+.
+  ([2026-07-26](#2026-07-26-later--founders-storagec10-board-d18))
+- **Verifying a prompt's claims found more consumers than the prompt listed.** Checking D18's five
+  `window_id` claims took minutes and surfaced three further consumers, one load-bearing. Cheap
+  verification beats careful enumeration.
+  ([2026-07-26](#2026-07-26-later--founders-storagec10-board-d18))
+- **A desktop screen-picker was too fragile on real browsers**, so the Chrome extension pivoted to
+  `tabCapture` (D-E7). The lesson generalises: capture surfaces get proven on real hardware before
+  a wire is designed around them.
+  ([2026-07-18→19](#2026-07-1819--recording-led-capture-m1--computer-surfaces-alpha-complete))
+- **An exit bar written before the first run was unmeetable.** M9's parity bar failed its first run
+  and had to be narrowed to three tiers ([D20](../DECISIONS.md)). Write the bar, then run once, then
+  ratify the bar.
+  ([2026-07-27](#2026-07-27-overnight--the-d18-storage-expansion-is-built-the-seam-is-closed))
+
 ## Worklog
 
 > **Newest first.** New entries are *prepended* directly under this heading, never appended

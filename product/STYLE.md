@@ -36,8 +36,8 @@ Sections are optional; their order is not.
 **5. Bold is a budget.** One bold span per bullet or table cell, two per paragraph. No ALL-CAPS.
 
 **6. One bullet, one idea.** Around 25 words; a second clause is a second bullet. Reasoning allows
-60: Why it's this way, Watch out for, How it got here, and a dated worklog entry. One em-dash per
-sentence.
+60: Why it's this way, Watch out for, How it got here, a dated worklog entry, a learning. One
+em-dash per sentence.
 
 **7. Status is a controlled word, not a phrase.** Use the vocabulary below. Never claim a status
 you must immediately qualify.
@@ -100,6 +100,40 @@ reordering.
   "the first draft said X".
 - **Now** stands alone, present tense, the only part a builder has to read.
 - **Payoff** names the cost accepted, if there was one.
+
+**A worklog entry is this block with a status line.** Never a prose blob — the four labels are what
+let a reader skip an entry safely.
+
+````markdown
+### 2026-07-27 — the watermark moves only on a publish
+> build · storage × continuum · [D18](DECISIONS.md)
+
+**Was** … **Changed** … **Now** … **Payoff** …
+````
+
+Kind is one of `design` · `build` · `decision` · `review` · `incident`. Name the services the entry
+touched and the D-numbers it produced. Never tag an entry's importance: every session rates its own
+work highly, and the honest signal is who cites it.
+
+## Learnings
+
+**A learning is what we tried, what stopped us, and what won instead.** It earns its place only if
+it would change a future decision.
+
+- It binds a live component → it is a **Watch out for** bullet on that component's card, not a
+  learning.
+- It binds nothing specific → a `## Learnings` entry on the thread, one bullet, linking the worklog
+  entry it came from.
+
+"Be careful with timezones" is not a learning. "Per-user `home_tz` could not survive travel, so the
+device reports the zone per chunk ([D17](DECISIONS.md))" is.
+
+## Growing a worklog
+
+**Roll, never prune.** A worklog is append-only, and which entry matters later is not knowable when
+you would be deleting it. When the read cost gets too high, cut the file at a date boundary into
+`handoff/<aspect>-<period>.md` and leave a one-line pointer. Moving costs nothing; deleting is
+unrecoverable in practice, because nobody greps git history for a rejected design.
 
 ## Status vocabulary
 
