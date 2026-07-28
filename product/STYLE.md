@@ -4,8 +4,9 @@
 > decides **what that file reads like** once the fact is in it. Both bind every node — product root,
 > every service, every workstream.
 
-**Last updated:** 2026-07-28 · **Status:** adopted in practice, **not yet ratified** — wants a
-D-number at the next founders' session, because a repo-wide writing standard binds every service.
+**Last updated:** 2026-07-28 · **Status:** ratified — [**D21**](DECISIONS.md). Binding on every
+document edit in `product/`. The file is ratified, not this revision of it; changing it is a
+founders' act.
 
 ---
 
