@@ -4,7 +4,8 @@
 > like**. Binds every node: root, service, workstream.
 
 **Last updated:** 2026-07-28 · ratified — [D21](DECISIONS.md). The file is ratified, not this
-revision; editing it is a founders' act.
+revision; editing it is a founders' act. §Was / Changed / Now / Payoff trimmed 2026-07-28: the
+example is the teaching, so the glosses restating it and the duplicate worklog-entry block went.
 
 ## Before you edit
 
@@ -86,30 +87,20 @@ reordering.
 
 ## Was / Changed / Now / Payoff
 
-```markdown
-- **2026-07-27 — the watermark moves only on a publish.**
-  - **Was** — it also advanced on `skipped_no_data`, so a night with no data burned its window.
-  - **Changed** — collapsed to one condition: advance on publish, never otherwise.
-  - **Now** — gate failure, crash and no data leave the watermark where it is, so the next
-    window is a superset of the failed one.
-  - **Payoff** — one sentence replaces five cases. Cost accepted: an inactive user's window
-    grows unboundedly.
-```
-
-- **Was** describes the world, not the document: "a night with no data burned its window", not
-  "the first draft said X".
-- **Now** stands alone, present tense, the only part a builder has to read.
-- **Payoff** names the cost accepted, if there was one.
-
-**A worklog entry is this block with a status line.** Never a prose blob — the four labels are what
-let a reader skip an entry safely.
-
 ````markdown
 ### 2026-07-27 — the watermark moves only on a publish
 > build · storage × continuum · [D18](DECISIONS.md)
 
-**Was** … **Changed** … **Now** … **Payoff** …
+**Was** — it also advanced on `skipped_no_data`, so a night with no data burned its window.
+**Changed** — collapsed to one condition: advance on publish, never otherwise.
+**Now** — gate failure, crash and no data leave the watermark where it is, so the next window
+is a superset of the failed one.
+**Payoff** — one sentence replaces five cases. Cost accepted: an inactive user's window grows
+unboundedly.
 ````
+
+Inside a document the same four labels are a bullet with its date instead of a heading. Never a
+prose blob — the labels are what let a reader skip an entry safely.
 
 Kind is one of `design` · `build` · `decision` · `review` · `incident`. Name the services the entry
 touched and the D-numbers it produced. Never tag an entry's importance: every session rates its own
