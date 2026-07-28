@@ -1,12 +1,12 @@
 # WS — async /ingest + D9 observability (data-processing × recording)
 
-> The ASYNC-INGEST + OBSERVABILITY slice (founders' pick 2026-07-19, after the audio/video
+> The async-Ingest + observability slice (founders' pick 2026-07-19, after the audio/video
 > modality slices merged + verified). Read [CHARTER.md](../CHARTER.md) §v0 deliverables
-> (M7 + M8) + OQ13, [ARCHITECTURE.md](../../../ARCHITECTURE.md) §Contracts (C1/C2 FROZEN) +
+> (M7 + M8) + OQ13, [ARCHITECTURE.md](../../../ARCHITECTURE.md) §Contracts (C1/C2 frozen) +
 > §Observability (D9), and [HANDOFF.md](../HANDOFF.md) (Processor seam + Current state) first.
-> This is the volatile record for the async-ingest + metrics work across BOTH services.
+> This is the volatile record for the async-ingest + metrics work across both services.
 
-**Status:** built + tested + adversarially reviewed; **reply shape RATIFIED by the founders
+**Status:** built + tested + adversarially reviewed; **reply shape ratified by the founders
 (D16, 2026-07-19)** — the re-drive condition satisfied in-slice. Async /ingest (ACK 202 + worker
 pool, off by default) + D9 `/metrics` on both services + node-7 smoke of the real audio backends.
 Suites: **DP 98** (72 baseline + 11 metrics + 10 async + 5 dedup) · **recording 120** (110 +
@@ -63,7 +63,7 @@ recording side, recorded in both HANDOFFs.
 | Bad C1 (schema) | 422 | `{error, violations}` — **synchronous, pre-claim** |
 | No processor for modality | 501 | `{error}` — **synchronous, pre-claim** |
 | **New chunk accepted** (async) | **202** | `{ok:true, accepted:true, chunk_id}` — **no record_ids** |
-| Dedup hit, DONE (either mode) | 200 | `{ok:true, record_ids:[…]}` — returned synchronously |
+| Dedup hit, done (either mode) | 200 | `{ok:true, record_ids:[…]}` — returned synchronously |
 | Dedup hit, in-flight (async) | **202** | `{ok:true, accepted:true, chunk_id, duplicate:true}` |
 | Queue full (async) | **503** | `{ok:false, error:"ingest queue full"}` — recording retries → visible `gaps` |
 | Inline success (default) | 200 | `{ok:true, record_ids:[…]}` — unchanged M0 |
@@ -83,7 +83,7 @@ it. (Surfaced by the pre-implementation design review; would have shipped in the
 
 **Fix — preserve `dp_acked=1 ⇔ C2 durably written`:**
 - **DP `/continuity/{stream_id}`** gains two **additive** fields (C2 stays frozen):
-  `processed` (`[lo,hi]` runs of sequences with a C2 written, set at `dedup.put` in BOTH
+  `processed` (`[lo,hi]` runs of sequences with a C2 written, set at `dedup.put` in both
   modes) and `dead_lettered` (sequences that exhausted retries / hit a terminal error). Still
   `note()`d at accept, so the never-arrived-gap detector is unchanged.
 - **Recording ledger** (`chunks.dp_state` column, additive-migrated): a 202 accept →
@@ -97,9 +97,9 @@ it. (Surfaced by the pre-implementation design review; would have shipped in the
   frozen 5-key shape; dead-letter/accepted surface as sibling leg fields.
 - **`clients.py` / `capturer.py` unchanged** structurally — they already coerced
   `ack.get("record_ids") or []`, so ack-without-record_ids was tolerated; the emitter now also
-  records WHICH state (accepted vs processed).
+  records which state (accepted vs processed).
 
-**Honest loss boundary — THIS slice guarantees *never falsely `clean`*:** every accepted
+**Honest loss boundary — This slice guarantees *never falsely `clean`*:** every accepted
 chunk is confirmed, or reads `recording` (in-flight / queued / lost-to-kill), or `gaps`
 (dead-lettered). **All loss is visible.** NOT closed here (stays full M7): auto-recovery of a
 volatile-queue drop past the drain timeout / a kill -9 — those read `recording` and are
@@ -109,7 +109,7 @@ it with a durable DP pending-journal (mirroring recording's ledger).
 **Re-drive path (D16 ratification condition — named + drilled in-slice).** A `recording`
 verdict after queue loss has a documented way back to `clean` before M7:
 `POST /capture/sessions/{id}/redrive` (and `emitter.redrive_accepted_chunks`, callable on
-restart / periodically) re-pushes every `dp_state='accepted'` chunk's ORIGINAL C1 envelope
+restart / periodically) re-pushes every `dp_state='accepted'` chunk's original C1 envelope
 (rebuilt from the ledger; bytes already durable in `/raw`, so no re-upload). DP's `chunk_id`
 dedup makes it idempotent + safe: a done chunk short-circuits to `200 {record_ids}` → recording
 `confirm_chunk`s it (→ `clean`); an in-flight one re-ACKs `202` (stays accepted); a lost one is
@@ -118,7 +118,7 @@ re-claimed + reprocessed. Drilled by `test_redrive_confirms_accepted_chunks` +
 provenance for a 202-confirmed chunk — the ids stay derivable (deterministic on `(chunk_id,
 pipeline_version[, discriminator])`); a re-drive that hits a done-claim also backfills them.
 
-**Accepted caveat (review finding #6, deferred — fails SAFE):** a chunk DP *durably
+**Accepted caveat (review finding #6, deferred — fails safe):** a chunk DP *durably
 processed* but that recording never confirmed before a **DP restart** (its in-memory
 processed set is volatile) reads a **permanent `gaps`** on that stream — a *false-positive*
 loss (over-reports, **never hides** loss, so the never-falsely-`clean` invariant holds). It
@@ -159,7 +159,7 @@ blob/process/context-write today.
 
 ## 4. Node-7 smoke of the real audio backends
 
-ALL THREE unrun audio seams (pyannote / whisper-translate / AST) **ran green end-to-end on
+ALL three unrun audio seams (pyannote / whisper-translate / AST) **ran green end-to-end on
 node-7** against a real webm/opus speech chunk; the smoke found + fixed **two real pyannote
 torch-2.x compat bugs** (weights_only default; webm decode). Full detail + caveats in
 [ws-audio-pipeline.md](ws-audio-pipeline.md) (2026-07-19 node-7 entry). Reproducible harness:
@@ -167,7 +167,7 @@ torch-2.x compat bugs** (weights_only default; webm decode). Full detail + cavea
 
 ## 5. Open questions resolved
 
-- **DP OQ13 (ingest processing mode) — RESOLVED** (2026-07-19): async `/ingest` = ACK 202 +
+- **DP OQ13 (ingest processing mode) — Resolved** (2026-07-19): async `/ingest` = ACK 202 +
   worker pool, off by default, dedup/record_id keep at-least-once safe; visible-not-silent
   loss for accepted-then-lost chunks; full durability (dead-letter+backfill journal) stays M7.
   Recorded in CHARTER.md.
@@ -199,7 +199,7 @@ torch-2.x compat bugs** (weights_only default; webm decode). Full detail + cavea
   (5) blob-fetch retry classification storming permanent 4xx → retry only 5xx/408/429. Plus
   the 3 requested coverage tests (migration+backfill, broken-source scrape isolation,
   inline-confirm no-op) + a transient-processor-retry test. **1 deferred (finding #6, fails
-  SAFE — caveat above).** Suites after fixes: **DP 98 / recording 118 / storage 26** green.
+  Safe — caveat above).** Suites after fixes: **DP 98 / recording 118 / storage 26** green.
 - 2026-07-19 — **Founders ratified the reply shape (D16)** — same wire, and the deep session's
   design memo cleared + strengthened their bar. Satisfied the one ratification condition
   in-slice: the **re-drive path** for accepted-unconfirmed chunks (`POST /…/redrive` +

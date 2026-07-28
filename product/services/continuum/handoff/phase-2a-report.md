@@ -1,7 +1,7 @@
 # Phase 2a — Morpheus core + parity harness
 
 **Branch:** `svc/continuum-morpheus-2a` · **Status:** kernels + harness landed; E2E seed
-ensemble complete — **PARITY** (permutation test p = 0.514, all per-night shapes exact) ·
+ensemble complete — **parity** (permutation test p = 0.514, all per-night shapes exact) ·
 **Cofounder review gate before 2b.**
 
 Deliverable: the §3 kernels reimplemented cleanly under `app/morpheus/`, behind
@@ -69,7 +69,7 @@ pooled order, the character budget taken from the *new day's* length, the greedy
 overshoot-by-one, tokenization, chunk slicing, and the step schedule — simultaneously.
 
 **Its limit, stated because an earlier draft of this report overstated it:** the chunk count
-pins the mixed corpus's total TOKEN VOLUME, not *which* paragraphs are rehearsed. One paragraph
+pins the mixed corpus's total token volume, not *which* paragraphs are rehearsed. One paragraph
 of difference is ~250 tokens and usually will not cross a 1024-token boundary. It is strong
 evidence of the same sampling *procedure*; it is not proof of the same sampled *text*.
 
@@ -98,7 +98,7 @@ Three chains (seeds 0/1/2), 6 nights each on days 5,9,12,13,17,21, through the r
 | *replay_f30_s2* | *0.2361* | *0.2028* | *0.1567* | *0.0333* | *0.0111* | *0.438* | *0.39* |
 | *repro_replay_f30* | *0.2861* | *0.2528* | *0.1599* | *0.0333* | *0.0111* | *1.000* | *0.39* |
 
-**Verdict: PARITY.** Exact two-sided permutation test on run-level seen-mean, over all
+**Verdict: parity.** Exact two-sided permutation test on run-level seen-mean, over all
 C(7,3)=35 splits: ours n=3 mean 0.2167 vs reference n=4 mean 0.2549, **p = 0.514**. The
 hypothesis that our chains and the reference chains are drawn from the same distribution
 cannot be rejected. Base-model floor is identical (0.0111 on every run, ours and theirs), and
@@ -173,7 +173,7 @@ is 3.9× faster, which is why it is the production path.
 
 - Both environments are invoked by **absolute interpreter path**. `PinnedEnv.preflight()` imports
   the required modules in one second before any GPU work — the reference chain's `phased_run.sh`
-  died precisely here (`conda activate` did not reorder PATH in a non-interactive shell, and the
+  died precisely here (`conda activate` did not reorder path in a non-interactive shell, and the
   `python` that ran lacked peft, after the corpus was already built).
 - `MORPHEUS_DEVICE` is a real knob and GPU-0 hardcoding is gone. The three chains run on GPUs
   7 / 2 / 4 concurrently.
@@ -192,15 +192,17 @@ is 3.9× faster, which is why it is the production path.
 chains ran:
 
 - **Cold model load off NFS is ~25–31 min; warm is 7.6 s.** `HF_HOME` sits on the NFS share, and
-  three chains starting together pulled 3 × 16 GB of safetensors through it concurrently. It is a
-  once-per-process cost, not per-night, but a nightly fleet that starts one process per user per
-  night pays it *every night, per user*. A node-local model cache (or a pre-warm step in the
-  SLURM wrapper) is the fix, and it is worth more than any kernel optimization here.
-- **Batched generation is 3.6× faster than one-at-a-time** (0.62 vs 2.24 s/generation at batch 12,
-  8B, 48 greedy tokens). Deliberately NOT used in the parity chains: the reference evaluated one
-  probe at a time, and left-padding a batch can perturb greedy decoding, so parity keeps the
-  slower path. Eval is ~1.1 h of a 4.4 h chain, so this is the obvious lever if 2b ever needs
-  eval to be cheap — behind a flag, never on the parity path.
+  three chains starting together pulled 3 × 16 GB of safetensors through it concurrently.
+- It is a once-per-process cost, not per-night — but a nightly fleet that starts one process per
+  user per night pays it *every night, per user*.
+- A node-local model cache, or a pre-warm step in the SLURM wrapper, is the fix. It is worth more
+  than any kernel optimization here.
+- **Batched generation is 3.6× faster than one-at-a-time** — 0.62 vs 2.24 s/generation at batch
+  12, 8B, 48 greedy tokens.
+- It is deliberately *not* used in the parity chains: the reference evaluated one probe at a time,
+  and left-padding a batch can perturb greedy decoding, so parity keeps the slower path.
+- Eval is ~1.1 h of a 4.4 h chain, so this is the obvious lever if 2b ever needs eval to be cheap.
+  Behind a flag, never on the parity path.
 
 For the record, per-generation and per-token costs measured here (8B, one H100): training
 0.377 s/step uncheckpointed and 0.64 s/step checkpointed-on-a-shared-card; tokenization
@@ -239,12 +241,13 @@ one new file.
 
 ## 6. Open decisions for the cofounders
 
-1. **`replay_source` stays `amp` in recipe v1.0.** The locked decision is raw day-logs. Both are
-   implemented and selectable today, and the tie is confirmed on the node (`h12_rawres_s0` mean
-   final recall **0.1250** vs `h12_replay_s0` **0.1250** — identical). But the goldens were
-   produced with `amp`, so parity has to be run against `amp`, and flipping the knob forks
-   `recipe_id`. The natural moment to fork to v1.1 is **2c**, when the day-log fetch client makes
-   raw logs fetchable at all. Flag if you want it sooner — it costs one E2E ensemble to validate.
+1. **`replay_source` stays `amp` in recipe v1.0**, though the locked decision is raw day-logs.
+   - Both are implemented and selectable today, and the tie is confirmed on the node:
+     `h12_rawres_s0` mean final recall **0.1250** vs `h12_replay_s0` **0.1250**, identical.
+   - But the goldens were produced with `amp`, so parity has to be run against `amp`, and flipping
+     the knob forks `recipe_id`.
+   - The natural moment to fork to v1.1 is **2c**, when the day-log fetch client makes raw logs
+     fetchable at all. Flag if you want it sooner; it costs one E2E ensemble to validate.
 2. **Calibration is not over-tuned, and the data on the node backs the decision**:
    `h12_calib_s0` (40 % neg-boost) scores **0.0208** mean final recall against **0.1250** for the
    uncalibrated arm — a lobotomy. `replay_neg_boost` ships as a ≤10 % tunable, default 0.

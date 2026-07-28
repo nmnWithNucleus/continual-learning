@@ -1,6 +1,6 @@
 # WS-H — DP hardening: slot ownership · fair dispatch · subprocess isolation
 
-> The follow-up slice that closes ALL THREE tracked review findings from
+> The follow-up slice that closes ALL three tracked review findings from
 > [ws-dp-stage-graph.md](ws-dp-stage-graph.md) (#3 fairness HOL-block, #6 order-dependent
 > fingerprint guard, #7 mutate-overlap race) **plus** the two failure classes the design
 > discussion surfaced beyond them: the poison-chunk service blast radius and the
@@ -9,10 +9,10 @@
 
 **Status:** built + tested + adversarially reviewed (workflow: 5 dimension reviewers →
 2 refuters per finding; 19 confirmed findings → 9 fixed in code + 7 gap tests + 2
-accepted-documented + 1 duplicate). Everything FROZEN stays frozen (C1/C2, D16 reply
+accepted-documented + 1 duplicate). Everything frozen stays frozen (C1/C2, D16 reply
 wire, claim/dedup/epoch semantics, chunk-atomicity, the single-bounded-queue 503 story).
 Inline mode + mock defaults byte-identical — **proven empirically**: sha256 of the full
-C2 output (processed_at stripped) over audio/video/image/text fixtures is IDENTICAL
+C2 output (processed_at stripped) over audio/video/image/text fixtures is identical
 across main, this branch, and this branch under subprocess isolation, for both the
 default and diarize-mock dialects. Suite: **DP 163 green** (was 128). **Owner session:**
 DP deep session (continued) · **Last updated:** 2026-07-21
@@ -28,13 +28,13 @@ and encoded in the dialect.**
 
 - **`SlotView` capability proxy** (`stage.py`): every stage's `run_*` receives a
   stage-scoped view of the slot blackboard, not the dict. A **sidecar is refused even a
-  READ of the primary's `mutable_slots`** — you cannot scribble on an object you were
+  read of the primary's `mutable_slots`** — you cannot scribble on an object you were
   never handed — and ALL direct writes are refused except a mutate's declared `writes`.
   Violations raise `SlotAccessError` (a `RuntimeError`) at the offending line,
   synchronously, order-independently. The old end-of-run fingerprint guard (which missed
   any illegal write landing before the last mutate finished — finding #6) is **deleted**,
   not just backstopped.
-- **Declared commits:** `provides` is now AUTHORITATIVE, not documentation — a
+- **Declared commits:** `provides` is now authoritative, not documentation — a
   `StageResult.slots` key outside `provides` (∪ `mutable_slots` for the primary) fails
   the chunk loudly even for `best_effort` stages (a stage may skip, never scribble), and
   `provides` sets must be disjoint per modality (resolution error).
@@ -45,7 +45,7 @@ and encoded in the dialect.**
   deterministic function of config (C2 idempotency). An explicit `needs` contradicting
   the chain order is a loud cycle error, never a silent reorder. Disjoint mutates still
   run concurrently.
-- **Dialect encodes the order:** `pipeline_version = base + mutate fragments in CHAIN
+- **Dialect encodes the order:** `pipeline_version = base + mutate fragments in chain
   order + sorted(other fragments)`. diarize→speaker_id and the reverse are different
   dialects — as they must be, their records genuinely differ. All shipped dialects
   (`asr-mock-v0`, `asr-mock-v0+diar-mock-v1`, `asr-fw-v1+diar-pyannote-v1`,
@@ -54,17 +54,17 @@ and encoded in the dialect.**
   `CaptionsStage.provides=('captions',)`.
 
 *Semantics note (composition over last-writer-wins):* the chain makes a future
-`speaker_id` stage COMPOSE on diarize's output (reads the diarized turns, enriches
+`speaker_id` stage compose on diarize's output (reads the diarized turns, enriches
 them), which is the intended model for shared enrichment slots.
 
 ## 2. Fair dispatch — finding #3 (`ingest_queue.py`, full rewrite)
 
-- **Permit-at-dispatch:** a worker takes the modality permit ATOMICALLY (same event-loop
+- **Permit-at-dispatch:** a worker takes the modality permit atomically (same event-loop
   tick) as it removes a job, and only removes a job whose permit is available — scanning
-  PAST capped-modality jobs to the first eligible. A capped burst queues without
-  occupying a worker; other modalities flow around it. (The old design dequeued THEN
+  Past capped-modality jobs to the first eligible. A capped burst queues without
+  occupying a worker; other modalities flow around it. (The old design dequeued then
   acquired, so one blocked worker HOL-blocked the pool — worse than no limit. The
-  startup EXPERIMENTAL warning died with the flaw; `INGEST_MODALITY_LIMITS` is now
+  startup experimental warning died with the flaw; `INGEST_MODALITY_LIMITS` is now
   production-safe.)
 - **Backpressure unchanged:** ONE shared bound counts every queued job regardless of
   modality → the bounded-queue 503 story is exactly as before. Empty knob (default) →
@@ -111,29 +111,29 @@ contract preservation, test gaps) → every finding attacked by 2 independent re
 (correctness + reproduce lenses); only findings surviving both were acted on.
 
 **Fixed in code (9):**
-1. **[high, queue]** Backoff retriers were STARVED unboundedly under a sustained
+1. **[high, queue]** Backoff retriers were starved unboundedly under a sustained
    capped-modality backlog: a finishing worker's same-tick rescan always stole the
    freed permit for a newer queued job before the parked retrier's wakeup ran
    (empirically reproduced: the retry ran only after a 30-job backlog fully drained).
    Fix: parked re-acquirers hold a **permit reservation** the dispatch scan must
    respect (`_reacquiring` counters — no permit transfer, so cancellation still can't
    strand one). Also closes the FIFO-inversion contract regression (same root cause).
-2. **[high, slots]** A sidecar declaring `provides` on a primary MUTABLE slot passed
+2. **[high, slots]** A sidecar declaring `provides` on a primary mutable slot passed
    resolution (the primary need not repeat mutable_slots in provides) and could
    blind-clobber the mutate cohort's output via a "declared" StageResult commit.
    Fix: `resolve()` seeds the ownership map with the primary's `mutable_slots`.
-3. **[med, slots]** A mutate could in-place-mutate mutable slots OUTSIDE its declared
+3. **[med, slots]** A mutate could in-place-mutate mutable slots outside its declared
    `writes` through a read reference (aliasing bypasses `__setitem__`), evading the
    overlap chain. Fix: a mutate's `deny_read` = `mutable_slots − writes` — the
    reference itself is withheld (reading a slot other mutates write is also a race,
    so read access legitimately requires declaring it).
 4. **[high, isolation]** Under `spawn`, `proc.start()` pickles the args (incl. the
    full chunk blob — MBs) and blocks writing them through the child's 64KB bootstrap
-   pipe ON THE EVENT LOOP until the fresh interpreter boots and drains. Fix: spawn +
+   pipe ON THE event loop until the fresh interpreter boots and drains. Fix: spawn +
    collect now run in ONE executor-thread call (`_spawn_and_collect`, holder-based
    kill-on-cancel with a raced-cancel check around start).
 5. **[med, isolation]** A child `ProcessingError` with an unpicklable `detail` blew up
-   the send and exited cleanly → the parent misread a TERMINAL failure as transient
+   the send and exited cleanly → the parent misread a terminal failure as transient
    "died (exitcode 0)". Fix: every child send has a string-only fallback preserving
    the transient/status flags (sanitized `repr` detail).
 6. **[med, isolation]** `_collect` parked one **shared asyncio default-executor**
@@ -145,7 +145,7 @@ contract preservation, test gaps) → every finding attacked by 2 independent re
 8. **[low, slots]** `ctx.c1` was handed to stages by reference; a best_effort stage
    could corrupt chunk-identity fields (record_id/journal inputs) and then "skip".
    Fix: stages get a read-only `MappingProxyType` view of c1.
-9. **[low, config]** `_choice` failed OPEN silently (`INGEST_ISOLATION=1` → isolation
+9. **[low, config]** `_choice` failed open silently (`INGEST_ISOLATION=1` → isolation
    off, no signal). Fix: warn-once on unrecognized values. **`forkserver` removed
    entirely** — it freezes `os.environ` at server launch, breaking the
    child-inherits-parent-env premise (stale-config child under a fresh parent-stamped
@@ -198,15 +198,15 @@ surface. No code deleted in this slice.
 
 | M | Deliverable | Status |
 |---|---|---|
-| M0 | Walking skeleton (C1→ASR→C2, idempotent) | **DONE** (proven live; alpha exercised) |
+| M0 | Walking skeleton (C1→ASR→C2, idempotent) | **done** (proven live; alpha exercised) |
 | M1 | Full audio pipeline | **BUILT, exit gate open**: diarize/ASR/VAD/translate/acoustic all real behind switches, node-7 green — but no denoise stage, and the WER/DER baseline on a labeled sample (the exit criterion) is unmeasured |
-| M2 | Text normalization + image pipeline | **NOT DONE**: both are mock stubs (`textnorm-mock-v0`, image mock caption); OQ14b bbox field waits on the real OCR pass |
-| M3 | Video pipeline | **DONE** (ffmpeg keyframes + VLM captions + OCR weave + per-keyframe sub-spans; real Qwen3-VL-8B E2E) |
-| M4 | Cross-source time spine (skew) | **NOT STARTED** (absolute timestamps exist; skew handling/alignment tests don't) |
-| M5 | World-data enrichment | **NOT STARTED** (`enrichments` carry only diarization speakers; faces/places/objects empty) |
-| M6 | C8 synchronous API | **NOT STARTED** (mechanism ready: inline path + stage-subset profiles; blocked on input's C8 shape) |
-| M7 | Production hardening | **SUBSTANTIALLY DONE after this slice**: backpressure ✓, dead-letter ✓, durable journal + kill-recovery ✓, epochs ✓, bounded re-drive ✓, fairness ✓ (now safe), poison/ghost isolation ✓ (opt-in). **Remaining:** dead-letter backfill tooling, reprocess-by-version drill at scale (a full pilot day), `processed` retention, warm child pool + wall-clock kill knob, and the ops story for WHO restarts DP (no supervisor config exists in-repo — platform owns the deploy layer; must be confirmed before the M7 exit box is checked) |
-| M8 | Metrics + dashboard | **DONE** (`/metrics` + `dashboards/data-processing.json`; per-graph-stage latency landed with the stage graph) |
+| M2 | Text normalization + image pipeline | **NOT done**: both are mock stubs (`textnorm-mock-v0`, image mock caption); OQ14b bbox field waits on the real OCR pass |
+| M3 | Video pipeline | **done** (ffmpeg keyframes + VLM captions + OCR weave + per-keyframe sub-spans; real Qwen3-VL-8B E2E) |
+| M4 | Cross-source time spine (skew) | **NOT started** (absolute timestamps exist; skew handling/alignment tests don't) |
+| M5 | World-data enrichment | **NOT started** (`enrichments` carry only diarization speakers; faces/places/objects empty) |
+| M6 | C8 synchronous API | **NOT started** (mechanism ready: inline path + stage-subset profiles; blocked on input's C8 shape) |
+| M7 | Production hardening | **Substantially done after this slice**: backpressure ✓, dead-letter ✓, durable journal + kill-recovery ✓, epochs ✓, bounded re-drive ✓, fairness ✓ (now safe), poison/ghost isolation ✓ (opt-in). **Remaining:** dead-letter backfill tooling, reprocess-by-version drill at scale (a full pilot day), `processed` retention, warm child pool + wall-clock kill knob, and the ops story for WHO restarts DP (no supervisor config exists in-repo — platform owns the deploy layer; must be confirmed before the M7 exit box is checked) |
+| M8 | Metrics + dashboard | **done** (`/metrics` + `dashboards/data-processing.json`; per-graph-stage latency landed with the stage graph) |
 
 **Sequencing reality:** M0/M3/M7(core)/M8 done; M1 needs its exit measurement; the
 next unstarted charter work in order is M2 (text/image), then M4/M5/M6 interleave.
@@ -220,13 +220,13 @@ items remain tracked in [ws-dp-stage-graph.md](ws-dp-stage-graph.md) §Deferred)
 ## Worklog
 - 2026-07-21 — Findings #6+#7 closed structurally (SlotView + writes/chaining +
   chain-order dialect; fingerprint guard deleted); finding #3 closed
-  (permit-at-dispatch rewrite; EXPERIMENTAL warning removed); subprocess isolation
+  (permit-at-dispatch rewrite; experimental warning removed); subprocess isolation
   landed (poison blast radius → one chunk; drain cancel → SIGKILL, journal row stays
   re-drivable). 23 tests added (stagegraph 19→28, +6 fairness incl. the HOL regression
   drill, +5 isolation incl. poison/ghost drills). Suite 128 → 151 green.
 - 2026-07-21 — **Adversarial review workflow** over the full diff (47 agents: 5
   dimension reviewers → 2 refuters per finding; 2.4M tokens): 19 confirmed / 2
-  refuted → **9 code fixes + 7 gap drills** (§4), incl. one HIGH empirically-reproduced
-  starvation in the new dispatch and one HIGH event-loop stall in spawn isolation.
+  refuted → **9 code fixes + 7 gap drills** (§4), incl. one high empirically-reproduced
+  starvation in the new dispatch and one high event-loop stall in spawn isolation.
   Byte-identity re-proven post-fix (identical output digests vs main across dialects
   AND under isolation). Suite **163 green** (stable across repeat runs).

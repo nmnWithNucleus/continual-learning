@@ -2,7 +2,7 @@
 
 > One tester drives phone web + Chrome extension + mac CLI end-to-end and checks that the
 > user-facing setup is sturdy and every nuance lands as designed. The unit/conformance
-> suites already prove the wire hermetically; THIS is the human-experience pass. State at
+> suites already prove the wire hermetically; this is the human-experience pass. State at
 > writing: **all captured data purged 2026-07-19, fleet restarted fresh** (no alias — the
 > wire is `/capture/*` only). Deep per-surface rationale: [ws-e](ws-e-extension.md) /
 > [ws-f](ws-f-mac-cli.md) / [ws-b](ws-b-phone-web-client.md).
@@ -15,7 +15,7 @@
   --status` (3× `up`). The tunnel URL **rotates when the tunnel restarts** — always read
   it fresh: `cat product/services/recording/var/tunnel_url.txt`. Below, `$TUNNEL` = that URL.
 - On your mac: `git pull` this repo (the extension + CLI ship in it), `brew install ffmpeg`.
-- Use the SAME user id on every surface (suggestion: `nmn`) — it groups your `/context`
+- Use the same user id on every surface (suggestion: `nmn`) — it groups your `/context`
   records. Each surface auto-mints its own stable `device_id` (`phone-web-*`,
   `ext-chrome-*`, `mac-cli-*`), which is how sessions stay attributable per device.
 - Server-side truth is read on node-7 (storage/DP are not tunneled):
@@ -37,9 +37,9 @@ upload with HTTP 404 in the status area — that symptom = stale page, refresh a
 | Set user id `nmn`, tap record, film ~35 s | timer runs; captured/uploaded tick together every ~10 s; verdict badge `recording` |
 | Tap stop | brief `uploading`, then badge → **`clean`**; report lines show `audio: N chunks` + `video: N chunks`, received N/N |
 | Pause 10 s mid-recording, resume, stop | no new segments while paused; final verdict `clean`; total segments ≈ recorded time / 10 s |
-| Camera toggle OFF, record 15 s, stop | mic-only: report shows an `audio` stream ONLY; verdict `clean` |
+| Camera toggle OFF, record 15 s, stop | mic-only: report shows an `audio` stream only; verdict `clean` |
 | Airplane mode 20 s mid-recording, back on, stop | queued climbs while offline, drains after; "retrying in Ns" appears then clears; verdict `clean`, **no missing seqs** |
-| Background the browser mid-recording, reopen | the hidden page beacons an end marker (ledger `ended` at that moment), but if iOS did NOT kill the tab the page still shows `recording` on return — that's expected: capture state survives backgrounding. If segments keep flowing, the server REOPENS the session (stale-marker protection, by design). Tap **Stop** for the real end marker → report typically `clean`. Only if the OS killed the tab do you come back to an idle page — then the old session's report is `clean` for what it received (a lost in-memory queue tail shows as client-leg missing — the design being honest; note it if seen) |
+| Background the browser mid-recording, reopen | the hidden page beacons an end marker (ledger `ended` at that moment), but if iOS did NOT kill the tab the page still shows `recording` on return — that's expected: capture state survives backgrounding. If segments keep flowing, the server reopens the session (stale-marker protection, by design). Tap **Stop** for the real end marker → report typically `clean`. Only if the OS killed the tab do you come back to an idle page — then the old session's report is `clean` for what it received (a lost in-memory queue tail shows as client-leg missing — the design being honest; note it if seen) |
 
 ## Surface 2 — Chrome extension (on the mac) — records the ACTIVE TAB
 
@@ -54,13 +54,13 @@ Capture". **After any `git pull` that touches the extension, hit its reload icon
 
 **Configure (once):** click the icon → server URL = `$TUNNEL` → user id `nmn` → **Save**
 → allow the origin prompt. Then **close and reopen the popup and confirm the fields still
-show YOUR values** — a Save that reverts to `localhost:8084`/`beta-user` is a fixed bug
+show your values** — a Save that reverts to `localhost:8084`/`beta-user` is a fixed bug
 regressing; report it. (A recording against a wrong/unreachable server retries forever and
 locks the settings — use **Discard unsent** in the draining state to bail out.)
 
 | Step | Expect |
 |---|---|
-| Open the popup **on an ordinary web page** playing audio (e.g. a YouTube tab); leave "video" ✓ (or uncheck for audio-only); **Record** | **NO picker** — capture starts immediately on THAT tab. State → `recording`, one session block, counters ticking ~10 s. (On a chrome:// or extension page you get an honest "could not start tab capture…open an ordinary web page tab" error — that's correct.) |
+| Open the popup **on an ordinary web page** playing audio (e.g. a YouTube tab); leave "video" ✓ (or uncheck for audio-only); **Record** | **NO picker** — capture starts immediately on that tab. State → `recording`, one session block, counters ticking ~10 s. (On a chrome:// or extension page you get an honest "could not start tab capture…open an ordinary web page tab" error — that's correct.) |
 | Listen | the captured tab is still audible (passthrough) |
 | Wait ~40 s → **Stop** | the queue drains, then the popup resets to the idle hint within seconds — that is the capture document closing after full drain, NOT a failure. **Verdict is server-side**: `/capture/sessions` → the `ext-chrome-*` session `clean`; its report shows an `audio` + `video` stream (or just `audio` if video was off), dense sequences; transcripts land in `/context` |
 | Drill: audio-only — uncheck "video", Record, Stop | one session, report shows only an `audio` stream, verdict `clean` |
@@ -131,18 +131,18 @@ while faster-whisper (CPU) catches up; empty transcripts for silent/toneless aud
 - 2026-07-19 — runbook written; data purged, fleet restarted fresh, `/ingest` alias
   removed (single-tester decision — refresh beats route versioning). Alpha pass is the
   tester's step.
-- 2026-07-19 — **Surface 3 (mac CLI): PASSED** (CTO, real avfoundation runs over the
+- 2026-07-19 — **Surface 3 (mac CLI): Passed** (CTO, real avfoundation runs over the
   tunnel). Results: smoke test clean; first real run surfaced the output-frame-rate
   defect (zero segments finalized — fixed same hour, fps pin, ws-F worklog); retry
   7/7 segments both streams, verdict `clean`, graceful Ctrl-C with tail segment.
-  Content checks: VLC on a kept segment shows the REAL screen (permission/black-frame
+  Content checks: VLC on a kept segment shows the real screen (permission/black-frame
   question closed); a spoken run produced audible audio in the spool AND real ASR
   transcripts in `/context` for the window. Known items recorded: seg-0 warm-up span
   (18.4 s, first segment only — ws-F); video quality soft at the default
   `--max-width 1728` + pinned CRF — acceptable for alpha, raise `--max-width` for
   crisper text; the real fidelity bar is charter OQ3 (codec/bitrate ladder, joint
   with DP).
-- 2026-07-19 — **Surface 2 (Chrome extension): PASSED** (CTO, real run in **Comet** — the
+- 2026-07-19 — **Surface 2 (Chrome extension): Passed** (CTO, real run in **Comet** — the
   browser the picker path had failed in). After the D-E7 pivot to direct tab capture, the
   first real run landed clean end-to-end: session `01KXWCPB…` (device `ext-chrome-NTP5GZW2`,
   user `nmn`), verdict **`clean`**, 7/7 segments, 0 failed/missing/dup; the muxed tab stream
@@ -151,12 +151,12 @@ while faster-whisper (CPU) catches up; empty transcripts for silent/toneless aud
   Fonsi interview → real faster-whisper text) + 21 mock video captions (video captioning is
   the fleet's mock backend; the video itself is really captured + stored). The desktop-picker
   path took 3 failed real-browser attempts; direct tab capture worked on the first.
-- 2026-07-19 — **Surface 1 (phone web): PASSED** (CTO, real iPhone through the tunnel, on the
+- 2026-07-19 — **Surface 1 (phone web): Passed** (CTO, real iPhone through the tunnel, on the
   renamed `/capture/*` wire). Session `01KXWE2DQY…` (device `phone-web-44W7BV2R`, user `nmn`),
   verdict **`clean`**, 4/4 segments. All 8 blobs in storage sha256-verified + ffprobe-decoded:
   4× video H.264 640×480 mp4 (~10 s) + 4× audio 16 kHz mono wav; 16 C2 records — 4 real ASR
   transcripts of the phone MIC (a room tour, first segment empty by VAD) + 12 mock captions.
   Confirms the phone client on the `/capture/*` wire (post-rename) end to end.
-- **ALPHA COMPLETE — all three surfaces verified clean end-to-end on real devices** (phone:
+- **Alpha complete — all three surfaces verified clean end-to-end on real devices** (phone:
   mic+camera; mac CLI: screen+mic; extension: tab video+audio). Next per the founders'
   sequencing: metrics emission (D9). Consent gate stays back-burner (D13).

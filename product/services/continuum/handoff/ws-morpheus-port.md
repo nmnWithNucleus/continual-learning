@@ -46,7 +46,7 @@ everything recipe-coupled-training lives in Morpheus.
 
 ## 2. Reproduction baseline + golden references (all on the cluster node)
 
-Phase 1 verdict: **REPRODUCED** — our `repro_replay_f30` seen-mean 0.286 == his seed-0; separation
+Phase 1 verdict: **reproduced** — our `repro_replay_f30` seen-mean 0.286 == his seed-0; separation
 +0.253 inside his 3-seed spread (+0.178…+0.269); micro 0.160 in his 0.152–0.183; day-5 retention
 1.00; corpus rebuild ratio 1.004. Diff every kernel against these:
 
@@ -54,7 +54,7 @@ Phase 1 verdict: **REPRODUCED** — our `repro_replay_f30` seen-mean 0.286 == hi
   `~/engram/results/phased/repro_replay_f30` (our Phase-1 run), `~/engram/results/refeval/*.json`.
 - **Prebuilt inputs:** `~/engram/data/corpus/day{D}.blocks.jsonl` (30 days), `~/engram/data/narrative/day{D}_x48neg.corpus.txt` (29 days) — the amplifier output to diff against.
 - **Root data:** `~/speed_lora/data/descriptions/{1,5,10,20}min/` (5min=9063), `~/speed_lora/data/holdout_manifest.csv`.
-- **Reference code:** `~/nmn/cl-research/research/engram/code/` @ `b3c58e1` — READ to understand behavior, do not import.
+- **Reference code:** `~/nmn/cl-research/research/engram/code/` @ `b3c58e1` — read to understand behavior, do not import.
 - **Envs:** conda `speedlora` (train/serve), `vllm23` (judge/litellm/Vertex). **H100 80GB** on the node (8× shared — GPU 0 is busiest, make it configurable). Judge: Gemini-2.5-flash via litellm on Vertex `poetic-avenue-438401-a7` (team access; export `VERTEX_PROJECT`).
 - **Day set:** train 5,9,12,13,17,21; heldout control 6,16,28.
 
@@ -65,14 +65,14 @@ Reimplement each **behavior** cleanly; prove it with the listed test. Discard al
 | Behavior | Home | Parity test (vs §2 goldens) |
 |---|---|---|
 | `render_block` (block → anchored text) | **storage day-log** (see 2c: client interface now, storage-side later) | byte-identical block text (Phase-1C showed identical) |
-| amplify: STYLES + NEG_STYLE + `valid()` + ok-rate≥0.85 gate | `morpheus/amplify.py` | neg-frac == 0.150, ok-rate ~1.0, corpus-size ratio ~1.0 |
+| amplify: Styles + NEG_STYLE + `valid()` + ok-rate≥0.85 gate | `morpheus/amplify.py` | neg-frac == 0.150, ok-rate ~1.0, corpus-size ratio ~1.0 |
 | CPT loop + LoRA cfg (r128/α256, LLM linears) + `chunk_corpus` (1024-tok) | `morpheus/train.py` | exact chunk boundaries, `adapter_config`, target-module set |
 | replay sampler (raw source, matched-compute, `neg_boost` knob) | `morpheus/replay.py` | identical paragraph selection given a fixed seed |
 | judge (prompt + litellm/Vertex call) | `morpheus/judge.py` | same judged-recall distribution on a fixed pred set |
 | scorers (`TRAP_MARKERS`, f1/contains/trap) | `morpheus/scorers.py` | exact scores on a fixed transcript set |
 | probes (self-study, ext) + probe≠corpus rule | `morpheus/probes.py` | probe/gold shape matches; no corpus-generator overlap |
 | eval driver (per-day/decay matrix) | `morpheus/eval.py` | reproduces the decay matrix within run-to-run variance |
-| **DISCARD** | — | all `sbatch/*`, `phased_run.sh`, `submit_chain.sh`, arm-dispatch, hardcoded paths |
+| **Discard** | — | all `sbatch/*`, `phased_run.sh`, `submit_chain.sh`, arm-dispatch, hardcoded paths |
 | **NOT NOW** | inference | `engram_server/worker/planner/mneme/train_mneme_proto/ttt_probe` (serve-time 4-lane harness) |
 
 ## 4. Parity harness (first-class deliverable — it licenses the clean rewrite)
@@ -89,27 +89,31 @@ A kernel is "ported" only when its parity test is green. No green, no merge.
 
 - Morpheus training/judging runs in a **pinned env invoked by absolute interpreter path or a
   container** — never `conda activate` (his `phased_run.sh` crashed on exactly this: activate
-  didn't fix PATH, python lacked peft). Capture `conda env export -n speedlora`/`-n vllm23`
+  didn't fix path, python lacked peft). Capture `conda env export -n speedlora`/`-n vllm23`
   as the env lockfiles under `continuum/` for reproducibility.
 - **Config knobs** (`config.py`): `MORPHEUS_DEVICE` (GPU index — GPU 0 hardcoding is gone),
   `gpu_memory_utilization`, interpreter/container path, model paths from config not
   `/home/ubuntu/engram`.
-- **ALL GPU work goes through SLURM — mandatory, no hand-placed jobs.** `sbatch` with explicit
+- **All GPU work goes through SLURM — mandatory, no hand-placed jobs.** `sbatch` with explicit
   `--gres=gpu:N` (32B needs `:2`), `--job-name`, `--output`, `--time`; nights chained with
-  `--dependency=afterok:`, never background pollers. Rationale, learned the hard way on
-  2026-07-23: the co-tenant's job 698 *was* a SLURM job and therefore visible in `squeue`, while
-  our work was hand-placed and invisible — unscheduled work racing scheduled work. Manual
-  placement also produced four of that night's five tooling defects (a `flock` that only bound
-  lanes started after it, a free-memory probe blind to a sibling lane's startup, two lanes landing
-  on one GPU twice, and `pkill -f` matching its own shell). **SLURM's allocator replaces all of
-  that tooling — delete it, don't fix it.** Use `scancel <jobid>`, never `pkill`.
-- **SLURM interaction gotchas:** (a) SLURM sets `CUDA_VISIBLE_DEVICES` for the allocation, so jobs
-  must use the *allocated* device (relative index 0 within the job), **not** an absolute node index
-  — `MORPHEUS_DEVICE` must not override a SLURM allocation or the job writes to the wrong card;
-  (b) SLURM hides GPUs without `--gpus-per-node=N`, even on the exclusive partition;
-  (c) `sbatch --export=NAME=a,b` **splits on commas** and silently truncates a list to its first
-  element (this cost the research chain a 12-day run that became 1-day) — pass dot-separated or
-  `--export=ALL`; (d) never deploy over an sbatch file a running job is executing from NFS.
+  `--dependency=afterok:`, never background pollers.
+- **Rationale, learned the hard way on 2026-07-23.** The co-tenant's job 698 *was* a SLURM job and
+  therefore visible in `squeue`, while our work was hand-placed and invisible — unscheduled work
+  racing scheduled work.
+- Manual placement also produced four of that night's five tooling defects: a `flock` that only
+  bound lanes started after it, a free-memory probe blind to a sibling lane's startup, two lanes
+  landing on one GPU twice, and `pkill -f` matching its own shell.
+- **SLURM's allocator replaces all of that tooling — delete it, don't fix it.** Use
+  `scancel <jobid>`, never `pkill`.
+- **SLURM interaction gotchas**, four of them.
+  - **(a)** SLURM sets `CUDA_VISIBLE_DEVICES` for the allocation, so jobs must use the *allocated*
+    device — relative index 0 within the job, not an absolute node index. `MORPHEUS_DEVICE` must
+    not override a SLURM allocation, or the job writes to the wrong card.
+  - **(b)** SLURM hides GPUs without `--gpus-per-node=N`, even on the exclusive partition.
+  - **(c)** `sbatch --export=NAME=a,b` **splits on commas** and silently truncates a list to its
+    first element. This cost the research chain a 12-day run that became 1-day; pass dot-separated
+    or `--export=ALL`.
+  - **(d)** Never deploy over an sbatch file a running job is executing from NFS.
 - Job names must be readable to co-tenants in `squeue` (`morpheus-chain-s3`, `morpheus-32b-m0`) —
   the node is shared and our usage should be legible to whoever looks.
 
@@ -125,39 +129,43 @@ Phases 2a–2c; do not build the lifestream profile yet, just keep the seam clea
 ## 7. Phases + exit criteria
 
 - **2a — Morpheus core + parity.** Reimplement the §3 kernels in `app/morpheus/`, fed by the
-  existing day-log blocks (`~/engram/data/corpus/day{D}.blocks.jsonl`). Green the §4 parity
-  harness. **Exit:** every kernel's parity test green; E2E seed-ensemble in-band vs the goldens.
-  → **kernels + harness landed** on `svc/continuum-morpheus-2a`; every kernel parity test green;
-  E2E seed ensemble measured. **✅ 2a COMPLETE (cofounders, 2026-07-24)** — the rehearsal sampler
-  is now proven **byte-identical on 5 nights × 14 seeds**, closing the last unverified kernel
-  surface; the ensemble is statistically indistinguishable from the reference (exact permutation
-  test, p = 0.514); the eval path is independently validated (the *reference's* adapter scores
-  0.45 through our eval code — its exact golden value). Write-ups:
-  [phase-2a-report.md](phase-2a-report.md), [overnight-diagnosis-report.md](overnight-diagnosis-report.md).
-  **Seed 0 — CLOSED (2026-07-24): a measurement artifact, not a defect.** At matched depth
-  (reference n=8, ours n=10) the ensembles are statistically indistinguishable (permutation
-  **p=0.82**) and the reference's own low tail holds a **0.042 chain, lower than any of our ten**.
-  The "2× variance" was the reference under-sampled at n=4. No action. (Kept in §10 for the two
-  falsified hypotheses, so nobody re-derives them.)
-  *Golden-path corrections found on the node:* the seed-0 reference run is
-  `results/phased/replay_f30` (no `_s0` suffix), and the ref-eval set is
-  `results/phased/_refeval/`, not `results/refeval/`. "Separation" in §2 is
-  **seen-mean − final heldout** (0.2694 / 0.1778 / 0.2028 across the three seeds), which is what
-  reproduces the quoted +0.178…+0.269 spread.
-- **2b — full nightly cycle + M0. ✅ DONE (2026-07-24).** A 32B life adapter trained by our own
-  pipeline (sharded 2-GPU, 4203 steps, loss 1.718→0.263, 1.97h) → **gate v1.1 → C5 publish →
-  loaded in vLLM and answered** (recall 0.267). M0 met on the production base model. Bar was M0
-  mechanics + in-band sanity (no 32B golden exists at this probe set), and it cleared.
-  **PREREQUISITE confirmed real: 32B training requires ≥2 GPUs.** A 32B forward OOMs on a
-  single H100 at *any* batch size (79.15/79.18 GiB at bsz 2, 79.16 at bsz 1 — it fails at the first
-  forward, so no step/corpus change helps). `--shard 2` was never optional; `MORPHEUS_SHARD_MAX_MEMORY`
-  now controls per-card budget. Already proven: the **full mechanic end-to-end on 8B** (train →
-  report-only gate → C5 `entries.jsonl`+`active.json` → **vLLM load OK**, answering from Day 5), and
-  **32B base + an r128/α256 LoRA of our recipe shape loads and serves** (the earlier failure was
-  KV-cache budgeting at util 0.90/len 4096, not LoRA incompatibility). Still to establish: a 32B
-  adapter *we* trained end to end. **2b's bar is M0 mechanics + in-band sanity, NOT strict parity** —
-  there is no 32B golden at this probe set to diff against.
-- **2c — lean architecture + storage seams (client side). ✅ DONE (2026-07-24).** Three client
+  existing day-log blocks (`~/engram/data/corpus/day{D}.blocks.jsonl`), and green the §4 parity
+  harness.
+  - **Exit:** every kernel's parity test green, and the E2E seed-ensemble in-band vs the goldens.
+  - **✅ 2a complete (cofounders, 2026-07-24).** Kernels and harness landed on
+    `svc/continuum-morpheus-2a`; every kernel parity test green; E2E seed ensemble measured.
+  - The rehearsal sampler is proven **byte-identical on 5 nights × 14 seeds**, closing the last
+    unverified kernel surface.
+  - The ensemble is statistically indistinguishable from the reference: exact permutation test,
+    p = 0.514.
+  - The eval path is independently validated — the *reference's* adapter scores 0.45 through our
+    eval code, its exact golden value.
+  - Write-ups: [phase-2a-report.md](phase-2a-report.md),
+    [overnight-diagnosis-report.md](overnight-diagnosis-report.md).
+  - **Seed 0 — closed (2026-07-24): a measurement artifact, not a defect.** At matched depth
+    (reference n=8, ours n=10) the ensembles are indistinguishable, permutation **p=0.82**.
+  - The reference's own low tail holds a 0.042 chain, lower than any of our ten.
+  - The "2× variance" was the reference under-sampled at n=4. No action. Kept in §10 for the two
+    falsified hypotheses, so nobody re-derives them.
+  - *Golden-path corrections found on the node:* the seed-0 reference run is
+    `results/phased/replay_f30` (no `_s0` suffix), and the ref-eval set is
+    `results/phased/_refeval/`, not `results/refeval/`.
+  - "Separation" in §2 is **seen-mean − final heldout** (0.2694 / 0.1778 / 0.2028 across the three
+    seeds), which is what reproduces the quoted +0.178…+0.269 spread.
+- **2b — full nightly cycle + M0. ✅ done (2026-07-24).** A 32B life adapter trained by our own
+  pipeline — sharded 2-GPU, 4203 steps, loss 1.718→0.263, 1.97 h — went gate v1.1 → C5 publish →
+  loaded in vLLM and answered, recall 0.267.
+  - M0 is met on the production base model. **The bar was M0 mechanics plus in-band sanity, not
+    strict parity**, because no 32B golden exists at this probe set to diff against. It cleared.
+  - **Prerequisite confirmed real: 32B training requires ≥2 GPUs.** A 32B forward OOMs on a single
+    H100 at *any* batch size — 79.15/79.18 GiB at bsz 2, 79.16 at bsz 1.
+  - It fails at the first forward, so no step or corpus change helps. `--shard 2` was never
+    optional, and `MORPHEUS_SHARD_MAX_MEMORY` now controls the per-card budget.
+  - Already proven beforehand: the **full mechanic end-to-end on 8B** — train → report-only gate →
+    C5 `entries.jsonl` + `active.json` → vLLM load OK, answering from Day 5.
+  - Also proven: **32B base plus an r128/α256 LoRA of our recipe shape loads and serves**. The
+    earlier failure was KV-cache budgeting at util 0.90 / len 4096, not LoRA incompatibility.
+- **2c — lean architecture + storage seams (client side). ✅ done (2026-07-24).** Three client
   seams under `app/clients/` (day-log fetch / recipe registry / reservoir), each with a local
   backend; factories pick the backend from settings so storage integration is an http branch
   behind them. `cycle.py` fetches the day-log and keys on its content fingerprint (no inline
@@ -229,7 +237,7 @@ night produces*, so the deficit **accumulates across the chain**.
 Framing that survives: seed 0 **acquired day 5 fine (0.25) and then failed to retain it (0.05)**,
 while the reference held 0.23 → 0.23. It is a *forgetting* failure.
 
-**Two cofounder hypotheses were tested and BOTH FALSIFIED (2026-07-24) — recorded so nobody
+**Two cofounder hypotheses were tested and both falsified (2026-07-24) — recorded so nobody
 re-derives them:**
 
 1. *"Seed 0's draws under-sampled day 5."* **Impossible — the rehearsal draw is not seed-dependent
@@ -248,7 +256,7 @@ re-derives them:**
 initialization and non-deterministic GPU reductions**. So either the recipe has an init-sensitive
 failure mode, or seed 0 is a tail draw. Only more chains settle it (ref n→8, ours n→10, in flight).
 
-**The metric to watch is the GATE PASS RATE, not just seen-mean.** Under the ratified policy the
+**The metric to watch is the gate pass rate, not just seen-mean.** Under the ratified policy the
 reference passes 4/4 and we pass 1/3 (s0 blocked on recall, s1 on traps). A nightly loop that ships
 one night in three is a different product from one that ships every night — this is the
 production-relevant readout of the chain wave.
@@ -284,7 +292,7 @@ Every entry below is deliberate and none of them moves a number the parity harne
 | 2026-07-23 | ok-rate gate | raises `AmplifyBelowOkRate` instead of `sys.exit(2)` | Same threshold (0.85) and same semantics (abort the night, keep serving the prior adapter, log the window as debt). A service cannot exit the process. |
 | 2026-07-23 | Step loop bounds | uses `range(0, len(chunks) - bsz + 1, bsz)` (the `phase_d_driver` form), not `train_cpt.py`'s `range(0, len(chunks) - bsz, bsz)` | The driver is the production path and the two differ by one batch at the tail. Confirmed by parity: the golden step counts (4203, 4272, 3879, 4206, 4782, 3423) only reproduce with the driver's form. |
 | 2026-07-23 | Eval-harness sizing (`probes_per_day` 60, `traps_n` 50, heldout 60) | CLI flags → constants in `morpheus/eval.py` | Identical values. They size the eval, not the artifact, so they are not recipe knobs and must not be reachable from a recipe. |
-| 2026-07-23 | `sbatch/*`, `phased_run.sh`, `submit_chain.sh`, arm dispatch, hardcoded `/home/ubuntu/engram` paths | **discarded** | §3 DISCARD. Replaced by `scripts/morpheus_chain.py` + `PinnedEnv` (absolute interpreter, import preflight). |
+| 2026-07-23 | `sbatch/*`, `phased_run.sh`, `submit_chain.sh`, arm dispatch, hardcoded `/home/ubuntu/engram` paths | **discarded** | §3 discard. Replaced by `scripts/morpheus_chain.py` + `PinnedEnv` (absolute interpreter, import preflight). |
 | 2026-07-23 | Parity E2E base model | **Qwen3-VL-8B**, not the production 32B | The goldens are 8B runs, so that is where the numbers to match exist. 32B ≈ 8B on identical probes is a measured tie (write-bound, not capacity-bound). The 32B adapter is 2b's deliverable, for serve-quality, not memory-quality. |
 | 2026-07-23 | Parity E2E seeds 1 and 2 | ran with gradient checkpointing; seed 0 without | Numerically identical (recomputes the same forward ops) and required to fit three chains on a shared node. Verified: identical `loss_first` (2.007) on both paths for the same corpus. |
 | 2026-07-23 | `recipes/consolidation-v1.0.json` `source` field | re-pinned `9711f4a` → `b3c58e1`, provenance-only wording | Commit re-pin per §0. **No knob changed**, so `recipe_id` stands and artifacts trained under it stay comparable. |

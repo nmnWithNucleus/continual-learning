@@ -1,13 +1,12 @@
 # WS-P3 — Phase 3: the DP dogfood (Speed data through the real pipeline)
 
-**Status:** ✅ **COMPLETE — LEARN-LOOP INTEGRATION PROVEN END-TO-END.** 3a bridged real Speed
+**Status:** ✅ **complete — learn-loop integration proven end to end.** 3a bridged real Speed
 audio through recording→DP→storage; 3b (1-min rule-bend) collapsed on **dose**, not the pipeline;
 the **decomposition run (parity content, `segment_seconds=300 block_segments=1`) reproduced the
 baseline separation** — 0.137 vs baseline 0.179, permutation **p=0.148 (same distribution)**,
-p=0.018 above the no-consolidation control, p=0.016 above the failed 1-min run. Verdict: **PIPELINE
-SOUND**. Reports: [phase-3-report.md](phase-3-report.md), [phase-3-decomp-report.md](phase-3-decomp-report.md).
+p=0.018 above the no-consolidation control, p=0.016 above the failed 1-min run. Verdict: **pipeline sound**. Reports: [phase-3-report.md](phase-3-report.md), [phase-3-decomp-report.md](phase-3-decomp-report.md).
 · design locked (cofounders, 2026-07-24) · **Spans:** recording + DP + storage + continuum ·
-**Driven by:** continuum (learn-loop validation) · Prereq: Phase 2 (2a/2b/2c) DONE on main.
+**Driven by:** continuum (learn-loop validation) · Prereq: Phase 2 (2a/2b/2c) done on main.
 
 > **Bottom line:** our real product services carry the learn loop without losing the model's
 > ability to learn. The only residual is a **recipe/dose** property (amplification is fixed at
@@ -16,11 +15,11 @@ SOUND**. Reports: [phase-3-report.md](phase-3-report.md), [phase-3-decomp-report
 > A minor block-**wrapper** rendering residual (`On <date>… / Scene:` vs the reference's
 > `[Day N of 35 · City · …]` header) is a later block-shape question; it does not move the verdict.
 
-> **The one question Phase 3 answers:** when Speed's data flows through our REAL product pipeline
-> (recording → DP → storage → continuum), does **seen-vs-heldout separation SURVIVE**? Not "does it
+> **The one question Phase 3 answers:** when Speed's data flows through our real product pipeline
+> (recording → DP → storage → continuum), does **seen-vs-heldout separation survive**? Not "does it
 > byte-reproduce 0.28" — the product path differs from the parity path in several coupled ways, so
 > the number will differ and that's fine. Separation surviving = the product path works. If it
-> collapses, THEN decompose — not before (the Phase-2 seed-0 lesson).
+> collapses, then decompose — not before (the Phase-2 seed-0 lesson).
 
 ## Why this is cheap (feasibility verified 2026-07-24)
 
@@ -29,7 +28,7 @@ Almost all of it is config; only two small files are net-new. Grounded findings:
 - **Rule-bend = pure config.** `segment_seconds` + `block_segments` are recipe knobs that flow into
   `build_daylog` (buckets by the first, groups by the second — `daylog.py:68,134`). A test recipe
   with `segment_seconds=60, block_segments=5` gives 1-min segments / 5-min blocks, **no code change**.
-- **Continuum needs ZERO changes to consume real data.** `record_provider` already defaults to the
+- **Continuum needs zero changes to consume real data.** `record_provider` already defaults to the
   real `/context` read (`fetch_window_records` over C10) — 2c wired this. Phase 3's "swap" is the
   existing default (`nightly.py:51`, `clients/__init__.py:43`).
 - **Real ASR+diarize is turnkey** — `ASR_BACKEND=faster_whisper` + `DIARIZE_BACKEND=pyannote`, already
@@ -52,7 +51,7 @@ Almost all of it is config; only two small files are net-new. Grounded findings:
 "drop in one file". It downloads a Speed **audio** track's bytes (extracted from the 20-min video
 blob in GCS) and yields it as chunk(s); driven through the existing `POST /capture/run` (accepts
 `modality, source, chunk_seconds, user_id, device_id, base_wallclock` — `models.py:49-64`).
-- **Blob leg needs the BYTES** — storage has no by-reference/GCS-URL registration (**recording's**
+- **Blob leg needs the bytes** — storage has no by-reference/GCS-URL registration (**recording's**
   OQ8, unbuilt — `../../recording/CHARTER.md:175`; this line said "storage OQ8", which does not
   exist and the mislabel propagated into the storage/C10 launch prompt — corrected by D18), so
   re-PUT through `/raw/blobs`. Fine at test volume; `/capture/run` avoids the 64 MB segment cap.
@@ -84,31 +83,31 @@ blob in GCS) and yields it as chunk(s); driven through the existing `POST /captu
   survive** (clear seen>heldout)? One line.
 - **Arm 2 — DP integration validation (bonus).** ASR+diarize ran for real on Speed audio — report the
   stages produced sane transcripts (spot-check a few). NOT part of the recall number.
-- **Arm 3 — DEFERRED.** Descriptions+ASR day-log (drop the filter), measured separately — a later
+- **Arm 3 — Deferred.** Descriptions+ASR day-log (drop the filter), measured separately — a later
   "does adding transcripts help/hurt" finding, not now.
 
 ## Staging
 
-- **3a — the bridge. ✅ DONE (2026-07-24, job 756).** 629 chunks / 209.7 h of real Speed
+- **3a — the bridge. ✅ done (2026-07-24, job 756).** 629 chunks / 209.7 h of real Speed
   audio through recording → DP → storage in 1 h 44 m on 8 H100s; 12,221 caption + 621
   transcript C2 records queryable by (user, window), zero missing, zero segment collisions,
   one dialect (`asr-fw-v1+diar-pyannote-v1`). Arm 2's ASR + diarization ran on every chunk
   and spot-checks sane.
-  ORIGINAL SCOPE: replay `ChunkSource` + injected-caption sidecar + test recipe + DP env profile
+  Original scope: replay `ChunkSource` + injected-caption sidecar + test recipe + DP env profile
   → Speed's 6 train days (5,9,12,13,17,21) + heldout (6,16,28) land in `/context` as rule-bent C2 for
   `user_id="replay-speed"`, via **real recording→DP→storage**. Arm 2's real ASR runs here.
   **Exit:** real C2 (caption + transcript) queryable by `(user, window)`; ASR spot-checked sane.
-- **3b — the measurement. ✅ DONE (2026-07-24, job 767). VERDICT: separation did NOT
+- **3b — the measurement. ✅ done (2026-07-24, job 767). Verdict: separation did *not*
   survive.** 5 seeds: separation 0.077 vs the 5-min baseline's 0.179 (p = 0.0067) and
   statistically indistinguishable from the rehearsal-off control (p = 0.80). The rule-bent
   day-log reproduces the baseline's block count exactly on 5 of 6 train days and the bridge
   is exact, so this is NOT a pipeline defect: acquisition is 3.2x weaker (0.079 vs 0.249 on
   the night a day is written) while retention is fine, tracking a 3.7x cut in amplification
-  dose per fact (48 retellings now cover 4.1x the block content). FIRST DECOMPOSITION STEP,
+  dose per fact (48 retellings now cover 4.1x the block content). First decomposition step,
   config only: inject the 5-min descriptions with segment_seconds=300, block_segments=1 —
   same services, same spine, parity block content. Full write-up:
   [phase-3-report.md](phase-3-report.md).
-  ORIGINAL SCOPE: continuum fetches (caption-only filter) → Morpheus over the 6 days →
+  Original scope: continuum fetches (caption-only filter) → Morpheus over the 6 days →
   Arm-1 verdict. **Exit:** the separation-survives table + one-line verdict.
 
 **Deferred (do NOT start):** real VLM keyframe captioning (the true caption-shape test), Arm 3,
@@ -128,8 +127,8 @@ C8 per-request profiles, GCS by-reference blobs (OQ8).
 - The replay source + injected-caption sidecar are the only net-new code; keep them lean and clearly
   test-oriented. No contract changes (that was the whole point of the config-profile decision).
 - SLURM for the Morpheus training (6 days). Branch off main. Cofounder review before merge.
-- Any cross-service contract friction (e.g. C10 needs kind-filtering, blob-by-reference) → NOTE for
+- Any cross-service contract friction (e.g. C10 needs kind-filtering, blob-by-reference) → note for
   the storage/C10 session, do not pin.
 - **Report:** 3a — records landed (counts, a sample caption + transcript), ASR spot-check. 3b — the
   Arm-1 table vs the 5-min baseline + the one-line verdict (did separation survive). If it didn't, the
-  FIRST decomposition step you'd take (cadence / block-shape) — not a full investigation. Job ids, GPU-h.
+  First decomposition step you'd take (cadence / block-shape) — not a full investigation. Job ids, GPU-h.
