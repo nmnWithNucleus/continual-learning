@@ -30,6 +30,7 @@ CAPS_OK = {
     # Names and acronyms, not emphasis.
     "GDPR", "CCPA", "PEFT", "SISA", "FIFO", "TTFT", "CTRL", "SIGKILL",
     "ULID", "TOCTOU", "SSIM", "RTSP", "VLLM", "SQLITE",
+    "ONNX", "JPEG", "CRLF", "TEMP",
 }
 # Rule 6: reasoning sections get 60 words, everything else 25 (27 with slack).
 REASONING = {"Why it's this way", "Watch out for", "How it got here"}
