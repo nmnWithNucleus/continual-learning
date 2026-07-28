@@ -1541,11 +1541,11 @@ later. Deliberately un-personalized: inference serves the base model, no adapter
 
 | WS | Service | M0 deliverable | Contracts it must honor |
 |---|---|---|---|
-| A | **input** | Computer text chat surface → request envelope → **QueryBuilder text path** → emit a **C3 UserPrompt** (text-only). Mint `session_id` / `turn_id`. | produces C3; C8 is a **pass-through** for text (no heavy normalization yet) |
-| B | **inference** | vLLM up with base **Qwen3-VL-32B** (TP=8, one node); accept C3, prepend system prompt, **single-shot** generate (no harness/tools/mentors yet), **stream out via C9**; write the turn via C4. C6 resolves to "base model, no adapter". | consumes C3, resolves C6 (trivial), produces C9 + C4 |
+| A | **input** | Computer text chat surface → request envelope → QueryBuilder text path → emit a **C3 UserPrompt**, text-only. Mint `session_id` / `turn_id`. | produces C3; C8 is a pass-through for text, with no heavy normalization yet |
+| B | **inference** | vLLM up with base **Qwen3-VL-32B** (TP=8, one node). Accept C3, prepend the system prompt, single-shot generate with no harness, tools or mentors yet, stream out via C9, and write the turn via C4. C6 resolves to "base model, no adapter". | consumes C3, resolves C6 (trivial), produces C9 + C4 |
 | C | **output** | Relay the **C9** token stream to the computer surface; markdown render; per-turn delivery ack. | consumes C9 |
-| D | **storage** | Minimal **/sessions**: persist a C4 turn record keyed by `session_id`/`turn_id`; trivial **model directory** entry ("base, no adapter") that C6 reads. | serves C4 write + C6 read |
-| E | **platform** | One a3mega node hosting vLLM + the three app services; basic HTTPS reachability; a shared dev secret/env. Thin — just enough to run the loop. | none (enables A–D) |
+| D | **storage** | Minimal **/sessions**: persist a C4 turn record keyed by `session_id`/`turn_id`, plus a trivial model-directory entry that C6 reads. | serves C4 write + C6 read |
+| E | **platform** | One a3mega node hosting vLLM and the three app services; basic HTTPS reachability; a shared dev secret/env. | none (enables A–D) |
 
 **Out of this slice (later slices):** recording + data-processing + `/context` (capture);
 continuum + per-user adapter (personalization); mentors/C7 + agentic harness; C11 recent-context;
@@ -1790,7 +1790,7 @@ A/V are later slices.
 
 | WS | Service | M0 deliverable | Contracts it must honor |
 |---|---|---|---|
-| A | **recording** | Computer-mic capture → chunker → **`PUT` bytes to storage `/raw`** (get `blob_ref`) → emit a **C1** envelope to data-processing. Mint globally-unique `stream_id`/`chunk_id`; dense zero-based `sequence`; device auth deferred. | produces C1 (both legs); push/at-least-once, dedup on `chunk_id` |
+| A | **recording** | Computer-mic capture → chunker → `PUT` bytes to storage `/raw` for a `blob_ref` → emit a **C1** envelope to data-processing. Mint globally-unique `stream_id`/`chunk_id`; dense zero-based `sequence`; device auth deferred. | produces C1 (both legs); push/at-least-once, dedup on `chunk_id` |
 | B | **data-processing** | Consume C1; **pull bytes by `blob_ref`**; run **ASR** (transcript + segment times); stamp `pipeline_version`; write a **C2** record to `/context`; idempotent on `record_id`. | consumes C1, produces C2; C8 not in this slice |
 | C | **storage** | Extend the running `:8083` service: **`/raw`** blob write (`PUT`, mints opaque `blob_ref`, idempotent on `chunk_id`) + read-by-ref; **`/context`** C2 write (idempotent on `record_id`), time-indexed on `(user_id, t_start)`. | serves the C1 blob leg + C2 write |
 | E | **platform** | One box hosting the three services + an ASR runtime (GPU optional at M0 — faster-whisper runs on CPU for the skeleton); a shared dev env. Thin — just enough to run the loop. | none (enables A–C) |
