@@ -9,7 +9,7 @@ revision; editing it is a founders' act.
 ## Before you edit
 
 **New document.** First sentence says what it is, status line underneath. Vocabulary block if it
-coins a term. Shape and mode come from [ORG.md](ORG.md) §Documentation protocol.
+coins a term. Shape and mode come from [ORG.md](ORG.md).
 
 **Appending.** ORG says where: top for worklogs and registers, nowhere for boards and charters,
 which get rewritten instead. Inside a card, append to the section that owns the sentence, never by
@@ -19,7 +19,7 @@ widening a table cell.
 Rewriting a rule means restating Rules in today's words plus a dated How it got here entry, not a
 parenthetical about the old one. Stamp *Last updated*.
 
-## The nine rules
+## The ten rules
 
 **1. Tables scan, prose reads.** A table cell is at most 20 words. At the 21st the content becomes
 a card below, and the cell keeps a one-line summary and a link.
@@ -35,8 +35,9 @@ Sections are optional; their order is not.
 
 **5. Bold is a budget.** One bold span per bullet or table cell, two per paragraph. No ALL-CAPS.
 
-**6. One bullet, one idea.** Around 25 words; a second clause is a second bullet. Reasoning
-sections (Why it's this way, Watch out for, How it got here) allow 60. One em-dash per sentence.
+**6. One bullet, one idea.** Around 25 words; a second clause is a second bullet. Reasoning allows
+60: Why it's this way, Watch out for, How it got here, and a dated worklog entry. One em-dash per
+sentence.
 
 **7. Status is a controlled word, not a phrase.** Use the vocabulary below. Never claim a status
 you must immediately qualify.
@@ -55,6 +56,10 @@ The second copy is the one that goes stale.
 **9. Define your jargon once.** A document that introduces terms opens with a Vocabulary block,
 one line per term, including the obvious ones. *Day-log*, *watermark* and *reservoir* are this
 repo's coinages.
+
+**10. Quoted material keeps its original wording.** A verbatim snapshot of a retired artifact is a
+quotation, not our prose: mark it as a quote and leave it. These rules govern what we write, not
+what we preserve.
 
 ## The card template
 
