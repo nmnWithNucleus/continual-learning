@@ -32,7 +32,7 @@ CAPS_OK = {
     "ULID", "TOCTOU", "SSIM", "RTSP", "VLLM", "SQLITE",
     "ONNX", "JPEG", "CRLF", "TEMP",
 }
-# Rule 6: reasoning sections get 60 words, everything else 25 (27 with slack).
+# Rule 6: reasoning sections get 60 words, everything else 40 (42 with slack).
 REASONING = {"Why it's this way", "Watch out for", "How it got here"}
 WORKLOG_ENTRY = re.compile(r"^### \d{4}-\d{2}-\d{2}")
 LEARNINGS = re.compile(r"^## Learnings")
@@ -110,7 +110,7 @@ def findings(path):
         bullets.append(bullet)
 
     for ln, text, sect, worklog in bullets:
-        cap = 60 if (sect in REASONING or worklog) else 27
+        cap = 60 if (sect in REASONING or worklog) else 42
         if len(text.split()) > cap:
             out.append((ln, "rule6-bullet", f"{len(text.split())}w > {cap}"))
         if text.count("**") // 2 > 1:

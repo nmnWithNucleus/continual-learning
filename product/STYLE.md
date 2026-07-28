@@ -36,7 +36,7 @@ Sections are optional; their order is not.
 
 **5. Bold is a budget.** One bold span per bullet or table cell, two per paragraph. No ALL-CAPS.
 
-**6. One bullet, one idea.** Around 25 words; a second clause is a second bullet. Reasoning allows
+**6. One bullet, one idea.** Around 40 words; a second clause is a second bullet. Reasoning allows
 60: Why it's this way, Watch out for, How it got here, a dated worklog entry, a learning. One
 em-dash per sentence.
 
