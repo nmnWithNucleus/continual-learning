@@ -36,13 +36,13 @@ mentorship.
 
 | Area | v0 shape |
 |---|---|
-| Model serving | vLLM hosting the base BWM — **BWM artifact custody, hosting, and serving are ours** (pinned in [ARCHITECTURE §Ownership splits](../../ARCHITECTURE.md); the pick itself is [D6](../../DECISIONS.md); upgrade migrations are continuum-executed, never hot); per-user LoRA resolved through the model directory (C6), hot-swapped per request; clean fallback to base when no eligible adapter |
+| Model serving | vLLM hosting the base world model, with per-user LoRA resolved through C6 and hot-swapped per request ([↓](#model-serving)) |
 | Prompt assembly | System prompt + UserPrompt (C3) → one model request |
 | Agentic harness | Think/act/observe loop: tool registry, code sandbox, loop control (step caps, timeouts); tool traces recorded |
-| Mentor protocol (C7) | When-to-consult policy; assistance-prompt generation (user prompt + system prompt + everything the model knows about the user); invoking Claude/GPT/Gemini; relaying mentors' clarification questions through our model to the user and back; integrating the handoff into a final grounded response |
+| Mentor protocol (C7) | When to consult a frontier model, how to ask it, and how to fold its answer back in ([↓](#the-mentor-protocol-c7)) |
 | Response stream (C9) | Emit the grounded response-stream envelope to output: token stream, mid-turn frames (mentor clarification questions, status), end-of-turn metadata |
 | Turn logging (C4) | Full turn records to storage `/sessions`, incl. complete mentor traces (thinking, plan, outputs) and tool traces — these are continuum's training data |
-| Observability (D9) | Expose `/metrics` (Prometheus) on `:8010` — baseline request rate / latency-histogram / error rate **plus GPU via dcgm-exporter** (util, mem, temp, power), tokens/sec, time-to-first-token, model backend (mock/vllm), generation queue depth; own a Grafana dashboard JSON at `dashboards/*.json`. Platform runs the ONE shared Prometheus/Grafana backbone + provisions the dashboard — see [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability |
+| Observability (D9) | Expose `/metrics` on `:8010` and own a Grafana dashboard JSON ([↓](#observability)) |
 
 **Out of scope** (not chartered here — see the owning sibling's charter)
 
@@ -53,6 +53,47 @@ mentorship.
 | Delivering the response to user devices | output |
 | Capturing, processing, and storing the life stream | recording / data-processing / storage |
 | Cluster, SLURM, GPU allocation, shared infra | platform |
+
+### Model serving
+
+**In one line.** vLLM hosts the base world model, and each request is served by that user's
+adapter if they have an eligible one.
+
+**Rules**
+
+- **Base-world-model artifact custody, hosting and serving are ours**, pinned in
+  [ARCHITECTURE §Ownership splits](../../ARCHITECTURE.md). The pick itself is
+  [D6](../../DECISIONS.md).
+- Upgrade migrations are continuum-executed, never hot.
+- Per-user LoRA is resolved through the model directory (C6) and hot-swapped per request.
+- Fall back cleanly to base when there is no eligible adapter.
+
+### The mentor protocol (C7)
+
+**In one line.** When our model is not enough, we ask a frontier model, relay any questions it has
+back to the user through our own model, and fold the answer into one grounded response.
+
+**Rules**
+
+- Own the when-to-consult policy.
+- Generate the assistance prompt: the user prompt, the system prompt, and everything the model
+  knows about the user.
+- Invoke Claude, GPT or Gemini.
+- Relay mentors' clarification questions through our model to the user, and back.
+- Integrate the handoff into a final grounded response.
+
+### Observability
+> `designed` · [D9](../../DECISIONS.md)
+
+**In one line.** We expose `/metrics` on `:8010` and own a Grafana dashboard JSON at
+`dashboards/*.json`; Platform runs the one shared backbone and provisions the dashboard.
+
+**Rules**
+
+- Emit the baseline request rate, latency histogram and error rate.
+- **Plus GPU via dcgm-exporter** — util, mem, temp, power — and tokens/sec, time-to-first-token,
+  the model backend (mock/vllm), and generation queue depth.
+- Shape: [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability.
 
 ## Position in the system
 
@@ -76,7 +117,7 @@ active/rolled-back status) is continuum's call; honoring it per request is ours.
 
 | M | Deliverable | Exit criterion |
 |---|---|---|
-| M0 | **Serving spine** — vLLM hosts the base BWM on the a3mega partition; C3 request → prompt assembly → streamed response emitted as C9; C4 turn record written (no mentor/tool fields yet) | A pilot C3 request returns a streamed grounded answer over C9 and its C4 record is readable in `/sessions`; C9 envelope mutually signed off with output's M0 (their M0 blocks on ours) |
+| M0 | **Serving spine** — vLLM hosts the base world model on the a3mega partition; C3 request → prompt assembly → streamed C9 response → a C4 turn record, with no mentor/tool fields yet | a pilot C3 request returns a streamed grounded answer over C9 and its C4 record is readable in `/sessions` |
 | M1 | **Per-user LoRA hot-swap (C6)** — per-request adapter resolution against the model directory; base-model fallback; rollback honored | Two users on interleaved requests each hit their own adapter; swap overhead measured + published; no-adapter and rolled-back cases fall back cleanly |
 | M2 | **Agentic harness v1** — think/act/observe loop, tool registry, code sandbox, loop guards; tool traces land in C4 | A multi-step tool task (incl. a sandbox code run) completes and is fully replayable from its C4 record |
 | M3 | **Mentor protocol v1 (C7)** — assistance-prompt builder, Claude/GPT/Gemini invocation, clarification relay, handoff integration, full trace logging | An end-to-end mentored turn incl. one clarification round-trip; continuum signs off that the logged trace is trainable |

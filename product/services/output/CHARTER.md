@@ -39,10 +39,10 @@ what inference produced to where the user is. Its future is the **proactive chan
 |---|---|---|
 | **In** | Streaming text delivery to computer surfaces (browser extension, computer app) | token-by-token relay of the inference stream |
 | **In** | Speech delivery to the **mobile app** (→ connected BT headphones/earbuds) | TTS synthesis + audio streaming; the default speech sink until a speaker-equipped wearable exists (§Ownership splits) |
-| **In** | Mid-turn clarification-frame delivery | mentor clarification questions arrive as C9 frames and render as a **distinct message type** on the origin surface (the relay loop is inference's OQ); answers return via input's C3 clarification-answer variant — not through us |
+| **In** | Mid-turn clarification-frame delivery | questions arrive as C9 frames and render as a distinct message type ([↓](#mid-turn-clarification-frames)) |
 | **In** | Render formats | markdown for text surfaces; audio to the mobile app |
 | **In** | Delivery acks + failure handling | per-turn ack, retry/timeout, device-offline behavior |
-| **In** | Delivery-side observability — **`/metrics` + Grafana dashboard JSON** (D9) | Exposes `/metrics` (Prometheus) on :8082 — baseline request rate/latency/errors **+** delivery latency, C9 stream-relay throughput, delivery ack/failure rates, TTS latency (when the speech path lands); owns `dashboards/*.json`. Platform runs the ONE shared Prometheus/Grafana + scrapes us — see [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability |
+| **In** | Delivery-side observability (D9) | expose `/metrics` on :8082 and own `dashboards/*.json` ([↓](#observability)) |
 | **Future (sketch only, NOT v0)** | Proactive channel | notifications, nudges, coach-mode interventions — the service's growth path |
 | **Out** | Generating the response (agentic loop, mentor traffic) | Inference Service |
 | **Out** | Capturing the life stream | Recording Service |
@@ -58,6 +58,43 @@ sibling charters under `product/services/`; do not restate it here.
 
 ---
 
+### Mid-turn clarification frames
+
+**In one line.** A mentor's question reaches the user through us, but the user's answer does not
+come back through us.
+
+**Rules**
+
+- Mentor clarification questions arrive as C9 frames and render as a **distinct message type** on
+  the origin surface. The relay loop itself is inference's open question.
+- Answers return via input's C3 clarification-answer variant — **not** through us.
+- On C3 we are read-only: the UserPrompt's session and turn ids plus **client capabilities**
+  determine the target surface and the render format for the reply.
+
+### The mobile speech path
+
+**In one line.** Sentence-boundary TTS, streamed to the mobile app, which plays it to the user's
+headphones.
+
+**Rules**
+
+- Audio streams to the mobile app, which plays to connected BT headphones or earbuds.
+- Per §Ownership splits, mobile is the speech sink, because the v0 wearable has no speaker.
+- This needs the mobile app's playback surface, and input owns the app.
+
+### Observability
+> `designed` · [D9](../../DECISIONS.md)
+
+**In one line.** We expose `/metrics` on :8082 and own `dashboards/*.json`; Platform runs the one
+shared Prometheus/Grafana and scrapes us.
+
+**Rules**
+
+- Emit the baseline request rate, latency and errors.
+- **Plus** delivery latency, C9 stream-relay throughput, delivery ack/failure rates, and TTS
+  latency once the speech path lands.
+- Shape: [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability.
+
 ## Position in the system
 
 **Upstream:** Inference Service — output consumes the grounded response stream (C9) inference
@@ -69,7 +106,7 @@ ID only, never redefined here):
 
 | Contract | Role for this service |
 |---|---|
-| C3 | Read-only: the UserPrompt's session/turn ids + **client capabilities** determine target surface and render format for the reply; the *clarification-answer* variant (replies to C9 clarification frames) is input's leg — answers never route through us |
+| C3 | Read-only: the UserPrompt's session/turn ids and client capabilities determine the target surface and render format ([↓](#mid-turn-clarification-frames)) |
 | C4 | The turn record a delivery refers to; delivery outcome should be recordable against it (ownership open — OQ2) |
 | **C9** | Our primary input: the grounded response-stream envelope from inference — token/text stream, **mid-turn frames** (mentor clarification questions, status), end-of-turn metadata. Payload fields pinned with inference in M0 |
 
@@ -81,9 +118,9 @@ ID only, never redefined here):
 |---|---|---|
 | M0 | **C9 payload pinned** — envelope fields under C9 (token/segment stream, mid-turn frames, end-of-turn metadata), surface-targeting rules, ack semantics; OQ1–OQ3 closed with inference + input | Payload details merged under C9 in ARCHITECTURE.md; sign-off is mutual — inference's M0 references us, and input signs the C3/OQ3 pieces |
 | M1 | **Computer text path** — relay the inference token stream to browser extension + computer app, markdown render | A pilot-user turn streams token-by-token into the computer surface; delivery ack recorded |
-| M2 | **Mobile speech path** — sentence-boundary TTS, audio streamed to the mobile app, which plays to connected BT headphones/earbuds (§Ownership splits: mobile is the speech sink; the v0 wearable has no speaker). Needs the mobile app's playback surface (input owns the app) | A wearable/mobile query gets a spoken answer end-to-end into the mobile app → BT audio; first audio within ~2 s of first token |
+| M2 | **Mobile speech path** — sentence-boundary TTS streamed to the mobile app, which plays to connected BT headphones/earbuds ([↓](#the-mobile-speech-path)) | a wearable/mobile query gets a spoken answer end-to-end into the mobile app → BT audio; first audio within ~2 s of first token |
 | M3 | **Failure handling** — per-turn acks, idempotent retry keyed by turn id, undeliverable queue, surface fallback | Injected failures (device offline, mid-stream drop) yield correct ack states; zero lost or duplicated responses |
-| M4 | **Metrics + dashboard** (D9) — `/metrics` on :8082 + a Grafana dashboard JSON (`dashboards/*.json`); baseline request rate/latency/errors + delivery latency, C9 relay throughput, ack/failure rates, TTS latency. Platform owns the shared backbone ([../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability) | Service `/metrics` scraped by the shared Prometheus; dashboard shows request rate/latency/errors + delivery latency + ack/failure rates |
+| M4 | **Metrics + dashboard** (D9) — `/metrics` on :8082 plus a Grafana dashboard JSON ([↓](#observability)) | `/metrics` scraped by the shared Prometheus; the dashboard shows request, delivery and ack/failure metrics |
 
 ---
 

@@ -51,7 +51,7 @@ providing paved roads, not gates.
 | GCP project, IAM, quotas; SLURM a3mega allocation policy (serving vs training windows) | Device capture, upload endpoints (**Recording**) |
 | Environments (dev / pilot), CI/CD conventions, deploy tooling | Stream/interactive processing pipelines (**Data Processing**) |
 | Secrets management (mentor API keys, HF token, service accounts) | Schemas, DB/GCS layout for /context and /sessions (**Storage** — platform sets encryption/retention standards) |
-| **Observability backbone**: run the shared **Prometheus + Grafana** (one instance, pinned port), scrape every service's `/metrics`, run the standard exporters (node/CPU, **dcgm** for GPU, DB), alert routing, and **provision each service's Grafana dashboard from the service-owned JSON**. Services own their instrumentation + dashboard JSON; Platform owns the hosting. (§Observability in ARCHITECTURE) | QueryBuilder, chat surfaces (**Input**) |
+| **Observability backbone**: run the shared Prometheus + Grafana, scrape every service, and provision their dashboards ([↓](#observability-backbone)) | QueryBuilder, chat surfaces (**Input**) |
 | Encryption standards in transit + at rest; network boundary; least-privilege access | Serving, agentic harness, mentor calls (**Inference**) |
 | Consent policy + consent-record store (per user / device / modality) + consent gate primitive | Response delivery (**Output**); on-device consent enforcement — pause/mute/delete-last-N, capture indicators (**Recording**, its M2) |
 | Per-user deletion: cross-store orchestration + proof-of-deletion, calling storage/continuum delete primitives (split pinned in ARCHITECTURE §Ownership splits) | Fine-tuning pipeline, adapter training (**Continuum**); model directory internals + per-store delete primitives incl. /raw and adapter artifacts (**Storage** — continuum publishes via C5) |
@@ -83,10 +83,75 @@ Platform sits **beneath** the data plane: upstream of no contract, consumed by e
 | M | Deliverable | Exit criterion |
 |---|---|---|
 | M0 | **Estate baseline + allocation policy** — inventory GCP project, IAM, buckets, the 8-node a3mega partition; written serving-vs-training allocation (proposal: daytime serving, nightly training window for continuum, preemption rules) | Policy doc merged; any sibling can request nodes/quota via a documented path; continuum + inference sign off |
-| M1 | **Security envelope v0** — secrets manager live (mentor keys + HF token out of dotfiles), TLS on all C1/C3 client paths, at-rest encryption posture set for GCS + DBs, least-privilege service accounts per sibling | No plaintext secrets in repos or home dirs; per-service envelope checklist green for every path in C1–C11 |
-| M2 | **Consent + deletion v0** — consent record store (per user/device/modality) with a gate check callable by recording/input; deletion **orchestrator** that enumerates every store (raw blobs, /context, /sessions, model directory, adapters), calls storage's per-store delete primitives (storage M5) + continuum's adapter teardown, and emits a proof-of-deletion report | Test pilot user deleted across all stores incl. adapter teardown within the SLA (proposal: 72 h); rehearsal documented |
-| M3 | **Observability backbone v0** — shared **Prometheus + Grafana** (pinned port), scrape config discovering each service's `/metrics`, standard exporters (node, **dcgm** GPU, DB), alert routing, and a **dashboard-provisioning path** that loads each service's `dashboards/*.json` into Grafana. Plus the per-user **cost dashboard** (ingest GB, storage GB, GPU-hours train/serve, mentor $) | Both founders open ONE Grafana URL and see every service's request rate / latency / errors (+ GPU for inference, DB for storage); a service that ships a `/metrics` endpoint + dashboard JSON appears automatically; weekly pilot cost report generates without manual steps |
+| M1 | **Security envelope v0** — a live secrets manager, TLS on all client paths, an at-rest encryption posture, and least-privilege service accounts ([↓](#m1--security-envelope-v0)) | no plaintext secrets in repos or home dirs; the per-service envelope checklist green for every path in C1–C11 |
+| M2 | **Consent + deletion v0** — a consent record store with a callable gate check, and a deletion orchestrator that reaches every store ([↓](#m2--consent--deletion-v0)) | a test pilot user deleted across all stores including adapter teardown within the SLA; the rehearsal documented |
+| M3 | **Observability backbone v0** — the shared stack, a discovering scrape config, the standard exporters, alert routing, dashboard provisioning, and the per-user cost dashboard ([↓](#m3--observability-backbone-v0)) | both founders open one Grafana URL and see every service; a service that ships `/metrics` plus dashboard JSON appears automatically |
 | M4 | **CI/CD + environments v0** — dev/pilot environments, one deploy convention | One sibling service ships through the pipeline end-to-end |
+
+### Observability backbone
+> `designed` · [D9](../../DECISIONS.md)
+
+**In one line.** Platform runs the one shared Prometheus + Grafana that every service's `/metrics`
+is scraped into, and provisions each service's dashboard from the JSON that service owns.
+
+**Rules**
+
+- One instance, on a pinned port.
+- Scrape every service's `/metrics`.
+- Run the standard exporters: node/CPU, **dcgm** for GPU, and DB.
+- Own alert routing.
+- **Provision each service's Grafana dashboard from the service-owned JSON.**
+
+**Why it's this way**
+
+- Services own their instrumentation and their dashboard JSON; Platform owns the hosting. See
+  §Observability in [ARCHITECTURE.md](../../ARCHITECTURE.md).
+
+### M1 — security envelope v0
+
+**In one line.** Secrets, transport and at-rest posture set once, for every sibling.
+
+**Rules**
+
+- A secrets manager live, with mentor keys and the HF token out of dotfiles.
+- TLS on all C1/C3 client paths.
+- An at-rest encryption posture set for GCS and the DBs.
+- Least-privilege service accounts, per sibling.
+
+### M2 — consent + deletion v0
+
+**In one line.** A consent record store with a gate check anyone can call, and a deletion
+orchestrator that reaches every store a user's data touched.
+
+**Rules**
+
+- The consent record store is per user, device and modality, with a gate check callable by
+  recording and input.
+- The deletion **orchestrator** enumerates every store: raw blobs, `/context`, `/sessions`, the
+  model directory, and adapters.
+- It calls storage's per-store delete primitives (storage M5) plus continuum's adapter teardown.
+- It emits a proof-of-deletion report.
+
+**Watch out for**
+
+- The SLA proposal is 72 h. That is a proposal, not a ratified number.
+
+### M3 — observability backbone v0
+
+**In one line.** The shared stack stood up, discovering services rather than being told about them.
+
+**Rules**
+
+- Shared **Prometheus + Grafana** on a pinned port.
+- A scrape config that *discovers* each service's `/metrics`.
+- Standard exporters: node, **dcgm** GPU, DB. Plus alert routing.
+- A **dashboard-provisioning path** that loads each service's `dashboards/*.json` into Grafana.
+- The per-user **cost dashboard**: ingest GB, storage GB, GPU-hours train and serve, mentor $.
+
+**Exit criterion.** Both founders open one Grafana URL and see every service's request rate,
+latency and errors, plus GPU for inference and DB for storage. A service that ships a `/metrics`
+endpoint and a dashboard JSON appears automatically, and the weekly pilot cost report generates
+without manual steps.
 
 ## Open questions
 

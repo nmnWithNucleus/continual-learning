@@ -36,11 +36,11 @@ component — every prompt-shape evolution lands there, nowhere else.
 | ✅ In | Request payload envelope — one shape across text / speech / image / video | input |
 | ✅ In | QueryBuilder: normalize via C8 → assemble UserPrompt per C3 (template, tags, structure) | input |
 | ✅ In | Session/turn bookkeeping at request creation (mint session/turn ids, turn ordering) | input |
-| ✅ In | Clarification-answer leg of the mentor relay: an envelope variant bound to the pending turn id, emitted as the C3 clarification-answer variant (questions reach the user as C9 mid-turn frames via output) | input |
-| ✅ In | Recent-context read (C11): QueryBuilder pulls same-day grounding from storage's recency/semantic index into the UserPrompt — weights only know up to the last nightly cycle (split pinned in [../../ARCHITECTURE.md](../../ARCHITECTURE.md) § Ownership splits) | input |
-| ✅ In | People-registry curation + consent UX — the small v0 surface where users review/confirm known people; data-processing matches, storage persists (split pinned in [../../ARCHITECTURE.md](../../ARCHITECTURE.md) § Ownership splits) | input |
-| ✅ In | **Mobile app** (v0, CTO-ratified 2026-07-09): an interaction chat surface **and** the device that plays output's synthesized speech to connected BT headphones/earbuds (mobile is the speech-output sink, §Ownership splits). Only mobile *screen capture* is deferred — that's recording's scope (iOS restriction), not ours | input |
-| ✅ In | **Observability** (D9, 2026-07-09): expose `/metrics` on :8081 (request rate/latency/errors + QueryBuilder build time, C3 validation-failure rate, per-surface request counts, upstream inference-call latency) and own a Grafana dashboard JSON at `dashboards/*.json`; Platform runs the shared Prometheus/Grafana backbone (see [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability) | input |
+| ✅ In | Clarification-answer leg of the mentor relay: an envelope variant bound to the pending turn id ([↓](#the-clarification-answer-leg)) | input |
+| ✅ In | Recent-context read (C11): QueryBuilder pulls same-day grounding from storage's recency/semantic index into the UserPrompt ([↓](#recent-context-and-people-registry)) | input |
+| ✅ In | People-registry curation + consent UX — the small v0 surface where users review/confirm known people ([↓](#recent-context-and-people-registry)) | input |
+| ✅ In | **Mobile app** (v0, CTO-ratified 2026-07-09): a chat surface, and the speech-output sink ([↓](#the-mobile-app)) | input |
+| ✅ In | **Observability** (D9, 2026-07-09): expose `/metrics` on :8081 and own a Grafana dashboard JSON ([↓](#observability)) | input |
 | ❌ Out | Passive life capture / continuous stream uplink | Recording Service |
 | ❌ Out | Normalization internals (ASR, diarization, enrichment, timestamp injection) — we only call them | Data Processing Service |
 | ❌ Out | Model serving, agentic harness, mentor-model calls (C7) | Inference Service |
@@ -48,6 +48,59 @@ component — every prompt-shape evolution lands there, nowhere else.
 | ❌ Out | Persisting context/sessions (C2, C4 storage side) | Storage Service |
 | ❌ Out | Fine-tuning cadence, adapter lifecycle (C5) | Continuum Service |
 | ❌ Out | Infra, identity/auth, deploy | Platform Service |
+
+### Recent context and people registry
+
+**In one line.** Two reads that keep a turn grounded in *today*, before tonight's training reaches
+the weights.
+
+**Rules**
+
+- **Recent-context read (C11)** — QueryBuilder pulls same-day grounding from storage's
+  recency/semantic index into the UserPrompt, because the weights only know up to the last nightly
+  cycle.
+- **People-registry curation and consent UX** — the small v0 surface where users review and confirm
+  known people. Data-processing matches; storage persists.
+- Both splits are pinned in [../../ARCHITECTURE.md](../../ARCHITECTURE.md) § Ownership splits.
+
+### The clarification-answer leg
+
+**In one line.** When a mentor needs something from the user mid-turn, the reply comes back to us
+as its own envelope variant, bound to the turn that is waiting for it.
+
+**Rules**
+
+- It is an envelope variant bound to the pending turn id, emitted as the C3 clarification-answer
+  variant.
+- The questions themselves reach the user as C9 mid-turn frames, via output. They do not come
+  through us.
+- The UserPrompt we produce carries a chat-templated multimodal request, session and turn ids, and
+  client capabilities.
+
+### The mobile app
+> v0 · CTO-ratified 2026-07-09
+
+**In one line.** One codebase that is both an interaction chat surface and the device that plays
+output's synthesized speech.
+
+**Rules**
+
+- It plays output's synthesized speech to connected BT headphones or earbuds — mobile is the
+  speech-output sink (§Ownership splits).
+- Only mobile *screen capture* is deferred, and that is recording's scope under an iOS
+  restriction, not ours.
+
+### Observability
+> `designed` · [D9](../../DECISIONS.md), 2026-07-09
+
+**In one line.** We expose `/metrics` on :8081 and own a Grafana dashboard JSON at
+`dashboards/*.json`; Platform runs the shared Prometheus/Grafana backbone.
+
+**Rules**
+
+- Emit request rate, latency and errors, **plus** QueryBuilder build time, the C3
+  validation-failure rate, per-surface request counts, and upstream inference-call latency.
+- Shape: [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability.
 
 ## Position in the system
 
@@ -58,7 +111,7 @@ contracts are defined once in [../../ARCHITECTURE.md](../../ARCHITECTURE.md) § 
 | Contract | Direction | Our role |
 |---|---|---|
 | **C8** | QueryBuilder ↔ data-processing (sync API) | QueryBuilder submits the raw request payload and gets the normalized result back — the SAME code path that processes the life-stream, exposed synchronously |
-| **C3** | input → inference | We produce the UserPrompt: chat-templated multimodal request + session/turn ids + client capabilities; plus the **clarification-answer variant** binding a user reply to its pending turn (return leg of the mentor relay — questions arrive as C9 frames) |
+| **C3** | input → inference | We produce the UserPrompt, plus the clarification-answer variant ([↓](#the-clarification-answer-leg)) |
 | **C11** | storage → input (QueryBuilder) | We consume the recent-context read for same-day grounding; the index lives in storage, QueryBuilder decides what enters the UserPrompt |
 | C4 | inference → storage (reference only) | Turn records are keyed by the session/turn ids we mint at request creation; we define id semantics, storage owns persistence |
 
@@ -73,7 +126,7 @@ envelope and hit data-processing only via C8.
 | M0 | **Interface pin.** Pin C3 (UserPrompt schema, template/tag/capability vocab, versioning) and C8 (call shape, latency budget) with inference + data-processing leads; envelope v1 spec | Both sibling leads sign off; schemas versioned in ARCHITECTURE.md § Contracts |
 | M1 | **Text thin slice.** Computer-app chat box → envelope → QueryBuilder (C8 text pass) → C3 UserPrompt accepted by inference; session/turn ids minted | A pilot user sends a text turn and gets a model response end-to-end on the dev stack |
 | M2 | **QueryBuilder v1.** All four modalities normalized via C8 (speech→transcript, image, video clip); chat template + tags v1; client capabilities populated; template version stamped into every C3 payload | Golden-payload fixture suite green for all 4 modalities; interactive C8 round-trip inside the M0 latency budget (p95) |
-| M3 | **All surfaces.** Browser extension chat, mobile app (chat + speech-output playback surface for output), and wearable push-to-talk voice, all emitting the identical envelope; surface-specific code limited to capture + display/playback | The same turn succeeds from all four surfaces against one unchanged backend |
+| M3 | **All surfaces.** Browser extension chat, the mobile app, and wearable push-to-talk voice, all emitting the identical envelope; surface-specific code is limited to capture and display/playback | the same turn succeeds from all four surfaces against one unchanged backend |
 | M4 | **Pilot hardening.** Idempotent request creation, payload size limits, retries, auth via platform, envelope/template version telemetry | 7 consecutive pilot days with zero failures attributable to envelope or prompt assembly |
 | M5 | **Metrics + dashboard** (D9; see [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability). `/metrics` on :8081 + a Grafana dashboard JSON in `dashboards/` | Service `/metrics` scraped by the shared Prometheus; dashboard shows request rate/latency/errors + QueryBuilder build time, C3 validation-failure rate, per-surface request counts, upstream inference-call latency |
 
