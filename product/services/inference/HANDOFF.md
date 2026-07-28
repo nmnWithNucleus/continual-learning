@@ -4,7 +4,7 @@
 > Read [CHARTER.md](CHARTER.md) first (mission/scope/interfaces), then this file — the
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
-**Status:** serve-loop MVP (v0.0) **CLOSED on the real model** — integrated E2E on the mock loop, then a genuine turn driven on **Qwen3-VL-32B-Instruct (vLLM TP=8, node-7)** 2026-07-09; `mock` stays the no-GPU dev default · **Last updated:** 2026-07-18 (post-return doc sync)
+**Status:** serve-loop MVP (v0.0) **closed on the real model** — integrated E2E on the mock loop, then a genuine turn driven on **Qwen3-VL-32B-Instruct (vLLM TP=8, node-7)** 2026-07-09; `mock` stays the no-GPU dev default · **Last updated:** 2026-07-18 (post-return doc sync)
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
@@ -39,7 +39,7 @@
   harness/mentors arrive. Mid-turn C9 frames are reserved, not emitted.
 
 ## Incoming — serve-time memory harness (continuum kickoff decision, 2026-07-22; pending founders'-board ratification)
-- Founder placed the **memory harness runtime HERE**: fast-memory (mneme/SSM) per-user state
+- Founder placed the **memory harness runtime here**: fast-memory (mneme/SSM) per-user state
   fed by tailing recent `/context` records, the think-back paging executor (~80–120 temporary
   LoRA steps on a past day's log + snapshot rollback at question time), day-log-grounded
   answering, and the memory router. Continuum **trains** the artifacts (nightly life adapter
@@ -63,7 +63,7 @@
   storage without consulting continuum.
 
 ## Next
-- ~~**Real model (M0 finish)**~~ **DONE 2026-07-09** — `serve_vllm.sh` ran on node-7 (TP=8);
+- ~~**Real model (M0 finish)**~~ **done 2026-07-09** — `serve_vllm.sh` ran on node-7 (TP=8);
   `/infer` with `MODEL_BACKEND=vllm` drove a genuine turn E2E (real usage in the C9 end frame;
   C4 persisted with the real `model_id`). Fleet verified **down** 2026-07-17 — relaunch via
   `serve_vllm.sh` when needed (node-7 is the product node; wider cluster busy with teammate runs).
@@ -73,7 +73,7 @@
 - **Observability (D9, now on backlog):** ship `/metrics` on `:8010` (request rate/latency/errors + **GPU via dcgm-exporter**, tokens/sec, time-to-first-token, backend, queue depth) + a `dashboards/*.json` Grafana dashboard; Platform runs the shared scrape/UI — see CHARTER M6 + [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability.
 
 ## Gotchas
-- **C9 is a wire format, not one JSON doc.** Split the body on the FIRST `\x1e` (U+001E): before =
+- **C9 is a wire format, not one JSON doc.** Split the body on the *first* `\x1e` (U+001E): before =
   answer text, after = the single JSON end frame. `app/wire.py` has `split_stream()`.
 - The **C4 write happens after the stream** (inside the streaming generator, after the end frame).
   Consuming the full response drives it to completion — so a fully-read `/infer` response means the

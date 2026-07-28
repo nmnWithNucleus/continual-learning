@@ -4,18 +4,27 @@
 > Read [CHARTER.md](CHARTER.md) first (mission/scope/interfaces), then this file — the
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
-**Status:** **COMPUTER CAPTURE SURFACES slice — ALPHA COMPLETE: all three surfaces verified
-clean end-to-end on real devices** (2026-07-19). **Phone web** (mic+camera → mp4/wav),
-**mac CLI** (avfoundation screen+mic), **browser extension** (Chrome MV3 → **direct tab
-capture**, video+audio) — each ran a real capture that landed verdict `clean`, blobs
-sha256-verified + ffprobe-decoded in storage, and real ASR transcripts in `/context`. The
-extension **PIVOTED 2026-07-19 (D-E7)** off the desktop-screen-picker (which failed 3× on the
-tester's Comet browser) to direct tab capture; passed on the first real run. Client wire renamed
-**`/ingest/*` → `/capture/*`** (founders; alias removed). All prior data purged 2026-07-19;
-fleet fresh. Runbook: [handoff/alpha-runbook.md](handoff/alpha-runbook.md). **+ async-ingest
-seam tolerance (DP's `INGEST_ASYNC`) + D9 `/metrics` + dashboard (M6) landed 2026-07-19.** ·
-recording suite **144 tests** (110 + 7 async-seam/redrive/migration + 3 metrics) · **Last updated:** 2026-07-19
-(async-observability session)
+**Status:** built · recording suite **144 tests** (110 + 7 async-seam/redrive/migration +
+3 metrics) · **Last updated:** 2026-07-19 (async-observability session)
+
+**Where we are.** The computer-capture-surfaces slice is alpha-complete: all three surfaces were
+verified `clean` end to end on real devices on 2026-07-19. Each ran a real capture that landed
+verdict `clean`, with blobs sha256-verified and ffprobe-decoded in storage, and real ASR
+transcripts in `/context`. Runbook: [handoff/alpha-runbook.md](handoff/alpha-runbook.md).
+
+- **Phone web** — mic and camera → mp4/wav.
+- **Mac CLI** — avfoundation screen and mic.
+- **Browser extension** — Chrome MV3, direct tab capture, video and audio.
+- Also landed 2026-07-19: async-ingest seam tolerance for DP's `INGEST_ASYNC`, plus D9 `/metrics`
+  and a dashboard (M6).
+
+**Watch out for**
+
+- **The extension pivoted 2026-07-19 (D-E7)** off the desktop-screen-picker, which failed 3× on
+  the tester's Comet browser, to direct tab capture. It passed on the first real run.
+- The client wire was renamed `/ingest/*` → `/capture/*` by the founders, and the alias is
+  removed.
+- All prior data was purged 2026-07-19, so the fleet is fresh.
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
@@ -25,39 +34,61 @@ recording suite **144 tests** (110 + 7 async-seam/redrive/migration + 3 metrics)
 | C | **Ingest server**: segment upload, A/V demux, continuity ledger, gap report | built + verified live (loss/dup drills) | [handoff/ws-c-ingest-demux-ledger.md](handoff/ws-c-ingest-demux-ledger.md) | recording M1 lead |
 | D | **VAD-cut chunking** (charter OQ4 → D-M1-2) | built + verified on real speech | [handoff/ws-d-vad-carve.md](handoff/ws-d-vad-carve.md) | recording M1 lead |
 | — | DP-side pair (continuity detector + real ASR + VAD gate) | built + verified | [../data-processing/handoff/ws-m1-continuity-asr.md](../data-processing/handoff/ws-m1-continuity-asr.md) | recording M1 lead |
-| E | **Browser extension** (MV3 passive: **direct tab capture**, D-E7) | **REAL-BROWSER VERIFIED** (Comet, verdict `clean`, real transcripts) | [handoff/ws-e-extension.md](handoff/ws-e-extension.md) | computer-capture lead |
+| E | **Browser extension** — MV3 passive direct tab capture (D-E7) | verified on a real browser (Comet, verdict `clean`, real transcripts) | [handoff/ws-e-extension.md](handoff/ws-e-extension.md) | computer-capture lead |
 | F | **Mac capture CLI** (ffmpeg avfoundation → segments → wire) | **live-verified** (real avfoundation + `--source test`, verdict `clean`) | [handoff/ws-f-mac-cli.md](handoff/ws-f-mac-cli.md) | computer-capture lead |
-| AO | **Async-ingest seam** (tolerate DP's 202-accept; `dp_state` + confirm-on-processed report reconciliation) + **D9 `/metrics` + dashboard (M6)** | built + tested (120 green) | [../data-processing/handoff/ws-async-observability.md](../data-processing/handoff/ws-async-observability.md) | async-observability lead |
+| AO | **Async-ingest seam** (tolerate DP's 202-accept) plus D9 `/metrics` and dashboard (M6) ([↓](#the-async-ingest-seam)) | built + tested (120 green) | [../data-processing/handoff/ws-async-observability.md](../data-processing/handoff/ws-async-observability.md) | async-observability lead |
+
+### The async-ingest seam
+> `built` 2026-07-19 · [D16](../../DECISIONS.md) · 120 tests green
+
+**In one line.** We tolerate data-processing accepting a chunk with a `202` before it has
+processed it, without ever reporting a lost chunk as `clean`.
+
+**Rules**
+
+- Track `dp_state` per chunk, and reconcile the report on *confirm-on-processed* rather than on
+  accept.
+- `dp_acked=1` means C2 was durably written, never merely accepted.
+
+**Why it's this way**
+
+- A `202` opens a silent-loss window. Confirming only on `processed` is what keeps an
+  accepted-then-lost chunk reading `recording` or `gaps` instead of a silent `clean`.
+- Detail, including DP's side of the wire:
+  [ws-async-observability](../data-processing/handoff/ws-async-observability.md).
 
 ## Current state
 - **M0 spine unchanged and green** (`:8084`, `/capture/run`, blob-first PUT → C1 push,
   at-least-once, dedup on `chunk_id`). See the M0 notes in git history / ws-A tests.
-- **Phone web client** (`clients/web/`, static, no build step; served at `/client/`, `GET /`
-  redirects): getUserMedia + segmented MediaRecorder (**~10 s self-contained segments via
-  recorder restart** — D-M1-1; timeslice fragments aren't self-contained), record/pause/stop,
-  camera-off mic-only mode, serialized offline upload queue with retry/backoff, end marker
-  (+ `sendBeacon` on pagehide), wake lock, live gap-report poll with verdict badge.
-- **Capture-wire server** (`app/capture_web.py` + `ledger.py` + `demux.py` + `emitter.py`):
-  **client wire renamed `/ingest/*` → `/capture/*` 2026-07-18 (founders)** so `/ingest` is
-  uniquely data-processing's C1 receiver; the transitional alias was **removed 2026-07-19**
-  (CTO: single tester — refresh loaded pages instead of versioning routes; a test asserts
-  recording serves nothing under `/ingest`).
-  `POST /capture/segments` (idempotent on `(session_id, seq)`, sha-verified, spool→ledger ack),
-  per-session FIFO emit worker: ffmpeg **demux into per-modality chunks** (audio → `audio/wav`
-  16 kHz mono; video → container copy mp4/webm) → per modality get-or-create stream
-  (**own `stream_id`, same `device_id`**) → chunk identity minted + persisted BEFORE first
-  emit (crash-safe; restart re-emits the same `chunk_id`s) → blob-first PUT → validated C1
-  push → acks recorded. `RECORDING_INGEST_SYNC=1` for inline processing (tests/small ops).
-  Spool deleted after emit (`RECORDING_KEEP_SPOOL=1` keeps it — the D13 consent-holdback seam).
-- **Gap detection is now a CHECKED guarantee** (was emit-side-only affordance in M0):
+- **Phone web client** (`clients/web/`) — static, no build step, served at `/client/`, with
+  `GET /` redirecting. getUserMedia plus a segmented MediaRecorder.
+- It uses **~10 s self-contained segments via recorder restart** (D-M1-1), because timeslice
+  fragments are not self-contained. Record/pause/stop, camera-off mic-only mode, a serialized
+  offline upload queue with retry and backoff, an end marker (plus `sendBeacon` on pagehide), a
+  wake lock, and a live gap-report poll with a verdict badge.
+- **Capture-wire server** (`app/capture_web.py` + `ledger.py` + `demux.py` + `emitter.py`).
+  `POST /capture/segments` is idempotent on `(session_id, seq)`, sha-verified, spool→ledger ack.
+- Per session a FIFO emit worker runs: ffmpeg **demuxes into per-modality chunks** (audio →
+  `audio/wav` 16 kHz mono; video → container copy mp4/webm) → per modality get-or-create stream
+  (**own `stream_id`, same `device_id`**) → chunk identity minted and persisted **before** the
+  first emit → blob-first PUT → validated C1 push → acks recorded.
+- Minting identity before the first emit is what makes it crash-safe: a restart re-emits the same
+  `chunk_id`s.
+- `RECORDING_INGEST_SYNC=1` gives inline processing, for tests and small ops. The spool is deleted
+  after emit; `RECORDING_KEEP_SPOOL=1` keeps it, which is the D13 consent-holdback seam.
+- **The client wire was renamed `/ingest/*` → `/capture/*` 2026-07-18** (founders), so `/ingest` is
+  uniquely data-processing's C1 receiver. The transitional alias was **removed 2026-07-19** (CTO:
+  a single tester, so refresh loaded pages instead of versioning routes). A test asserts recording
+  serves nothing under `/ingest`.
+- **Gap detection is now a checked guarantee** (was emit-side-only affordance in M0):
   the SQLite **continuity ledger** (`var/ledger.db`) tracks both legs;
   `GET /capture/sessions/{id}/report` joins client leg (missing seqs, dups, unterminated),
   emit leg (per-stream dense sequences, pending/failed, `segment_states` drain signal), and a
   **live DP cross-check** (`GET /continuity/{stream_id}` on data-processing) into a
-  `clean|gaps|recording` verdict. Client-side loss appears in the client leg and NEVER as a
+  `clean|gaps|recording` verdict. Client-side loss appears in the client leg and never as a
   fabricated C1 gap (two continuity domains, joined by the ledger). Verified live: clean,
   loss-drill (`gaps` + `missing_seqs`), dup-drill (acked `duplicate`, not re-emitted).
-- **Chunking (OQ4) DECIDED — D-M1-2** (charter §Open questions 4 updated): VAD-cut variable
+- **Chunking (OQ4) ratified — D-M1-2** (charter §Open questions 4 updated): VAD-cut variable
   chunks [5–30 s] where the server owns a continuous feed (`app/carve.py`, now the audio
   ChunkSource **default**; explicit `chunk_seconds`/`CHUNK_SECONDS` = fixed); phone = fixed
   ~10 s edge segments; video = fixed windows. Verified live on real speech: cut lands in the
@@ -76,9 +107,9 @@ recording suite **144 tests** (110 + 7 async-seam/redrive/migration + 3 metrics)
   DP-missing against ledger ack receipts — `dp.missing_unacked`), stale pagehide end
   marker (monotonic + reopen), retry sequence-order, demux subprocess timeout, and a
   client Pause→Resume double-recorder race. Live E2E re-verified after the fixes.
-- **Browser extension** (`clients/extension/`, Chrome MV3 — ws-E): a PASSIVE capture
+- **Browser extension** (`clients/extension/`, Chrome MV3 — ws-E): a passive capture
   surface (no content scripts, no page/DOM access, no static host permissions — runtime
-  origin grant instead of server CORS). **Records the ACTIVE TAB — video + audio in ONE
+  origin grant instead of server CORS). **Records the active tab — video and audio in one
   muxed stream via `chrome.tabCapture` (D-E7, pivoted 2026-07-19 off the fragile
   desktopCapture screen-picker after it failed 3× on the tester's Comet browser).** One
   tab = ONE session = one muxed-webm (vp8+opus) segment loop; the **server demuxes each
@@ -87,7 +118,7 @@ recording suite **144 tests** (110 + 7 async-seam/redrive/migration + 3 metrics)
   `ext-chrome-<suffix>`. D-M1-1 segmented recorder + the phone client's serialized uploader
   as DI'd ES modules (17 deno tests); popup mirrors the phone status panel. Server URL is a
   popup setting (tunnel or localhost); a **Discard-unsent** escape hatch unlocks a drain
-  stuck on a bad URL. **REAL-BROWSER VERIFIED 2026-07-19** (CTO on Comet, verdict `clean`,
+  stuck on a bad URL. **Verified on a real browser 2026-07-19** (CTO on Comet, verdict `clean`,
   7 real ASR transcripts of the captured tab's audio). Trade-off: the extension captures a
   browser *tab*, not the whole desktop — full-screen capture is the mac CLI's job.
 - **Mac capture CLI** (`clients/mac/nucleus_capture.py` — ws-F): single-file stdlib-only

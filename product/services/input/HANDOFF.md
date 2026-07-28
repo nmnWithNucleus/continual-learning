@@ -24,7 +24,7 @@
   Output's `c9_reader.js` is **vendored** into [app/static/c9_reader.js](app/static/c9_reader.js)
   (same-origin so the browser ES-module import needs no CORS to `:8082`); `index.html` loads
   `app.js` as `type="module"` and `app.js` hands the `fetch()` response to
-  `renderC9Stream(resp, #answer, {onEndFrame})`, which streams + SAFE-markdown-renders the
+  `renderC9Stream(resp, #answer, {onEndFrame})`, which streams and safe-markdown-renders the
   answer and surfaces usage. Canonical source stays output's copy — re-copy on change.
 
 ## Contracts

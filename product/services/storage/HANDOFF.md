@@ -57,7 +57,7 @@ may contain `/`; 404 also when the blob was since-deleted, which consumers must 
   a **ledger, not corpora** — by design.
 - **Tables:** `turns`, `model_directory`, `raw_blobs`, `context_records`, `user_profiles`,
   `training_windows`, `day_logs`.
-- **M9 parity: PASS** — 31 binding checks over **two** window origins including a **misaligned** one
+- **M9 parity passes** — 31 binding checks over **two** window origins including a **misaligned** one
   (the first run passed only on a grid-aligned origin, which no real window has; the bar was narrowed
   and the proof redone — [D20](../../DECISIONS.md)).
 
@@ -73,7 +73,7 @@ may contain `/`; 404 also when the blob was since-deleted, which consumers must 
 - **C11** (recency / semantic index) is still **deliberately absent** — a later slice.
 - **The model directory is still the trivial C6 row** (`user_id, model_id, adapter, adapter_path`):
   no entries log, no status column. Hosting C5 is therefore a **build, not a transport swap**.
-- **Storage owns the day-log's REPRESENTATION outright; its CONTENT is a contract neither service
+- **Storage owns the day-log's *representation* outright; its *content* is a contract neither service
   may move alone** ([D20](../../DECISIONS.md)) — *if the trainer can see it, it is contract; if only
   storage can see it, it is ours.*
 
