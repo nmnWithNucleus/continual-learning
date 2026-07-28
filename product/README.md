@@ -4,19 +4,20 @@
 > feeders). Everything about building Nucleus v0 — vision, architecture, org, and one
 > directory per service lives here.
 
-**Last updated:** 2026-07-08
+**Last updated:** 2026-07-28
 
 ## Cold start — read in this order
 
 1. [VISION.md](VISION.md) — what we're building and why.
-2. [ARCHITECTURE.md](ARCHITECTURE.md) — the v0 system: the two loops, components, services and **§Contracts**.
+2. [ARCHITECTURE.md](ARCHITECTURE.md) — the v0 system: the two loops, components, services and §Contracts.
 3. [ORG.md](ORG.md) — how we work: doc protocol, session mechanics, growth rules.
-3b. [STYLE.md](STYLE.md) — how we write it down: the card template, the change format, status words.
-4. [HANDOFF.md](HANDOFF.md) — the board: service status, escalations, what's next. Rewritten each session.
-5. [DECISIONS.md](DECISIONS.md) — every ratified founders' decision, numbered. Cited everywhere, restated nowhere.
-6. [PROMPTS.md](PROMPTS.md) — sample copy-paste prompt templates to launch any kind of session.
+4. [STYLE.md](STYLE.md) — how we write it down: the card template, the change format, status words.
+5. [HANDOFF.md](HANDOFF.md) — the board: service status, escalations, what's next. Rewritten each session.
+6. [DECISIONS.md](DECISIONS.md) — every ratified founders' decision, numbered. Cited everywhere, restated nowhere.
+7. [PROMPTS.md](PROMPTS.md) — sample copy-paste prompt templates to launch any kind of session.
 
 A service lead only needs 1–2 above plus their own `services/<key>/CHARTER.md` + `HANDOFF.md`.
+Anyone editing any document reads 4 first.
 
 ## Map
 
@@ -45,11 +46,13 @@ product/
     └── platform/          infra · CI/CD · security/privacy · cost · observability
 ```
 
-## Conventions (short form — law lives in [ORG.md](ORG.md))
+## Conventions
 
-- Stable docs vs volatile canvases: CHARTER/README change deliberately; HANDOFF changes every session.
-- **A board is not a log.** Every `HANDOFF.md` and `CHARTER.md` is **rewritten in place** to describe
-  today. Only worklogs and `DECISIONS.md` accumulate — and they **prepend**, newest at the top.
-- One fact, one home; link, don't restate. Contracts change in ARCHITECTURE.md §Contracts *first*;
-  ratified decisions live in [DECISIONS.md](DECISIONS.md) and are cited by D-number.
-- Every session ends by updating its canvas + a clean, attribution-free commit.
+Four rules bind every session. Each is stated once, elsewhere, and linked from here.
+
+| Rule | Home |
+|---|---|
+| A board is not a log: boards are rewritten, worklogs prepend | [ORG.md](ORG.md) §Documentation protocol |
+| One fact, one home; link, never restate | [STYLE.md](STYLE.md) rule 8 |
+| A contract changes in §Contracts first, then `contracts/`, then both canvases | [ARCHITECTURE.md](ARCHITECTURE.md) §Contracts |
+| Every session ends by stamping its canvas and committing, attribution-free | [ORG.md](ORG.md) §Documentation protocol |

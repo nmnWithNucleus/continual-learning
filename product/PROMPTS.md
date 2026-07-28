@@ -4,7 +4,7 @@
 > order and end-of-session duties, so the session is productive cold and leaves the docs
 > better than it found them. Mechanics/rationale: [ORG.md](ORG.md).
 
-**Last updated:** 2026-07-08 · Repo root assumed: `~/nmn/continual_learning`
+**Last updated:** 2026-07-28 · Repo root assumed: `~/nmn/continual_learning`
 
 ---
 
@@ -16,11 +16,11 @@
 
 ---
 
-## A — Service-lead kickoff (first real session of a service) — CONSULTATIVE, founder-in-the-loop
+## A — Service-lead kickoff (consultative, founder-in-the-loop)
 
-> Initial kickoff is deliberately **two-phase with a founder gate**: the lead does NOT design or
+> Initial kickoff is deliberately **two-phase with a founder gate**: the lead does not design or
 > build until the founder has answered the blocking open questions. This is the one session type
-> that pauses for the founder by design (resume/B is autonomous).
+> that pauses for the founder by design (B is autonomous).
 
 ```
 You are the service lead for the <SERVICE NAME> of Nucleus AI's v0 product. This is the
@@ -33,6 +33,7 @@ Read, in order:
 3. product/services/<key>/CHARTER.md   — your mission, scope, milestones, OPEN QUESTIONS
 4. product/services/<key>/HANDOFF.md   — current working state (today: awaiting kickoff)
 5. product/ORG.md               — how we work: doc protocol, parallelism rules, escalation
+6. product/STYLE.md             — how we write it: binding on every document you touch (D21)
 
 PHASE 1 — Kickoff brief, then STOP and wait for me. Produce, as a message (do not build yet):
   a) A short M0 plan sketch — how you'd make CHARTER.md § v0 deliverables M0 real, and the
@@ -54,7 +55,7 @@ Before you end: update HANDOFF.md (status row, Current state, Next, gotchas + th
 made), stamp Last updated + your session, commit with a clean message (no attribution).
 ```
 
-## B — Service-lead resume (any later session) — AUTONOMOUS
+## B — Service-lead resume (autonomous)
 
 > Unlike the kickoff (A), resume is **autonomous**: proceed from the canvas's Next without a
 > founder gate. Make + document reasonable decisions; escalate only genuine blockers
@@ -65,7 +66,8 @@ You are the service lead for the <SERVICE NAME> of Nucleus AI's v0 product, resu
 
 Read: product/services/<key>/HANDOFF.md first (the canvas tells you where things stand and
 what's next), then the specific handoff/wsN files you're picking up. Skim your CHARTER.md
-§Scope + product/ARCHITECTURE.md §Contracts as needed; ORG.md governs conventions.
+§Scope + product/ARCHITECTURE.md §Contracts as needed; ORG.md governs conventions and
+product/STYLE.md governs every document edit you make (D21).
 
 Continue from the canvas's "Next" — proceed autonomously; make + document decisions rather
 than pausing, and escalate only true blockers (a contract change, a cross-service conflict) by
@@ -82,9 +84,10 @@ Before you end: update HANDOFF.md + stamp + commit (clean message, no attributio
 ```
 You are the <WS-NAME> workstream agent inside the <SERVICE NAME> of Nucleus AI's v0
 product. Your workstream file: product/services/<key>/handoff/<wsN-name>.md — read it,
-plus the service's HANDOFF.md (global context + contracts you touch). That must be enough
-to work independently; if it isn't, fixing those docs is part of your job. (If the ws file
-doesn't exist, stop and tell me — it needs an A/B planning pass first.)
+plus the service's HANDOFF.md (global context + contracts you touch) and product/STYLE.md
+(binding on every doc edit). That must be enough to work independently; if it isn't, fixing
+those docs is part of your job. (If the ws file doesn't exist, stop and tell me — it needs an
+A/B planning pass first.)
 
 Deliver what the ws file's "Next" defines. Stay inside your workstream's scope — the only
 coupling with parallel workstreams is the contracts pinned in ARCHITECTURE.md §Contracts
@@ -102,8 +105,8 @@ This is a Nucleus AI founders' working session on: <ASPECT: engineering | resear
 design | hiring-ops>.
 
 Read: product/HANDOFF.md (whole-company canvas: service status board, escalations), then
-product/handoff/<aspect>.md (our running thread on this aspect). You have full context of
-VISION/ARCHITECTURE/ORG; open them as needed.
+product/handoff/<aspect>.md (our running thread on this aspect), then product/STYLE.md if you
+will edit any document. You have full context of VISION/ARCHITECTURE/ORG; open them as needed.
 
 Today's agenda: <WHAT WE'RE WORKING ON>.
 
@@ -121,23 +124,16 @@ several coupled decisions, each with real blast radius — the D17 → D18 pair 
 with five additions. Written down because the prep file that proved them has been retired into the
 docs it produced:
 
-1. **Order the agenda by dependency and say which one gates the rest.** D18's `window_id` decision
-   had to land before the day-log move and the watermark window, because both key on it. Deciding
-   it late means redoing them.
-2. **Open each decision with "VERIFY THIS FIRST" and a handful of `file:line` citations.** Not
-   background — the specific greps that make the decision concrete. Every one of D18's five
-   `window_id` claims was verified in minutes, and the exercise turned up *three more consumers the
-   prompt had not listed*, one of which was load-bearing.
-3. **State your own read and invite the argument** — "My read (argue with it)". It gives the session
-   something to push against instead of a blank page, and it makes disagreement cheap. One premise
-   in D18's prompt was flatly wrong (it conflated two functions named `render_block`); saying it out
-   loud is what got it caught rather than inherited.
-4. **List the deliverables explicitly, and require DECIDED vs BUILT stated separately for each.**
-   This is the O-12 discipline in prompt form: a session that ratifies four things will otherwise
-   report them under one status headline, and the Decisions log is the most authoritative doc we
-   have.
-5. **Name the things that must not get lost again**, with their escalation ids. Items that had
-   already slipped twice (E-2, the unminted C-numbers) survived only because the prompt listed them.
+1. **Order the agenda by dependency and name the decision that gates the rest.** D18's `window_id`
+   had to land before the day-log move and the watermark window, because both key on it.
+2. **Open each decision with the `file:line` citations that make it concrete.** Verifying D18's
+   five `window_id` claims took minutes and turned up three more consumers the prompt had missed.
+3. **State your own read and invite the argument.** One premise in D18's prompt was flatly wrong;
+   saying it out loud is what got it caught rather than inherited.
+4. **Require `ratified` and `BUILT` to be stated separately per deliverable.** A session that
+   ratifies four things will otherwise report them under one status headline.
+5. **Name the things that must not get lost again, with their escalation ids.** E-2 and the
+   unminted C-numbers had already slipped twice and survived only because the prompt listed them.
 
 The failure this guards against is not a bad decision; it is a session that spends its first hour
 reconstructing context that was hot when the prep was written.
@@ -148,8 +144,8 @@ reconstructing context that was hot when the prep was written.
 You are the integrator for <SCOPE: e.g. the serve-loop MVP> in Nucleus AI's v0 product.
 The parallel workstreams are done or nearly done; your job is wiring + end-to-end proof.
 
-Read: product/ARCHITECTURE.md (§Contracts + the relevant loop walkthrough), then every
-involved service HANDOFF.md and ws file. Wire the pieces, run the end-to-end path, fix
+Read: product/ARCHITECTURE.md (§Contracts + the relevant loop walkthrough), product/STYLE.md,
+then every involved service HANDOFF.md and ws file. Wire the pieces, run the end-to-end path, fix
 integration deltas (record each in the owning service's canvas — pattern:
 poc/live_video_chat/HANDOFF.md "How WS6 wired it"). Contract drift you discover is a
 finding, not something you silently patch — fix the doc AND flag it.
@@ -162,11 +158,11 @@ product/HANDOFF.md Current state, update involved canvases, commit.
 
 ```
 You are a reviewer for Nucleus AI's v0 product docs + code. Read product/ARCHITECTURE.md
-§Contracts, then every services/*/HANDOFF.md and recent git log. Look for: canvases gone
-stale (status rows contradicting Current state or the code), contract drift (code diverged
-from §Contracts), orphaned/duplicated responsibilities, and cold-start failures (could a
-fresh session actually resume from this canvas?). Report findings ranked by severity into
-product/HANDOFF.md §Escalations — do not fix silently. Commit.
+§Contracts and product/STYLE.md, then every services/*/HANDOFF.md and recent git log. Look
+for: canvases gone stale (status rows contradicting Current state or the code), contract drift
+(code diverged from §Contracts), orphaned/duplicated responsibilities, STYLE.md violations,
+and cold-start failures (could a fresh session actually resume from this canvas?). Report
+findings ranked by severity into product/HANDOFF.md §Escalations — do not fix silently. Commit.
 ```
 
 ---

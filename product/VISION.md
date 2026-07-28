@@ -3,14 +3,12 @@
 > The stable "why" document. The system design lives in [ARCHITECTURE.md](ARCHITECTURE.md);
 > how we work lives in [ORG.md](ORG.md). This file changes rarely and deliberately.
 
-**Last updated:** 2026-07-08
-
----
+**Last updated:** 2026-07-08 · Status: stable
 
 ## What we are building
 
 A personal AI that sits at the same perception level as its user. It sees what they see,
-hears what they hear, and — unlike every assistant on the market — it does not meet the user
+hears what they hear, and unlike every assistant on the market it does not meet the user
 fresh on every request. The user's entire life context is **continuously distilled into the
 weights of a model that belongs to them**. v0's mission: evolve a personal AI over time by
 consuming the ever-growing context of a user's life. Later versions grow from assistant to
@@ -22,8 +20,8 @@ coach — guiding, steering, and nudging, always grounded in how that user has a
   real, complicated, day-to-day work questions — but the interface stayed a text box across
   dozens of disconnected threads.
 - **Modality era.** Image, speech, video moved into the models themselves.
-- **Harness era.** Engineering scaffolding — Codex, Claude Code, Cursor, agent frameworks —
-  wrapped models with context injection, memory, tools, search, and planning loops. AI became
+- **Harness era.** Engineering scaffolding (Codex, Claude Code, Cursor, agent frameworks)
+  wrapped models with context injection, memory, tools, search and planning loops. AI became
   the brain of a system rather than a text-completion box.
 
 Every inch of human work is getting easier with an AI alongside. But all of it still lives
@@ -51,8 +49,8 @@ A human's "context" is what they perceive — sight, sound, speech, the physical
 digital one. Upper bound on a whole life of it: 24 h × 365 d × 100 y ≈ **876K hours**.
 Frontier models pre-train on millions of hours. A single life fits.
 
-So: take a performant open base vision-language model — our **Base World Model (BWM)** — and
-instead of a rolling context window, **continuously fine-tune it on the user's life stream**:
+So: take a performant open base vision-language model, our **Base World Model (BWM)**, and
+instead of a rolling context window, continuously fine-tune it on the user's life stream:
 
 - A wearable (v0: body cam — camera + mic, no speaker) captures the physical world.
 - Computer capture (screen recording, browser extension, mic) covers the digital world.
@@ -65,14 +63,17 @@ The bet mirrors pre-training itself: enough continuous life context should produ
 recall but **emergent behaviors** — patterns, skills, preferences that mimic the user.
 A digital twin, grown rather than configured.
 
-**v0 mechanism (locked):** per-user LoRA over all layers, hot-swapped in vLLM for both
-inference and fine-tuning. Crude but right for a handful of pilot users. *(What v0 has actually
-**built** is narrower than "all layers": the language-model stack only — all 36 LLM layers × 7
-projections — with the vision towers deliberately excluded, since the day log reaches the model as
-text. "All layers" stays the standing intent; the gap is a named open item, and widening back is a
-module-filter change. See the [continuum charter](services/continuum/CHARTER.md) §Scope.)*
-**Research path:** users-as-experts in an MoE — one big network, experts allocated per user,
-routing by identity — unexplored territory and our long-range scaling story. Both live in the
+**v0 mechanism (intent).** Per-user LoRA over all layers, hot-swapped in vLLM for both inference
+and fine-tuning. Crude but right for a handful of pilot users.
+
+**Watch out for — intent is wider than the build.** What v0 built is the language-model stack only:
+all 36 LLM layers × 7 projections, vision towers deliberately excluded because the day-log reaches
+the model as text. "All layers" stays the standing intent, the gap is a named open item, and
+widening back is a module-filter change. See the
+[continuum charter](services/continuum/CHARTER.md) §Scope.
+
+**Research path.** Users-as-experts in an MoE: one big network, experts allocated per user, routing
+by identity. Unexplored territory and our long-range scaling story. Both live in the
 [continuum service](services/continuum/CHARTER.md).
 
 ## Why this matters — a day in a life
@@ -93,11 +94,11 @@ life in its weights.
 
 A freshly personalized model won't out-reason frontier models on day one, and users shouldn't
 pay for that gap. So v0 wraps our model in an agentic harness with a **mentor protocol**:
-when our model wants help, it composes an assistance prompt — injecting what it knows about
-the user — and consults frontier models (Claude, GPT, Gemini). Their plans, thinking, and
-outputs flow back through our model to the user, and **their full traces become training
-data**. The personal model is simultaneously the memory, the router, and the student. The
-graduation criterion — when does it answer solo? — is one of our defining research questions.
+when our model wants help, it composes an assistance prompt, injecting what it knows about the
+user, and consults frontier models (Claude, GPT, Gemini). Their plans, thinking, and outputs flow
+back through our model to the user, and **their full traces become training data**. The personal
+model is simultaneously the memory, the router and the student. The graduation criterion — when
+does it answer solo? — is one of our defining research questions.
 
 ## What v0 is, and is not
 
@@ -105,7 +106,7 @@ graduation criterion — when does it answer solo? — is one of our defining re
 |---|---|
 | Users | A handful of pilots, hands-on |
 | Devices | Computer capture + wearable body cam; **no mobile capture** |
-| Personalization | LoRA-per-user, all layers *(intent; as built = LLM stack only, vision towers excluded — above)*, vLLM hot-swap |
+| Personalization | **LoRA-per-user, all layers** (intent; as built, the LLM stack only), vLLM hot-swap |
 | Learning cadence | Periodic (nightly-ish), gated by evals — not realtime |
 | Assistant posture | Reactive assistant with mentor support — coach/nudge comes later |
 | Trust | Consent controls, per-user isolation, deletion are day-one requirements, not v1 polish |

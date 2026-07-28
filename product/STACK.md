@@ -1,13 +1,10 @@
 # Nucleus v0 — Stack Registry
 
-> The index of what we run on. **Exact version pins are NOT here** — they live once in each
-> service's dependency manifest (the source of truth). This doc records the *shared* runtime
-> decisions every service inherits, the serving stack, the cluster baseline, and where each
-> service's lockfile lives. "One fact, one home": pins in the lockfile, decisions + index here.
+> The index of what we run on: the shared runtime decisions every service inherits, the serving
+> stack, the cluster baseline, and where each service's lockfile lives. **A service's own dependency
+> pins are not here** — they live once in its manifest, which is the source of truth.
 
 **Last updated:** 2026-07-09 · Owner: Platform (backbone) + each service (its own manifest)
-
----
 
 ## Policy
 
@@ -26,7 +23,7 @@
 | Language | **Python 3.11/3.12** | services target 3.11; the on-node envs are 3.12 |
 | Web framework | **FastAPI + uvicorn** | one per backend service |
 | HTTP client | **httpx** | inter-service calls |
-| Models/validation | **pydantic** + **jsonschema** | pydantic models mirror the `contracts/*.json` schemas; jsonschema validates against them in tests |
+| Models/validation | **pydantic + jsonschema** | pydantic models mirror the `contracts/*.json` schemas; jsonschema validates against them in tests |
 | Tests | **pytest** | each service ships its own suite |
 | Surfaces | static HTML/CSS/JS, **no build step** (v0) | served by input; a build step arrives with the real frontends |
 
@@ -36,8 +33,8 @@
 |---|---|---|
 | Base model (BWM) | **Qwen/Qwen3-VL-32B-Instruct** (dense) | cached in the HF hub cache on node-7 (~63 GB) |
 | Server | **vLLM**, OpenAI-compatible, TP=8 | see the per-env rows below |
-| Serving env (**primary**) | conda **`vllm-cu13`** — vLLM **0.24.0**, torch **2.11.0**, transformers **5.13.0**, **CUDA-13 (cu13) wheels + flashinfer** | validated E2E 2026-07-09 on node-7 (driver 580); the current serving stack |
-| Serving env (fallback) | conda **`vllm-vlm`** — vLLM **0.19.1**, torch 2.10/cu128, transformers 5.12.1 | the POC-proven stack that first closed v0.0; kept intact as the known-good fallback |
+| Serving env (primary) | **`vllm-cu13`** · vLLM 0.24.0 · torch 2.11.0 · transformers 5.13.0 · CUDA-13 wheels + flashinfer | validated E2E 2026-07-09 on node-7 (driver 580); the current serving stack |
+| Serving env (fallback) | **`vllm-vlm`** · vLLM 0.19.1 · torch 2.10/cu128 · transformers 5.12.1 | the POC-proven stack that first closed v0.0; kept as the known-good fallback |
 | Launch recipe | [`services/inference/serve_vllm.sh`](services/inference/serve_vllm.sh) | defaults to `vllm-cu13`; `VLLM_BIN=…/vllm-vlm/bin/vllm` to fall back |
 
 ## Observability endpoints & ports (pinned)
@@ -79,6 +76,7 @@ storage 8083 · vLLM 8000. Each also serves `/metrics` on that same port.
 | recording · data-processing · continuum | *(not yet built — manifest lands with the service)* | — |
 
 ## Known hygiene follow-ups
+
 - **Pin/lock exact versions** in each service's `requirements.txt` (they are currently loose
   ranges). Add a lockfile per service so a fresh venv is reproducible.
 - **Consolidate the venv story**: `run_all.sh` builds one shared dev venv; when services become

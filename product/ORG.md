@@ -1,11 +1,11 @@
 # Nucleus v0 — Organization & Operating Model
 
-> How we split the work, run parallel sessions, and keep everyone (human or agent) in context. 
-> Launch prompts live in [PROMPTS.md](PROMPTS.md); live status in[HANDOFF.md](HANDOFF.md).
+> How we split the work, run parallel sessions, and keep everyone (human or agent) in context.
+> This file decides **which document** a fact belongs in; [STYLE.md](STYLE.md) decides what that
+> document reads like. Launch prompts: [PROMPTS.md](PROMPTS.md) · live status:
+> [HANDOFF.md](HANDOFF.md).
 
-**Last updated:** 2026-07-08
-
----
+**Last updated:** 2026-07-28
 
 ## The structure
 
@@ -18,7 +18,7 @@ CTO + AI co-founder + Founders
             └─ Sub-team members             (agents now, humans as we hire)
 ```
 
-**[v0-simplification] For v0 we run exactly two of those layers, and grow the other two on demand:**
+**For v0 we run exactly two of those layers** and grow the other two on demand:
 
 | Layer | v0 reality | Instrument |
 |---|---|---|
@@ -29,9 +29,13 @@ CTO + AI co-founder + Founders
 
 Why the simplification:
 
-1. **An org-role with no work queue is an overhead. Thus, directors are just pure agent sessions**
-2. **Documents are the org chart.** Reporting lines are reads/writes on handoff files rather than meetings. A superior "checks in" by reading the canvas. A subordinate "reports" by updating it and flipping its status row. This survives session death, model swaps, and humans employees joining later.
-3. **Contracts before fan-out.** The only rule that makes parallelism safe: a piece of work may be parallelized only after the interfaces it touches are pinned in [ARCHITECTURE.md §Contracts](ARCHITECTURE.md). Change a contract -> edit that section first, then note it in both affected services' canvases.
+1. **An org-role with no work queue is overhead.** A director is a session, not a standing entity.
+2. **Documents are the org chart.** Reporting lines are reads and writes on handoff files, not
+   meetings. A superior checks in by reading the canvas; a subordinate reports by updating it and
+   flipping its status row. This survives session death, model swaps and human hires.
+3. **Contracts before fan-out.** Work may be parallelized only after the interfaces it touches are
+   pinned in [ARCHITECTURE.md §Contracts](ARCHITECTURE.md). Changing a contract edits that section
+   first, then both affected services' canvases.
 
 ## Stage: PROTOTYPE (pre-dev, pre-production)
 
@@ -43,8 +47,8 @@ purpose with the reason recorded.
 
 This changes what we build. **It never changes what we say about what we built.** The rules below —
 contracts before fan-out, the contract-edit order, documents as the org chart — hold unchanged, and
-"prototype" is never a reason to leave a decision unrecorded or to call a thing BUILT when it is
-DECIDED. Full posture: [ARCHITECTURE.md](ARCHITECTURE.md) §Stage.
+"prototype" is never a reason to leave a decision unrecorded or to call a thing `BUILT` when it is
+only `ratified`. Full posture: [ARCHITECTURE.md](ARCHITECTURE.md) §Stage.
 
 ## Keeping documents true (learned the hard way, 2026-07-25 → 07-27)
 
@@ -55,13 +59,13 @@ working — presented first as a document disagreeing with the code or with anot
 was caught by a test.** Twice a *test harness* was green while asserting the defect as correct
 behaviour. So:
 
-**1. Sort a doc defect by SHAPE before deciding ceremony.** Three shapes recur, and they need
-wildly different responses:
+**1. Sort a doc defect by its shape before deciding ceremony.** Three shapes recur, and they need
+different responses:
 
 | Shape | What it means | Ceremony |
 |---|---|---|
 | **Incomplete description** | one truth, written down only partially | fill it in everywhere; no D-number |
-| **Intent/build gap** | two true statements about *different things* — the standing intent vs what v0 built | state both and name the gap; no D-number. The defect is asserting the intent in the voice of the build |
+| **Intent/build gap** | two true statements about different things: the standing intent vs what v0 built | state both and name the gap; no D-number |
 | **Prose lagging its own authoritative artifact** | the schema/code was already right; only the summary lagged | fix the prose; explicitly **not** a contract change |
 
 **2. Inventory with a repo-wide grep, not by memory.** A "fixed in three places" item turned out to
@@ -72,9 +76,9 @@ be in five — and the two missed sites included the strongest as-though-built c
 entries keep their contemporaneous ones. Rewriting a dated entry to match today destroys the record
 rather than reconciling it.
 
-**4. State a claim's status in the row that makes it.** "DECIDED" and "BUILT" are different words
+**4. State a claim's status in the row that makes it.** `ratified` and `BUILT` are different words
 and the [ARCHITECTURE.md](ARCHITECTURE.md) §Stage banner forbids trading one for the other. When
-something ships, annotate the original decision with its build date — do not rewrite what was
+something ships, annotate the original decision with its build date rather than rewriting what was
 decided.
 
 **5. When a review closes, fold its findings into the docs they belong to and delete the review
@@ -88,10 +92,10 @@ workstream) maintains:
 
 | File | Nature | POC ancestor |
 |---|---|---|
-| `CHARTER.md` (root: README/VISION/ARCHITECTURE/ORG) | **Stable** — mission, scope, interfaces, milestones. Changes deliberately. | POC `README.md` |
+| `CHARTER.md` (root: README/VISION/ARCHITECTURE/ORG) | **Stable.** Mission, scope, interfaces, milestones; changes deliberately | POC `README.md` |
 | `HANDOFF.md` | **Volatile board** — status tables, where we are, what's next, gotchas. **Rewritten in place** every session. | POC `HANDOFF.md` |
 | `handoff/<ws>.md` | Per-workstream / per-aspect working file: the reasoning and a newest-first worklog | POC `phase-N-*.md` / `wsN-*.md` |
-| `DECISIONS.md` | **Append-at-top register** of ratified decisions. Cited everywhere, restated nowhere. At the root it holds the founders' D-numbers; a service opens one only when it has service-local decisions to record (see *The same three files, at every level* below). | — (new 2026-07-27) |
+| `DECISIONS.md` | **Append-at-top register** of ratified decisions, cited everywhere and restated nowhere. Root holds the D-numbers; a service opens one only when it has local decisions | — (new 2026-07-27) |
 
 **Deliberate deviation from the original plan — one format, not two.** The original intent
 was parallel human-readable and AI-readable copies at every level (4+ docs per node). We
@@ -109,8 +113,8 @@ append. So the mode is now named, per section:
 
 | Mode | Applies to | Rule |
 |---|---|---|
-| **Rewrite in place** | every `HANDOFF.md` (root + service), every `CHARTER.md`, `README`/`VISION`/`ARCHITECTURE`/`STACK`/`ORG` | Describe **today**. Nothing is appended; no history accumulates. When an item is done it *leaves* the board for the aspect/ws worklog — it does not stay struck through. |
-| **Prepend (newest first)** | `handoff/<aspect>.md` and `handoff/<ws>.md` §Worklog · `DECISIONS.md` | Genuinely append-only history, written **at the top**, never at the bottom. A cold-starting reader hits today first and can stop reading whenever they have enough. |
+| **Rewrite in place** | every `HANDOFF.md` (root + service), every `CHARTER.md`, `README`/`VISION`/`ARCHITECTURE`/`STACK`/`ORG`/`STYLE` | Describe **today**. A finished item leaves the board for its worklog rather than staying struck through |
+| **Prepend (newest first)** | `handoff/<aspect>.md` and `handoff/<ws>.md` §Worklog · `DECISIONS.md` | Append-only history, written **at the top**. A cold reader hits today first and can stop whenever they have enough |
 
 Worklog entries are `### <date> — <title>` headings, not list items, so every entry is a stable
 anchor other documents can point at. That is what lets a decision row carry a *pointer* to its
@@ -141,11 +145,8 @@ that is not a restatement, because the implementation is genuinely the service's
   docs or the owning charter — everything else links. Never restate a sibling's internals.
   **Ratified decisions live in [DECISIONS.md](DECISIONS.md) and are cited by D-number** — if a
   decision is written out in full anywhere else, that copy is the bug.
-- **A table is not an essay.** This file decides *which* document a fact belongs in;
-  [STYLE.md](STYLE.md) decides what that document reads like — the card template, the
-  Was/Changed/Now/Payoff change format, and the status vocabulary. It binds every node, for the
-  same reason the doc protocol does: when a rule has nowhere to go but the end of the paragraph it
-  is already in, the next session appends, and four appends later the copies disagree.
+- **A table is not an essay.** [STYLE.md](STYLE.md) is binding on every document edit ([D21](DECISIONS.md)):
+  the card template, the change format, the status vocabulary. Read it before you touch a file.
 - **Stamp your work.** Every canvas edit updates *Last updated* + owner session; finishing a
   workstream flips its status row in the index table.
 - **Don't scatter.** No stray READMEs/notes in working directories; everything routes

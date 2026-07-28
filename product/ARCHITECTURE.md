@@ -16,31 +16,31 @@ voice is aspirational, and reading it as a commitment is the single most expensi
 session can make here. **We are building a prototype: the goal is one end-to-end product that
 genuinely works, as fast as we can honestly get there.**
 
-**What this licenses.** Contracts may be **re-cut rather than versioned** — a pinned shape is
+**What this licenses.** Contracts may be **re-cut rather than versioned**: a pinned shape is
 "stable enough to build against today", never "immutable", which is why §Contracts does not use the
-word *frozen* at all. Stored data may be **wiped and re-collected** rather than migrated; everything
-captured so far is experiment output, not user data. Durability work (Postgres/GCS, retention sweeps, backup drills, multi-node) is **deferred on
-purpose**, with the reason written down.
+word *frozen* at all. Stored data may be wiped and re-collected rather than migrated; everything
+captured so far is experiment output, not user data. Durability work (Postgres/GCS, retention
+sweeps, backup drills, multi-node) is deferred on purpose, with the reason written down.
 
-**What it does NOT license**, because this is the half that keeps the posture honest:
+**What it does not license**, because this is the half that keeps the posture honest:
 - Skipping [ORG.md](ORG.md)'s contract-edit order. A re-cut contract still edits §Contracts first,
   then `contracts/`, then **both** owning canvases. Cheap to change is not the same as unowned.
-- Undocumented decisions. "Prototype" is a reason to defer work, never a reason to leave a choice
-  unrecorded — the deferral itself is the thing that must be written down, or it is just a gap.
+- Undocumented decisions. "Prototype" defers work; it never leaves a choice unrecorded. The
+  deferral itself is the thing that must be written down, or it is just a gap.
 - Silent breakage. A thing we know is wrong stays wrong on the record, not quietly.
 - **Claiming something is built when it is decided.** The stage changes what we build, never what
   we say about it.
 
-**What changes at dev/prod.** Everything parked under this banner is *tracked*, not forgotten. All parked action-items
-and todos will be picked up to serve general audience at scale.
+**What changes at dev/prod.** Everything parked under this banner is tracked, not forgotten. Every
+parked action-item is picked up before we serve a general audience at scale.
 
 ## The two loops
 
 Everything in v0 is one of two loops sharing the same stores and the same per-user model:
 
-- **Learn loop (background, nightly-ish):** life stream is captured → processed into
-  timestamped, enriched records → stored → periodically fine-tuned into the user's adapter →
-  published for serving. The context of a day silently becomes weights overnight.
+- **Learn loop (background, nightly-ish):** life stream is captured → processed into timestamped,
+  enriched records → stored → fine-tuned into the user's adapter → published for serving.
+  The context of a day silently becomes weights overnight.
 - **Serve loop (interactive, seconds):** user asks → request is normalized and templated →
   the personal model (+ harness + mentors) answers → response is delivered; the turn is stored.
 
@@ -101,7 +101,7 @@ flowchart TD
 | Inference Service | The brain: vLLM + per-user LoRA hot-swap, agentic harness, mentor protocol, turn logging | [charter](services/inference/CHARTER.md) |
 | Output Service | Delivers responses to the right device in the right form; future home of the proactive channel | [charter](services/output/CHARTER.md) |
 | Continuum Service | The magic: nightly per-user fine-tuning with replay mixtures and eval gates; publishes adapters | [charter](services/continuum/CHARTER.md) |
-| Platform Service | Cross-cutting: infra, CI/CD, observability, security/privacy/compliance, cost. **This Service was added as an umbrella (see D1)** | [charter](services/platform/CHARTER.md) |
+| Platform Service | Cross-cutting: infra, CI/CD, observability, security/privacy/compliance, cost. An umbrella service ([D1](DECISIONS.md)) | [charter](services/platform/CHARTER.md) |
 
 ## Contracts (the spine)
 
@@ -549,10 +549,11 @@ Day-log body:
 
 **Why it's this way**
 
-- **An ingest-time watermark dissolves late data instead of handling it.** `ingest_time` is assigned
-  by storage at write, so a record can never land below an already-closed boundary — there is no
-  late-arrival case left to get wrong. Two properties fall out free: storage needs **no timezone** to
-  serve C10, and a missed or gate-failed night is absorbed into the next window rather than lost.
+- **An ingest-time watermark dissolves late data instead of handling it.** `ingest_time` is
+  assigned by storage at write, so a record can never land below an already-closed boundary and
+  there is no late-arrival case left to get wrong.
+- Two properties fall out free: storage needs **no timezone** to serve C10, and a missed or
+  gate-failed night is absorbed into the next window rather than lost.
 - **Advancing only on a publish makes the failed-day merge structural.** Each failed night's window
   is a strict superset of the last — the design-of-record's failed-day merge obtained by
   construction rather than by `_UserState.debt` bookkeeping — and it is what would make a min-data
@@ -564,24 +565,29 @@ Day-log body:
   the split that made the call:
   [§Ownership splits → *Day-log and training-window custody*](#day-log-and-training-window-custody).
 - **The id format follows from the window; it is a consequence, not a cost.** Under
-  `[last_trained_t, now−δ)` there is no local date to name — a window can span 23 h, 25 h, or 47 h
-  after a missed night, so `w<local-date>` would mean synthesising a date purely to name a window:
-  reintroducing the timezone dependency the query had just proved it does not need, and making the
-  id lie about the window's extent. Its three surviving properties are each load-bearing —
-  *path-safe* (a filesystem path component and an `rmtree` target; a raw RFC3339 instant fails the
-  regex on its colons), *lexicographically ordered* (four call sites compare it as a string), and
-  *second granularity* (a truncating id can silently collide two distinct windows).
+  `[last_trained_t, now−δ)` there is no local date to name: a window can span 23 h, 25 h, or 47 h
+  after a missed night.
+- `w<local-date>` would mean synthesising a date purely to name a window, reintroducing the
+  timezone dependency the query had just proved it does not need, and making the id lie about the
+  window's extent.
+- Its three surviving properties are each load-bearing:
+  - *path-safe* — a filesystem path component and an `rmtree` target; a raw RFC3339 instant fails
+    the regex on its colons.
+  - *lexicographically ordered* — four call sites compare it as a string.
+  - *second granularity* — a truncating id can silently collide two distinct windows.
 
 **Watch out for**
 
 - **An inactive user's open window grows unboundedly** and is re-scanned nightly. Correct — there is
   nothing to train — and cheap at v0 scale, but a real cost taken on purpose.
 - **Do not tidy away the fixed width or the zero padding.** They are the entire basis of "string
-  order == chronological order", relied on at four sites: `publish.py:83` (`active_before`, the
-  resume-from lineage), `publish.py:106` (the alias-monotonicity guard), `cycle.py:106,115` (journal
-  debt + `latest_window`) and `reservoir.py:105` (replay's `before_window` filter). Mixed id formats
-  in one user's history order correctly only by ASCII accident (`-` = 0x2D sorts below `0` = 0x30),
-  so any cutover must be explicit and tested, never trusted.
+  order == chronological order", relied on at four sites:
+  - `publish.py:83` — `active_before`, the resume-from lineage.
+  - `publish.py:106` — the alias-monotonicity guard.
+  - `cycle.py:106,115` — journal debt and `latest_window`.
+  - `reservoir.py:105` — replay's `before_window` filter.
+- Mixed id formats in one user's history order correctly only by ASCII accident (`-` = 0x2D sorts
+  below `0` = 0x30), so any cutover must be explicit and tested, never trusted.
 - **One id collision corrupts the journal, the reservoir and C5 lineage at once** — hence second
   granularity, and belt-and-braces the cycle refuses a window whose end is not strictly greater than
   `last_trained_t`.
@@ -592,32 +598,34 @@ Day-log body:
 - **`seg_id` carries no cross-materialization stability guarantee** (D20). What is stable is the
   bucket grid, which decides grouping; the label is only the segment's position in the rendered
   day-log, so a re-materialization that legitimately drops a record renumbers everything after it.
-  Nothing external stores a `seg_id`, so it sits outside the byte-identity bar — storage CHARTER
+- Nothing external stores a `seg_id`, so it sits outside the byte-identity bar. Storage CHARTER
   M9(b) requires an order-preserving bijection with per-block membership preserved instead.
 - **`content_fingerprint` is not a cross-backend equality claim.** It is computed by whoever renders
   and only ever compared to itself across runs — it is a journal stage key. At cutover it changes
   once and that night re-runs, which is correct, because the input genuinely changed.
 - **The two recipe pins are set independently** (`STORAGE_DAYLOG_RECIPE_ID`, `CONTINUUM_RECIPE_ID`),
   so a half-finished re-pin is an ordinary deployment slip that only the consumer can detect.
-  Storage renders honestly under its own pin and stamps what it rendered, while publish writes
-  *continuum's* `recipe_id` into C5 — so the adapter would be audited as trained under a recipe it
+- Storage renders honestly under its own pin and stamps what it rendered, while publish writes
+  *continuum's* `recipe_id` into C5, so the adapter would be audited as trained under a recipe it
   was not trained under.
-- **A `pipeline_version` bump is a forward-only correction.** New records get new `ingest_time`s and
-  land in the next window, so the day-log renders the new dialect — but the old dialect is **not**
-  un-trained, which on an append-only weight chain is irreducible. Accepted cost: the same lived
-  moment can be trained twice, in two dialects. Suppressing already-rendered chunks would stop the
-  double exposure and would also stop the *correction* from ever training — and we bump precisely
-  because the old dialect was worse, so training the correction wins. The escape hatch is a
-  deliberate rebuild from base over retained history, which the retained day-logs and the reservoir
-  make possible; named here, not built, tracked as a storage OQ.
+- **A `pipeline_version` bump is a forward-only correction.** New records get new `ingest_time`s
+  and land in the next window, so the day-log renders the new dialect. The old dialect is **not**
+  un-trained, which on an append-only weight chain is irreducible.
+- Accepted cost: the same lived moment can be trained twice, in two dialects.
+- Suppressing already-rendered chunks would stop the double exposure and would also stop the
+  *correction* from ever training. We bump precisely because the old dialect was worse, so training
+  the correction wins.
+- The escape hatch is a deliberate rebuild from base over retained history, which the retained
+  day-logs and the reservoir make possible. Named here, not built, tracked as a storage OQ.
 - **Strike counting is unaffected** by superset windows: each failed night is a distinct, larger
   window and so strikes once, and `active_before` still resumes from the last `active` entry because
   a `gate_failed` row never enters the activation stack.
 - **`w-day5` is a mess, not a precedent.** The literal was written by a pre-D18 continuum smoke
-  script, **retired 2026-07-28**; it breaks the total order twice over (`w-day10` < `w-day5`, and
-  every `w-day*` sorts below every real id). Two on-disk C5 entries still carry it. The validator
-  rejects the shape (`services/storage/tests/test_window_id.py`), so it cannot recur — which is
-  exactly why the single minter plus validator exist.
+  script, **retired 2026-07-28**. It breaks the total order twice over: `w-day10` < `w-day5`, and
+  every `w-day*` sorts below every real id.
+- Two on-disk C5 entries still carry it. The validator rejects the shape
+  (`services/storage/tests/test_window_id.py`), so it cannot recur, which is exactly why the single
+  minter plus validator exist.
 - **A fifth outcome is designed but does not exist.** D19's min-data floor (`min_block_chars`)
   would add a *too-little-data* outcome that also leaves the watermark. It is **not built** —
   `cycle.py:53` defines four outcomes and `min_block_chars` appears nowhere in the repo. Tracked as
@@ -636,11 +644,11 @@ Day-log body:
     its whole origin-dependent bar over an aligned **and** a misaligned origin.
   - **Now** — a segment's bucket is stable across re-materialization, and no window origin appears
     in the calculation.
-  - **Payoff** — measured before the fix, shifting that fixture's origin by 1–9 s broke M9 tier A at
-    every one of the nine: segment bounds always, **block text** — the artifact that trains the
-    model — at eight, and at +3 s the segment count and per-block membership too. Window-relative
-    indices also go negative once membership sits on the ingest axis, so the old rule was not merely
-    different; it was unusable.
+  - **Payoff** — measured before the fix, shifting that fixture's origin by 1–9 s broke M9 tier A
+    at every one of the nine: segment bounds always, block text (the artifact that trains the
+    model) at eight, and at +3 s the segment count and per-block membership too.
+  - Window-relative indices also go negative once membership sits on the ingest axis, so the old
+    rule was unusable.
 - **2026-07-27 — F3: a dialect mismatch became a refusal, not a stamp.**
   - **Was** — storage wrote `daylog_format_version` and `recipe_id` into every day-log and nobody
     read them, which is precisely the silent format change those fields exist to prevent.
@@ -668,15 +676,16 @@ Day-log body:
     by re-deriving their bounds under *tonight's* timezone.
   - **Now** — prior windows are **enumerated and fetched**, never reconstructed, which is what makes
     the enumeration read load-bearing rather than a convenience.
-  - **Payoff** — the day-log storage renders is proven byte-identical to continuum's over two window
-    origins including a misaligned one (D20's bar). **Costs accepted:** filesystem paths, `seg_id`,
-    `block_id`, the training seed (`cycle.py:147` seeds from `window_id`) and C5 `training_window`
-    lineage all re-key. Old directories are orphaned, not corrupted, and need no migration for
-    correctness — but a night re-run across the change is **not** apples-to-apples, because
-    amplification variant selection and replay sampling move with the seed. We took that
-    discontinuity rather than re-pin the seed on a "stable" value that was itself changing; anyone
-    needing a controlled comparison pins it explicitly, which is a recipe change. `tests/parity/` is
-    unaffected — it seeds from its own harness.
+  - **Payoff** — the day-log storage renders is proven byte-identical to continuum's over two
+    window origins including a misaligned one (D20's bar). Costs accepted: filesystem paths,
+    `seg_id`, `block_id`, the training seed (`cycle.py:147` seeds from `window_id`) and C5
+    `training_window` lineage all re-key.
+  - Old directories are orphaned, not corrupted, and need no migration for correctness. But a
+    night re-run across the change is **not** apples-to-apples, because amplification variant
+    selection and replay sampling move with the seed.
+  - We took that discontinuity rather than re-pin the seed on a "stable" value that was itself
+    changing; anyone needing a controlled comparison pins it explicitly, which is a recipe change.
+    `tests/parity/` seeds from its own harness and is unaffected.
 - **2026-07-26 — D18: from a raw range read to a day-log fetch over an ingest-time watermark.**
   - **Was** — C10 was `GET /context/records?user_id=&from=&to=`, an event-time range read over a
     window named by a local date. Late-arriving records could fall below a closed boundary, and
@@ -804,8 +813,8 @@ GET /policies/{policy_id}  → the eval-gate policy (separate artifact, separate
 - Both schemas deviate from the house `additionalProperties: false` rule **on purpose.** Recipe and
   policy artifacts carry human provenance prose (`source`, `note`, `traps_note`) recording why a
   number is what it is, and a registry that rejected an artifact for documenting itself would push
-  that documentation out into a wiki. A mistyped knob is still caught, because every knob that
-  matters is `required`.
+  that documentation out into a wiki.
+- A mistyped knob is still caught, because every knob that matters is `required`.
 - Continuum's `LocalRecipeRegistry` (`app/clients/registry.py`) is the reference implementation to
   lift.
 
@@ -1147,8 +1156,8 @@ health — so instrumenting is every service's job, and running the backbone is 
 
 - **Every service** exposes `/metrics` (Prometheus text format) on its own port, and owns a Grafana
   dashboard JSON at `services/<key>/dashboards/*.json` — the service knows what is worth showing.
-- **Platform** runs the ONE shared Prometheus + Grafana, scrapes every `/metrics`, runs the standard
-  exporters (node/CPU, dcgm/GPU, DB), routes alerts, and **auto-provisions** each service's
+- **Platform** runs the one shared Prometheus + Grafana, scrapes every `/metrics`, runs the
+  standard exporters (node/CPU, dcgm/GPU, DB), routes alerts, and auto-provisions each service's
   dashboard. Both founders use a single Grafana URL and pick any service.
 
 **Rules**
