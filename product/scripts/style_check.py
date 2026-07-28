@@ -65,8 +65,11 @@ def findings(path):
         if stripped.startswith("#"):
             section = None
 
+        # A bold-only line is a section heading; a list item that opens with a
+        # bold span is not. Match on the list marker, not on the leading "*",
+        # which a "**Why it's this way**" heading also starts with.
         m = re.match(r"^\*\*(.+?)\*\*\s*(—|$)", stripped)
-        if m and not re.match(r"^[-*\d]", stripped):
+        if m and not re.match(r"^([-*+]|\d+[.)])\s", stripped):
             section = m.group(1).rstrip(".")
 
         # accumulate wrapped bullets into one logical bullet
