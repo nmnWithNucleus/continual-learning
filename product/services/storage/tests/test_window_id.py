@@ -54,10 +54,11 @@ def test_the_old_local_date_format_is_rejected():
     assert not validate_window_id("w2026-07-21")
 
 
-def test_the_m0_smoke_shape_is_rejected():
-    """`w-day5` (scripts/m0_smoke.py) breaks the total order twice over — 'w-day10' <
-    'w-day5', and every 'w-day*' sorts below every real id. It is a mess, not a
-    precedent, and the validator is what stops it recurring."""
+def test_legacy_freeform_window_ids_are_rejected():
+    """`w-day5` — the shape a pre-D18 continuum smoke script wrote, since retired —
+    breaks the total order twice over: 'w-day10' < 'w-day5', and every 'w-day*' sorts
+    below every real id. It is a mess, not a precedent, and the validator is what stops
+    it recurring. The script is gone; this test is why it cannot come back."""
     assert not validate_window_id("w-day5")
 
 

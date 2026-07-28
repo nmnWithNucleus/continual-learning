@@ -613,10 +613,11 @@ Day-log body:
 - **Strike counting is unaffected** by superset windows: each failed night is a distinct, larger
   window and so strikes once, and `active_before` still resumes from the last `active` entry because
   a `gate_failed` row never enters the activation stack.
-- **`scripts/m0_smoke.py:133` still writes `f"w-day{args.day}"`** and never calls the minter.
-  `w-day5` breaks the total order twice over (`w-day10` < `w-day5`, and every `w-day*` sorts below
-  every real id). Harmless only because it is a smoke script — and exactly why the single minter
-  plus validator exist. **Still outstanding.**
+- **`w-day5` is a mess, not a precedent.** The literal was written by a pre-D18 continuum smoke
+  script, **retired 2026-07-28**; it breaks the total order twice over (`w-day10` < `w-day5`, and
+  every `w-day*` sorts below every real id). Two on-disk C5 entries still carry it. The validator
+  rejects the shape (`services/storage/tests/test_window_id.py`), so it cannot recur — which is
+  exactly why the single minter plus validator exist.
 - **A fifth outcome is designed but does not exist.** D19's min-data floor (`min_block_chars`)
   would add a *too-little-data* outcome that also leaves the watermark. It is **not built** —
   `cycle.py:53` defines four outcomes and `min_block_chars` appears nowhere in the repo. Tracked as

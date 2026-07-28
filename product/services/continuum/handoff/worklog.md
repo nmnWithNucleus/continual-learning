@@ -12,6 +12,26 @@
 
 ## Worklog
 
+### 2026-07-28 — `scripts/m0_smoke.py` retired
+
+**Was** — a one-shot M0 dry run: one 32B night → report-only gate → C5 publish → load in vLLM,
+serving no one. It existed to de-risk a single link, that an adapter we trained ourselves loads in
+the server that will serve it. Written before D18, it minted `training_window` as `f"w-day{n}"`, a
+free-form literal that never went through a minter because there wasn't one yet.
+
+**Changed** — deleted. D18's build slice had listed moving it onto storage's minter
+(`../../../handoff/engineering.md` §Worklog 2026-07-26) and never did; board item 6 carried the
+open question "should the smoke require storage?". Founders' answer, 2026-07-28: retire it instead.
+
+**Now** — the M0 question it existed to answer is answered, and `scripts/vllm_load_check.py` already
+holds the durable form of it — *"Does an adapter we trained load and serve in vLLM? The M0 question,
+alone."* Nothing imported `m0_smoke`; nothing else moved.
+
+**Payoff** — the last producer of a malformed `window_id` is gone, so the ordering invariant now
+rests on code rather than on discipline. `services/storage/tests/test_window_id.py` still rejects the
+`w-day*` shape, which is what stops it coming back. **Cost accepted:** the two on-disk C5 entries
+carrying `training_window:"w-day5"` keep it — under D19 that state is wiped, not migrated.
+
 ### 2026-07-27 (board hygiene) — prior canvas state
 
 *The canvas was rewritten to describe today. Its prior text is kept here verbatim so no wire

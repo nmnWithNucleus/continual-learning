@@ -681,8 +681,7 @@ nothing writes them), and per-user LoRA hot-swap on request boundaries is the **
 wired** tail. Continuum's M0 proved the artifact side of it — a 32B r128/α256 adapter of our exact
 recipe shape loads and answers in vLLM (the earlier failure was KV-cache budgeting, not LoRA
 incompatibility — `continuum/handoff/ws-morpheus-port.md`) — but that serving proof ran through
-continuum's own offline `vllm.LLM(enable_lora=True)` smoke (`continuum/scripts/m0_smoke.py:151-156`,
-`scripts/vllm_load_check.py`), never through the inference service; inference's `/infer` handler
+continuum's own offline `vllm.LLM(enable_lora=True)` smoke (`continuum/scripts/vllm_load_check.py`), never through the inference service; inference's `/infer` handler
 drops `adapter_path` on the floor after resolve (`inference/app/main.py:74-76`). Closing C5→model directory→C6→vLLM-hot-swap as one wired path is exactly what the
 pending C5 shape pin ("needs inference at the table") is for.
 
@@ -1081,7 +1080,7 @@ that costs, not as a list to tick off.
    continuum, with the operator's fallback deliberately set to UTC, renders *"around 15:00 local
    time"*. The same run before this change rendered *"06:00"* — a UTC clock reading **labelled**
    local, with no error and no metric. Nothing already published was harmed: both C5 publishes on
-   disk carried `training_window:"w-day5"` (a literal at `scripts/m0_smoke.py:133`; `window_for`
+   disk carried `training_window:"w-day5"` (a literal in the since-retired M0 smoke script; `window_for`
    never ran), and Phase-3 passed a real per-day zone.
 
    **Two things this decided that live elsewhere:** `nightly.py --tz` is now **required** (there is

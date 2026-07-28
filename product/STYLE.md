@@ -1,61 +1,54 @@
 # Nucleus v0 — Document Style
 
-> How we write the documents. [ORG.md](ORG.md) decides **which file** a fact belongs in; this file
-> decides **what that file reads like** once the fact is in it. Both bind every node — product root,
-> every service, every workstream.
+> [ORG.md](ORG.md) decides **which file** a fact belongs in. This file decides **what that file
+> reads like** once the fact is in it. Binds every node — product root, every service, every
+> workstream.
 
-**Last updated:** 2026-07-28 · **Status:** ratified — [**D21**](DECISIONS.md). Binding on every
-document edit in `product/`. The file is ratified, not this revision of it; changing it is a
-founders' act.
+**Last updated:** 2026-07-28 · **Status:** ratified — [**D21**](DECISIONS.md). The file is
+ratified, not this revision of it; changing it is a founders' act.
 
 ---
 
-## Why this exists
+## Before you touch a document
 
-Our documents are read by two audiences with opposite failure modes. A model will happily parse a
-430-word table cell and lose nothing. A human reads the first clause, meets the fourth em-dash, and
-stops. We were optimising for the reader who never complains.
+**New document.** First sentence says what it is, status line underneath. Open with a Vocabulary
+block if it coins any term. Take the file's shape and its writing mode from [ORG.md](ORG.md)
+§Documentation protocol.
 
-That was a real cost, not an aesthetic one. When a rule is written as one dense paragraph, the next
-session extends it by appending another clause — because there is nowhere else to put it. Do that
-four times and you get [ARCHITECTURE.md](ARCHITECTURE.md)'s watermark rule: the same invariant
-stated in four places, three of them saying one thing and the fourth saying another. Nobody
-introduced that defect. The **shape of the document** did.
+**Appending.** ORG §Documentation protocol says where the text goes: top for worklogs and
+registers, nowhere for boards and charters, which are rewritten instead. Inside a card, append to
+the section that owns the sentence, never by widening a table cell.
 
-So the rules below are mostly about giving every kind of sentence a named place to live, so that
-"where does this go?" has an answer other than *the end of the paragraph I am already in*.
+**Editing in place.** Grep the claim across `product/` first; if it already has a home, edit there
+and link. Rewriting a rule means restating **Rules** in today's words plus a dated **How it got
+here** entry, not a parenthetical apologising for the old wording. Stamp *Last updated*.
 
 ## The nine rules
 
-**1. Tables scan, prose reads.** A table cell is at most two lines — call it twenty words. The
-moment a cell needs a third, the content is not table content: it becomes a **card** below the
-table, and the cell keeps a one-line summary plus a link. A table whose cells run from 25 to 430
-words is not a table; it is prose wearing pipes.
+**1. Tables scan, prose reads.** A table cell is at most 20 words. At the 21st the content becomes
+a card below the table and the cell keeps a one-line summary plus a link — a 400-word cell is prose
+wearing pipes.
 
-**2. Meaning before metadata.** The first sentence says what the thing *is*, in words a new joinee
-already knows. Ratification dates, D-numbers, commit hashes and status words go on a **status
-line** underneath — never in front. A reader who does not yet know what C10 is cannot use the fact
-that it was ratified in D18.
+**2. Meaning before metadata.** The first sentence says what the thing is, in words a new joinee
+knows. Dates, D-numbers, hashes and status words go on a status line underneath, never in front —
+nobody can use "ratified in D18" before they know what C10 is.
 
-**3. Use the card template, in order.** Sections are optional; their order is not. See below.
+**3. Use the card template, in order.** Sections are optional; their order is not.
 
-**4. Every change is a Was / Changed / Now / Payoff block.** Four labels, always the same four. See
-below.
+**4. Every change is a Was / Changed / Now / Payoff block.** Four labels, always the same four,
+newest first.
 
-**5. Bold is a budget.** At most one bold span per bullet, spent on the words a reader must not
-miss. When a third of a paragraph is bold, nothing in it is emphasised — and that is the state we
-are correcting. **No ALL-CAPS shouting**; if a word needs shouting, the sentence around it is weak.
+**5. Bold is a budget.** One bold span per bullet or table cell, two per paragraph, spent on the
+words a reader must not miss. No ALL-CAPS: if a word needs shouting, the sentence is weak.
 
-**6. One bullet, one idea.** Twenty-five words or so. If you need a second clause, you probably need
-a second bullet. No stacked em-dashes: an em-dash is a pause, and three of them in one sentence is a
-reader losing the thread of the first.
+**6. One bullet, one idea.** Around 25 words. A second clause is a second bullet. One em-dash per
+sentence — three is a reader losing the thread of the first.
 
-**7. Status is a controlled word, not a phrase.** See the vocabulary below. `DECIDED` and `BUILT`
-are different words and the difference is load-bearing — the [ARCHITECTURE.md](ARCHITECTURE.md)
-§Stage banner forbids trading one for the other. And never claim a status a document has to
-immediately qualify: if the word needs a footnote redefining it, the word is doing negative work.
+**7. Status is a controlled word, not a phrase.** Use the vocabulary below. Never claim a status you
+must immediately qualify — a word that needs a footnote redefining it does negative work.
 
-**8. One current home; link, never restate.** [ORG.md](ORG.md)'s rule, made operational:
+**8. One current home; link, never restate.** Before writing a fact into a second place, write a
+link instead. The second copy is the one that goes stale.
 
 | Kind of fact | Home |
 |---|---|
@@ -65,17 +58,14 @@ immediately qualify: if the word needs a footnote redefining it, the word is doi
 | What happened on a given day | the relevant `handoff/*.md` §Worklog |
 | Where we are right now | the node's `HANDOFF.md` board |
 
-If you are about to write a fact into a second place, write a link instead. The second copy is the
-one that goes stale, and it goes stale within days.
-
-**9. Define your jargon once.** Any document that introduces terms opens with a **Vocabulary**
-block — one line per term, no exceptions for terms that feel obvious to whoever is writing. *Day-log*,
-*watermark*, *dialect* and *reservoir* are all coinages of this repo. Nobody arrives knowing them.
+**9. Define your jargon once.** Any document that introduces terms opens with a Vocabulary block,
+one line per term, including the terms that feel obvious to whoever is writing. *Day-log*,
+*watermark* and *reservoir* are coinages of this repo; nobody arrives knowing them.
 
 ## The card template
 
 A card is what a table row becomes when it outgrows the table. Contracts use it; so does anything
-else with a shape, a set of rules, and a history — an ownership split, a milestone, a subsystem.
+else with a shape, a set of rules and a history — an ownership split, a milestone, a subsystem.
 
 ````markdown
 ### C10 · storage → continuum — the training-window read
@@ -94,51 +84,33 @@ else with a shape, a set of rules, and a history — an ownership split, a miles
 **How it got here** — dated entries, newest first.
 ````
 
-Every section is optional and the order never changes. A settled, simple contract gets a heading, a
-status line and three lines. A contract carrying a year of hard-won reasoning gets a page. Either
-way a reader who wants the invariants knows to look under **Rules**, and a reader who wants to know
-why it isn't simpler knows to look under **Why it's this way**.
+Every section is optional; the order never changes. A settled contract gets three lines and one
+carrying a year of reasoning gets a page — either way the invariants are under **Rules**.
 
-**One sanctioned variant.** Where the subject has no wire format, **Shape** becomes the thing that
-plays its role and keeps its slot in the order. Ownership splits use **The split** — who owns what,
-as a list. Do not invent a third name for the same slot, and do not reorder around it.
-
-Two sections earn their keep more than they look like they will:
-
-- **Watch out for** is where a named cost goes. Costs we have accepted on purpose are our most
-  fragile knowledge — they read like oversights to anyone who wasn't there, and a future session
-  will helpfully remove one. Naming them is the defence.
-- **How it got here** is what stops the rest of the card re-arguing itself. Once a change has a
-  dated entry, the **Rules** section can simply state today's rule without the parenthetical
-  apology explaining what it used to be.
+**One sanctioned variant.** Where the subject has no wire format, Shape becomes the thing that
+plays its role and keeps its slot in the order: ownership splits use **The split**, a list of who
+owns what. Do not invent a third name for the slot, and do not reorder around it.
 
 ## The change format — Was / Changed / Now / Payoff
-
-Every entry under **How it got here** takes the same four labels. It is STAR in engineering
-clothes: *Was* is the situation, *Changed* is the task and the action, *Now* and *Payoff* split the
-result into the half a builder needs and the half a reviewer needs.
 
 ```markdown
 - **2026-07-27 — the watermark moves only on a publish.**
   - **Was** — the first draft also advanced on `skipped_no_data`, so a night with nothing
-    to train burned its window. The rule was written in four places and the fourth disagreed.
+    to train burned its window.
   - **Changed** — collapsed to one condition: advance on publish, never otherwise.
-  - **Now** — gate failure, freeze, crash, no data and too-little data all leave the
-    watermark where it is, so the next window is a strict superset of the failed one.
-  - **Payoff** — one sentence replaces five cases, and the watermark becomes auditable by its
-    own definition. Cost accepted: an inactive user's window grows unboundedly.
+  - **Now** — gate failure, freeze, crash and no data all leave the watermark where it is,
+    so the next window is a strict superset of the failed one.
+  - **Payoff** — one sentence replaces five cases. Cost accepted: an inactive user's window
+    grows unboundedly.
 ```
 
-Three things to hold to:
+- **Was** describes the world, not the document: "a night with no data burned its window", never
+  "the first draft said X".
+- **Now** stands alone, present tense, with no reference to what it replaced. It is the only part a
+  builder has to read.
+- **Payoff** names the cost accepted, if there was one — a note claiming none reads as marketing.
 
-- **Was** describes the world, not the document. "The first draft said X" is about the doc;
-  "a night with no data burned its window" is about the system. Write the second.
-- **Now** is the only part a builder has to read. It must stand alone, in the present tense,
-  with no reference to what it replaced.
-- **Payoff** names the **cost accepted**, if there was one. A change with no cost is rare, and a
-  change note claiming none reads as marketing.
-
-Do not use literal S/T/A/R labels. They read like a résumé; these read like an engineer.
+Do not use literal S/T/A/R labels.
 
 ## Status vocabulary
 
@@ -149,35 +121,25 @@ Two words. Anything else is prose pretending to be a status.
 | `designed` | Pinned on paper. No code. |
 | `built` | Running in code. |
 
-Add the date the status was reached, and nothing else. If the status needs a caveat, the caveat is a
-**Watch out for** bullet.
+Add the date the status was reached, and nothing else. A caveat is a **Watch out for** bullet, not a
+qualifier on the word.
 
-**There is deliberately no `frozen`,** and the omission is the interesting part. While the stage is
-PROTOTYPE ([D19](DECISIONS.md)) the word promises an immutability the stage explicitly withholds —
-and the failure mode is expensive and specific: an agent that reads `frozen` will circle a contract
-hunting for a workaround, when the honest fix was a two-line edit to the contract itself. A status
-nobody can act on correctly is worse than no status.
+**There is deliberately no `frozen`.** While the stage is PROTOTYPE ([D19](DECISIONS.md)) it
+promises an immutability the stage withholds, and an agent who believes it circles a contract
+hunting for a workaround instead of proposing the two-line edit. The schema link on the status line
+carries what the word carried: code validates against that shape, so breaking it fails CI. Bring
+`frozen` back at production stage, not before.
 
-What `frozen` was really carrying — *a machine-readable schema exists and services validate against
-it* — is carried better by the **schema link** on the status line. A link cannot drift from reality
-the way an adjective can: either the file is there and CI checks it, or it is not.
-
-Bring the word back at production stage, when it will be true. Edit this section then, not before.
-
-**Decision rows keep their own vocabulary** — `ratified` · `BUILT` · `superseded` · `demoted` ·
-`RETIRED`, capitalised only where the status changes what you may do next — along with the rule
-that a D-number is an immutable handle and lineage lives in a column beside it. That belongs to the
-register: [DECISIONS.md](DECISIONS.md) §Stage.
+Decision rows keep their own status vocabulary and lineage rules, in [DECISIONS.md](DECISIONS.md)
+§Stage. Do not copy them here.
 
 ## Checking yourself
 
-Cheap, mechanical, and each one has caught a real defect here:
-
-- **Widest cell.** Any table cell over ~20 words is a card waiting to be extracted.
+- **Widest cell.** Any table cell over 20 words is a card waiting to be extracted.
 - **Restatement grep.** `grep -rn "<the claim>" --include=*.md product/`. More than one *current*
-  home is the bug. Dated worklog entries keep their contemporaneous wording and don't count.
-- **Bold density.** If a paragraph has more than two or three bold spans, cut until it has one.
-- **The joinee test.** Read the section start to finish assuming nothing. Every coined term should
-  be in Vocabulary, and the first sentence of every card should make sense on its own.
-- **Meaning-first check.** Cover everything after the first sentence of a card. Does that sentence
-  still say what the thing is?
+  home is the bug; dated worklog entries don't count.
+- **Bold density.** More than one bold span in a bullet or cell, or two in a paragraph: cut.
+- **The joinee test.** Read the section assuming nothing. Every coined term is in Vocabulary, and
+  every card's first sentence stands alone.
+- **Meaning-first check.** Cover everything after a card's first sentence. Does it still say what
+  the thing is?

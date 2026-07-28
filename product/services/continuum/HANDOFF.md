@@ -65,7 +65,6 @@ storage** · **Last updated:** 2026-07-27
 | 3 | **Board ratification of [C-1](DECISIONS.md) and [C-2](DECISIONS.md)** — the serve-time memory harness landing in inference, and DP's data-ownership + caption-spec upgrade. Both re-cut another service's charter, so neither is ours to settle. | a founders' session |
 | 4 | **Recipe/dose finding for Gnandeep** — amplification dose is fixed *per block*, but recall tracks retellings *per unit of block text*, so at our native cadence dose must scale with block-text volume. | cofounder conversation, not code |
 | 5 | **`_UserState.debt` demotion to reporting** — deliberately left out of the transport cutover; it is a cycle-semantics change. | nothing |
-| 6 | **`scripts/m0_smoke.py:133`'s `w-day{n}` onto the minter.** It bypasses it today because the minter is storage's and that script never talks to storage. | a decision on whether the smoke should require storage |
 
 ## Cross-service flags
 
