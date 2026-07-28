@@ -8,7 +8,8 @@
 > what needs a founders' decision — is [../HANDOFF.md](../HANDOFF.md); the ratified decisions are
 > [../DECISIONS.md](../DECISIONS.md), whose rows point back at the `### <date>` worklog anchors below.
 
-**Status:** active · **Last updated:** 2026-07-27 (**D18/D19/D20 shipped** — the storage expansion is
+**Status:** active · **Last updated:** 2026-07-28 (style pass over `handoff/*`, D21. Earlier:
+**D18/D19/D20 shipped** — the storage expansion is
 built, continuum is cut over to storage's HTTP surface, the fleet runs on it, and the review backlog
 is empty. Same week: **D17** timezone ownership decided *and* built)
 
@@ -23,84 +24,29 @@ is empty. Same week: **D17** timezone ownership decided *and* built)
 ---
 
 ## Open agenda
-0. ~~**NEXT SLICE — Data-collection (learn) loop MVP**~~ **SLICED + C1/C2 FROZEN + M0 BUILT +
-   CAPTURE M1 + COMPUTER SURFACES — ALPHA COMPLETE (2026-07-19).** The learn loop is fully
-   wrapped to the alpha bar: M0 skeleton → capture M1 (enforced gap-detection via the continuity
-   ledger + DP break/dup detector; faster-whisper standing with a VAD gate; VAD-cut variable
-   chunking, OQ4→D-M1-2) → three real capture clients on the `/capture/*` wire (phone web /
-   Chrome-MV3 extension via `tabCapture` D-E7 / mac CLI), **all verified `clean` on real
-   hardware**. Client transport pinned segmented-HTTP (**D14**; streaming ingest a deferred
-   additive leg). **Next → now IN FLIGHT (2026-07-19): the DP-led deep session** (async
-   `/ingest` M7-early · D9 emission · real-backend smokes · OQ3 — see §Post-capture-alpha
-   sequencing above). Full state lives in the recording +
-   data-processing canvases (this founders' thread links, not restates). The forward-looking
-   plan that drove the slice is kept below for history.
-   Original slice plan (2026-07-09, delivered): Skeleton = computer mic → ASR → `/context` (D10);
-   C1/C2 frozen (D11),
-   adversarially reviewed pre-freeze; M0 fan-out built (storage/data-processing/recording/platform),
-   **the mock capture loop runs E2E on live ports + real-ASR leg ran once** (62 tests, idempotency
-   proven, independently verified). **Next (capture M1, audio stream — staying on this component):**
-   (1) **enforce gap-detection** on `(stream_id, sequence)` — the top item, it's recording's "zero
-   silent loss" guarantee, currently emit-side only (a break/dup detector on data-processing ingest
-   feeding recording's continuity report); (2) **async `/ingest`** — ACK `202` + process on a
-   worker/queue so capture cadence decouples from ASR latency (dedup + `record_id` determinism keep
-   retry safe; M0 is inline); (3) real computer-mic capture (recording M1) replacing the file
-   source; (4) consent gate (recording M2) before any always-on capture; (5) **fuller audio
-   pipeline** — **VAD gate → diarize → ASR → translate → acoustic-event captioning** (non-speech
-   audio is *captioned, not dropped* — ambient sound is life-context signal; VAD also kills
-   Whisper's silence-hallucination) + real faster-whisper as the standing backend; (6) chunk length:
-   lift the M0 5 s placeholder to **~20–30 s + overlap** (recording OQ4, joint with DP).
-   **Founders' sequencing (2026-07-18): recording-led.** Wrap the recording service as the next
-   big gain (user-facing; gives the beta tester a touch-and-feel surface): items **(1)
-   gap-detection** and **(5) the ASR pipeline** are the priority pair; capture surfaces to build
-   behind the `ChunkSource` seam are **bodycam (device)** and **computer** — mic, screen
-   recording, and browser-extension screen capture. Capture-modeling note: screen *video* and
-   any system/tab *audio* are **separate C1 streams** (each with its own `stream_id`, like the
-   wearable's A/V demux) — browsers expose tab/system audio via `getDisplayMedia`/`tabCapture`
-   only on some platforms (Chrome: tab audio broadly, system audio Windows/ChromeOS; macOS needs
-   a native-app loopback), and the mic is always captured as its own stream, never through the
-   screen recorder. A recording-lead session (Prompt B + this scope) owns the slice.
-   **Founders' refinement (2026-07-18, second pass):** consent gate → **back-burner (D13** —
-   pre-pilot, not pre-beta). Capture-surface order: **(1) phone web client** (camera + mic via
-   `getUserMedia` over HTTPS/tunnel — the bodycam stand-in AND the structured beta handover:
-   Gnandeep gets a press-record URL; the live_video_chat POC already proved iOS capture +
-   MediaRecorder + tunnel on this exact leg — reference, not lift, D7); **(2) computer** —
-   screen video via app + browser-extension screen share, **tab audio** via the extension
-   (`tabCapture`); system audio out of scope for now; computer mic continues from M0. The
-   recording server demuxes phone A/V into per-modality C1 streams (charter OQ8 pattern).
-   **Chunk-length lean (OQ4, pin in-session with DP): variable-length chunks cut at VAD speech
-   pauses within ~5–30 s bounds** — frozen C1 already supports it (per-chunk `t_start`/`t_end`;
-   `sequence` density is length-independent); semantic cuts avoid mid-sentence splits and may
-   obviate audio overlap (exact `t_end[n] == t_start[n+1]` adjacency becomes a clean second
-   continuity signal); fixed windows remain fine for video/screen streams.
-1. ~~Serve-loop MVP slice~~ **DONE** (see build-result sections above).
-2. Cluster split: which a3mega nodes serve (vLLM) vs train (continuum) vs pipeline work.
-   **2026-07-18 interim answer:** Gnandeep runs continuum-side model-stabilization experiments
-   across the wider cluster (the `engram` SLURM jobs — his workspace, outside this repo);
-   product components keep **node-7**; allocate beyond one node on demand. Revisit when
-   continuum's nightly window lands. **2026-07-19: continuum kickoff (D15) is the scheduled
-   forcing function — settle the split at kickoff.**
-3. Mobile app (now v0, D5) — one codebase serving both the chat surface (input) and the
-   speech-output playback sink (output); sequence it after the computer text slice proves the loop.
-   **2026-07-19: loop proven; considered at the D15 sequencing and passed for now — mobile's value
-   binds to a personalized model (§Post-capture-alpha sequencing); revisit once the first adapter
-   serves.**
-4. **Observability & per-service dashboards** (CTO ask, **RATIFIED 2026-07-09, D9** — see
-   [../ARCHITECTURE.md](../ARCHITECTURE.md) §Observability + [../STACK.md](../STACK.md) ports):
-   each service **exposes a `/metrics` endpoint** (Prometheus text; instrumentation
-   owned by the service — the service knows what to measure: request rate, latency histogram,
-   error rate; inference adds GPU via dcgm-exporter; DB-touching services add query metrics).
-   **Platform runs ONE shared Prometheus + Grafana** (pinned port) rather than 8 bespoke dashboard
-   servers — each service ships a **Grafana dashboard JSON in its own repo** (per-service
-   ownership), Platform provisions them into the shared Grafana. Both founders open one Grafana
-   URL and pick any service. Standard exporters (node/dcgm/db) cover hardware/GPU/DB so services
-   don't hand-roll them. Ports + the Grafana URL get pinned in [../STACK.md](../STACK.md) +
-   [../ARCHITECTURE.md](../ARCHITECTURE.md) and each service's HANDOFF. Note: node/CPU graphs are
-   placeholders until the true multi-node microservice split (CTO's own point); app-latency,
-   error-rate, and GPU are the metrics that mean something today. Build as a near-term Platform
-   slice (service agents instrument; Platform builds the backbone). **2026-07-19: the emission
-   half (recording M6 + DP M8) is in flight via the deep session; the shared backbone is the
-   D15 small parallel slice that follows.**
+
+Three open threads. Delivered slices live in [§Archive](#archive--delivered-slices); what shipped,
+and when, is in [§Worklog](#worklog).
+
+1. **Cluster split — which a3mega nodes serve (vLLM), train (continuum), and run pipeline work.**
+   - Interim answer (2026-07-18): Gnandeep runs continuum-side model-stabilization experiments
+     across the wider cluster — the `engram` SLURM jobs, his workspace, outside this repo.
+   - Product components keep **node-7**; allocate beyond one node on demand.
+   - Continuum kickoff ([D15](../DECISIONS.md)) is the forcing function. Settle the split there.
+2. **Mobile app — one codebase serving both the chat surface (input) and the speech-output
+   playback sink (output)** ([D5](../DECISIONS.md)).
+   - Sequence it after the computer text slice proves the loop.
+   - Considered at the D15 sequencing (2026-07-19) and passed for now: mobile's value binds to a
+     personalized model. Revisit once the first adapter serves.
+3. **The [D9](../DECISIONS.md) observability backbone is still unbuilt.**
+   - The emission half shipped: recording M6 and data-processing M8.
+   - The shared Prometheus + Grafana is the D15 small parallel slice, and it is
+     [../HANDOFF.md](../HANDOFF.md) §Next item 2.
+   - One shared stack rather than eight bespoke dashboard servers was the call; each service ships
+     its own Grafana dashboard JSON and platform provisions them.
+   - Shape and metrics: [../ARCHITECTURE.md](../ARCHITECTURE.md) §Observability. Ports:
+     [../STACK.md](../STACK.md).
+
 
 ---
 
@@ -110,20 +56,48 @@ is empty. Same week: **D17** timezone ownership decided *and* built)
 > at the bottom (ORG.md §Documentation protocol). Each entry is a `###` anchor so [DECISIONS.md](../DECISIONS.md)
 > and the service canvases can point at the reasoning behind a decision by name.
 
+### 2026-07-28 — the style pass over `handoff/*` (D21)
+
+**Board view.** All four aspect threads were brought under [STYLE.md](../STYLE.md). The three
+seeded threads are clean; this file went from 375 findings to a residue that is deliberate.
+
+- **The verbatim board snapshots are quoted, not consolidated.** Both 2026-07-27 board-hygiene
+  entries, and the 2026-07-18→19 board view, said consolidation was "a later pass". This was that
+  pass, and the answer is no: merging a dated snapshot into surrounding prose deletes record to
+  remove duplication. They are now marked as quotations and exempt under STYLE rule 10.
+- **`§Open agenda` lost its two delivered items.** ORG says a finished item leaves the board;
+  item 0 was ~700 words of delivered planning history, now an archive record.
+- **Worklog headings were not touched** — none removed, none altered — so the four `DECISIONS.md`
+  anchors and every internal link still resolve.
+- **`DECIDED` became `ratified` in six places inside dated entries.** A glossary correction, not a
+  fact change: the register has never had a `DECIDED` status.
+
+- **2026-07-28 — worklog entries earn the 60-word bullet cap.**
+  - **Was** — rule 6 capped every bullet at ~25 words, which fits a board and not a session
+    narrating why it decided something. 44 of this file's 125 bullets sat between 28 and 60.
+  - **Changed** — rule 6 now grants 60 words to reasoning, and names a dated worklog entry as
+    reasoning alongside Why it's this way, Watch out for and How it got here.
+  - **Now** — a worklog bullet may carry a full thought; only the 31 bullets over 60 words are
+    findings, and most of those are inside the quoted snapshots.
+  - **Payoff** — the rule stops fighting the corpus it governs. Cost accepted: two caps to
+    remember instead of one.
+
 ### 2026-07-27 (board hygiene) — compressed the service status board
 
 *The board's status cells had become append-only too: each carried an `Earlier: …` tail recording
 how the service got to its current state. Compressed to present state; the full prior cells are
 kept verbatim below. Per-service history lives in each service's own canvas and worklog.*
 
-- | Recording | **capture M1 + computer surfaces — ALPHA COMPLETE** (checked gap-detection + VAD-cut chunking + 3 capture clients: phone web / Chrome-MV3 extension / mac CLI, all verified `clean` on real hardware — 2026-07-19; 110 tests) **+ async seam (D16: `dp_state` ledger + `/redrive`) + D9 `/metrics`+dashboard (M6 emission) — 144 tests** | computer-capture → **M6 emission DONE (merged 2026-07-19)** | [canvas](../services/recording/HANDOFF.md) |
-- | Data Processing | **v1 + HARDENING done: durable ingest journal (kill-recovery; restart-amnesia/false-`gaps` CLOSED) · stage-graph pipeline (every step a drop-in file) · all 3 v1 review findings closed by construction (SlotView slot-ownership · mutate-overlap chaining · permit-at-dispatch fairness) · opt-in subprocess isolation (poison chunk → 1 chunk, not the service)** — on async `/ingest` (D16 wire, off-by-default) + D9 `/metrics`; audio/video byte-identical, real backends re-validated on node-7 (merged `5350f7a`, pushed 2026-07-21; suites re-verified by founders) **+ SCREEN-VIDEO CLIP PATH BUILT + INTEGRATED (WS-VC, 2026-07-25): 8 workstreams landed + merged to trunk — clip-level captioning (one multi-image VLM call/chunk) replaces per-keyframe calls; a dedicated CPU **OCR channel** (`kind='ocr'` record); a **versioned prompt pack whose digest IS the dialect**; the **record-vs-mutation law** enforced in CI + at registration; an offline eval harness that cannot write `/context` by construction — behind `VIDEO_PIPELINE=clip` (default `keyframe` = shipped legacy, byte-identical). DP suite **788 + 21 skipped** (2026-07-27; 765 at the WS-VC merge); lead-verified each WS (mutation-tested the law; caught + returned a masked order/registration bug before merge). Cutover gates (O-2 real-frame OCR bar · O-8 blind-vs-injected A/B vs a real VLM · E-2 or fresh user_id · E-3(b)) + follow-ups remain, none blocking** | DP deep session → **merged; M7 substantially done** · screen-video WS-VC → **BUILT + integrated 2026-07-25** | [canvas](../services/data-processing/HANDOFF.md) |
-- | Storage | **D18 EXPANSION BUILT + LIVE (2026-07-27) — 310 tests:** C12 profile · training-window ledger + the sole `window_id` minter · day-log materialization (C10 evolved) · C13 registry · C14 reservoir. Day-log byte-identity vs continuum proven over **two window origins incl. a misaligned one**. Earlier: **v0.0 + capture M0 built + integrated E2E** (serve loop + `/raw`/`/context` mock capture loop 2026-07-09; 32 tests post-D17) **+ SCOPE EXPANSION (D18, ratified 2026-07-26; BUILT 2026-07-27):** day-log materialization + training-window ledger (**C10 evolved**) · per-user profile (**C12**, schema minted) · recipe registry (**C13**) · reservoir custody (**C14**). Four new build items, none started | serve + learn → **storage/C10 board DONE; build slice next** | [canvas](../services/storage/HANDOFF.md) |
-- | Input | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-A | [canvas](../services/input/HANDOFF.md) |
-- | Inference | **v0.0 live on real Qwen3-VL-32B** (vLLM TP=8 on node-7, verified E2E 2026-07-09) | serve-loop WS-B | [canvas](../services/inference/HANDOFF.md) |
-- | Output | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-C | [canvas](../services/output/HANDOFF.md) |
-- | Continuum | ✅ **LEARN-LOOP INTEGRATION PROVEN END-TO-END (2026-07-25).** **CUT OVER TO STORAGE 2026-07-27 — 262 tests:** HTTP clients for C10/C12/C13/C14; `window_for()`/`closed_window_before()`/`Window.local_date` deleted; `--tz` retired for the C12 profile read; a crash now leaves the window open so a retry resumes. `app/morpheus/` + `tests/parity/` byte-unchanged. Live two-process seam green (10 steps/151 checks). *(D18 as originally ratified —* the day-log build leaves for storage (`daylog.py`/`window.py`; the parity-locked `Profile.render_block` **stays**), `window_for()` is deleted for the watermark window, and `nightly.py --tz` is replaced by the C12 profile read. Kickoff → **Morpheus** nightly-consolidation core reimplemented from the research line (`b3c58e1`), parity-proven; **M0** — a 32B life adapter our own pipeline trained → gate → C5 → **served in vLLM**; lean 5-verb loop over storage client seams; **Phase-3 DP dogfood: real Speed data through recording→DP→storage→continuum reproduces the baseline separation (PIPELINE SOUND).** Gate policy **v1.1** adopted. Now-pending (board): storage charter expansion + C10 evolution (below) | Morpheus + Phase-3 sessions | [canvas](../services/continuum/HANDOFF.md) |
-- | Platform | **v0.0 serve bring-up + learn-loop bring-up** (`run_all.sh` + `run_learn.sh`, both run E2E 2026-07-09) | serve + learn | [canvas](../services/platform/HANDOFF.md) |
+> | Service | Status | Lead session | Canvas |
+> |---|---|---|---|
+> | Recording | **capture M1 + computer surfaces — alpha complete** (checked gap-detection + VAD-cut chunking + 3 capture clients: phone web / Chrome-MV3 extension / mac CLI, all verified `clean` on real hardware — 2026-07-19; 110 tests) **+ async seam (D16: `dp_state` ledger + `/redrive`) + D9 `/metrics`+dashboard (M6 emission) — 144 tests** | computer-capture → **M6 emission done (merged 2026-07-19)** | [canvas](../services/recording/HANDOFF.md) |
+> | Data Processing | **v1 + hardening done: durable ingest journal (kill-recovery; restart-amnesia/false-`gaps` closed) · stage-graph pipeline (every step a drop-in file) · all 3 v1 review findings closed by construction (SlotView slot-ownership · mutate-overlap chaining · permit-at-dispatch fairness) · opt-in subprocess isolation (poison chunk → 1 chunk, not the service)** — on async `/ingest` (D16 wire, off-by-default) + D9 `/metrics`; audio/video byte-identical, real backends re-validated on node-7 (merged `5350f7a`, pushed 2026-07-21; suites re-verified by founders) **+ screen-video clip path BUILT + integrated (WS-VC, 2026-07-25): 8 workstreams landed + merged to trunk — clip-level captioning (one multi-image VLM call/chunk) replaces per-keyframe calls; a dedicated CPU **OCR channel** (`kind='ocr'` record); a **versioned prompt pack whose digest is the dialect**; the **record-vs-mutation law** enforced in CI + at registration; an offline eval harness that cannot write `/context` by construction — behind `VIDEO_PIPELINE=clip` (default `keyframe` = shipped legacy, byte-identical). DP suite **788 + 21 skipped** (2026-07-27; 765 at the WS-VC merge); lead-verified each WS (mutation-tested the law; caught + returned a masked order/registration bug before merge). Cutover gates (O-2 real-frame OCR bar · O-8 blind-vs-injected A/B vs a real VLM · E-2 or fresh user_id · E-3(b)) + follow-ups remain, none blocking** | DP deep session → **merged; M7 substantially done** · screen-video WS-VC → **BUILT + integrated 2026-07-25** | [canvas](../services/data-processing/HANDOFF.md) |
+> | Storage | **D18 expansion BUILT + live (2026-07-27) — 310 tests:** C12 profile · training-window ledger + the sole `window_id` minter · day-log materialization (C10 evolved) · C13 registry · C14 reservoir. Day-log byte-identity vs continuum proven over **two window origins incl. a misaligned one**. Earlier: **v0.0 + capture M0 built + integrated E2E** (serve loop + `/raw`/`/context` mock capture loop 2026-07-09; 32 tests post-D17) **+ scope expansion (D18, ratified 2026-07-26; BUILT 2026-07-27):** day-log materialization + training-window ledger (**C10 evolved**) · per-user profile (**C12**, schema minted) · recipe registry (**C13**) · reservoir custody (**C14**). Four new build items, none started | serve + learn → **storage/C10 board done; build slice next** | [canvas](../services/storage/HANDOFF.md) |
+> | Input | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-A | [canvas](../services/input/HANDOFF.md) |
+> | Inference | **v0.0 live on real Qwen3-VL-32B** (vLLM TP=8 on node-7, verified E2E 2026-07-09) | serve-loop WS-B | [canvas](../services/inference/HANDOFF.md) |
+> | Output | **v0.0 built + mock loop runs** (integrated E2E 2026-07-09) | serve-loop WS-C | [canvas](../services/output/HANDOFF.md) |
+> | Continuum | ✅ **learn-loop integration proven END-to-END (2026-07-25).** **CUT over to storage 2026-07-27 — 262 tests:** HTTP clients for C10/C12/C13/C14; `window_for()`/`closed_window_before()`/`Window.local_date` deleted; `--tz` retired for the C12 profile read; a crash now leaves the window open so a retry resumes. `app/morpheus/` + `tests/parity/` byte-unchanged. Live two-process seam green (10 steps/151 checks). *(D18 as originally ratified —* the day-log build leaves for storage (`daylog.py`/`window.py`; the parity-locked `Profile.render_block` **stays**), `window_for()` is deleted for the watermark window, and `nightly.py --tz` is replaced by the C12 profile read. Kickoff → **Morpheus** nightly-consolidation core reimplemented from the research line (`b3c58e1`), parity-proven; **M0** — a 32B life adapter our own pipeline trained → gate → C5 → **served in vLLM**; lean 5-verb loop over storage client seams; **Phase-3 DP dogfood: real Speed data through recording→DP→storage→continuum reproduces the baseline separation (pipeline sound).** Gate policy **v1.1** adopted. Now-pending (board): storage charter expansion + C10 evolution (below) | Morpheus + Phase-3 sessions | [canvas](../services/continuum/HANDOFF.md) |
+> | Platform | **v0.0 serve bring-up + learn-loop bring-up** (`run_all.sh` + `run_learn.sh`, both run E2E 2026-07-09) | serve + learn | [canvas](../services/platform/HANDOFF.md) |
 
 ### 2026-07-27 (board hygiene) — retired `HANDOFF.md §Next`
 
@@ -131,132 +105,132 @@ kept verbatim below. Per-service history lives in each service's own canvas and 
 `DONE` records or `*Superseded*` notes. Retired here **verbatim** so nothing is lost; the board now
 carries only genuinely-open items and is rewritten in place each session ([ORG.md](../ORG.md)
 §Documentation protocol). Consolidating this text with the dated entries below is a later pass.*
-
-
-- ~~**NEXT SESSION IS PREPPED:** the storage/C10 board launch prompt~~ **RUN 2026-07-26 → D18.**
-  All four decisions taken plus E-2's disposition; the prompt's `window_id` gate was verified (and
-  three further consumers found), and one of its premises — the `render_block` parity constraint —
-  was corrected. The prep file itself was retired 2026-07-27 once
-  everything in it had a home — decisions in D18/D19/D20, contracts in ARCHITECTURE + `contracts/`,
-  scope in the owning charters, and the prompt-format lessons it proved in
-  [PROMPTS.md](../PROMPTS.md) §D+.
-- ~~**NEXT FOUNDER ACT — the storage build slice**~~ **BUILT 2026-07-27** (`a5a48fb` storage ·
-  `1757efb` continuum · `2698b63` data-processing). D20's bar met and verified by the founders'
-  session, not relayed: storage **310** · continuum **251**+7 · recording **144** · DP **788**+21 ·
-  M9 parity **PASS over 2 origins incl. misaligned** · live seam **PASS, 151 checks, 0 blockers**.
-  Four adversarial rounds ran and every one found something real — the sharpest being that the seam
-  showed 148 green checks *while the shipped default trained on nothing*, because the harnesses
-  proved the paths they exercised and the default was not one of them.
-- ~~**THE WIPE (D19)**~~ **DONE 2026-07-27 — the fleet is live on the new code and healthy.**
-  Sequence: fleet stopped → all three stores backed up via SQLite's online-backup API and the
-  backups verified restorable (`/home/ubuntu/nmn/backups/pre-wipe-20260727-155147/`) → stores
-  cleared → restarted on the cutover code. Fresh schema carries `user_profiles`, `training_windows`
-  and `day_logs`. **Proven live, two processes, real ASR:** a `/capture/run` carried 3 chunks
-  through faster-whisper into `/context`; a C12 profile was set and a *missing* one 404'd; a nightly
-  ran over HTTP to **published**; and the three invariants held on the real fleet — the watermark
-  advanced **only** on `published` (the following `skipped_no_data` window did not move it, and the
-  next window opened exactly at the published window's `t_end`), and C5 carried **exactly one**
-  active row. Verification data was then cleared and the fleet restarted clean — note E-2's DELETE
-  primitive is still unbuilt, so a re-wipe is currently the only way to retract rows.
-- *Superseded:* the wipe was gated on D20 and a final adversarial round. Continuum's
-  `var_dir` and node-7's learn-fleet DBs are experiment output, not user data; lineage restarts from
-  base, which is what makes D18's `window_id` reformat free. Back up first via SQLite's
-  online-backup API (D17 precedent). **Expect, do not debug:** after the wipe a user has no
-  `home_tz`, and D19 removed auto-seed — so the first run needs it set explicitly or that user does
-  not consolidate. Visible by design.
-- *Superseded — the original build-order note:* Order is forced
-  by dependencies, not preference: **(1) C12 profile** — day-log materialization reads it, so it
-  lands first; **(2) resolve the discriminator sub-item** (additive C2 field vs `(chunk_id, kind,
-  t_start)` uniqueness) before any materializer code; **(3) the window ledger + `window_id` minter**
-  (one minter, one validator, `m0_smoke.py` moved onto it); **(4) day-log materialization**, whose
-  exit bar is the **differential byte-equality diff** against continuum's current output — and
-  continuum's local path is not deleted until that diff is green; **(5) C13/C14**, then continuum's
-  cutover (`window_for` deleted, `--tz` replaced by the C12 read, `LocalDayLogClient` retired).
-  E-2 rides M5 whenever it is scheduled — it no longer gates the WS-VC cutover.
-- **D17 follow-through** (the tz path itself is BUILT + verified; these are the pieces that
-  belong to the board, not to a single session): at the **storage/C10 board session** — (1) mint
-  the **per-user profile** contract (`home_tz`) alongside the recipe-registry + reservoir IDs;
-  (2) move **day-log materialization** continuum → storage; (3) switch the cycle window to the
-  **watermark range `[last_trained_t, now)`**, retiring `window_for`'s local-date arithmetic — all
-  three are specified in the ARCHITECTURE C10 row + the storage charter. Then at the **C5 freeze**,
-  stamp the resolved tz into the run report + C5 entry (today `training_window:"w-day5"` records
-  nothing about the zone it was derived under, so a wrong-tz adapter is unfalsifiable after the
-  fact).
-- **C5 freeze — inherited constraint (from review item O-2, 2026-07-26; C5 deliberately NOT frozen
-  that session).** C5's four descriptions are now correct and explicitly labelled *"as built, not
-  frozen"* — nine fields, and `status` ∈ `active | gate_failed | rolled_back`. The freeze session
-  inherits one thing that is **more than documentation**: `gate_failed` (the audit row for a
-  candidate the gate blocked) constrains the storage build, because storage's `model_directory` is
-  still only the trivial C6 row (`user_id, model_id, adapter, adapter_path`) — no entries log, no
-  status column, so hosting C5 is a build, not a transport swap. Three constraints, written into
-  the [storage charter](../services/storage/CHARTER.md) model-directory row: a **three**-value status
-  enum (or `record_gate_failure()` has nowhere to land); **nullable** `adapter_dir` +
-  `base_model_hash` (gate-failed rows carry NULLs there); and C6 eligibility as a **log replay**,
-  not "latest row wins" — else a gate-failed candidate becomes servable, the exact ungated swap the
-  gate prevents. Smaller + unblocked: **E-4**'s per-fragment local timestamps are now a pure continuum
-  renderer change; and DP **OQ9**'s residual — a `/metrics` counter on `unsynced` chunks +
-  `|ingest_time − t_end|` outliers, so clock skew is *measured*, not just detectable.
-- ~~**Fleet note (D17):** node-7's DBs predate the new columns~~ **DONE 2026-07-26 — the learn
-  fleet was restarted onto the new code and the migrations are applied.** Both live DBs were
-  backed up first via SQLite's online-backup API (`/home/ubuntu/nmn/backups/pre-d17-20260726-211912/`).
-  Verified after restart: `context_records` gained `device_tz` + `device_utc_offset_minutes` with
-  **125/125 rows intact and all NULL** (no backfill, as designed — a record captured before clients
-  reported a zone genuinely has none); `segments` gained both columns with **40/40 rows intact**.
-  The long-pending **`dp_state` migration also ran**, correctly backfilling all **68 chunks** to
-  `processed` — the running fleet had predated the D16/v1/hardening merges since 2026-07-19, so
-  this restart collected those too. Live checks: the capture wire **accepts** `device_tz=Asia/Tokyo`
-  and persists it, and **rejects `PST` with 400** ("must be an IANA zone id"); a real `--smoke`
-  capture run carved 3 chunks through faster-whisper ASR → C2 → `/context` (headless `/capture/run`
-  has no reporting device, so those records correctly **omit** the fields rather than nulling them).
-  Verification rows were removed; ledger is back to its 40-segment baseline. All three services
-  healthy (storage 8083 · DP 8085 · recording 8084). **Still off by default:** `INGEST_ASYNC`,
-  `INGEST_ISOLATION`. The serve loop (vLLM + app services) remains down.
-- ~~Recording-led capture M1~~ **DONE + ALPHA COMPLETE 2026-07-19** (see Current state above /
-  the recording canvas). Gap-detection enforced, ASR pipeline standing, three capture surfaces
-  verified `clean` on real hardware. Consent gate stayed back-burner per D13.
-- ~~DP-led deep session~~ **DONE + MERGED 2026-07-19 (`0ce4941`, founders' review passed):**
-  async `/ingest` behind `INGEST_ASYNC` (off = inline byte-identical; **D16 wire implemented
-  verbatim incl. the re-drive condition** — `/capture/sessions/{id}/redrive` + emitter re-push
-  + 2 drill tests) · D9 emission on BOTH services (`/metrics` + dashboard JSONs, zero new
-  deps) · all 3 real audio backends smoke-tested GREEN on node-7 (+2 real pyannote fixes) ·
-  OQ13 resolved + **OQ3 answered per-modality** (no ladder: 16 kHz mono audio is model-native;
-  video container-copy — resolution-bound not bitrate-bound, ~2560 px only for OCR-heavy
-  screens; cost dial = keyframe cadence). Suites re-verified independently by the founders'
-  session: **DP 98 · recording 120 · storage 26**. Honest residuals (ws file): DP-restart
-  false-`gaps` window fails SAFE (**now CLOSED by the v1 durable journal, 2026-07-20**);
-  whisper-translate unproven on a genuine non-English source; pyannote pinned 3.1.1, smoked
-  3.3.2. *(This slice was superseded by DP v1 + hardening — see the current-state entries
-  above; residuals tracked there.)* **Fleet note:** node-7
-  still runs pre-merge code — restart `run_learn.sh` at convenience to start emitting
-  `/metrics` (async stays off by default; flipping `INGEST_ASYNC=1` retires
-  `RECORDING_HTTP_TIMEOUT=120`).
-- **Now (D15):** (1) **continuum kickoff** — the next founders-led slice; first act:
-  storage × continuum propose the **C10 v0 freeze** (founders ratify), then a charter-M0 plan +
-  workstreams. Kickoff deliberately forces the cluster-split (nightly window) and DP
-  reprocess-policy (OQ5) conversations; the parked **D6 OCR spot-check** rides the vLLM
-  relaunch continuum-era eval needs anyway. (2) **Platform D9 backbone** as the small parallel
-  slice — the one shared Prometheus + Grafana scraping the new `/metrics`, provisioning both
-  dashboards + node/dcgm exporters, closing D9 end-to-end. Image/text DP pipelines stay
-  **deferred until a producing surface exists** (D15).
-- **Beta hand-off (D12):** standing `dev` branch forked from `main` for Gnandeep — serve loop
-  (mock or real backend) + learn loop (real faster-whisper ASR, `ASR_LANGUAGE=en`) both run today;
-  storage's `/context` range read is his training-window feed for the black-box fine-tuning tests
-  until C10 lands. The three capture clients (`/capture/*` wire, tunnel URL from
-  `services/recording/var/tunnel_url.txt`) are the beta's data-collection front door.
-- CTO to read the Platform charter internals when time allows (D1).
-- **Fleet status (2026-07-19):** the **learn loop is UP on node-7** — storage:8083 ·
-  data-processing:8085 (`ASR_BACKEND=faster_whisper`, `ASR_LANGUAGE=en`) · recording:8084, plus
-  the cloudflared tunnel for the capture clients (URL rotates per restart →
-  `services/recording/var/tunnel_url.txt`); `run_learn.sh --status` checks it. The **serve loop
-  (vLLM + app services) is down** — relaunch `run_all.sh` + `services/inference/serve_vllm.sh`
-  when needed. The wider cluster runs Gnandeep's continuum-side experiments — product work keeps
-  to **node-7**; allocate more nodes on demand. *Learn loop re-verified up by the 2026-07-19
-  sequencing session. Post-merge: the running fleet predates all three DP merges (`0ce4941`
-  async, `86acb95` v1, `5350f7a` hardening) — restart to start emitting `/metrics` + gain the
-  durable journal + isolation knob (behavior otherwise unchanged; `INGEST_ASYNC` +
-  `INGEST_ISOLATION` both off by default). WHO restarts DP (supervisor/deploy) is an open M7
-  ops item with platform.*
-
+>
+>
+> - ~~**next session is prepped:** the storage/C10 board launch prompt~~ **RUN 2026-07-26 → D18.**
+>   All four decisions taken plus E-2's disposition; the prompt's `window_id` gate was verified (and
+>   three further consumers found), and one of its premises — the `render_block` parity constraint —
+>   was corrected. The prep file itself was retired 2026-07-27 once
+>   everything in it had a home — decisions in D18/D19/D20, contracts in ARCHITECTURE + `contracts/`,
+>   scope in the owning charters, and the prompt-format lessons it proved in
+>   [PROMPTS.md](../PROMPTS.md) §D+.
+> - ~~**next founder ACT — the storage build slice**~~ **BUILT 2026-07-27** (`a5a48fb` storage ·
+>   `1757efb` continuum · `2698b63` data-processing). D20's bar met and verified by the founders'
+>   session, not relayed: storage **310** · continuum **251**+7 · recording **144** · DP **788**+21 ·
+>   M9 parity **pass over 2 origins incl. misaligned** · live seam **pass, 151 checks, 0 blockers**.
+>   Four adversarial rounds ran and every one found something real — the sharpest being that the seam
+>   showed 148 green checks *while the shipped default trained on nothing*, because the harnesses
+>   proved the paths they exercised and the default was not one of them.
+> - ~~**The wipe (D19)**~~ **done 2026-07-27 — the fleet is live on the new code and healthy.**
+>   Sequence: fleet stopped → all three stores backed up via SQLite's online-backup API and the
+>   backups verified restorable (`/home/ubuntu/nmn/backups/pre-wipe-20260727-155147/`) → stores
+>   cleared → restarted on the cutover code. Fresh schema carries `user_profiles`, `training_windows`
+>   and `day_logs`. **Proven live, two processes, real ASR:** a `/capture/run` carried 3 chunks
+>   through faster-whisper into `/context`; a C12 profile was set and a *missing* one 404'd; a nightly
+>   ran over HTTP to **published**; and the three invariants held on the real fleet — the watermark
+>   advanced **only** on `published` (the following `skipped_no_data` window did not move it, and the
+>   next window opened exactly at the published window's `t_end`), and C5 carried **exactly one**
+>   active row. Verification data was then cleared and the fleet restarted clean — note E-2's delete
+>   primitive is still unbuilt, so a re-wipe is currently the only way to retract rows.
+> - *Superseded:* the wipe was gated on D20 and a final adversarial round. Continuum's
+>   `var_dir` and node-7's learn-fleet DBs are experiment output, not user data; lineage restarts from
+>   base, which is what makes D18's `window_id` reformat free. Back up first via SQLite's
+>   online-backup API (D17 precedent). **Expect, do not debug:** after the wipe a user has no
+>   `home_tz`, and D19 removed auto-seed — so the first run needs it set explicitly or that user does
+>   not consolidate. Visible by design.
+> - *Superseded — the original build-order note:* Order is forced
+>   by dependencies, not preference: **(1) C12 profile** — day-log materialization reads it, so it
+>   lands first; **(2) resolve the discriminator sub-item** (additive C2 field vs `(chunk_id, kind,
+>   t_start)` uniqueness) before any materializer code; **(3) the window ledger + `window_id` minter**
+>   (one minter, one validator, `m0_smoke.py` moved onto it); **(4) day-log materialization**, whose
+>   exit bar is the **differential byte-equality diff** against continuum's current output — and
+>   continuum's local path is not deleted until that diff is green; **(5) C13/C14**, then continuum's
+>   cutover (`window_for` deleted, `--tz` replaced by the C12 read, `LocalDayLogClient` retired).
+>   E-2 rides M5 whenever it is scheduled — it no longer gates the WS-VC cutover.
+> - **D17 follow-through** (the tz path itself is BUILT + verified; these are the pieces that
+>   belong to the board, not to a single session): at the **storage/C10 board session** — (1) mint
+>   the **per-user profile** contract (`home_tz`) alongside the recipe-registry + reservoir IDs;
+>   (2) move **day-log materialization** continuum → storage; (3) switch the cycle window to the
+>   **watermark range `[last_trained_t, now)`**, retiring `window_for`'s local-date arithmetic — all
+>   three are specified in the ARCHITECTURE C10 row + the storage charter. Then at the **C5 freeze**,
+>   stamp the resolved tz into the run report + C5 entry (today `training_window:"w-day5"` records
+>   nothing about the zone it was derived under, so a wrong-tz adapter is unfalsifiable after the
+>   fact).
+> - **C5 freeze — inherited constraint (from review item O-2, 2026-07-26; C5 deliberately not frozen
+>   that session).** C5's four descriptions are now correct and explicitly labelled *"as built, not
+>   frozen"* — nine fields, and `status` ∈ `active | gate_failed | rolled_back`. The freeze session
+>   inherits one thing that is **more than documentation**: `gate_failed` (the audit row for a
+>   candidate the gate blocked) constrains the storage build, because storage's `model_directory` is
+>   still only the trivial C6 row (`user_id, model_id, adapter, adapter_path`) — no entries log, no
+>   status column, so hosting C5 is a build, not a transport swap. Three constraints, written into
+>   the [storage charter](../services/storage/CHARTER.md) model-directory row: a **three**-value status
+>   enum (or `record_gate_failure()` has nowhere to land); **nullable** `adapter_dir` +
+>   `base_model_hash` (gate-failed rows carry NULLs there); and C6 eligibility as a **log replay**,
+>   not "latest row wins" — else a gate-failed candidate becomes servable, the exact ungated swap the
+>   gate prevents. Smaller + unblocked: **E-4**'s per-fragment local timestamps are now a pure continuum
+>   renderer change; and DP **OQ9**'s residual — a `/metrics` counter on `unsynced` chunks +
+>   `|ingest_time − t_end|` outliers, so clock skew is *measured*, not just detectable.
+> - ~~**Fleet note (D17):** node-7's DBs predate the new columns~~ **done 2026-07-26 — the learn
+>   fleet was restarted onto the new code and the migrations are applied.** Both live DBs were
+>   backed up first via SQLite's online-backup API (`/home/ubuntu/nmn/backups/pre-d17-20260726-211912/`).
+>   Verified after restart: `context_records` gained `device_tz` + `device_utc_offset_minutes` with
+>   **125/125 rows intact and all NULL** (no backfill, as designed — a record captured before clients
+>   reported a zone genuinely has none); `segments` gained both columns with **40/40 rows intact**.
+>   The long-pending **`dp_state` migration also ran**, correctly backfilling all **68 chunks** to
+>   `processed` — the running fleet had predated the D16/v1/hardening merges since 2026-07-19, so
+>   this restart collected those too. Live checks: the capture wire **accepts** `device_tz=Asia/Tokyo`
+>   and persists it, and **rejects `PST` with 400** ("must be an IANA zone id"); a real `--smoke`
+>   capture run carved 3 chunks through faster-whisper ASR → C2 → `/context` (headless `/capture/run`
+>   has no reporting device, so those records correctly **omit** the fields rather than nulling them).
+>   Verification rows were removed; ledger is back to its 40-segment baseline. All three services
+>   healthy (storage 8083 · DP 8085 · recording 8084). **Still off by default:** `INGEST_ASYNC`,
+>   `INGEST_ISOLATION`. The serve loop (vLLM + app services) remains down.
+> - ~~Recording-led capture M1~~ **done + alpha complete 2026-07-19** (see Current state above /
+>   the recording canvas). Gap-detection enforced, ASR pipeline standing, three capture surfaces
+>   verified `clean` on real hardware. Consent gate stayed back-burner per D13.
+> - ~~DP-led deep session~~ **done + merged 2026-07-19 (`0ce4941`, founders' review passed):**
+>   async `/ingest` behind `INGEST_ASYNC` (off = inline byte-identical; **D16 wire implemented
+>   verbatim incl. the re-drive condition** — `/capture/sessions/{id}/redrive` + emitter re-push
+>   + 2 drill tests) · D9 emission on both services (`/metrics` + dashboard JSONs, zero new
+>   deps) · all 3 real audio backends smoke-tested green on node-7 (+2 real pyannote fixes) ·
+>   OQ13 resolved + **OQ3 answered per-modality** (no ladder: 16 kHz mono audio is model-native;
+>   video container-copy — resolution-bound not bitrate-bound, ~2560 px only for OCR-heavy
+>   screens; cost dial = keyframe cadence). Suites re-verified independently by the founders'
+>   session: **DP 98 · recording 120 · storage 26**. Honest residuals (ws file): DP-restart
+>   false-`gaps` window fails safe (**now closed by the v1 durable journal, 2026-07-20**);
+>   whisper-translate unproven on a genuine non-English source; pyannote pinned 3.1.1, smoked
+>   3.3.2. *(This slice was superseded by DP v1 + hardening — see the current-state entries
+>   above; residuals tracked there.)* **Fleet note:** node-7
+>   still runs pre-merge code — restart `run_learn.sh` at convenience to start emitting
+>   `/metrics` (async stays off by default; flipping `INGEST_ASYNC=1` retires
+>   `RECORDING_HTTP_TIMEOUT=120`).
+> - **Now (D15):** (1) **continuum kickoff** — the next founders-led slice; first act:
+>   storage × continuum propose the **C10 v0 freeze** (founders ratify), then a charter-M0 plan +
+>   workstreams. Kickoff deliberately forces the cluster-split (nightly window) and DP
+>   reprocess-policy (OQ5) conversations; the parked **D6 OCR spot-check** rides the vLLM
+>   relaunch continuum-era eval needs anyway. (2) **Platform D9 backbone** as the small parallel
+>   slice — the one shared Prometheus + Grafana scraping the new `/metrics`, provisioning both
+>   dashboards + node/dcgm exporters, closing D9 end-to-end. Image/text DP pipelines stay
+>   **deferred until a producing surface exists** (D15).
+> - **Beta hand-off (D12):** standing `dev` branch forked from `main` for Gnandeep — serve loop
+>   (mock or real backend) + learn loop (real faster-whisper ASR, `ASR_LANGUAGE=en`) both run today;
+>   storage's `/context` range read is his training-window feed for the black-box fine-tuning tests
+>   until C10 lands. The three capture clients (`/capture/*` wire, tunnel URL from
+>   `services/recording/var/tunnel_url.txt`) are the beta's data-collection front door.
+> - CTO to read the Platform charter internals when time allows (D1).
+> - **Fleet status (2026-07-19):** the **learn loop is UP on node-7** — storage:8083 ·
+>   data-processing:8085 (`ASR_BACKEND=faster_whisper`, `ASR_LANGUAGE=en`) · recording:8084, plus
+>   the cloudflared tunnel for the capture clients (URL rotates per restart →
+>   `services/recording/var/tunnel_url.txt`); `run_learn.sh --status` checks it. The **serve loop
+>   (vLLM + app services) is down** — relaunch `run_all.sh` + `services/inference/serve_vllm.sh`
+>   when needed. The wider cluster runs Gnandeep's continuum-side experiments — product work keeps
+>   to **node-7**; allocate more nodes on demand. *Learn loop re-verified up by the 2026-07-19
+>   sequencing session. Post-merge: the running fleet predates all three DP merges (`0ce4941`
+>   async, `86acb95` v1, `5350f7a` hardening) — restart to start emitting `/metrics` + gain the
+>   durable journal + isolation knob (behavior otherwise unchanged; `INGEST_ASYNC` +
+>   `INGEST_ISOLATION` both off by default). WHO restarts DP (supervisor/deploy) is an open M7
+>   ops item with platform.*
+>
 ### 2026-07-27 (close-out) — seam shipped, fleet live, review backlog empty
 
 2026-07-27 (close-out) — **the seam is shipped, the fleet is live, and the review backlog is
@@ -283,7 +257,7 @@ the watermark advancing **only** on `published`; **exactly one** active C5 row.
 **Doc close-out:** all eleven accuracy-review items are closed (O-1 → D17, O-2/3/4 → 07-26,
 O-5…O-11 → today), storage OQ7 resolved, OQ9 re-scoped now that `day_logs` is a real table, and
 **two false claims of my own retracted** — D19's "the min-data-floor mechanism exists" (it appears
-nowhere in the repo) and the parity PASS I reported before it covered a misaligned origin. Both
+nowhere in the repo) and the parity pass I reported before it covered a misaligned origin. Both
 were caught by adversarial rounds rather than tests, which is the week's actual lesson: every
 serious defect started as a document disagreeing with the code.
 
@@ -316,7 +290,7 @@ configuration silently trained on nothing*. Green harnesses proved the paths the
 the default was not one of them.
 
 **Two corrections to my own prior claims**, both recorded rather than quietly fixed: I reported
-the parity proof as PASS when it covered only an aligned origin (a stronger claim than the
+the parity proof as pass when it covered only an aligned origin (a stronger claim than the
 evidence supported), and my watermark refinement reached three of four sites, leaving
 ARCHITECTURE — the doc named authoritative — contradicting the code.
 
@@ -334,37 +308,37 @@ DP's, which deleting would have hidden; *behaviour genuinely gone* → the `wind
 
 **Recipe `consolidation-v1.1`** minted and **both** services re-pinned. It forks v1.0 on exactly
 one knob — `replay.source` `amp` → `rawlog` — proven by diffing the artifacts. Under `amp` only a
-user's FIRST night could run over HTTP: amp pools amplified corpus *bodies* and C14 serves a
+user's first night could run over HTTP: amp pools amplified corpus *bodies* and C14 serves a
 *ledger* by design. v1.0 is **retained**, being the recipe the Phase-1/Phase-3 numbers were
 produced under. The re-pin is deliberately two-sided — storage stamps the day-log's `recipe_id`,
 continuum records C5 lineage, so a one-sided re-pin trains under a recipe the artifact is not
 labelled with.
 
 **D20's bar, verified by the founders' session rather than relayed:** storage **310** · continuum
-**251** +7 skipped · recording **144** · data-processing **788** +21 skipped · M9 parity **PASS,
+**251** +7 skipped · recording **144** · data-processing **788** +21 skipped · M9 parity **pass,
 31 binding checks over 2 window origins including a misaligned one** (exit 0) · live two-process
-seam **PASS, 10 steps / 151 checks, zero blockers** (exit 0) · `app/morpheus/` and `tests/parity/`
+seam **pass, 10 steps / 151 checks, zero blockers** (exit 0) · `app/morpheus/` and `tests/parity/`
 **byte-unchanged**.
 
 **D20 as ratified — full text.** *Relocated 2026-07-27 from the HANDOFF.md decisions log, now the register at [../DECISIONS.md](../DECISIONS.md); the D20 row there carries the headline and points back here.*
 
 **The exit bar for the storage↔continuum cutover — and a definition of "done" that can actually be
-met.** Two parts. **(a) M9's parity bar NARROWED, after the first run failed it.** The bar as first
+met.** Two parts. **(a) M9's parity bar narrowed, after the first run failed it.** The bar as first
 written contradicted D18's own materialization rule and no code could satisfy both: continuum's
-`seg_id` is `floor((t − window_start)/segment_seconds)` over an EVENT-time origin, while D18 deletes
-the window origin from storage's grid and puts the window on the INGEST axis, where a backlog record
+`seg_id` is `floor((t − window_start)/segment_seconds)` over an event-time origin, while D18 deletes
+the window origin from storage's grid and puts the window on the ingest axis, where a backlog record
 yields a negative index. The narrowed bar has three tiers — **byte-identical** (block `text`,
 ordering, `block_id`, `anchors`, `quality`, segment payloads: the artifact that trains the model) ·
 **proven-equivalent** (`seg_id`: an order-preserving bijection with per-block membership preserved,
 *measured* not assumed — it is written to `segments.jsonl` and read by nothing, since the trainer
 consumes `blocks.jsonl`) · **excluded** (`content_fingerprint`, which hashes `seg_id` and is a cache
 key compared only to itself; forcing it to match would make the cache lie). The general rule this
-instantiates, now pinned in §Ownership splits: **storage owns the day-log's REPRESENTATION outright;
-its CONTENT is a contract neither service may move alone** — *if the trainer can see it, it is
-contract; if only storage can see it, it is storage's*. **(b) "Golden" DEFINED**, because the
+instantiates, now pinned in §Ownership splits: **storage owns the day-log's representation outright;
+its content is a contract neither service may move alone** — *if the trainer can see it, it is
+contract; if only storage can see it, it is storage's*. **(b) "Golden" defined**, because the
 founders' wipe gate ("no defects, no artifacts") is unfalsifiable as written and would justify
-reviewing forever: **all four suites green · the M9 proof green over a REAL, misaligned window
-origin · the live two-process seam green with ZERO blockers · one adversarial round returning
+reviewing forever: **all four suites green · the M9 proof green over a real, misaligned window
+origin · the live two-process seam green with zero blockers · one adversarial round returning
 nothing high-severity.** Hit that and we wipe and take the first clean run; anything found
 afterwards is a follow-up slice, not a hold on the cutover — because past that point the honest way
 to find the remaining bugs is to run the thing on real data, not to review it a fourth time
@@ -377,7 +351,7 @@ earned. Fixed globally (**ARCHITECTURE §Stage**, **ORG §Stage**) and locally (
 eight** service charters). The posture licenses re-cutting contracts rather than versioning them,
 wiping data rather than migrating it, and deferring durability work with the reason recorded — and
 explicitly does **not** license skipping ORG's contract-edit order, leaving a decision unwritten,
-or calling a thing BUILT when it is DECIDED.
+or calling a thing BUILT when it is ratified.
 
 **Seven calls taken under it.** Retention → **keep everything**, but the *knob ships and the
 policy does not*: a versioned per-store retention document, every store `keep_forever`, read and
@@ -400,10 +374,10 @@ recorded for whoever freezes it (`training_window` must be frozen **opaque, neve
    first device-reported `device_tz`. Wrong: a guessed zone and a chosen zone are different facts,
    and only the second can be corrected by the person who knows. The CTO's question — *should it
    change when the user travels?* — has exactly one right answer, **no**, and it is the whole
-   point of D17's FACT/POLICY split: a week in Tokyo moves every record's `device_tz` and moves
+   point of D17's fact/policy split: a week in Tokyo moves every record's `device_tz` and moves
    nothing here, so the boundary stays put instead of jumping 9 h and producing a 15 h night
    followed by a 33 h one.
-2. **The watermark advances if and only if a cycle PUBLISHES** — D18 also advanced on
+2. **The watermark advances if and only if a cycle publishes** — D18 also advanced on
    `skipped_no_data`. My own refinement, taken because the min-data floor forces it: a below-floor
    night must not advance or the material is lost. Unifying gives one sentence covering gate
    failure, freeze, crash, no data and too-little data, and makes the name literally true —
@@ -417,61 +391,61 @@ rather than implying a cleanliness it does not have.
 
 **D19 as ratified — full text.** *Relocated 2026-07-27 from the HANDOFF.md decisions log, now the register at [../DECISIONS.md](../DECISIONS.md); the D19 row there carries the headline and points back here.*
 
-**STAGE: PROTOTYPE. Nothing is set in stone — contracts included — and the docs must say so.** The
+**Stage: PROTOTYPE. Nothing is set in stone — contracts included — and the docs must say so.** The
 founders' read is that every canvas in this repo is written in a production voice, so an agent or a
 new teammate reads it and builds for durability we have not earned yet. The correction is a standing
 posture, announced at global *and* local level (§Stage in [ARCHITECTURE.md](../ARCHITECTURE.md) +
 [ORG.md](../ORG.md), and a banner on **every** service CHARTER). **What the posture licenses:**
 re-cutting a contract instead of versioning it; **wiping and re-collecting** stored data instead of
-migrating it; deferring durability work with the reason written down. **What it does NOT license** —
+migrating it; deferring durability work with the reason written down. **What it does not license** —
 and this is the half that keeps it honest: skipping [ORG.md](../ORG.md)'s contract-edit order,
 undocumented decisions, silent breakage, or "prototype" as an excuse for a thing we know is wrong.
-Seven calls taken under it: **(1) RETENTION = KEEP EVERYTHING**, and the *mechanism* ships even
+Seven calls taken under it: **(1) retention = keep everything**, and the *mechanism* ships even
 though the *policy* does not — a versioned per-store retention document that storage reads and logs,
 every store set to `keep_forever`, **no sweeper built**. Retention rules mark *eligibility*; a
 separate explicit sweep acts and writes a manifest, so a config edit can never silently delete data.
 This is what makes the dev/prod retention decision a config change rather than an archaeology
-project. **(2) STORAGE TECH: local now** (SQLite + filesystem), **Postgres + GCS later, option (c)**
+project. **(2) storage tech: local now** (SQLite + filesystem), **Postgres + GCS later, option (c)**
 — metadata in Postgres, day-logs/corpora in GCS. The migration is kept cheap by one rule, not by
 foresight: every new store goes behind a **narrow interface** in storage from day one, exactly as
 continuum already did on the client side, so the swap is a backend change. **(3) The C2
-`discriminator` is SURFACED** (additive-optional, `contracts/c2_processed_record.v0.json`) rather
+`discriminator` is surfaced** (additive-optional, `contracts/c2_processed_record.v0.json`) rather
 than inferred from `(chunk_id, kind, t_start)` uniqueness — the option that cannot rot, taken
 because contracts are not frozen in this stage. It adds no new promise: DP already rejects duplicate
 discriminators within a chunk (`stagegraph/executor.py:396-401`), and `record_id` is unchanged, so
-nothing re-keys. **(4) EXISTING STATE IS WIPED, NOT MIGRATED** — the fleet's stores are experiment
+nothing re-keys. **(4) existing state is wiped, not migrated** — the fleet's stores are experiment
 output, not user data. *(Scope corrected 2026-07-27 after measuring: the five continuum `var_dir`
 sub-directories named in this row **do not exist**, so that half is a no-op, while `continuum/var/`
-does hold **66 GB of Phase-1/2/3 research evidence** which must NOT be deleted. The wipe is the
+does hold **66 GB of Phase-1/2/3 research evidence** which must not be deleted. The wipe is the
 three fleet SQLite DBs only — and it is cleanliness, not correctness, since the migrations are
 additive.)* Lineage restarts from base. This is what makes D18's `window_id` reformat free: no
 mixed-format ordering to defend, no seed-discontinuity to reconcile, and the two `w-day5` C5 rows
-disappear rather than needing a rule. **(5) CYCLE TRIGGER: a per-user cron at their `home_tz`
+disappear rather than needing a rule. **(5) cycle trigger: a per-user cron at their `home_tz`
 boundary, interval configurable in the service** — today's human-run CLI is the prototype stand-in,
-not the design. **Materialization is ON DEMAND at fetch**, deliberately buying a slow first fetch to
+not the design. **Materialization is on demand at fetch**, deliberately buying a slow first fetch to
 delete an entire scheduler and its failure modes. The **min-data floor** becomes a recipe knob
 (`min_block_chars`, in *characters of eligible block text* — Phase-3 showed recall tracks retellings
 per unit of text, not block count), **default 0** = today's behaviour; D18's advance-only-on-publish
 rule makes a below-floor night carry forward for free. *(**Corrected 2026-07-27:** this row
 originally said the mechanism existed and only the value was a config change. It does not —
 `min_block_chars` appears nowhere in the repo. The design stands; the build does not exist. Caught
-by an adversarial round, not by a test, and retracted here rather than caveated.)* **(6) C5 FREEZE
-DEFERRED** — its only consumer is inference (C6 resolve), which we are not building; continuum's
+by an adversarial round, not by a test, and retracted here rather than caveated.)* **(6) C5 freeze
+Deferred** — its only consumer is inference (C6 resolve), which we are not building; continuum's
 local `entries.jsonl` carries the lifecycle meanwhile. Cost is zero *because* C5 is unfrozen, so
 `training_window`'s D18 format change costs nothing now. **One standing note for whoever freezes it:
-`training_window` must be frozen as an OPAQUE token, never as a date**, or the parsing D18 just
-deleted grows back. **(7) `home_tz` IS DECLARED, NOT INFERRED** — this **overturns D18's own first
+`training_window` must be frozen as an opaque token, never as a date**, or the parsing D18 just
+deleted grows back. **(7) `home_tz` is declared, not inferred** — this **overturns D18's own first
 draft**, which had storage auto-seed it from the first device-reported `device_tz`. The user sets
 it; a client may *suggest* the device zone in a UI, but a guess is never stored as though it were an
 answer. It follows that **`home_tz` does not move when the user travels** — a week in Tokyo changes
 every record's `device_tz` and changes nothing here, so the night boundary stays put instead of
-jumping 9 h and producing a 15 h night followed by a 33 h one. That is precisely the FACT/POLICY
+jumping 9 h and producing a 15 h night followed by a 33 h one. That is precisely the fact/policy
 split of D17 doing its job
 
 ### 2026-07-26 (later) — founders' storage/C10 board (D18)
 
 2026-07-26 (later — **founders' storage/C10 board: D18**). Ratified the storage scope expansion
-and the C10 evolution. **Everything below is DECIDED, NOT BUILT** — stated that way from the
+and the C10 evolution. **Everything below is ratified, not BUILT** — stated that way from the
 first draft rather than corrected in afterwards, which is the O-12 lesson applied prospectively.
 
 **The gate first, because it decided the rest.** All five `window_id` claims in the launch prompt
@@ -481,12 +455,12 @@ string comparison (the alias-monotonicity guard itself — the prompt named only
 **`cycle.py:217`** then uses to rebuild prior windows under *tonight's* timezone.
 
 **A premise of the prompt was wrong, and correcting it made the session easier, not harder.**
-The stated HARD CONSTRAINT — "`render_block` must stay byte-parity with the research line @
+The stated hard constraint — "`render_block` must stay byte-parity with the research line @
 `b3c58e1`; moving the renderer must not break it" — conflates two functions with the same name:
 
 | | Locked by | Consumes | Verdict |
 |---|---|---|---|
-| `Profile.render_block` (`morpheus/profiles/speed.py:89`) | `tests/parity/test_render_block.py`, 1427/1427 vs research goldens | 5-min description dicts | **recipe-coupled — STAYS** |
+| `Profile.render_block` (`morpheus/profiles/speed.py:89`) | `tests/parity/test_render_block.py`, 1427/1427 vs research goldens | 5-min description dicts | **recipe-coupled — stays** |
 | `daylog.py:183 _render_block` | nothing; no golden has ever existed | C2 records | **moves to storage** |
 
 The research line never materialized the 10 s-segment/2 min-block schema (continuum's own canvas:
@@ -546,7 +520,7 @@ continuum 189 · recording 144 · DP 770 (+21 skipped) · extension deno 11.
 
 2026-07-26 (founders' storage/C10 board — **D18: the day-log moves, the window becomes a
 watermark, `window_id` stops meaning anything**): the two items queued twice — by the 2026-07-25
-learn-loop close-out and by D17 — were ratified together, and **all of it is DECIDED, NOT BUILT** *(true as written; **built 2026-07-27** — see the close-out entry below)*
+learn-loop close-out and by D17 — were ratified together, and **all of it is ratified, not BUILT** *(true as written; **built 2026-07-27** — see the close-out entry below)*
 (the D17/O-12 discipline, applied from the start rather than corrected into the row afterwards).
 
 **Verified before deciding, because the gate demanded it:** all five `window_id` claims hold —
@@ -557,7 +531,7 @@ string comparison — the alias-monotonicity guard itself, not just `active_befo
 `window.py:44` + `reservoir.py:65-69` **parse the id back into a date**, which `cycle.py:217` then
 uses to rebuild *prior* windows under *tonight's* timezone.
 
-**One premise of the launch prompt was wrong.** Its HARD CONSTRAINT ("`render_block` must stay
+**One premise of the launch prompt was wrong.** Its hard constraint ("`render_block` must stay
 byte-parity with the research line; moving the renderer must not break it") conflates two
 different functions. `tests/parity/test_render_block.py` locks **`Profile.render_block`**
 (`morpheus/profiles/speed.py:89`) over 5-min description dicts — recipe-coupled, and it **does not
@@ -591,8 +565,8 @@ continuum 189 · recording 144 · DP 770 +21 skipped · extension deno 11).
 
 **Storage owns the day-log; the training window becomes a watermark over OUR OWN ingest clock;
 `window_id` stops meaning anything.** Ratifies the 2026-07-25 storage-charter expansion and the C10
-evolution, and completes D17's three deferred clauses. **STATUS AS RATIFIED: ALL FIVE PARTS
-*DECIDED, NOT BUILT*** — **all five BUILT 2026-07-27** (`a5a48fb` · `1757efb` · `2698b63` ·
+evolution, and completes D17's three deferred clauses. **Status as ratified: All five parts
+*ratified, not BUILT*** — **all five BUILT 2026-07-27** (`a5a48fb` · `1757efb` · `2698b63` ·
 `38479df`), D20's bar met and the fleet cut over. The row keeps its original status because the
 Decisions log is the historical record; the build is recorded here rather than by rewriting what was
 decided. Nothing below ships until it is built, and the day-log's byte-equality is *proven* rather
@@ -622,7 +596,7 @@ behaviour (scheduling, fallbacks), never user-facing identity, which is input's.
 **not** minted until it has a consumer (E-5 precedent). **404 on absence, no server-side default
 anywhere** (D17), so a user without `home_tz` is *not schedulable* — an operational alert, never a
 silent skip. **Auto-seeded from the first device-reported `device_tz`, never auto-updated**: a
-traveller's night boundary must not chase their device, which is the whole point of the FACT/POLICY
+traveller's night boundary must not chase their device, which is the whole point of the fact/policy
 split. **(2) The day-log moves to storage** — decisively because of **replay**, not tidiness: replay
 re-reads *prior* day-logs nightly, so a continuum-side builder re-pulls every prior day's raw
 records every night, O(days²) across the wire to rebuild what storage could have kept. **A premise
@@ -650,7 +624,7 @@ captions and transcripts share one `pipeline_version`. **A `pipeline_version` bu
 correction**: it never repairs past weights (irreducible on an append-only chain), and the accepted
 named cost is that one lived moment can train twice in two dialects — suppressing that would equally
 suppress the correction, and the correction wins. **(4) E-2 stays a separate storage build item, but
-is DEMOTED from cutover blocker**: the one-dialect materialization rule is what actually fixes the
+is demoted from cutover blocker**: the one-dialect materialization rule is what actually fixes the
 double-count, so E-2 is the retraction/privacy/space primitive it always should have been. Shape
 recorded in the storage charter M5. **New obligation this creates:** the day-log and the reservoir
 are **second copies of user content**, so **M5's deletion primitives must cascade to both** — a
@@ -669,9 +643,9 @@ needed a D-number.
 
 | Item | Shape | Ceremony | Why |
 |---|---|---|---|
-| **O-2** — C5's field list short in four places | **INCOMPLETE description** — one truth, written down only partially | The real judgment call (below); doc edits + one comment-only code edit | Nothing is in dispute: `publish.py:83-99` writes nine fields, `record_gate_failure` (`:101-114`) writes a third status. The docs simply hadn't caught up |
-| **O-3** — "LoRA over all layers" | **INTENT/BUILD GAP** — two truths about different things | Lowest; state both, name the gap | Neither side is wrong. The defect was asserting the *intent* in the voice of the *build*, so a newcomer read the charter and believed vision towers were adapted |
-| **O-4** — C2 `record_id` discriminator | **PROSE LAGGING ITS OWN AUTHORITATIVE SCHEMA** — one truth, already recorded correctly | Lowest; **explicitly not a contract change** | The frozen schema has mandated the discriminator since v0; only ARCHITECTURE's summary lagged. Confirmed before editing, against the CURRENT file (post-D17), not from memory |
+| **O-2** — C5's field list short in four places | **incomplete description** — one truth, written down only partially | The real judgment call (below); doc edits + one comment-only code edit | Nothing is in dispute: `publish.py:83-99` writes nine fields, `record_gate_failure` (`:101-114`) writes a third status. The docs simply hadn't caught up |
+| **O-3** — "LoRA over all layers" | **intent/build GAP** — two truths about different things | Lowest; state both, name the gap | Neither side is wrong. The defect was asserting the *intent* in the voice of the *build*, so a newcomer read the charter and believed vision towers were adapted |
+| **O-4** — C2 `record_id` discriminator | **prose lagging ITS OWN authoritative schema** — one truth, already recorded correctly | Lowest; **explicitly not a contract change** | The frozen schema has mandated the discriminator since v0; only ARCHITECTURE's summary lagged. Confirmed before editing, against the current file (post-D17), not from memory |
 
 **Verified before editing, not taken on the brief's word:** `LM_PROJECTIONS` + `_LM_SCOPE` and
 their in-source rationale (`morpheus/train.py:27-32`), `lora_target_modules()` (`:89-100`), the
@@ -763,14 +737,14 @@ same line. `Intl.DateTimeFormat().resolvedOptions().timeZone` is one line away. 
 collected `device_location` and **C2 dropped it**, and `device_location`/`device_clock` were
 declared in both recording's and DP's `models.py` and read by neither — dead fields.
 
-**D17 as ratified: the device owns the FACT, storage owns the POLICY.** Per-chunk `device_tz` +
+**D17 as ratified: the device owns the fact, storage owns the policy.** Per-chunk `device_tz` +
 `device_utc_offset_minutes` on C1 → verbatim through DP → C2 `source{}` → storage columns →
 continuum's renderer. Per-user `home_tz` does **scheduling** (when does this user's night fire?)
 and **fallback** only. UTC stays canonical and is the only ordering/range axis. Two standing
 rules: never persist a derived local wall-clock (two sources of truth that will disagree), never
 accept an abbreviation (`PST` is ambiguous + DST-sensitive).
 
-**Why the offset is NOT redundant with the zone:** it records what the device *believed* at
+**Why the offset is not redundant with the zone:** it records what the device *believed* at
 capture. When a tzdata build is stale or wrong, the offset is the only independent witness — the
 zone id alone would silently re-derive the wrong wall clock forever.
 
@@ -804,7 +778,7 @@ rather than silently corrected) · DP **OQ4** (device clock discipline) · DP **
 (envelope time suffices, now auditable; residual = nobody *measures* the disagreement rate yet) ·
 continuum **OQ10**'s timezone half (a tz is needed for scheduling only) · **E-4**'s premise.
 
-**Specified, NOT built — the board's own agenda, not for an unreviewed slip:** day-log
+**Specified, not built — the board's own agenda, not for an unreviewed slip:** day-log
 materialization continuum → storage, and the cycle window → watermark `[last_trained_t, now)`.
 Both are written into the ARCHITECTURE C10 row. The second retires `window_for` entirely; it also
 changes training-window semantics (`window_id` keys the journal, C5 `training_window`, and
@@ -830,7 +804,7 @@ built (`window_for()`/`closed_window_before()` are still local-date; `nightly.py
 them). Fair catch: the Decisions log is the most authoritative doc we have, so a blanket BUILT
 claim over a two-part decision is exactly the kind of drift this session existed to remove. D17's
 status is now **split explicitly** — timezone split BUILT + verified, watermark window
-DECIDED/pending — and ARCHITECTURE's C10 row is reworded from "the cycle window is" to "is to
+ratified/pending — and ARCHITECTURE's C10 row is reworded from "the cycle window is" to "is to
 become … and is still what runs". Both now name the blocking design question: `window_id` is the
 local start date and keys the day-log, the cycle journal, C5's `training_window`, and publish's
 active-alias monotonicity; the natural watermark key is the window's **end instant** (monotone per
@@ -839,8 +813,8 @@ a board call, not a refactor.
 
 **Board view** — *merged 2026-07-27 from the retired `HANDOFF.md §Current state`, which had become a second worklog. Kept verbatim; consolidation with the text above is a later pass.*
 
-2026-07-26 (founders' engineering session — **timezone: decided AND built, D17**): the
-2026-07-26 accuracy review's open item **O-1** ("timezone ownership is unowned") is **CLOSED**,
+2026-07-26 (founders' engineering session — **timezone: decided and built, D17**): the
+2026-07-26 accuracy review's open item **O-1** ("timezone ownership is unowned") is **closed**,
 and the fix shipped in the same session. Verified first: `context_records` really had no tz
 column (`storage/app/db.py`), the wearer's tz really was a CLI flag defaulting to `"UTC"`
 (`continuum/app/nightly.py:27`), and — the fact that decided the design — **the capture clients
@@ -868,7 +842,7 @@ path**; DP passes all three fields (incl. the long-dropped `device_location`) **
 C2 `source{}` with zero timezone logic; storage promotes them to columns beside the UTC instant
 **and still serves the C2 back byte-verbatim**; continuum's `_block_zone` renders each block in
 the **device's** zone, falling back to the window's `home_tz`, degrading (never raising) on a bad
-id. Both SQLite stores got **additive ALTER migrations with deliberately NO backfill** — a record
+id. Both SQLite stores got **additive alter migrations with deliberately no backfill** — a record
 captured before clients reported a zone genuinely has none, and inventing one is the exact
 failure this slice removes.
 
@@ -887,22 +861,22 @@ fork the dialect, or every existing record would re-key on upgrade.
 **Also taken:** `nightly.py --tz` is now **required** (no default timezone anywhere).
 **Open questions closed by this work:** storage **OQ3** (clock skew), DP **OQ4** (device clock
 discipline), DP **OQ9** substantially (envelope time is enough — and now *auditable*), continuum
-**OQ10**'s timezone half, and **E-4**'s premise. **Specified but deliberately NOT built** (they
+**OQ10**'s timezone half, and **E-4**'s premise. **Specified but deliberately not built** (they
 are the storage/C10 board session's own agenda, not something to slip in unreviewed): moving
 day-log materialization from continuum to storage, and switching the cycle window to the
 watermark range `[last_trained_t, now)` — both now written into the ARCHITECTURE C10 row.
 
 **D17 as ratified — full text.** *Relocated 2026-07-27 from the HANDOFF.md decisions log, now the register at [../DECISIONS.md](../DECISIONS.md); the D17 row there carries the headline and points back here.*
 
-**Timezone: the DEVICE owns the fact, storage owns the policy — and they are different things.**
-Conflating them was the original bug. **(1) The FACT** (where the user physically was at a moment)
+**Timezone: the device owns the fact, storage owns the policy — and they are different things.**
+Conflating them was the original bug. **(1) The fact** (where the user physically was at a moment)
 is reported **per chunk by the capturing device**: `device_tz` (IANA) + `device_utc_offset_minutes`,
 **additive-optional on C1**, carried **verbatim** by DP into **C2 `source{}`** (DP does *no*
 timezone logic — it is provenance passthrough like `device_id`, so the emission law's T2 does not
 gate it), persisted by storage as promoted columns beside the UTC instant, and read by continuum's
 renderer. This is the only design that is **correct under travel**, and the device already knew it —
 every capture client computed the local instant and discarded the zone converting to UTC. **(2) The
-POLICY** (when is this user's night?) is storage's per-user profile **`home_tz`**, whose only jobs
+Policy** (when is this user's night?) is storage's per-user profile **`home_tz`**, whose only jobs
 are **scheduling** the nightly fire and **fallback** when a record carries no zone. **Timestamps
 stay UTC-canonical**: UTC is the sole ordering/range axis, C10 is a pure duration query needing no
 zone. **Never** store a derived local wall-clock (two sources of truth), **never** accept
@@ -910,10 +884,10 @@ abbreviations (`PST` is ambiguous + DST-sensitive; rejected 400 at the capture e
 the first draft of D17** (same day), which had storage own a per-user tz *only*, banned tz from
 C1/C2, and deferred travel — wrong because it applied T2 as a veto to a field whose consumer this
 very slice builds, and because it defended a `window_id` total-order problem the watermark window
-dissolves. — **STATUS, split deliberately (O-12, pass 2): the timezone split above is BUILT +
+dissolves. — **status, split deliberately (O-12, pass 2): the timezone split above is BUILT +
 verified end to end this session** (C1→C2→storage→renderer; `--tz` required, no default anywhere;
 suites storage 32 · continuum 189 · recording 144 · DP 770+21; node-7 migrated + smoked). **The
-companion window-semantics clause is DECIDED, NOT BUILT** *(as of this row's date; **BUILT
+companion window-semantics clause is ratified, not BUILT** *(as of this row's date; **BUILT
 2026-07-27** — `window_for()`/`closed_window_before()` deleted, the watermark window live)*​**:**
 the cycle window *should become* the watermark range `[last_trained_t, now)` — what ARCHITECTURE's
 C10 row and the storage charter always said, and which retires the local-date pathologies (23 h/25 h
@@ -921,7 +895,7 @@ days, a repeated local date colliding `window_id`) — but `window_for()` / `clo
 are still local-date and `nightly.py` still calls them. Nothing is broken; local-date windows work.
 **Open question the builder must answer first: does `window_id` survive the move?** It is today the
 local start date and it keys the day-log, the cycle journal, C5's `training_window`, and publish's
-active-alias monotonicity. Under a watermark window the natural key is the window's END INSTANT
+active-alias monotonicity. Under a watermark window the natural key is the window's END instant
 (monotone per user by construction, no dateline case) — but that changes the `w2026-07-21` format
 and therefore forks adapter lineage, which is a board call, not a refactor. Belongs to the
 storage/C10 board session with the day-log move
@@ -930,7 +904,7 @@ storage/C10 board session with the day-log move
 
 **Board view** — *merged 2026-07-27 from the retired `HANDOFF.md §Current state`, which had become a second worklog. Kept verbatim; consolidation with the text above is a later pass.*
 
-2026-07-25 (continuum — **THE LEARN LOOP IS CLOSED**): the D15 continuum kickoff ran to
+2026-07-25 (continuum — **the learn loop is closed**): the D15 continuum kickoff ran to
 completion. The nightly-consolidation core (**"Morpheus"**, our nomenclature; methods
 reimplemented cleanly from the research consolidation line `b3c58e1`, parity-proven by a
 differential harness — `render_block` byte-identical, LoRA targets 252/252, judge exact,
@@ -942,10 +916,10 @@ over three storage **client seams** (local now, HTTP-to-storage later). Then the
 dogfood** routed real Speed data (209.7 h of audio, 629 chunks) through the **actual
 recording→DP→storage→continuum services** — a replay `ChunkSource` + an injected-caption DP
 sidecar (~2 net-new files, no contract changes; test-type = config profile + `replay-speed`
-naming, NOT a contract field). The 1-min rule-bend collapsed recall on **dose** (fixed 48
+naming, not a contract field). The 1-min rule-bend collapsed recall on **dose** (fixed 48
 retellings now spread over 4.1× the block text); the **decomposition run with parity block
 content reproduced the baseline separation** (0.137 vs 0.179, permutation p=0.148 — same
-distribution; p=0.018 above the no-consolidation control). **Verdict: PIPELINE SOUND — our real
+distribution; p=0.018 above the no-consolidation control). **Verdict: Pipeline sound — our real
 services carry the learn loop without losing learnability.** Suites green: continuum 185 ·
 storage 26 · recording 133 · DP 173. Detail: continuum canvas + [ws-morpheus-port](../services/continuum/handoff/ws-morpheus-port.md) · [ws-phase3-dogfood](../services/continuum/handoff/ws-phase3-dogfood.md).
 **Two founder-level follow-ups, neither an integration defect:** (a) a **recipe/dose finding for
@@ -967,13 +941,13 @@ conflict-free, carrying `aaebd88`; `dev`=`13bad86`; pushed). **It overtook the c
 by closing inventory items (1)–(3) structurally**: SlotView capability slot-ownership
 (fingerprint guard *deleted*), mutate `writes` + deterministic overlap chaining with
 chain-order in the dialect, and a permit-at-dispatch queue rewrite (fairness knob now
-production-safe, EXPERIMENTAL warning gone). Added opt-in `INGEST_ISOLATION=subprocess`
+production-safe, experimental warning gone). Added opt-in `INGEST_ISOLATION=subprocess`
 (poison chunk → 1 chunk; drain-cancel SIGKILLs the ghost). A 47-agent adversarial round
-(19 confirmed / 2 refuted → 9 fixes + 7 drills) caught two HIGH bugs in the *new* code.
+(19 confirmed / 2 refuted → 9 fixes + 7 drills) caught two high bugs in the *new* code.
 Founders re-verified independently: **DP 163 / recording 120 / storage 26 green**, merge
 topology + attribution-free commits + off-by-default knobs checked; byte-identity re-proven
 by the session's own C2-digest diff. **Recorded engineering decisions absorbed from the ws
-file:** (a) **sync/inline path — KEEP** (considered retiring it "now that async is fast";
+file:** (a) **sync/inline path — keep** (considered retiring it "now that async is fast";
 it is the C8/M6 skeleton — the single shared `process_chunk` core plus ~40 lines of HTTP
 mapping — and the byte-identical verification baseline; flipping the async *production
 default* stays a founders' call after the D16 re-drive drill; retiring the inline *handler*
@@ -999,24 +973,24 @@ unstarted charter work, supervisor/deploy confirmation with platform.
 (`5350f7a`, conflict-free merge carrying the founders' `aaebd88` board-sync; `dev` at the
 raw tip `13bad86`; pushed; DP trees identical between `main` and `dev`). It **closes all 3
 v1 review findings by construction, not by patch**: (1) a **SlotView capability proxy** —
-a sidecar can't even READ the primary's mutable slots, illegal writes raise synchronously
+a sidecar can't even read the primary's mutable slots, illegal writes raise synchronously
 at the offending line (the order-dependent end-of-run fingerprint guard is *deleted*);
 (2) mutate **`writes` + deterministic overlap chaining**, with the chain order folded into
 `pipeline_version` (a future second mutate like speaker-ID composes on diarize, can't race
 it); (3) a **permit-at-dispatch** queue rewrite — the modality-fairness knob no longer
-head-of-line-blocks, so `INGEST_MODALITY_LIMITS` is production-safe and the EXPERIMENTAL
+head-of-line-blocks, so `INGEST_MODALITY_LIMITS` is production-safe and the experimental
 warning is gone. Plus a **new containment layer**: opt-in `INGEST_ISOLATION=subprocess`
 runs each chunk's Processor in a killable child (a segfault/native-OOM/`os._exit` in model
-code kills ONE chunk, not the service; a drain-cancel SIGKILLs the ghost compute a
+code kills one chunk, not the service; a drain-cancel SIGKILLs the ghost compute a
 threadpool can't). A **47-agent adversarial round** (5 dimensions → 2 refuters/finding)
-confirmed 19 / refuted 2 → 9 code fixes + 7 gap drills, catching two HIGH bugs *in the new
+confirmed 19 / refuted 2 → 9 code fixes + 7 gap drills, catching two high bugs *in the new
 code* (a reproduced retry-starvation in the new dispatch; an event-loop stall in spawn
 isolation). Byte-identity re-proven empirically (identical C2 digests vs `main` across
-dialects AND under isolation). Founders re-verified independently: **DP 163 · recording
+dialects and under isolation). Founders re-verified independently: **DP 163 · recording
 120 · storage 26 green**; merge topology + attribution-free commits + off-by-default knobs
 checked. The ws file also carries a full **M0–M8 milestone eval** (M0/M3/M7-core/M8 done;
 **M1 exit open** — no denoise stage + WER/DER baseline unmeasured; **M2 text/image is the
-next unstarted charter work**; M4/M5/M6 not started) and a **sync-path decision: KEEP
+next unstarted charter work**; M4/M5/M6 not started) and a **sync-path decision: Keep
 inline** — it's the C8/M6 skeleton and the byte-identical verification baseline; flipping
 the async production default stays a founders' call after the **D16 re-drive drill** (still
 the one open gate). Detail: [ws-dp-hardening](../services/data-processing/handoff/ws-dp-hardening.md).
@@ -1031,7 +1005,7 @@ fairness-knob startup warning present in code (`ingest_queue.py:88`). **The D16-
 deferred false-`gaps` caveat is closed** (journal rehydration), so the async-trust rider
 is now satisfiable — the `INGEST_ASYNC` fleet flip is a live decision. Founders' caveat
 inventory prepared for a drill: (1) `INGEST_MODALITY_LIMITS` HOL-block; (2) a mutate-ordering
-rule in `resolve` as a hard prerequisite for any SECOND mutate stage (the ws drop-in table's
+rule in `resolve` as a hard prerequisite for any second mutate stage (the ws drop-in table's
 own speaker-ID example would trip finding #7); (3) fingerprint-guard order-dependence (LOW).
 Also flagged: Architecture-Atlas custody vs the D2 single-doc protocol; the journal's
 `pipeline_version`-staleness reprocess mechanics as the first real OQ5 code (continuum input);
@@ -1041,13 +1015,13 @@ Also flagged: Architecture-Atlas custody vs the D2 single-doc protocol; the jour
 
 2026-07-20 (DP v1): **the DP team shipped v1 — durable ingest journal + stage-graph
 pipeline** (`86acb95`, single clean commit, pushed; `main`=`dev`=origin verified). Layer A
-journals async accepts BEFORE the 202 (kill -9 auto-recovers at startup; continuity
-rehydrates from the journal → **the D16-era deferred false-`gaps` caveat is CLOSED**;
+journals async accepts before the 202 (kill -9 auto-recovers at startup; continuity
+rehydrates from the journal → **the D16-era deferred false-`gaps` caveat is closed**;
 durable dedup backstop with a `pipeline_version` staleness check — receipts written in
-BOTH modes, so inline gains restart-safe dedup too; epochs guard stale workers; bounded
+Both modes, so inline gains restart-safe dedup too; epochs guard stale workers; bounded
 per-attempt re-drive breaks crash-loops visibly). Layer B turns every processing step into
 a **drop-in stage file** (readiness DAG runs independent stages concurrently; composed
-`pipeline_version` where a mutate stage's enabledness IS its version fragment — the
+`pipeline_version` where a mutate stage's enabledness is its version fragment — the
 silent-overwrite class dies by construction); audio+video ported byte-identically, real
 backends re-validated through the graph on node-7. Two adversarial rounds (9 confirmed →
 2 fix-before-merge fixed). Founders re-verified: **DP 128 · recording 120 · storage 26
@@ -1059,7 +1033,7 @@ held separately.)
 
 ### 2026-07-19 (later) — deep session landed + merged (`0ce4941`)
 
-2026-07-19 (later) — **deep session LANDED + MERGED (`0ce4941`).** Founders' merge review:
+2026-07-19 (later) — **deep session landed + merged (`0ce4941`).** Founders' merge review:
 all three suites re-run independently (DP **98** / recording **120** / storage **26**
 green); D16 condition verified in code + drill tests; OQ3/OQ13 records confirmed in the
 charters. `dev` fast-forwarded with `main`. Board synced — **D15 is now the active
@@ -1080,7 +1054,7 @@ a `202` ACK opens is the load-bearing clause), opened the escalation row, and re
 D9 backbone as the small parallel slice, DP image/text deferred until a producing surface
 exists; mobile+C8 and a standalone C10 freeze considered + passed. Learn fleet re-verified
 up on node-7 (storage/DP/recording healthy). **Later same session — ratification executed
-(→ D16):** the deep session's FINAL async-`/ingest` design memo arrived (five-reviewer
+(→ D16):** the deep session's final async-`/ingest` design memo arrived (five-reviewer
 verified; code claims spot-checked here) and was ratified — it strengthened the bar's
 headline clause into the non-negotiable **`dp_acked` == "C2 durably written"** invariant
 fix (recording moves in-slice; "zero recording change" dropped as unsound). One condition
@@ -1100,8 +1074,8 @@ codec ladder, joint; DP OQ13 resolved by the slice). The founders' session pinne
 C-number; escalation row open above) and recorded **D15**: continuum kickoff next (C10 v0
 freeze as its gate) + Platform D9 backbone as the small parallel slice; DP image/text
 deferred until a producing surface exists. Learn fleet re-verified healthy on node-7.
-*Later same session:* the deep session's FINAL async-`/ingest` design memo arrived
-(five-reviewer verified; code claims spot-checked) and was **RATIFIED → D16** — the memo
+*Later same session:* the deep session's final async-`/ingest` design memo arrived
+(five-reviewer verified; code claims spot-checked) and was **ratified → D16** — the memo
 strengthened the bar's headline clause into the non-negotiable `dp_acked`-invariant fix;
 one condition (re-drive drill) + one accepted caveat (202-path provenance) recorded.
 *Later still:* **the slice landed + merged (`0ce4941`; `dev` fast-forwarded with it).**
@@ -1123,7 +1097,7 @@ from `/ingest/*` so `/ingest` is uniquely DP's C1 receiver): **phone web** (mic+
 **Chrome-MV3 extension** (passive active-tab capture — pivoted to `tabCapture` per D-E7 after
 the desktop picker proved fragile on real browsers), **mac CLI** (ffmpeg avfoundation). Each
 demuxes to per-modality C1 streams; **zero server changes for the two new clients** (the wire
-is client-agnostic, by design). **ALPHA COMPLETE 2026-07-19** — all three verified `clean`
+is client-agnostic, by design). **Alpha complete 2026-07-19** — all three verified `clean`
 end-to-end on real hardware (blobs sha256+ffprobe-checked in storage, real ASR transcripts in
 `/context`). Multiple adversarial review rounds + a fresh-eyes runbook-accuracy pass hardened
 it (110 recording tests). **D14** (segmented-HTTP transport; streaming ingest deferred additive)
@@ -1201,11 +1175,11 @@ test-DB gitignored. **Real Qwen3-VL-32B (`vllm`) is scripted-but-unrun** (needs 
 node). Full result: [handoff/engineering.md](../handoff/engineering.md) "Serve-loop MVP — v0.0
 build result"; run guide: [services/README.md](../services/README.md). Committed (`f6805d1`).
 
-2026-07-09 (later still): **v0.0 CLOSED on the real base model.** Qwen3-VL-32B-Instruct
+2026-07-09 (later still): **v0.0 closed on the real base model.** Qwen3-VL-32B-Instruct
 launched on vLLM TP=8 on node-7 (driver 580 / CUDA-13, `vllm-vlm` env, model already cached);
 flipped `MODEL_BACKEND=vllm` and drove a real turn end to end — genuine Qwen answer streamed in
 the C9 format, C4 persisted with the real `model_id`. `serve_vllm.sh` updated to the verified
-recipe. Detail: [handoff/engineering.md](../handoff/engineering.md) "REAL model — v0.0 closed".
+recipe. Detail: [handoff/engineering.md](../handoff/engineering.md) "real model — v0.0 closed".
 
 2026-07-09 (capture slice): **learn-loop MVP sliced + C1/C2 frozen.** Founders' engineering
 session sliced the barebones capture path **computer mic → ASR → `/context`** (D10) and froze
@@ -1294,7 +1268,7 @@ and receives a streamed base-model answer; the turn is persisted in `/sessions` 
 
 **Recommended first launch:** the **interface-freeze session** (Prompt A framing, but joint across
 input+inference+output leads) — nothing safely parallelizes until C3/C9/C4 v0 are locked.
-**Status: freeze DONE (2026-07-09)** — shapes locked in [../ARCHITECTURE.md](../ARCHITECTURE.md)
+**Status: freeze done (2026-07-09)** — shapes locked in [../ARCHITECTURE.md](../ARCHITECTURE.md)
 §Contracts + machine-readable in [../contracts/](../contracts/). Fan-out is unblocked.
 
 #### MVP build conventions (v0.0) — so the 5 workstreams interoperate
@@ -1307,7 +1281,7 @@ Pinned so WS A–E produce compatible pieces; the integrator may finalize proces
 - **Model backend switch (critical):** env `MODEL_BACKEND=mock|vllm`. **`mock` is the default**
   — a canned, streamed answer, **no GPU needed**, so the whole loop runs on any box. `vllm` =
   OpenAI-compatible client to a vLLM server (real Qwen3-VL-32B, needs the a3mega node). Ship
-  BOTH; only `mock` is expected to run tonight.
+  Both; only `mock` is expected to run tonight.
 - **Ports (localhost dev):** input `8081`, inference `8010`, output `8082`, storage `8083`
   (vLLM `8000` when real).
 - **Storage:** SQLite file DB for dev — a `/sessions` turns table (C4) + a model-directory
@@ -1367,7 +1341,7 @@ Pinned so WS A–E produce compatible pieces; the integrator may finalize proces
    TODO to adopt output's renderer. Fixed: **vendored** `output/app/static/c9_reader.js` →
    `input/app/static/c9_reader.js` (same-origin so the browser ES-module import needs no CORS
    to `:8082`), rewrote `input/app/static/app.js` to `import { renderC9Stream }` and hand it the
-   `fetch()` response (streams + SAFE-markdown-renders into `#answer`, surfaces usage via
+   `fetch()` response (streams + safe-markdown-renders into `#answer`, surfaces usage via
    `onEndFrame`), and updated `index.html` (`<pre>`→`<div id="answer">`, `<script type="module">`,
    markdown/code/error CSS). Canonical source stays output's copy — re-copy on change (a
    build-time copy step is the future fix to kill the duplication).
@@ -1410,7 +1384,7 @@ The mock ceiling is lifted — the loop now runs on the **real base model**, ver
 changed vs. the mock loop (the backend) — everything else (contracts, wiring, persistence) was
 already proven, so the real turn worked first try.
 
-**Follow-up DONE (2026-07-09):** upgraded the serving stack to **vLLM 0.24.0 / torch 2.11 /
+**Follow-up done (2026-07-09):** upgraded the serving stack to **vLLM 0.24.0 / torch 2.11 /
 transformers 5.13 / CUDA-13 (cu13) wheels + flashinfer** in a fresh `vllm-cu13` env, and
 validated it end to end (direct completion + a real loop turn) — swapped in as primary with the
 0.19.1 `vllm-vlm` env kept as fallback. Done as its own step *after* v0.0 closed, so the version
@@ -1419,6 +1393,72 @@ to `vllm-cu13`); stack in [../STACK.md](../STACK.md). Still open: the D6 OCR spo
 screen-capture data (model is serving).
 
 ---
+
+### Capture M1 + computer surfaces — the slice plan (2026-07-09 → 07-19)
+
+> delivered · alpha complete 2026-07-19 · outcome in
+> [§Worklog 2026-07-18→19](#2026-07-1819--recording-led-capture-m1--computer-surfaces-alpha-complete)
+
+**In one line.** The forward plan that drove the learn-loop slice from M0 skeleton to three
+verified capture clients, kept for history after the work landed.
+
+**What was delivered.** M0 skeleton → capture M1 (enforced gap-detection via the continuity ledger
+plus a DP break/dup detector; faster-whisper standing with a VAD gate; VAD-cut variable chunking,
+OQ4 → D-M1-2) → three real capture clients on the `/capture/*` wire — phone web, Chrome-MV3
+extension via `tabCapture` (D-E7), mac CLI — **all verified `clean` on real hardware**. Client
+transport pinned to segmented HTTP ([D14](../DECISIONS.md)); streaming ingest is a deferred
+additive leg. Full state lives in the recording and data-processing canvases; this thread links
+rather than restates.
+
+**The original slice plan (2026-07-09, delivered).** Skeleton = computer mic → ASR → `/context`
+([D10](../DECISIONS.md)); C1/C2 frozen ([D11](../DECISIONS.md)), adversarially reviewed pre-freeze;
+M0 fan-out built across storage, data-processing, recording and platform. The mock capture loop ran
+E2E on live ports and the real-ASR leg ran once — 62 tests, idempotency proven, independently
+verified. Six items were queued for capture M1, the audio stream:
+
+1. **Enforce gap-detection** on `(stream_id, sequence)` — the top item. It is recording's "zero
+   silent loss" guarantee, and was emit-side only: a break/dup detector on data-processing ingest,
+   feeding recording's continuity report.
+2. **Async `/ingest`** — ACK `202` and process on a worker or queue, so capture cadence decouples
+   from ASR latency. Dedup and `record_id` determinism keep retry safe; M0 is inline.
+3. **Real computer-mic capture** (recording M1), replacing the file source.
+4. **Consent gate** (recording M2) before any always-on capture.
+5. **A fuller audio pipeline** — VAD gate → diarize → ASR → translate → acoustic-event captioning.
+   Non-speech audio is *captioned, not dropped*, because ambient sound is life-context signal, and
+   the VAD also kills Whisper's silence-hallucination. Real faster-whisper becomes the standing
+   backend.
+6. **Chunk length** — lift the M0 5 s placeholder to ~20–30 s plus overlap (recording OQ4, joint
+   with DP).
+
+**Founders' sequencing (2026-07-18) — recording-led.** Wrap the recording service as the next big
+gain: user-facing, and it gives the beta tester a touch-and-feel surface.
+
+- Items (1) gap-detection and (5) the ASR pipeline are the priority pair.
+- Capture surfaces to build behind the `ChunkSource` seam are **bodycam (device)** and **computer**
+  — mic, screen recording, and browser-extension screen capture.
+- **Capture-modeling note.** Screen *video* and any system or tab *audio* are separate C1 streams,
+  each with its own `stream_id`, like the wearable's A/V demux. Browsers expose tab and system
+  audio via `getDisplayMedia`/`tabCapture` only on some platforms — Chrome carries tab audio
+  broadly, system audio on Windows and ChromeOS, and macOS needs a native-app loopback. The mic is
+  always captured as its own stream, never through the screen recorder.
+- A recording-lead session (Prompt B plus this scope) owns the slice.
+
+**Founders' refinement (2026-07-18, second pass).**
+
+- Consent gate → back-burner ([D13](../DECISIONS.md)): pre-pilot, not pre-beta.
+- Capture-surface order (1): **phone web client** — camera and mic via `getUserMedia` over
+  HTTPS/tunnel. The bodycam stand-in and the structured beta handover: Gnandeep gets a press-record
+  URL. The `live_video_chat` POC already proved iOS capture, MediaRecorder and tunnel on this exact
+  leg — reference, not lift ([D7](../DECISIONS.md)).
+- Capture-surface order (2): **computer** — screen video via app and browser-extension screen
+  share, tab audio via the extension (`tabCapture`). System audio out of scope for now; computer
+  mic continues from M0.
+- The recording server demuxes phone A/V into per-modality C1 streams (charter OQ8 pattern).
+- **Chunk-length lean** (OQ4, pinned in-session with DP): variable-length chunks cut at VAD speech
+  pauses within ~5–30 s bounds. Frozen C1 already supports it — per-chunk `t_start`/`t_end`, and
+  `sequence` density is length-independent. Semantic cuts avoid mid-sentence splits and may obviate
+  audio overlap, since exact `t_end[n] == t_start[n+1]` adjacency becomes a clean second continuity
+  signal. Fixed windows remain fine for video and screen streams.
 
 ### Learn-loop MVP slice — the capture skeleton (2026-07-09)
 
@@ -1440,7 +1480,7 @@ refinement, **not** an M0 gate — but build data-processing *knowing* the strea
 underneath. This is also exactly why consent + delete-last-N (recording's M2) are load-bearing:
 capture is always-on, so there is no natural "stop" the user leans on.
 
-**Skeleton scope (decided in-session, D10).** ONE device+modality first: **computer mic → ASR-only
+**Skeleton scope (decided in-session, D10).** One device+modality first: **computer mic → ASR-only
 → a `/context` record** — the simplest capture path. It reuses the POC Phase-1 audio machinery
 (faster-whisper/WhisperX) and dodges the GPU-heavy vision/OCR path. Screen-frames→OCR and wearable
 A/V are later slices.
@@ -1461,7 +1501,7 @@ C10 training-window read; C11 recency index; wearable + browser-extension + mobi
 enforcement (recording's M2 — no always-on capture ships without it; the mic-only *dev* skeleton
 predates that gate). Each is its own slice.
 
-**Gate — interface freeze: DONE (2026-07-09).** C1 + C2 v0 frozen in
+**Gate — interface freeze: Done (2026-07-09).** C1 + C2 v0 frozen in
 [../ARCHITECTURE.md](../ARCHITECTURE.md) §Contracts (learn-loop block) + machine-readable in
 [../contracts/](../contracts/) (`c1_raw_stream_envelope.v0.json`, `c2_processed_record.v0.json`),
 stress-tested by a 5-lens adversarial critic pass before freeze (2 blockers + 7 fixes applied). The
@@ -1547,7 +1587,7 @@ real-ASR transcript byte-for-byte). Honest result below.
 | **total** | **62 passed, 0 failed** |
 
 #### Residual risks / explicitly NOT in M0 (feed the next slices)
-- **Gap-detection is emit-side only, NOT enforced.** `(stream_id, sequence)` is emitted densely +
+- **Gap-detection is emit-side only, not enforced.** `(stream_id, sequence)` is emitted densely +
   schema-min-validated, but **no consumer detects a gap / lost chunk / duplicate sequence** at
   runtime. "Zero silent loss" is currently an affordance, not a check — closing it (a gap-detector
   on data-processing ingest feeding recording's continuity report) is the **top M1 item**: it is
@@ -1605,8 +1645,8 @@ it because recording's fake still returned the old shape. Fixed: capturer reads 
 live** with populated `record_ids`, C2 re-readable. Data was never lost (C2s always landed) — only
 the API envelope was broken.
 
-**Two C2-additive gaps surfaced by the pressure-test — both DEFERRED, both NON-blocking, neither
-needs a version bump now** (recorded as DP charter OQs; the frozen C2 was NOT touched):
+**Two C2-additive gaps surfaced by the pressure-test — both deferred, both NON-blocking, neither
+needs a version bump now** (recorded as DP charter OQs; the frozen C2 was not touched):
 - **Video per-keyframe timing:** N keyframe records share the chunk's `t_start/t_end` → they collide
   on storage's `(user_id, t_start)` index. Fix is an **internal seam hook** (optional per-`ProcessedUnit`
   `t_start/t_end`; C2 already has per-record timestamps) — **no schema change.** Defer to the video session.
@@ -1679,7 +1719,7 @@ session proposes; this standing founders' session ratifies. The bar the proposal
   dropped task.
 - **Mock-default + all three suites stay green; C1/C2 schemas untouched.**
 
-**RATIFIED — 2026-07-19, same session (→ D16).** The deep session's FINAL design memo
+**ratified — 2026-07-19, same session (→ D16).** The deep session's final design memo
 (worktree `scratch/design_memo.md`, five-reviewer verified; its two load-bearing code claims
 spot-checked here against `ledger.py:405` / `capturer.py:172` / `capture_web.py:297`) **clears
 the bar and strengthens it**: it located the exact mechanism of the silent-loss clause —
@@ -1718,25 +1758,25 @@ session landed the full charge: the **D16 wire verbatim including the re-drive c
 a re-drive that hits a done-claim also **backfills `record_ids`**, softening the accepted
 caveat), D9 emission on both services (zero new deps, pure-ASGI middleware,
 cardinality-bounded; both dashboard JSONs shipped), node-7 smokes of all three real audio
-backends GREEN (+2 real pyannote torch-2.x fixes found by the smoke), **DP OQ13 resolved +
+backends green (+2 real pyannote torch-2.x fixes found by the smoke), **DP OQ13 resolved +
 recording OQ3 answered per-modality** (no ladder: 16 kHz mono audio is model-native — the
 existing demux target was already exactly right; video is resolution-bound not bitrate-bound
 → container-copy, ~2560 px only for OCR-heavy screens, cost dial = keyframe cadence). Their
 18-agent adversarial round confirmed 9 findings — 5 fixed pre-merge, 1 deferred **fails
-SAFE** (a DP-restart false-`gaps` over-report window; never hides loss, so
+Safe** (a DP-restart false-`gaps` over-report window; never hides loss, so
 never-falsely-`clean` holds; the M7 durable journal closes it — land before async is trusted
 for final archived verdicts). **Founders' merge review executed here:** all three suites
 re-run independently — **DP 98 · recording 120 · storage 26, green** — and the condition +
 OQ records verified in the diff. Detail:
 [ws-async-observability](../services/data-processing/handoff/ws-async-observability.md).
 
-**D15 — CLOSED (2026-07-25): the learn loop is proven end-to-end.** The continuum kickoff ran to
+**D15 — closed (2026-07-25): the learn loop is proven end-to-end.** The continuum kickoff ran to
 completion. The consolidation core (**Morpheus**, reimplemented from the research line `b3c58e1`,
 parity-proven) trains a real 32B life adapter → gate v1.1 → C5 → **served in vLLM** (M0), behind a
 lean 5-verb loop over storage client seams. The **Phase-3 DP dogfood** then routed real Speed data
 through the **actual recording→DP→storage→continuum services** and — once block content matched
 parity (the 1-min rule-bend's collapse was **dose**, not the pipeline) — **reproduced the baseline
-separation (PIPELINE SOUND)**. The captured-days-are-inert-until-continuum-runs gap (below) is now
+separation (pipeline sound)**. The captured-days-are-inert-until-continuum-runs gap (below) is now
 mechanically closed. **Remaining founder acts, both scheduled not blocking:** the **C10 freeze
 becomes a C10 *evolution*** (raw range-read → **day-log fetch, random-access by `(user, window_id)`**)
 folded into a **storage/C10 board session** that also ratifies the storage charter expansion
@@ -1759,7 +1799,7 @@ Detail: [../services/continuum/HANDOFF.md](../services/continuum/HANDOFF.md).
    Gnandeep's wider-cluster occupancy vs serving) and **DP OQ5 reprocess policy** (mixed
    `pipeline_version` dialects inside a training window). The long-parked **D6 OCR spot-check**
    rides the vLLM relaunch that continuum-era eval needs anyway.
-2. **Platform D9 backbone as the small parallel slice:** the ONE shared Prometheus + Grafana on
+2. **Platform D9 backbone as the small parallel slice:** the one shared Prometheus + Grafana on
    node-7, scraping what the deep session emits, provisioning both dashboard JSONs + the
    standard node/dcgm exporters. No file/service contention with kickoff; closes D9 end-to-end
    so both founders open one Grafana URL.

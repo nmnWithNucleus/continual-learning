@@ -7,19 +7,14 @@
 **Status:** seeded · **Last updated:** 2026-07-08
 
 ## Open agenda
-1. Which service earns the **first human hire** — likely wherever agent sessions bottleneck
-   on physical-world work (wearable hardware, user pilots) or accountability (security).
-   Per [../ORG.md](../ORG.md), a human slots into an existing node and reads the same two
-   files — define the interview around exactly that.
-2. Pilot-user operations: recruiting the handful of v0 users, consent paperwork, device
+1. **Which service earns the first human hire.** Likely wherever agent sessions bottleneck on
+   physical-world work (wearable hardware, user pilots) or on accountability, meaning security.
+   - Per [../ORG.md](../ORG.md) a human slots into an existing node and reads the same two files.
+     Define the interview around exactly that.
+2. **Pilot-user operations.** Recruiting the handful of v0 users, consent paperwork, device
    logistics.
-3. Vendor accounts: mentor APIs (Anthropic/OpenAI/Google) quotas + cost tracking (with
-   platform).
-
-## Decisions
-
-Ratified decisions live in [DECISIONS.md](../DECISIONS.md) and are cited by
-D-number — never restated here. *(none from this thread yet)*
+3. **Vendor accounts.** Mentor API quotas (Anthropic, OpenAI, Google) and cost tracking, with
+   platform.
 
 ## Worklog
 
@@ -27,4 +22,6 @@ D-number — never restated here. *(none from this thread yet)*
 > the bottom ([ORG.md](../ORG.md) §Documentation protocol). Each entry is a `### <date> — <title>`
 > anchor so [DECISIONS.md](../DECISIONS.md) can point at the reasoning behind a decision by name.
 
-- 2026-07-08 — thread seeded at product-structure standup.
+### 2026-07-08 — thread seeded
+
+Opened at the product-structure standup.
