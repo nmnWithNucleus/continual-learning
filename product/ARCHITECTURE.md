@@ -524,8 +524,9 @@ Day-log body:
 
 - The window is `[last_trained_t, now−δ)` on storage's **`ingest_time`** axis — not event time, not
   a local date. `δ` defaults to 60 s and covers in-flight writes racing the boundary.
-- `last_trained_t` advances **only when a cycle publishes.** Gate failure, freeze, crash, no data
-  and too-little data all leave it where it is, so the next window is a strict superset.
+- `last_trained_t` advances **only when a cycle publishes.** Every other outcome — `gate_failed`,
+  `frozen`, `crashed`, `skipped_no_data` — leaves it where it is, so the next window is a strict
+  superset (`services/continuum/app/cycle.py:53`).
 - Storage opens windows; continuum never computes one. `POST /training/windows` returns the
   already-open window, so a retry re-opens the same `window_id` and the cycle's crash-safe journal
   replay survives.
@@ -554,8 +555,8 @@ Day-log body:
   serve C10, and a missed or gate-failed night is absorbed into the next window rather than lost.
 - **Advancing only on a publish makes the failed-day merge structural.** Each failed night's window
   is a strict superset of the last — the design-of-record's failed-day merge obtained by
-  construction rather than by `_UserState.debt` bookkeeping. The min-data floor comes free with it:
-  a thin night simply does not advance, so material accumulates until it is worth a run.
+  construction rather than by `_UserState.debt` bookkeeping — and it is what would make a min-data
+  floor nearly free to add, since a thin night simply would not advance.
 - **It also keeps the watermark's name true**, which is what makes it auditable: `last_trained_t` is
   the high-water mark of what has actually been trained into this user's adapter.
 - **Storage materializes rather than continuum, and the reason is replay** — a continuum-side
@@ -616,6 +617,10 @@ Day-log body:
   `w-day5` breaks the total order twice over (`w-day10` < `w-day5`, and every `w-day*` sorts below
   every real id). Harmless only because it is a smoke script — and exactly why the single minter
   plus validator exist. **Still outstanding.**
+- **A fifth outcome is designed but does not exist.** D19's min-data floor (`min_block_chars`)
+  would add a *too-little-data* outcome that also leaves the watermark. It is **not built** —
+  `cycle.py:53` defines four outcomes and `min_block_chars` appears nowhere in the repo. Tracked as
+  [HANDOFF.md](HANDOFF.md) §Next item 5; do not read the rule above as covering it.
 - **The `/sessions` leg of this contract (C4 mentor traces) is unchanged and remains UNBUILT.** v0's
   day-log derives from `/context` only.
 
@@ -649,7 +654,7 @@ Day-log body:
     burned its window. The rule was written in four places and the fourth disagreed with the other
     three.
   - **Changed** — collapsed to one condition: advance on publish, never otherwise.
-  - **Now** — gate failure, freeze, crash, no data and too-little data all leave `last_trained_t`
+  - **Now** — `gate_failed`, `frozen`, `crashed` and `skipped_no_data` all leave `last_trained_t`
     where it is.
   - **Payoff** — one rule replaces five cases, and the four places that stated it collapse to one.
 - **2026-07-27 — built and cut over.**

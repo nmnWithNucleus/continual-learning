@@ -1,6 +1,6 @@
 """C5 publish / rollback — adapter version entries + the active alias.
 
-C5's v0 shape is NOT frozen yet (needs inference at the table; founders
+C5's v0 shape is NOT pinned yet (needs inference at the table; founders
 ratify). Until then this module maintains the full lifecycle locally under
 var_dir/model_directory/ — an append-only entries.jsonl of C5-shaped rows,
 nine fields:

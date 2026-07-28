@@ -300,7 +300,7 @@ plus an atomic `active.json` serving alias. Semantics verified in code:
 - **Snapshot retention** — old adapter *artifacts* are pruned (default 14, sized for rollback and
   the ≤14-night hard-delete replay), entries stay (`publish.py:142-167`).
 
-The module's own header says it plainly: *"C5's v0 shape is NOT frozen yet (needs inference at the
+The module's own header says it plainly: *"C5's v0 shape is NOT pinned yet (needs inference at the
 table; founders ratify)"* (`publish.py:3-4`) — hence the directory lives under continuum's
 `var_dir/model_directory/` so the storage-hosted swap-in is "a transport change, not a redesign."
 
