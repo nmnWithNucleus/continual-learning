@@ -31,8 +31,10 @@ Why the simplification:
 
 1. **An org-role with no work queue is overhead.** A director is a session, not a standing entity.
 2. **Documents are the org chart.** Reporting lines are reads and writes on handoff files, not
-   meetings. A superior checks in by reading the canvas; a subordinate reports by updating it and
-   flipping its status row. This survives session death, model swaps and human hires.
+   meetings.
+   - A superior checks in by reading the canvas; a subordinate reports by updating it and flipping
+     its status row.
+   - This survives session death, model swaps and human hires.
 3. **Contracts before fan-out.** Work may be parallelized only after the interfaces it touches are
    pinned in [ARCHITECTURE.md §Contracts](ARCHITECTURE.md). Changing a contract edits that section
    first, then both affected services' canvases.
@@ -141,9 +143,10 @@ that is not a restatement, because the implementation is genuinely the service's
 
 **Rules (inherited from the POCs, now law):**
 
-- **One fact, one home.** Shared truths (infra, contracts, conventions) live once — root
-  docs or the owning charter, everything else links. Never restate a sibling's internals.
-  *Ratified decisions live in [DECISIONS.md](DECISIONS.md) and are cited by D-number* — if a
+- **One fact, one home.** Shared truths (infra, contracts, conventions) live once — root docs or
+  the owning charter, everything else links.
+- Never restate a sibling's internals.
+- *Ratified decisions live in [DECISIONS.md](DECISIONS.md) and are cited by D-number* — if a
   decision is written out in full anywhere else, that copy is the bug.
 - **A table is not an essay.** [STYLE.md](STYLE.md) is binding on every document edit ([D21](DECISIONS.md)):
   the card template, the change format, the status vocabulary. Read it before you touch a file.
@@ -164,15 +167,16 @@ that is not a restatement, because the implementation is genuinely the service's
 - **Ask vs. decide (the founder-in-the-loop rule).** A service's *initial kickoff (Prompt A) is
   consultative*: the lead produces a kickoff brief — M0 plan + the blocking open questions with
   recommendations, and *stops for founder answers before designing or building.* Every *resume
-  (Prompt B) is autonomous*: proceed from the canvas's Next, make + document decisions,
-  escalate only true blockers. Cross-service / contract questions are *never* decided by one
-  service session — they route to a founders' session (or a joint interface-pin), regardless of
-  A vs B.
+  (Prompt B) is autonomous*: proceed from the canvas's Next, make + document decisions, escalate
+  only true blockers.
+- Cross-service / contract questions are *never* decided by one service session — they route to a
+  founders' session (or a joint interface-pin), regardless of A vs B.
 - **Lead plans and dispatches; workers advance ws files.** An A/B lead decomposes M0 into
-  `handoff/wsN-*.md` files and may either build inline or fan out workers. *Prompt C* is a
-  scoped worker that *presupposes its ws file already exists* — C is how you (or a human hire)
-  drive one workstream directly, especially interactive/stateful work a fire-and-forget sub-agent
-  can't. No ws file yet ⇒ an A/B planning pass writes it first.
+  `handoff/wsN-*.md` files and may either build inline or fan out workers.
+- *Prompt C* is a scoped worker that *presupposes its ws file already exists* — C is how you (or a
+  human hire) drive one workstream directly, especially interactive/stateful work a
+  fire-and-forget sub-agent can't.
+- No ws file yet ⇒ an A/B planning pass writes it first.
 - **Git is the message bus.** Sessions communicate by committing doc + code updates;
   superiors monitor by reading canvases (and `git log`), not by being present. Frequent
   small commits; the repo is always the ground truth.
@@ -183,10 +187,10 @@ that is not a restatement, because the implementation is genuinely the service's
   integrator role (a session that wires parallel outputs together, like `live_video_chat`
   WS6) is opened per fan-out, not standing.
 - **POCs are reference, not source** ([D7](DECISIONS.md)).
-  The `poc/` projects were built to answer research questions fast, not to production standard.
-  Sessions mine them for *learnings, contracts, and de-risking* — never lift-and-shift their
-  code. Every production path is written fresh, to fit this product's architecture. Cite a POC
-  as *reference*; if you catch yourself copying a file, stop and re-derive it.
+- The `poc/` projects were built to answer research questions fast, not to production standard.
+- Sessions mine them for *learnings, contracts, and de-risking* — never lift-and-shift their code.
+- Every production path is written fresh, to fit this product's architecture.
+- Cite a POC as *reference*; if you catch yourself copying a file, stop and re-derive it.
 
 ## Growth rules (when to add the deferred layers)
 

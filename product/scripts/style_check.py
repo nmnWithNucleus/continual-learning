@@ -154,7 +154,12 @@ def findings(path):
         # counting it again as a paragraph applies two caps to one unit.
         if re.match(r"^\d+[.)]\s", head):
             continue
-        if para.count("**") // 2 > 2:
+        # A lead-in with its list under it is one block to `split`, but the
+        # list items are bullets and were counted as bullets. Only the prose
+        # spends the paragraph's budget.
+        prose = "\n".join(l for l in para.split("\n")
+                          if not re.match(r"^\s*([-*+]|\d+[.)])\s", l))
+        if prose.count("**") // 2 > 2:
             out.append((0, "rule5-para-bold", head[:40]))
 
     return out

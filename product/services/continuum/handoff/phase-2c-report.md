@@ -71,14 +71,16 @@ through the CLI over the seams.
 
 1. **Day-log fetch must be addressable by `(user, window_id)` for arbitrary prior windows**, not
    just "the current window." Raw-source replay re-reads prior day-logs, so C10-evolved must serve
-   any past window's day-log on demand. The local impl reconstructs prior windows from the
-   reservoir ledger + the recipe boundary; storage's C10 needs the same addressability. *(This is
-   the one design point that surfaced concretely — the local rawlog test needed a window-aware
-   fetch to work.)*
+   any past window's day-log on demand.
+   - The local impl reconstructs prior windows from the reservoir ledger + the recipe boundary;
+     storage's C10 needs the same addressability.
+   - *(This is the one design point that surfaced concretely — the local rawlog test needed a
+     window-aware fetch to work.)*
 2. **The set of a user's prior consolidated windows** is today derived from the reservoir ledger
-   (which nights ran). If replay reads day-logs and the amplified reservoir becomes pure
-   audit/provenance, storage should expose "which windows has this user consolidated?" as part of
-   the reservoir or model-directory contract, rather than inferring it from amplified-corpus files.
+   (which nights ran).
+   - If replay reads day-logs and the amplified reservoir becomes pure audit/provenance, storage
+     should expose "which windows has this user consolidated?" as part of the reservoir or
+     model-directory contract, rather than inferring it from amplified-corpus files.
 3. **Recipe-registry + reservoir contract IDs** — new contracts (registry fetch, reservoir
    write/read) need IDs minted when the board ratifies the storage expansion (storage CHARTER
    lists these as *pending board*). The client interfaces here are the continuum-side shape to

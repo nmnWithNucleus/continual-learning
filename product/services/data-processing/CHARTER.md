@@ -353,9 +353,10 @@ channels, R2 Corollary 2); bbox geometry = *not emitted* (T2 — no reader; park
 
     **(b) Image and keyframe OCR frame-location (bbox) — deliberately not emitted.**
 
-    - **Was** — `content` had no home for structured region geometry. OCR *text* survived, woven
-      into the caption or as a `kind:'ocr'` record via the discriminator; only the bbox was lost.
-      The planned fix was an additive optional field, `content.regions:[{text,bbox,confidence?}]`
+    - **Was** — `content` had no home for structured region geometry.
+    - OCR *text* survived, woven into the caption or as a `kind:'ocr'` record via the
+      discriminator; only the bbox was lost.
+    - The planned fix was an additive optional field, `content.regions:[{text,bbox,confidence?}]`
       or `enrichments.text_regions`, schema-additive when a real OCR pass landed, owned in the
       *image* build.
     - **Changed** — a real OCR pass landed, and the decision was to *not* emit bbox to C2. The OCR
@@ -365,9 +366,9 @@ channels, R2 Corollary 2); bbox geometry = *not emitted* (T2 — no reader; park
       and parked as escalation *E-5*, to be taken in one additive commit when the first geometry
       or quality consumer exists.
     - **Payoff** — `enrichments` has *zero readers* in continuum today, which is exactly what the
-      record-law's T2 test refuses to store for. The originally-planned fix, an additive optional
-      field, is preserved rather than performed, and it stays schema-additive so old records still
-      validate whenever it lands.
+      record-law's T2 test refuses to store for.
+    - The originally-planned fix, an additive optional field, is preserved rather than performed,
+      and it stays schema-additive so old records still validate whenever it lands.
 
 ---
 
@@ -405,7 +406,8 @@ v0 = **one lead session + on-demand workstream agents**. As the service grows:
   Phase-1 (download → ASR → diarize) prototypes the audio pipeline; Phase-2 (chunking + the
   20-min/1-fps operating point) prototypes VidProc; Phase-3 (dense describe with video-relative +
   real-world-time timestamps, multi-granularity, batch economics) prototypes video dense
-  captioning + timestamp injection. Deep record: its HANDOFF.md + `experiments/phase3_describe/`.
+  captioning + timestamp injection.
+- Deep record: its HANDOFF.md + `experiments/phase3_describe/`.
 - **[poc/recursive_finetuning_stability](../../../poc/recursive_finetuning_stability/HANDOFF.md)** —
   `continuum`-side lineage; relevant here for the shared operational conventions only: manifests
   as the spine, idempotent/resumable pipelines, GCS as source of truth for bulk data.

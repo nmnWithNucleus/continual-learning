@@ -37,18 +37,19 @@ Run everything: `./run.sh` (venv bootstrap → pytest → one synthetic night).
 
 ## Design decisions recorded
 
-- **Idempotency = content-hash stage keys** (the research pipeline's `(day, stage,
-  content-hash)` discipline, in-process): changed upstream input invalidates exactly the
-  stages below it; a re-run of an unchanged night skips to the same adapter version.
-  Caught live by the tests: resume-adapter selection had to be `active_before(window)`,
-  not the live alias, or a re-run resumes from its own output.
+- **Idempotency = content-hash stage keys** (the research pipeline's `(day, stage, content-hash)`
+  discipline, in-process): changed upstream input invalidates exactly the stages below it; a
+  re-run of an unchanged night skips to the same adapter version.
+- Caught live by the tests: resume-adapter selection had to be `active_before(window)`, not the
+  live alias, or a re-run resumes from its own output.
 - **Quality gate placement:** the day log keeps everything; `quality < 0.5` rows are
   excluded from *amplification* only. Unscored (`None`) passes — C2 v0 has no quality
   field yet (DP flag).
-- **Gate-fail policy:** candidate recorded (`status=gate_failed`, audit trail), prior
-  adapter keeps serving, strike counted, window added to debt; 2 consecutive strikes
-  freeze the user (`--force` or state-file clear to resume). Failed-day *merge* into the
-  next night's corpus is ws-morpheus-port scope (debt is already tracked).
+- **Gate-fail policy:** candidate recorded (`status=gate_failed`, audit trail), prior adapter
+  keeps serving, strike counted, window added to debt; 2 consecutive strikes freeze the user
+  (`--force` or state-file clear to resume).
+- Failed-day *merge* into the next night's corpus is ws-morpheus-port scope (debt is already
+  tracked).
 - **First night has no replay** (empty reservoir) — matches the research recipe; the
   sequential-collapse risk begins night 2, which is exactly when replay kicks in.
 - `skipped_no_data` (empty window) is not a strike — the charter M4 min-data rule's

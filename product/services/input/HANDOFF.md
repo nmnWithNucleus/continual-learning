@@ -21,11 +21,11 @@
 - 19 tests pass; end-to-end smoke against a mock inference confirmed (chunked streaming
   relay, C3 schema-valid at the inference side, end-frame `turn_id` == `X-Turn-Id` header).
 - **Render seam wired (integrator, 2026-07-09):** the surface no longer renders plain text.
-  Output's `c9_reader.js` is *vendored* into [app/static/c9_reader.js](app/static/c9_reader.js)
+- Output's `c9_reader.js` is *vendored* into [app/static/c9_reader.js](app/static/c9_reader.js)
   (same-origin so the browser ES-module import needs no CORS to `:8082`); `index.html` loads
-  `app.js` as `type="module"` and `app.js` hands the `fetch()` response to
-  `renderC9Stream(resp, #answer, {onEndFrame})`, which streams and safe-markdown-renders the
-  answer and surfaces usage. Canonical source stays output's copy — re-copy on change.
+  `app.js` as `type="module"` and `app.js` hands the `fetch()` response to `renderC9Stream(resp,
+  #answer, {onEndFrame})`, which streams and safe-markdown-renders the answer and surfaces usage.
+- Canonical source stays output's copy — re-copy on change.
 
 ## Contracts
 - **Produces C3** (`contracts/c3_userprompt.v0.json`) — validated in code + tests.

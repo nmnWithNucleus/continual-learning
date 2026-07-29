@@ -138,11 +138,12 @@ envelope and hit data-processing only via C8.
    semantics (their build, our requirement)?
 2. Push-to-talk ASR placement: browser/on-device speech-to-text vs server-side via C8
    (poc/live_video_chat used server-side faster-whisper). Who owns endpointing/barge-in?
-3. Session semantics: what opens/closes a session, and does multi-turn history travel inside
-   the C3 UserPrompt or get fetched by inference from storage /sessions? Directly bounds C3 size.
-   Includes clarification-answer binding: how a reply attaches to its pending turn id, and what
-   happens on timeout/abandon — joint with inference's clarification-relay OQ
-   ([their charter](../inference/CHARTER.md), Engineering) and output's C9 frames.
+3. Session semantics: what opens/closes a session, and does multi-turn history travel inside the
+   C3 UserPrompt or get fetched by inference from storage /sessions?
+   - Directly bounds C3 size.
+   - Includes clarification-answer binding: how a reply attaches to its pending turn id, and what
+     happens on timeout/abandon — joint with inference's clarification-relay OQ ([their
+     charter](../inference/CHARTER.md), Engineering) and output's C9 frames.
 4. Client-capabilities vocabulary in C3: exact consumer (inference vs output, for response
    modality choice) and how it versions without breaking either.
 5. Wearable interactive audio transport: shared uplink with recording (C1 path) or a
@@ -150,10 +151,10 @@ envelope and hit data-processing only via C8.
 
 **Research / product**
 6. Template-vs-weights split: as the per-user adapter distills life context, how much
-   recent/retrieved context still belongs in the UserPrompt? C11 is the concrete instance:
-   what same-day retrieval (recency window, semantic top-k) QueryBuilder injects by default,
-   and how that shrinks as nightly cycles absorb more. Co-iterated with inference +
-   continuum evals; every change is a template version bump.
+   recent/retrieved context still belongs in the UserPrompt?
+   - C11 is the concrete instance: what same-day retrieval (recency window, semantic top-k)
+     QueryBuilder injects by default, and how that shrinks as nightly cycles absorb more.
+   - Co-iterated with inference + continuum evals; every change is a template version bump.
 7. Turn provenance: should interactive turns carry tags distinguishing them from passive
    stream data so continuum can weight them differently at fine-tune time?
 

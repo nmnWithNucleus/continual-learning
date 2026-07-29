@@ -89,8 +89,9 @@ A kernel is "ported" only when its parity test is green. No green, no merge.
 
 - Morpheus training/judging runs in a **pinned env invoked by absolute interpreter path or a
   container** — never `conda activate` (his `phased_run.sh` crashed on exactly this: activate
-  didn't fix path, python lacked peft). Capture `conda env export -n speedlora`/`-n vllm23`
-  as the env lockfiles under `continuum/` for reproducibility.
+  didn't fix path, python lacked peft).
+- Capture `conda env export -n speedlora`/`-n vllm23` as the env lockfiles under `continuum/` for
+  reproducibility.
 - **Config knobs** (`config.py`): `MORPHEUS_DEVICE` (GPU index — GPU 0 hardcoding is gone),
   `gpu_memory_utilization`, interpreter/container path, model paths from config not
   `/home/ubuntu/engram`.
@@ -168,13 +169,15 @@ Phases 2a–2c; do not build the lifestream profile yet, just keep the seam clea
 - **2c — lean architecture + storage seams (client side). ✅ done (2026-07-24).** Three client
   seams under `app/clients/` (day-log fetch / recipe registry / reservoir), each with a local
   backend; factories pick the backend from settings so storage integration is an http branch
-  behind them. `cycle.py` fetches the day-log and keys on its content fingerprint (no inline
-  build); `daylog/window/renderer` reached only through the client, proven byte-identical
-  (segment/block equality + byte-equal rendered files + render_block 1427/1427). Raw-source replay
-  wired (v1.0 keeps `amp` for parity — flipping to raw is now a recipe change, not a code change).
-  185 tier-A + 83 tier-B green. Surfaced storage-contract requirements (day-log fetch must be
-  random-access by `(user, window_id)`; enumerate a user's consolidated windows; day-log carries
-  its recipe/format version) — logged in the storage handoff for the C10-evolution session.
+  behind them.
+- `cycle.py` fetches the day-log and keys on its content fingerprint (no inline build);
+  `daylog/window/renderer` reached only through the client, proven byte-identical (segment/block
+  equality + byte-equal rendered files + render_block 1427/1427).
+- Raw-source replay wired (v1.0 keeps `amp` for parity — flipping to raw is now a recipe change,
+  not a code change). 185 tier-A + 83 tier-B green.
+- Surfaced storage-contract requirements (day-log fetch must be random-access by `(user,
+  window_id)`; enumerate a user's consolidated windows; day-log carries its recipe/format version)
+  — logged in the storage handoff for the C10-evolution session.
 
 DP dogfood / product-shape day-log (records → day-log) is **Phase 3**, a later workstream — out
 of scope here. Keep DP and real storage OUT of the parity-critical path (2a) so a data-shape
@@ -209,12 +212,13 @@ reference now passes **4/4** (was 71% of its nights blocked); the *lobotomy cont
 
 Two follow-ups the re-scoring surfaced:
 - **The lobotomy passes the traps check at 0.393** — it *denies its way* to a mid-reference
-  calibration score, and is caught *only by the recall floor*. Design principle to keep:
-  *calibration checks cannot be the primary safety net; a lobotomized model scores well on them.*
-  Never let the gate degrade to traps-only.
+  calibration score, and is caught *only by the recall floor*.
+- Design principle to keep: *calibration checks cannot be the primary safety net; a lobotomized
+  model scores well on them.* Never let the gate degrade to traps-only.
 - **The heldout policy is not yet fully exercised:** it specifies all *222* probes, but the
-  re-scoring ran on *60* (seed 2's p=0.029 pass is a 60-probe result). Generating predictions for
-  the full 222-probe heldout suite is outstanding before the policy is truly in force.
+  re-scoring ran on *60* (seed 2's p=0.029 pass is a 60-probe result).
+- Generating predictions for the full 222-probe heldout suite is outstanding before the policy is
+  truly in force.
 - Honest limit: at n=28 traps, **0.15 is the smallest floor with any teeth**, and it still blocks
   one of 24 reference nights (its own minimum, 4/28 = 0.143). The floor gets meaningful only when
   the trap suite grows to ~150.
@@ -243,14 +247,17 @@ re-derives them:**
 1. *"Seed 0's draws under-sampled day 5."* **Impossible — the rehearsal draw is not seed-dependent
    at all.** The rehearsal RNG is a separate `Random` instance on a constant seed (the reference
    hardcodes `random.Random(7)`, `phase_d_driver.py:313`); `transformers.set_seed()` touches the
-   *global* `random` and cannot reach an independent instance. `--seed` fixes *LoRA init only*.
-   Verified empirically: all three of our chains trained on *byte-identical rehearsal text*, and
-   seeds 1/2 saw exactly what seed 0 saw and landed in-band. Draw variance is excluded.
+   *global* `random` and cannot reach an independent instance.
+   - `--seed` fixes *LoRA init only*.
+   - Verified empirically: all three of our chains trained on *byte-identical rehearsal text*, and
+     seeds 1/2 saw exactly what seed 0 saw and landed in-band.
+   - Draw variance is excluded.
 2. *"Per-night draw noise (sd 0.074) ÷ √6 ≈ 0.030 ≈ the reference's chain sd 0.033, so their
    spread is explained by draw noise."* **A coincidence, comparing different variance sources.**
    The draw sweep varied the *rehearsal seed*; real chains hold it fixed at 7. So 0.074 measures
-   rehearsal-draw sensitivity, which real chains do not exercise. We have *no calibrated model*
-   for how much chain variance LoRA-init + GPU non-determinism should produce.
+   rehearsal-draw sensitivity, which real chains do not exercise.
+   - We have *no calibrated model* for how much chain variance LoRA-init + GPU non-determinism
+     should produce.
 
 **What that leaves:** the only differences between chains — ours or the reference's, are **LoRA-A
 initialization and non-deterministic GPU reductions**. So either the recipe has an init-sensitive

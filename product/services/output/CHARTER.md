@@ -135,9 +135,10 @@ ID only, never redefined here):
 3. Transport ownership: does output hold its own persistent per-device channel (which the future
    proactive channel needs anyway), or ride the request connection input already holds for v0?
 4. TTS engine + placement: open-weights model on our H100 nodes vs hosted API; shared service vs
-   per-node; consistent voice across sessions. Playback path is the **mobile app → BT audio**
-   (§Ownership splits); dependency is the mobile app's audio surface (input owns the app), not
-   wearable hardware. Blocks M2.
+   per-node; consistent voice across sessions.
+   - Playback path is the **mobile app → BT audio** (§Ownership splits); dependency is the mobile
+     app's audio surface (input owns the app), not wearable hardware.
+   - Blocks M2.
 5. Cross-surface rule for v0: always reply on the origin surface? What degrades when the answer
    form doesn't fit the surface (e.g. a table, asked from the wearable)?
 

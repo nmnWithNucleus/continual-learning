@@ -63,9 +63,10 @@ processed it, without ever reporting a lost chunk as `clean`.
 - **Phone web client** (`clients/web/`) — static, no build step, served at `/client/`, with
   `GET /` redirecting. getUserMedia plus a segmented MediaRecorder.
 - It uses **~10 s self-contained segments via recorder restart** (D-M1-1), because timeslice
-  fragments are not self-contained. Record/pause/stop, camera-off mic-only mode, a serialized
-  offline upload queue with retry and backoff, an end marker (plus `sendBeacon` on pagehide), a
-  wake lock, and a live gap-report poll with a verdict badge.
+  fragments are not self-contained.
+- Record/pause/stop, camera-off mic-only mode, a serialized offline upload queue with retry and
+  backoff, an end marker (plus `sendBeacon` on pagehide), a wake lock, and a live gap-report poll
+  with a verdict badge.
 - **Capture-wire server** (`app/capture_web.py` + `ledger.py` + `demux.py` + `emitter.py`).
   `POST /capture/segments` is idempotent on `(session_id, seq)`, sha-verified, spool→ledger ack.
 - Per session a FIFO emit worker runs: ffmpeg **demuxes into per-modality chunks** (audio →
@@ -76,23 +77,26 @@ processed it, without ever reporting a lost chunk as `clean`.
   `chunk_id`s.
 - `RECORDING_INGEST_SYNC=1` gives inline processing, for tests and small ops. The spool is deleted
   after emit; `RECORDING_KEEP_SPOOL=1` keeps it, which is the D13 consent-holdback seam.
-- **The client wire was renamed `/ingest/*` → `/capture/*` 2026-07-18** (founders), so `/ingest` is
-  uniquely data-processing's C1 receiver. The transitional alias was *removed 2026-07-19* (CTO:
-  a single tester, so refresh loaded pages instead of versioning routes). A test asserts recording
-  serves nothing under `/ingest`.
-- **Gap detection is now a checked guarantee** (was emit-side-only affordance in M0):
-  the SQLite *continuity ledger* (`var/ledger.db`) tracks both legs;
-  `GET /capture/sessions/{id}/report` joins client leg (missing seqs, dups, unterminated),
-  emit leg (per-stream dense sequences, pending/failed, `segment_states` drain signal), and a
-  *live DP cross-check* (`GET /continuity/{stream_id}` on data-processing) into a
-  `clean|gaps|recording` verdict. Client-side loss appears in the client leg and never as a
-  fabricated C1 gap (two continuity domains, joined by the ledger). Verified live: clean,
-  loss-drill (`gaps` + `missing_seqs`), dup-drill (acked `duplicate`, not re-emitted).
+- **The client wire was renamed `/ingest/*` → `/capture/*` 2026-07-18** (founders), so `/ingest`
+  is uniquely data-processing's C1 receiver.
+- The transitional alias was *removed 2026-07-19* (CTO: a single tester, so refresh loaded pages
+  instead of versioning routes).
+- A test asserts recording serves nothing under `/ingest`.
+- **Gap detection is now a checked guarantee** (was emit-side-only affordance in M0): the SQLite
+  *continuity ledger* (`var/ledger.db`) tracks both legs; `GET /capture/sessions/{id}/report`
+  joins client leg (missing seqs, dups, unterminated), emit leg (per-stream dense sequences,
+  pending/failed, `segment_states` drain signal), and a *live DP cross-check* (`GET
+  /continuity/{stream_id}` on data-processing) into a `clean|gaps|recording` verdict.
+- Client-side loss appears in the client leg and never as a fabricated C1 gap (two continuity
+  domains, joined by the ledger).
+- Verified live: clean, loss-drill (`gaps` + `missing_seqs`), dup-drill (acked `duplicate`, not
+  re-emitted).
 - **Chunking (OQ4) ratified — D-M1-2** (charter §Open questions 4 updated): VAD-cut variable
   chunks [5–30 s] where the server owns a continuous feed (`app/carve.py`, now the audio
-  ChunkSource *default*; explicit `chunk_seconds`/`CHUNK_SECONDS` = fixed); phone = fixed
-  ~10 s edge segments; video = fixed windows. Verified live on real speech: cut lands in the
-  natural pause, exact `t_end[n]==t_start[n+1]` adjacency.
+  ChunkSource *default*; explicit `chunk_seconds`/`CHUNK_SECONDS` = fixed); phone = fixed ~10 s
+  edge segments; video = fixed windows.
+- Verified live on real speech: cut lands in the natural pause, exact `t_end[n]==t_start[n+1]`
+  adjacency.
 - **DP-side pair landed** (their ws file above): `/ingest` break/dup *continuity tracker* +
   `/continuity` endpoints; *faster-whisper standing* (`asr-fw-v1`, mock stays default) with
   *VAD gate* (all-silence chunk → honest empty transcript, no hallucination). Verified live
@@ -100,27 +104,30 @@ processed it, without ever reporting a lost chunk as `clean`.
 - **Tunnel**: `run_tunnel.sh` (`--bg/--stop/--url`) exposes `:8084` over HTTPS
   (cloudflared quick tunnel; URL rotates per restart, written to `var/tunnel_url.txt`).
   Full upload path verified through the tunnel. *Beta handover = that URL + `/client/`.*
-- **Adversarial review round** (multi-agent find → 2-skeptic verify) confirmed 7 defects
-  (5 server, 2 client) — all fixed + regression-tested, detail in
-  [ws-c](handoff/ws-c-ingest-demux-ledger.md) §Worklog: ack-before-spool loss window,
-  unbounded gap walk / body size, DP-restart false `gaps` verdict (report now reconciles
-  DP-missing against ledger ack receipts — `dp.missing_unacked`), stale pagehide end
-  marker (monotonic + reopen), retry sequence-order, demux subprocess timeout, and a
-  client Pause→Resume double-recorder race. Live E2E re-verified after the fixes.
-- **Browser extension** (`clients/extension/`, Chrome MV3 — ws-E): a passive capture surface
-  (no content scripts, no page/DOM access, no static host permissions — runtime origin grant
-  instead of server CORS). *Records the active tab — video and audio in one muxed stream via
-  `chrome.tabCapture` (D-E7, pivoted 2026-07-19 off the fragile desktopCapture screen-picker
-  after it failed 3× on the tester's Comet browser).* One tab = ONE session = one muxed-webm
-  (vp8+opus) segment loop; the *server demuxes each segment into audio + video C1 streams*,
-  the same muxed-A/V path the phone/mac clients use, zero server changes. AudioContext
-  passthrough keeps the tab audible; `device_id` = `ext-chrome-<suffix>`. D-M1-1 segmented
-  recorder + the phone client's serialized uploader as DI'd ES modules (17 deno tests); popup
-  mirrors the phone status panel. Server URL is a popup setting (tunnel or localhost); a
-  *Discard-unsent* escape hatch unlocks a drain stuck on a bad URL. *Verified on a real
-  browser 2026-07-19* (CTO on Comet, verdict `clean`, 7 real ASR transcripts of the captured
-  tab's audio). Trade-off: the extension captures a browser *tab*, not the whole desktop —
-  full-screen capture is the mac CLI's job.
+- **Adversarial review round** (multi-agent find → 2-skeptic verify) confirmed 7 defects (5
+  server, 2 client) — all fixed + regression-tested, detail in
+  [ws-c](handoff/ws-c-ingest-demux-ledger.md) §Worklog: ack-before-spool loss window, unbounded
+  gap walk / body size, DP-restart false `gaps` verdict (report now reconciles DP-missing against
+  ledger ack receipts — `dp.missing_unacked`), stale pagehide end marker (monotonic + reopen),
+  retry sequence-order, demux subprocess timeout, and a client Pause→Resume double-recorder race.
+- Live E2E re-verified after the fixes.
+- **Browser extension** (`clients/extension/`, Chrome MV3 — ws-E): a passive capture surface (no
+  content scripts, no page/DOM access, no static host permissions — runtime origin grant instead
+  of server CORS).
+- *Records the active tab — video and audio in one muxed stream via `chrome.tabCapture` (D-E7,
+  pivoted 2026-07-19 off the fragile desktopCapture screen-picker after it failed 3× on the
+  tester's Comet browser).* One tab = ONE session = one muxed-webm (vp8+opus) segment loop; the
+  *server demuxes each segment into audio + video C1 streams*, the same muxed-A/V path the
+  phone/mac clients use, zero server changes.
+- AudioContext passthrough keeps the tab audible; `device_id` = `ext-chrome-<suffix>`. D-M1-1
+  segmented recorder + the phone client's serialized uploader as DI'd ES modules (17 deno tests);
+  popup mirrors the phone status panel.
+- Server URL is a popup setting (tunnel or localhost); a *Discard-unsent* escape hatch unlocks a
+  drain stuck on a bad URL.
+- *Verified on a real browser 2026-07-19* (CTO on Comet, verdict `clean`, 7 real ASR transcripts
+  of the captured tab's audio).
+- Trade-off: the extension captures a browser *tab*, not the whole desktop — full-screen capture
+  is the mac CLI's job.
 - **Mac capture CLI** (`clients/mac/nucleus_capture.py` — ws-F): single-file stdlib-only
   python3 + ffmpeg; avfoundation screen+mic muxed → ~10 s self-contained mp4 segments
   (forced keyframes) → serialized uploader on the same wire; duration-chained wall-clock

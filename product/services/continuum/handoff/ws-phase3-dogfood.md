@@ -85,27 +85,29 @@ blob in GCS) and yields it as chunk(s); driven through the existing `POST /captu
 
 ## Staging
 
-- **3a — the bridge. ✅ done (2026-07-24, job 756).** 629 chunks / 209.7 h of real Speed
-  audio through recording → DP → storage in 1 h 44 m on 8 H100s; 12,221 caption + 621
-  transcript C2 records queryable by (user, window), zero missing, zero segment collisions,
-  one dialect (`asr-fw-v1+diar-pyannote-v1`). Arm 2's ASR + diarization ran on every chunk
-  and spot-checks sane.
-  Original scope: replay `ChunkSource` + injected-caption sidecar + test recipe + DP env profile
-  → Speed's 6 train days (5,9,12,13,17,21) + heldout (6,16,28) land in `/context` as rule-bent C2 for
-  `user_id="replay-speed"`, via *real recording→DP→storage*. Arm 2's real ASR runs here.
-  *Exit:* real C2 (caption + transcript) queryable by `(user, window)`; ASR spot-checked sane.
-- **3b — the measurement. ✅ done (2026-07-24, job 767). Verdict: separation did *not*
-  survive.** 5 seeds: separation 0.077 vs the 5-min baseline's 0.179 (p = 0.0067) and
-  statistically indistinguishable from the rehearsal-off control (p = 0.80). The rule-bent
-  day-log reproduces the baseline's block count exactly on 5 of 6 train days and the bridge
-  is exact, so this is NOT a pipeline defect: acquisition is 3.2x weaker (0.079 vs 0.249 on
-  the night a day is written) while retention is fine, tracking a 3.7x cut in amplification
-  dose per fact (48 retellings now cover 4.1x the block content). First decomposition step,
-  config only: inject the 5-min descriptions with segment_seconds=300, block_segments=1 —
-  same services, same spine, parity block content. Full write-up:
-  [phase-3-report.md](phase-3-report.md).
-  Original scope: continuum fetches (caption-only filter) → Morpheus over the 6 days →
-  Arm-1 verdict. *Exit:* the separation-survives table + one-line verdict.
+- **3a — the bridge. ✅ done (2026-07-24, job 756).** 629 chunks / 209.7 h of real Speed audio
+  through recording → DP → storage in 1 h 44 m on 8 H100s; 12,221 caption + 621 transcript C2
+  records queryable by (user, window), zero missing, zero segment collisions, one dialect
+  (`asr-fw-v1+diar-pyannote-v1`).
+- Arm 2's ASR + diarization ran on every chunk and spot-checks sane.
+- Original scope: replay `ChunkSource` + injected-caption sidecar + test recipe + DP env profile →
+  Speed's 6 train days (5,9,12,13,17,21) + heldout (6,16,28) land in `/context` as rule-bent C2
+  for `user_id="replay-speed"`, via *real recording→DP→storage*.
+- Arm 2's real ASR runs here.
+- *Exit:* real C2 (caption + transcript) queryable by `(user, window)`; ASR spot-checked sane.
+- **3b — the measurement. ✅ done (2026-07-24, job 767).
+- Verdict: separation did *not* survive.** 5 seeds: separation 0.077 vs the 5-min baseline's 0.179
+  (p = 0.0067) and statistically indistinguishable from the rehearsal-off control (p = 0.80).
+- The rule-bent day-log reproduces the baseline's block count exactly on 5 of 6 train days and the
+  bridge is exact, so this is NOT a pipeline defect: acquisition is 3.2x weaker (0.079 vs 0.249 on
+  the night a day is written) while retention is fine, tracking a 3.7x cut in amplification dose
+  per fact (48 retellings now cover 4.1x the block content).
+- First decomposition step, config only: inject the 5-min descriptions with segment_seconds=300,
+  block_segments=1 — same services, same spine, parity block content.
+- Full write-up: [phase-3-report.md](phase-3-report.md).
+- Original scope: continuum fetches (caption-only filter) → Morpheus over the 6 days → Arm-1
+  verdict.
+- *Exit:* the separation-survives table + one-line verdict.
 
 **Deferred (do NOT start):** real VLM keyframe captioning (the true caption-shape test), Arm 3,
 C8 per-request profiles, GCS by-reference blobs (OQ8).
@@ -126,6 +128,8 @@ C8 per-request profiles, GCS by-reference blobs (OQ8).
 - SLURM for the Morpheus training (6 days). Branch off main. Cofounder review before merge.
 - Any cross-service contract friction (e.g. C10 needs kind-filtering, blob-by-reference) → note for
   the storage/C10 session, do not pin.
-- **Report:** 3a — records landed (counts, a sample caption + transcript), ASR spot-check. 3b — the
-  Arm-1 table vs the 5-min baseline + the one-line verdict (did separation survive). If it didn't, the
-  First decomposition step you'd take (cadence / block-shape) — not a full investigation. Job ids, GPU-h.
+- **Report:** 3a — records landed (counts, a sample caption + transcript), ASR spot-check. 3b —
+  the Arm-1 table vs the 5-min baseline + the one-line verdict (did separation survive).
+- If it didn't, the First decomposition step you'd take (cadence / block-shape) — not a full
+  investigation.
+- Job ids, GPU-h.

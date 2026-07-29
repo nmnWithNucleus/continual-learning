@@ -52,9 +52,9 @@ DP pairing: DP gains a **VAD gate before ASR** (their ws file) — same lens, di
   `chunk_seconds` > `CHUNK_SECONDS` env > VAD default with `VAD_MIN/MAX_CHUNK_SECONDS`
   bounds). 16 new tests; fixed path byte-identical (M0 regression held).
 - 2026-07-18 — **verified live**: `/capture/run` with `chunk_seconds` omitted on an 11 s
-  real-speech WAV (JFK sample) → 2 chunks cut at 7.86 s inside the natural pause,
-  `t_end[0] == t_start[1]` exact to the microsecond in the stored C2 spans. Degenerate
-  synthetic tone (the M0 sample) degrades to max_s cuts as documented. Known limit
-  (documented in carve.py): the p20 calibration wants silence in ≥~20 % of hops; noisy
-  always-loud streams degrade to fixed max_s cuts — a real VAD model swaps in behind
-  `find_cuts` later.
+  real-speech WAV (JFK sample) → 2 chunks cut at 7.86 s inside the natural pause, `t_end[0] ==
+  t_start[1]` exact to the microsecond in the stored C2 spans.
+- Degenerate synthetic tone (the M0 sample) degrades to max_s cuts as documented.
+- Known limit (documented in carve.py): the p20 calibration wants silence in ≥~20 % of hops; noisy
+  always-loud streams degrade to fixed max_s cuts — a real VAD model swaps in behind `find_cuts`
+  later.

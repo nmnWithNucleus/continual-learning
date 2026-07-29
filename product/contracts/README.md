@@ -20,9 +20,9 @@ is push/at-least-once, dedup on `chunk_id`, gaps via `(stream_id, sequence)`.
 - Every service validates the payloads it produces/consumes against these schemas in its tests.
 - Ten contracts are materialized across **twelve files**: C3/C9/C4/C6 (serve loop) + C1/C2 (learn
   loop) + *C12* (user profile, D18) + *C10 v1* (*two* files — the day-log fetch and the
-  training-window ledger row, see below) + *C13* (recipe registry, *two* files, see below) +
-  *C14* (reservoir ledger); the last four landed 2026-07-27 with the storage build slice.
-  C5/C7/C8/C11 get schema files when their slices start.
+  training-window ledger row, see below) + *C13* (recipe registry, *two* files, see below) + *C14*
+  (reservoir ledger); the last four landed 2026-07-27 with the storage build slice.
+- C5/C7/C8/C11 get schema files when their slices start.
 
 | File | Contract | Body |
 |---|---|---|

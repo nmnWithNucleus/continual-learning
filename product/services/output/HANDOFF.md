@@ -13,18 +13,22 @@
 
 ## Current state
 - **Deliverable 1 — browser-side C9 client**: `app/static/c9_reader.js` (dependency-free ES
-  module). Stream-reads a `fetch()` Response in C9 wire format, splits the answer text from the
-  JSON end frame on the first `U+001E`, renders the answer as *safe markdown* (HTML escaped
-  first — no XSS), and exposes the end-frame usage. Primary export the input surface imports:
-  `renderC9Stream(response, targetEl)` → `{answer, endFrame, usage}`; also exports
-  `readC9Stream`, `renderMarkdown`/`markdownToHtml`, `escapeHtml`, `RECORD_SEPARATOR`.
-  Self-test page: `app/static/selftest.html` (feeds a synthetic C9 stream, renders it, and has a
-  "Run assertions" button covering XSS-inertness + answer/end-frame round-trip).
-- **Deliverable 2 — standalone relay service (:8082)**: `app/main.py` (FastAPI). `POST /deliver`
-  proxies a C9 stream from an `upstream_url` to the caller *byte-for-byte unchanged*, with a
-  delivery ack in response headers (`X-Delivery-*`). `GET /health`, `GET /` index. Serves the
-  static browser client at `/static/*`. NOT on the web MVP hot path (input relays directly) — it
-  proves the delivery service boundary for future non-web surfaces + the proactive channel.
+  module).
+- Stream-reads a `fetch()` Response in C9 wire format, splits the answer text from the JSON end
+  frame on the first `U+001E`, renders the answer as *safe markdown* (HTML escaped first — no
+  XSS), and exposes the end-frame usage.
+- Primary export the input surface imports: `renderC9Stream(response, targetEl)` → `{answer,
+  endFrame, usage}`; also exports `readC9Stream`, `renderMarkdown`/`markdownToHtml`, `escapeHtml`,
+  `RECORD_SEPARATOR`. Self-test page: `app/static/selftest.html` (feeds a synthetic C9 stream,
+  renders it, and has a "Run assertions" button covering XSS-inertness + answer/end-frame
+  round-trip).
+- **Deliverable 2 — standalone relay service (:8082)**: `app/main.py` (FastAPI).
+- `POST /deliver` proxies a C9 stream from an `upstream_url` to the caller *byte-for-byte
+  unchanged*, with a delivery ack in response headers (`X-Delivery-*`).
+- `GET /health`, `GET /` index.
+- Serves the static browser client at `/static/*`. NOT on the web MVP hot path (input relays
+  directly) — it proves the delivery service boundary for future non-web surfaces + the proactive
+  channel.
 - **Tests (46, all green)**: `tests/test_c9_parse.py` (parser correctness incl. chunk-boundary +
   multibyte + malformed; end frame validated against `c9_response_stream.v0.json`),
   `tests/test_markdown.py` (HTML-escaping / no-XSS + formatting), `tests/test_relay.py` (relay

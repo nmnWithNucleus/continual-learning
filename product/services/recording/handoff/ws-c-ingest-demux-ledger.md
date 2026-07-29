@@ -12,28 +12,31 @@
 
 ## Decisions
 
-- **D-M1-3 — ledger = SQLite** (`var/ledger.db`, WAL). This is *operational continuity
-  metadata* (sessions, segment receipt, minted chunk ids, ack state), not durable user-content
-  custody — content custody stays with storage `/raw` (blobs transit the spool and are deleted
-  after emit by default). Crash-safe: `chunk_id`s are minted + persisted before the first emit
-  attempt, so a restart retries with the same ids (idempotent downstream).
+- **D-M1-3 — ledger = SQLite** (`var/ledger.db`, WAL).
+- This is *operational continuity metadata* (sessions, segment receipt, minted chunk ids, ack
+  state), not durable user-content custody — content custody stays with storage `/raw` (blobs
+  transit the spool and are deleted after emit by default).
+- Crash-safe: `chunk_id`s are minted + persisted before the first emit attempt, so a restart
+  retries with the same ids (idempotent downstream).
 - **D-M1-4 — upload wire** as pinned in WS-B (internal to recording, not a C-contract).
-  *Route rename 2026-07-18 (founders):* client-facing prefix `/ingest/*` → `/capture/*`
-  (file `app/ingest_web.py` → `app/capture_web.py`) so `/ingest` is uniquely
-  data-processing's C1 receiver. Shapes and semantics unchanged. A transitional hidden
-  `/ingest/*` alias lived exactly one day — *removed 2026-07-19* (CTO: single tester,
-  refresh beats versioned routes); a test now asserts recording serves nothing under
-  `/ingest`.
-- **Demux is recording's job** (charter OQ8 pattern: the muxed device link is split here,
-  before emission): phone segments arrive A/V-muxed; ffmpeg demuxes per segment into
-  audio → `audio/wav` 16 kHz mono s16le (ASR-native) and video → container copy
-  (`video/mp4` / `video/webm`, no re-encode). 1 segment → 1 audio chunk + 1 video chunk
-  (either may be absent — probe decides). Both chunks carry the segment's wall-clock span.
-- **Two C1 streams per session** (audio, video): own `stream_id` (ULID) each, same
-  `device_id`, wall-clock aligned. C1 `sequence` = per-stream emit counter — dense by
-  construction. The client→server leg has its own continuity domain (`seq`); the ledger joins
-  the two legs. A client-side loss (dropped segment) appears in the client leg of the report,
-  never as a fabricated C1 gap.
+- *Route rename 2026-07-18 (founders):* client-facing prefix `/ingest/*` → `/capture/*` (file
+  `app/ingest_web.py` → `app/capture_web.py`) so `/ingest` is uniquely data-processing's C1
+  receiver.
+- Shapes and semantics unchanged.
+- A transitional hidden `/ingest/*` alias lived exactly one day — *removed 2026-07-19* (CTO:
+  single tester, refresh beats versioned routes); a test now asserts recording serves nothing
+  under `/ingest`.
+- **Demux is recording's job** (charter OQ8 pattern: the muxed device link is split here, before
+  emission): phone segments arrive A/V-muxed; ffmpeg demuxes per segment into audio → `audio/wav`
+  16 kHz mono s16le (ASR-native) and video → container copy (`video/mp4` / `video/webm`, no
+  re-encode). 1 segment → 1 audio chunk + 1 video chunk (either may be absent — probe decides).
+- Both chunks carry the segment's wall-clock span.
+- **Two C1 streams per session** (audio, video): own `stream_id` (ULID) each, same `device_id`,
+  wall-clock aligned.
+- C1 `sequence` = per-stream emit counter — dense by construction.
+- The client→server leg has its own continuity domain (`seq`); the ledger joins the two legs.
+- A client-side loss (dropped segment) appears in the client leg of the report, never as a
+  fabricated C1 gap.
 - **Consent-gate compatibility (D13, not built):** the spool+ledger is the natural holdback
   point — a future consent gate delays the emit step per session; the upload path is unchanged.
   `RECORDING_KEEP_SPOOL=1` keeps spooled segments after emit (default: delete).
@@ -47,12 +50,12 @@
   - `chunks(stream_id, sequence, session_id, seq, modality, chunk_id, codec, bytes, sha256, blob_ref, dp_acked INT, record_ids TEXT, emitted_at, PRIMARY KEY(stream_id, sequence))`
 - `app/demux.py` — ffprobe track probe + ffmpeg demux of one spooled segment into per-modality
   chunk files (subprocess; binaries from `FFMPEG_BIN`/`FFPROBE_BIN`, default path).
-- `app/emitter.py` — per-session in-order worker: for each received segment, demux → per
-  modality: get-or-create stream → mint+persist `chunk_id` → PUT `/raw/blobs` → validated C1
-  push → record `blob_ref`/`record_ids`/acks in the ledger → mark segment `emitted`, delete
-  spool file. Reuses `clients.StorageClient`/`DataProcessingClient` (their retry = the
-  at-least-once semantics) and `contracts.validate_c1`. Terminal failure marks the segment
-  `failed` (visible in the report); `POST /capture/sessions/{id}/retry` re-enqueues failures.
+- `app/emitter.py` — per-session in-order worker: for each received segment, demux → per modality:
+  get-or-create stream → mint+persist `chunk_id` → PUT `/raw/blobs` → validated C1 push → record
+  `blob_ref`/`record_ids`/acks in the ledger → mark segment `emitted`, delete spool file.
+- Reuses `clients.StorageClient`/`DataProcessingClient` (their retry = the at-least-once
+  semantics) and `contracts.validate_c1`. Terminal failure marks the segment `failed` (visible in
+  the report); `POST /capture/sessions/{id}/retry` re-enqueues failures.
 - `app/capture_web.py` — the router: segment upload (idempotent on `(session_id, seq)`; sha256
   verified when provided), end marker, sessions list, gap report, retry. Async ack by default;
   `RECORDING_INGEST_SYNC=1` processes inline before ack (tests + small-scale ops).
@@ -112,38 +115,36 @@ ack-then-poll; report merges a fake DP `/continuity` response.
   C1 streams stay dense (no fabricated gap — exactly the two-continuity-domain design);
   dup redelivery → acked `duplicate`, counted, not re-emitted, verdict `clean`. Uploads
   also exercised through the cloudflared HTTPS tunnel.
-- 2026-07-18 — **adversarial review round** (multi-agent find → 2-skeptic verify over the
-  diff) confirmed 5 server defects, all fixed + regression-tested (+6 tests → 72):
-  (1) *ack-before-spool*: the ledger row committed before the spool write, so a crash
-  between them made the client's retry ack bytes that existed nowhere — now the spool is
-  written first (content-addressed `seq.sha[:12].ext` names so a conflicting sha can
-  never clobber the original), and a duplicate whose segment is still `received`
-  re-enqueues (self-heals the lost-spool/lost-enqueue windows);
-  (2) *unbounded gap walk*: one huge `seq` made the report materialize every missing seq —
-  `seq` is now bounded (≤ 9 999 999), the walk is O(received), `missing_seqs` is capped at
-  1000 with an exact `missing_count` alongside;
-  (3) *unbounded body*: `/capture/segments` now streams the body against a cap
-  (`RECORDING_MAX_SEGMENT_MB`, default 64 → 413);
-  (4) *DP-amnesia false alarm*: a mid-session DP restart made its in-memory tracker
-  report already-acked chunks as a permanent leading gap → verdict `gaps` forever; the
-  report now reconciles DP-missing against the ledger's ack receipts
-  (`dp.missing_unacked` drives the verdict; raw `missing` kept for transparency);
-  (5) *stale end marker*: the client beacons `end` on every page-hide, so a resumed
-  session could read `clean` against a stale expected count — `mark_ended` is now
-  monotonic on `expected_segments` and a segment arriving past the marker reopens the
-  session; plus *sequence-order-vs-retry*: all of a segment's chunks are allocated
-  before any emits, so a mid-emit failure + `/retry` slots back in capture order
-  (a fully-demux-failed segment retried after later ones still emits late sequences —
-  documented residual, visible as `failed` in the report; `t_start` stays the time axis).
-  Also from the round: demux subprocess timeout (120 s) so a hung ffmpeg can't wedge a
-  session worker, and blocking read/hash moved off the event loop in the emitter.
-  Re-verified live end-to-end after the fixes (clean + gap drills, real ASR).
+- 2026-07-18 — **adversarial review round** (multi-agent find → 2-skeptic verify over the diff)
+  confirmed 5 server defects, all fixed + regression-tested (+6 tests → 72): (1)
+  *ack-before-spool*: the ledger row committed before the spool write, so a crash between them
+  made the client's retry ack bytes that existed nowhere — now the spool is written first
+  (content-addressed `seq.sha[:12].ext` names so a conflicting sha can never clobber the
+  original), and a duplicate whose segment is still `received` re-enqueues (self-heals the
+  lost-spool/lost-enqueue windows); (2) *unbounded gap walk*: one huge `seq` made the report
+  materialize every missing seq — `seq` is now bounded (≤ 9 999 999), the walk is O(received),
+  `missing_seqs` is capped at 1000 with an exact `missing_count` alongside; (3) *unbounded body*:
+  `/capture/segments` now streams the body against a cap (`RECORDING_MAX_SEGMENT_MB`, default 64 →
+  413); (4) *DP-amnesia false alarm*: a mid-session DP restart made its in-memory tracker report
+  already-acked chunks as a permanent leading gap → verdict `gaps` forever; the report now
+  reconciles DP-missing against the ledger's ack receipts (`dp.missing_unacked` drives the
+  verdict; raw `missing` kept for transparency); (5) *stale end marker*: the client beacons `end`
+  on every page-hide, so a resumed session could read `clean` against a stale expected count —
+  `mark_ended` is now monotonic on `expected_segments` and a segment arriving past the marker
+  reopens the session; plus *sequence-order-vs-retry*: all of a segment's chunks are allocated
+  before any emits, so a mid-emit failure + `/retry` slots back in capture order (a
+  fully-demux-failed segment retried after later ones still emits late sequences — documented
+  residual, visible as `failed` in the report; `t_start` stays the time axis).
+- Also from the round: demux subprocess timeout (120 s) so a hung ffmpeg can't wedge a session
+  worker, and blocking read/hash moved off the event loop in the emitter.
+- Re-verified live end-to-end after the fixes (clean + gap drills, real ASR).
 - 2026-07-18 (computer-capture lead) — **route rename executed** (see D-M1-4 note):
-  `app/ingest_web.py` → `app/capture_web.py`, prefix moved to the include site
-  (`main.py` mounts `/capture` + hidden `/ingest` alias). Handlers, shapes, ledger,
-  emitter untouched. Test module renamed `test_capture_web.py`; suite green; canonical
-  (and the then-alias) drilled live on the fleet. Two NEW client surfaces now speak this
-  wire unchanged — [ws-e](ws-e-extension.md) (extension) and [ws-f](ws-f-mac-cli.md)
-  (mac CLI), plus `tests/test_wire_conformance.py` proving the client-shape matrix
-  (video-only webm/vp8, audio-only webm/opus, muxed mp4 h264+aac) demuxes to the right
-  C1 streams.
+  `app/ingest_web.py` → `app/capture_web.py`, prefix moved to the include site (`main.py` mounts
+  `/capture` + hidden `/ingest` alias).
+- Handlers, shapes, ledger, emitter untouched.
+- Test module renamed `test_capture_web.py`; suite green; canonical (and the then-alias) drilled
+  live on the fleet.
+- Two NEW client surfaces now speak this wire unchanged — [ws-e](ws-e-extension.md) (extension)
+  and [ws-f](ws-f-mac-cli.md) (mac CLI), plus `tests/test_wire_conformance.py` proving the
+  client-shape matrix (video-only webm/vp8, audio-only webm/opus, muxed mp4 h264+aac) demuxes to
+  the right C1 streams.

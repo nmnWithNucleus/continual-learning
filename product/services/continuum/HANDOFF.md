@@ -20,16 +20,18 @@ storage* · *Last updated:* 2026-07-27
 
 ## Current state
 
-- **The learn loop is closed end to end and runs on storage's HTTP surface** ([D18](../../DECISIONS.md),
-  built 2026-07-27). Five clients sit behind the existing protocols — `HttpDayLogClient` (C10 v1),
+- **The learn loop is closed end to end and runs on storage's HTTP surface**
+  ([D18](../../DECISIONS.md), built 2026-07-27).
+- Five clients sit behind the existing protocols — `HttpDayLogClient` (C10 v1),
   `HttpWindowLedger`, `HttpProfileClient` (C12), `HttpRecipeRegistry` (C13), `HttpReservoirClient`
   (C14), selected by `CONTINUUM_STORAGE_CLIENTS=local|http`, and *`http` is the default*.
 - **Suite: 262 passed + 7 skipped** (re-run 2026-07-27). `app/morpheus/` and `tests/parity/` are
   *byte-unchanged* by the cutover; the live two-process seam check passes at 10 steps / 151 checks.
 - **Window arithmetic is gone from this service.** `window_for()`, `closed_window_before()`,
-  `Window.local_date` and `ReservoirEntry.local_window_date()` are deleted, along with `cycle.py`'s
-  reconstruction of prior windows under tonight's timezone — prior windows now come from storage's
-  enumeration read. A test walks `app/`'s AST and fails if window-id parsing reappears.
+  `Window.local_date` and `ReservoirEntry.local_window_date()` are deleted, along with
+  `cycle.py`'s reconstruction of prior windows under tonight's timezone — prior windows now come
+  from storage's enumeration read.
+- A test walks `app/`'s AST and fails if window-id parsing reappears.
 - **`nightly.py --tz` and `--date` are gone.** `home_tz` comes from the C12 profile; a 404 exits 2
   with an operator message and runs nothing. A *crash leaves the window open*, so the retry resumes
   the same `window_id` instead of minting a second one.
@@ -40,8 +42,9 @@ storage* · *Last updated:* 2026-07-27
   measured against. It refuses to *source* records for a training window (that is an ingest-time
   question and the local path filters event time).
 - **Recipe `consolidation-v1.1` is what runs**, forking v1.0 on one knob (`replay.source` `amp` →
-  `rawlog`). `replay.source="amp"` has *no HTTP implementation* by design — C14 serves a ledger, not
-  corpora, so a v1.0 night over HTTP with history fails loudly. v1.0 is retained as the recipe the
+  `rawlog`).
+- `replay.source="amp"` has *no HTTP implementation* by design — C14 serves a ledger, not corpora,
+  so a v1.0 night over HTTP with history fails loudly. v1.0 is retained as the recipe the
   Phase-1/Phase-3 numbers were produced under.
 - **D9 observability obligation is unchanged and not started** (metrics + dashboard, off the request
   path).
@@ -52,7 +55,7 @@ storage* · *Last updated:* 2026-07-27
 | WS1 | Nightly-loop scaffold: mock cycle headless green (window→daylog→amplify→replay→train→gate→publish, journaled + idempotent) | **done** | [handoff/ws-nightly-scaffold.md](handoff/ws-nightly-scaffold.md) | — |
 | WS2 | **Morpheus port** (real `TRAINER_BACKEND=morpheus`); exit = Speed-data night reproduces recipe-v1.0 numbers through our gate + C5 path | **2a + 2b done ✅** (port proven; 32B M0 published + served) | [ws-morpheus-port.md](handoff/ws-morpheus-port.md) · [phase-2a-report.md](handoff/phase-2a-report.md) · [overnight-2-report.md](handoff/overnight-2-report.md) | Morpheus sessions |
 | WS2c | **Lean storage seams** — 5-verb loop over three storage *client* interfaces (day-log fetch / recipe registry / reservoir), local impls; daylog/window/renderer migrated behind the day-log client (byte-identical); raw-source replay wired | **done ✅** | [ws-morpheus-port.md](handoff/ws-morpheus-port.md) §7 (2c) | 2c: Morpheus session |
-| WS-P3 | **Phase 3 — DP dogfood**: Speed data through the real recording→DP→storage→continuum pipeline. 3a bridged 209.7 h of real audio; 3b's 1-min rule-bend collapsed on *dose*; the *decomp (parity content) reproduced the baseline separation* → **pipeline sound** | **done ✅** | [handoff/ws-phase3-dogfood.md](handoff/ws-phase3-dogfood.md) · [phase-3-decomp-report.md](handoff/phase-3-decomp-report.md) | Phase-3 sessions |
+| WS-P3 | **Phase 3 — DP dogfood**: Speed data through the real recording→DP→storage→continuum pipeline. 3a bridged 209.7 h of real audio; 3b's 1-min rule-bend collapsed on *dose*; the *decomp (parity content) reproduced the baseline separation* → *pipeline sound* | **done ✅** | [handoff/ws-phase3-dogfood.md](handoff/ws-phase3-dogfood.md) · [phase-3-decomp-report.md](handoff/phase-3-decomp-report.md) | Phase-3 sessions |
 | WS3 | C10 **evolution** + real storage integration + watermark/late-data policy | **done ✅ (2026-07-27)** — five HTTP clients, `--tz`/`--date` retired, window-id parsing deleted, verified against the live storage service | [handoff/worklog.md](handoff/worklog.md) 2026-07-27 | — |
 | WS4 | Eval gates v1: probe generation (generator ≠ corpus-generator), Gemini judge on our creds, the 3 unwired gate checks | **queued** — the next unstarted workstream | *(opens with work)* | — |
 

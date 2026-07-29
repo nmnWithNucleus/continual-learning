@@ -367,8 +367,8 @@ extension* (passive active-tab capture). Transport is *segmented HTTP upload* fo
 1. **Demux** (`recording/app/demux.py:67-106`): ffprobe decides which tracks exist (a `video/*`
    mime can be audio-only), then one segment splits into per-modality chunk files — audio
    re-encoded to 16 kHz mono s16le WAV (faster-whisper's native shape), video *container-copied*
-   (no re-encode; mp4 gets `+faststart`). This is why one mac screen segment becomes *two C1
-   chunks on two streams* (audio + video).
+   (no re-encode; mp4 gets `+faststart`).
+   - This is why one mac screen segment becomes *two C1 chunks on two streams* (audio + video).
 2. **Allocate-then-emit** (`emitter.py:247-274`): every track's chunk identity (stream row,
    `sequence`, ULID `chunk_id`) is allocated in the SQLite ledger *before* any emission, so a
    mid-emit failure can never make a retry mint out-of-order sequences.
@@ -494,11 +494,12 @@ while `pipeline_version` stayed constant — a silent `/context` overwrite under
 - Packs are read once per process at import, so there is no mtime TOCTOU; `relock` tooling
   archives full text per version.
 - **`cfg_tag` = `#` + sha8 over an explicit `OUTPUT_AFFECTING` allowlist** of config knobs
-  (`app/vision/version.py:38-56`), with an `OPERATIONAL_ONLY` complement (URLs, timeouts,
-  threads — moving an endpoint must *not* fork the corpus). The union of the two lists must equal
-  every `VisionSettings` field — asserted in `tests/test_prompt_pack.py:97-98` (the emission-law
-  matrix in `tests/test_emission_law.py` polices the riders, not the allowlist), so *a new knob
-  cannot be added without being classified*.
+  (`app/vision/version.py:38-56`), with an `OPERATIONAL_ONLY` complement (URLs, timeouts, threads
+  — moving an endpoint must *not* fork the corpus).
+- The union of the two lists must equal every `VisionSettings` field — asserted in
+  `tests/test_prompt_pack.py:97-98` (the emission-law matrix in `tests/test_emission_law.py`
+  polices the riders, not the allowlist), so *a new knob cannot be added without being
+  classified*.
 - The legacy `keyframes` stage carries a `""` fragment as a **single-entry fixed exemption** so
   the legacy dialect reproduces `vidproc-vlm-v0` byte-for-byte; no new stage may join it (D-14).
 
@@ -569,19 +570,21 @@ journaled under a content-hash key so a re-run is idempotent and an unchanged ni
 recorded outcome with zero side effects:
 
 1. **fetch recipe (+ policy)** — `LocalRecipeRegistry` resolves ids to `recipes/<id>.json` /
-   `policies/<id>.json` (`app/clients/registry.py`). Recipe v1.0: 48× amplification variants, 15 %
-   deny-then-correct negatives, LoRA r128/α256, lr 1e-4, 3 epochs, 1024-token chunks, next-token
-   CPT (never QA-SFT), 30 % replay, `segment_seconds=10`, `block_segments=12`, day boundary 04:00
-   local. The *gate policy is a separate artifact* whose id never enters a stage key
-   (`app/policy.py:1-24`): re-deciding what is shippable must never re-train anything.
+   `policies/<id>.json` (`app/clients/registry.py`).
+   - Recipe v1.0: 48× amplification variants, 15 % deny-then-correct negatives, LoRA r128/α256, lr
+     1e-4, 3 epochs, 1024-token chunks, next-token CPT (never QA-SFT), 30 % replay,
+     `segment_seconds=10`, `block_segments=12`, day boundary 04:00 local.
+   - The *gate policy is a separate artifact* whose id never enters a stage key
+     (`app/policy.py:1-24`): re-deciding what is shippable must never re-train anything.
 2. **fetch day-log** — `daylog_client.fetch_daylog(win)`; §4.5 below for the join. Cache key =
    content hash of the *rendered* day-log (`cycle.py:161-171`).
 3. **amplify** — `MorpheusBackend.amplify` (`app/backends/morpheus.py:60-72`): each eligible block
    is retold ~48× by a generator model under the profile's prompt, which mandates *"keep every
-   exact color, number, name, and on-screen/world text verbatim. Do not invent"*
-   (`app/morpheus/profiles/speed.py:59-66`), plus 15 % negation-style calibration variants. An
-   `ok_rate` below the recipe floor *aborts the night* (serve stale adapter, consolidation debt
-   — `cycle.py:188-191`).
+   exact color, number, name, and on-screen/world text verbatim.
+   - Do not invent"* (`app/morpheus/profiles/speed.py:59-66`), plus 15 % negation-style
+     calibration variants.
+   - An `ok_rate` below the recipe floor *aborts the night* (serve stale adapter, consolidation
+     debt — `cycle.py:188-191`).
 4. **replay mix** — anti-forgetting: ~30 % prior-night material sampled from the *reservoir*
    (the permanent store of every gate-passed night's corpus; admission at `cycle.py:280`), keyed
    so a re-consolidated past day invalidates tonight's mix (`cycle.py:199-227`).
@@ -656,9 +659,9 @@ pinned-schema rule — `continuum/app/daylog.py:1-8`). How `/context` records be
   written in when no contributing record carried a `device_tz`. That is D17's fact/policy split;
   the record's own zone wins, because it is a fact about where the user physically was.
 - **Membership is by `ingest_time`; bucketing is by `t_start`**, and the bucket grid is *global,
-  not window-relative* (`continuum/app/daylog.py:15-22`, adopted 2026-07-27). A window-relative
-  grid made the M9 diff true only for a window whose origin happened to sit on a segment boundary,
-  and real windows are second-granular, so nine origins in ten are misaligned.
+  not window-relative* (`continuum/app/daylog.py:15-22`, adopted 2026-07-27).
+- A window-relative grid made the M9 diff true only for a window whose origin happened to sit on a
+  segment boundary, and real windows are second-granular, so nine origins in ten are misaligned.
 - **Segments**: every C2 record in the window lands in a `segment_seconds` (10 s) bucket by its
   `t_start`. Routing is by `content.kind`: `transcript` → the `asr` channel — with *diarized
   sub-spans placed by their own `t_start`*, so a VAD chunk straddling the boundary can't drag
@@ -760,10 +763,12 @@ sequenceDiagram
 1. **Capture.** The mac CLI records screen+mic via ffmpeg avfoundation into 10 s segments
    (`nucleus_capture.py:647`), uploading each over the `/capture/*` wire.
 2. **Demux + identity.** The segment splits into `audio.wav` (16 kHz mono) and `video.mp4`
-   (container copy) (`demux.py:87-104`). Recording mints/gets one *stream per (session, modality)*
-   and allocates each track the next dense `sequence` plus a fresh ULID `chunk_id` — *before*
-   emitting anything (`emitter.py:247-274`). One segment → *two chunks on two streams*; both
-   carry the segment's wall-clock `t_start/t_end`.
+   (container copy) (`demux.py:87-104`).
+   - Recording mints/gets one *stream per (session, modality)* and allocates each track the next
+     dense `sequence` plus a fresh ULID `chunk_id` — *before* emitting anything
+     (`emitter.py:247-274`).
+   - One segment → *two chunks on two streams*; both carry the segment's wall-clock
+     `t_start/t_end`.
 3. **Blob-first.** Video bytes `PUT` to `/raw/blobs`; storage verifies sha256, mints
    `blob_ref = sha256(user_id␀chunk_id)`-style opaque ref, idempotent (`db.py:206-217`,
    `main.py:108-128`).
@@ -771,17 +776,17 @@ sequenceDiagram
    dialect at accept, claims `chunk_id` (journal receipt), and the ledger row on recording's side
    moves to `accepted`/`processed` per D16.
 5. **The clip stages** (the audio sibling runs its own graph → 1 transcript record):
-   - `clipprep` (order 5): pass A probes change every 2 s (32×32 binarized area-max cells:
-     idle floor = 2, typing 11–19, app switch 255); pass B extracts K = clamp(⌈span/2.5⌉, 2, 12)
-     frames at true PTS, split-scaled to 768 px (caption) and 1728 px (OCR). Slots:
-     `clip_frames`, `delta`.
+   - `clipprep` (order 5): pass A probes change every 2 s (32×32 binarized area-max cells: idle
+     floor = 2, typing 11–19, app switch 255); pass B extracts K = clamp(⌈span/2.5⌉, 2, 12) frames
+     at true PTS, split-scaled to 768 px (caption) and 1728 px (OCR).
+   - Slots: `clip_frames`, `delta`.
    - `screentext` (order 15): OCRs the changed/floor frames at native res through the sidecar
      (`POST /ocr` → `[(text, bbox, conf)]`), then confidence-gate (≥0.60), reading-order sort +
      **region role words** (`titlebar|compose|main|…` — the useful 80 % of geometry at zero
      contract cost; the bbox is then discarded), min-chars, *deterministic secret redaction*
      (AWS/sk-/ghp_/PEM/Luhn shapes → `[redacted:secret]`), within-chunk dedup, budget → one
-     single-line block. Provides `ocr_text`; emits *1 unit* `kind='ocr'`, discriminator
-     `"ocr"`.
+     single-line block.
+   - Provides `ocr_text`; emits *1 unit* `kind='ocr'`, discriminator `"ocr"`.
    - `clipcap` (order 20, primary): ONE multi-image chat call — interleaved time-labelled frames,
      the OCR block injected under *"On-screen text (read by a specialist pass, input, not
      target)"*, rules forbidding invention; guided-JSON reply parsed to `ClipDesc{app, activity,
@@ -943,13 +948,15 @@ The handful of choices to internalize to reason about this system.
    are placement+label+loss units the day-log consumes; an unprincipled record set produces
    unstable identities (survivor ordinals, decoder-dependent counts) and unreadable blocks. The
    law is executable (CI + registration-time raises), not prose.
-7. **OCR decoupled from the BWM and from the captioner — CPU specialist, injected as input**
-   (D8, D-06…D-09). Alternative: let the 32B read pixels (POC measured Qwen3-VL OCR at 0.143 vs
-   0.857/1.000 for alternatives — and 3.1×-to-73× the GPU cost), or keep OCR out of the captioner
-   entirely (fuse at consolidation). Why: the nightly loop's only model is *instructed not to
-   fuse* — so string→action binding ("wrote to Sarah about the Q3 deck") must be written *once,
-   at caption time*, where pixels+PTS+regions live; and OCR text as a separate `kind='ocr'`
-   record keeps a machine-checkable, independently-filterable channel.
+7. **OCR decoupled from the BWM and from the captioner — CPU specialist, injected as input** (D8,
+   D-06…D-09).
+   - Alternative: let the 32B read pixels (POC measured Qwen3-VL OCR at 0.143 vs 0.857/1.000 for
+     alternatives — and 3.1×-to-73× the GPU cost), or keep OCR out of the captioner entirely (fuse
+     at consolidation).
+   - Why: the nightly loop's only model is *instructed not to fuse* — so string→action binding
+     ("wrote to Sarah about the Q3 deck") must be written *once, at caption time*, where
+     pixels+PTS+regions live; and OCR text as a separate `kind='ocr'` record keeps a
+     machine-checkable, independently-filterable channel.
    - The injection premise is
    honest enough to be *measured* (O-8) rather than argued.
 8. **One code path for stream + interactive (C8).** Alternative: a separate interactive
@@ -984,10 +991,11 @@ it (now closed and removed, its findings folded into the docs they belonged to):
 - Phase-3 and parity **statistics** are traced to their reports, not recomputed here.
 - `ws-video-clip.md` is 2,513 lines; the ~15 claims this doc draws from it were verified, not the
   whole document.
-- **Real capture, GPU and fleet state:** partially exercised. The D17 session restarted the node-7
-  learn fleet and drove a real `--smoke` capture; the 2026-07-27 cutover re-ran that on a wiped
-  store through faster-whisper to a published nightly. *GPU training and real client capture (phone
-  / extension on hardware) remain unexercised* — `TRAINER_BACKEND=mock` throughout.
+- **Real capture, GPU and fleet state:** partially exercised.
+- The D17 session restarted the node-7 learn fleet and drove a real `--smoke` capture; the
+  2026-07-27 cutover re-ran that on a wiped store through faster-whisper to a published nightly.
+- *GPU training and real client capture (phone / extension on hardware) remain unexercised* —
+  `TRAINER_BACKEND=mock` throughout.
 - Read but not line-audited: input/output/inference charters, the extension and phone clients,
   `stagegraph/executor.py` internals (SlotView, permit-at-dispatch).
 
@@ -1103,8 +1111,9 @@ that costs, not as a list to tick off.
      computed the local instant and discarded the zone converting to UTC. That one discarded line
      was the whole bug.
    - **Never store a derived local wall-clock.** It is recoverable from instant + zone; persisting
-     it creates two sources of truth with no rule for which wins. (The offset *is* kept — it
-     witnesses what the device believed, the only way to catch stale tzdata after the fact.)
+     it creates two sources of truth with no rule for which wins.
+   - (The offset *is* kept — it witnesses what the device believed, the only way to catch stale
+     tzdata after the fact.)
    - **Never accept an abbreviation.** `PST` is ambiguous and DST-sensitive; recording returns
      *400* at the capture edge.
 
@@ -1129,25 +1138,27 @@ that costs, not as a list to tick off.
 5. **ARCHITECTURE's system diagram is stale on capture surfaces** ("computer + wearable capture;
    no mobile capture", "Last updated 2026-07-08"): the landed fleet is mac CLI + *phone web*
    (mic+camera) + Chrome extension — no wearable yet, and phone-web *does* capture (only mobile
-   *screen* capture is deferred per D5). The DP box's "denoise→diarize→ASR" also overstates: no
-   denoise stage exists (M1 exit open).
+   *screen* capture is deferred per D5).
+   - The DP box's "denoise→diarize→ASR" also overstates: no denoise stage exists (M1 exit open).
 6. **OCR engine naming:** the design and several fragments say PP-OCR*v6*; the shipped sidecar
    engine is PP-OCR*v4* (what `rapidocr-onnxruntime` bundles), file-swappable, sha-pinned in
-   `/health` (ws-video-clip O-2 verdict, flag L-3). The human-readable token in the dialect was
-   corrected to `+ocr-ppv4-cpu-v1`; treat any `-ppv6-` mention as the design name, not provenance.
+   `/health` (ws-video-clip O-2 verdict, flag L-3).
+   - The human-readable token in the dialect was corrected to `+ocr-ppv4-cpu-v1`; treat any
+     `-ppv6-` mention as the design name, not provenance.
 7. **`continuum/app/daylog.py:11-12` docstring** still describes video captions as "per-keyframe
    records" — true of the default keyframe pipeline, stale w.r.t. the clip path (which emits one
    chunk-span caption). Cosmetic; the join itself is kind-based and handles both.
 8. **Ledger vocabulary drift (minor):** recording's dp_state comment (`ledger.py:76`) and the D16
    text use `accepted`/`processed`; a fresh reader of the C1 schema alone won't find dp_state —
-   it's an internal ledger column, not a contract field. Documented here so nobody hunts for it in
-   C1.
+   it's an internal ledger column, not a contract field.
+   - Documented here so nobody hunts for it in C1.
 9. **D-09's hallucination counter is declared but unwired in production.**
    `dp_caption_ungrounded_quote_total` is registered and seeded to zero
    (`data-processing/app/main.py:180-184`) but incremented nowhere in production code — the
    (already-widened) grounding scorer lives only in the offline eval harness
-   (`scripts/prompt_ab.py:296-307`). Until wired, the injection architecture's headline safety
-   property is eval-only. The one §8 item worth acting on before the pilot.
+   (`scripts/prompt_ab.py:296-307`).
+   - Until wired, the injection architecture's headline safety property is eval-only.
+   - The one §8 item worth acting on before the pilot.
 10. **Two continuum policy/recipe knobs are parsed but dead.** `decay_retention_min` (0.5) is
     loaded into `GatePolicy` (`policy.py:58`) but `run_gate` never reads it (the decay spot-check
     is one of the three declared-skipped checks).
@@ -1159,10 +1170,10 @@ that costs, not as a list to tick off.
     hardcoded at `cycle.py:43`. The charter's "continuum pins the base-model hash per adapter" is
     aspirational until D6's exact variant is pinned.
 12. **"LoRA over all layers" — an intent/build gap, now named in all three documents (review item
-    O-3, closed 2026-07-26).** Pass 1 filed this as "wrong in three documents". It isn't wrong; it
-    is *two true statements about different things*, and the defect was that the documents
-    asserted the *intent* in the voice of the *build*, so a newcomer read the charter and believed
-    vision towers were being adapted.
+    O-3, closed 2026-07-26).** Pass 1 filed this as "wrong in three documents".
+    - It isn't wrong; it is *two true statements about different things*, and the defect was that
+      the documents asserted the *intent* in the voice of the *build*, so a newcomer read the
+      charter and believed vision towers were being adapted.
 
     - **The intent** — "LoRA per user, all layers", stands, in [ARCHITECTURE.md](../ARCHITECTURE.md)
       §Founding posture. It is sourced to `start.md`, an inherited founding assumption, *never a

@@ -41,29 +41,31 @@ Fallthrough → `ENRICHMENT` (subject to T2) or **stage input**.
 
 ## The five riders
 
-- **R1 — `FORK` `RIDER` (mechanised).** Any enabled stage whose configuration can change the bytes of a
-  record it does not itself emit must contribute a non-empty `version_fragment`. Mechanised as: *a
-  sidecar declaring a non-empty `provides` must return a non-empty fragment when enabled* — a
-  provided slot exists only to be consumed, i.e. to change someone else's bytes. Conversely a
-  sidecar that only *adds* records and feeds nothing declares *no* fragment (`translate`,
-  `acoustic`, `injected_caption`): forking the whole chunk's dialect on an additive toggle would
-  re-key the primary for a change that never touched it.
-- **R2 — `INDEPENDENCE` `RIDER`.** Two records may describe the same second only if a consumer can use
-  either *without* the other; every sidecar record is *self-anchored* (carries its own app,
-  region, offsets inside its own `content.text`). *Corollary 2:* where record B's specific strings
-  are *grounded in* record A's (OCR text injected into the caption, D-09), the pair is *one witness
-  rendered on two channels* — no consumer may treat their agreement as corroboration.
-- **R3 — `DIALECT`-`HONESTY` `RIDER`.** `pipeline_version` states the *attempted* dialect, never what
-  succeeded (it is resolved before any stage runs). Hence: (a) `best_effort` ⇒ additive-only, never
-  a mutate, never upstream of a required stage; (b) *never `best_effort` + a non-empty fragment*;
-  (c) never use `discriminator` as a back-door dialect carrier; (d) absence is diagnosed by record
-  presence + a metric, never by the dialect string and never by a fabricated placeholder claim;
-  (e) cross-service: continuum must never infer "no on-screen text" from an absent OCR record.
+- **R1 — `FORK` `RIDER` (mechanised).** Any enabled stage whose configuration can change the bytes
+  of a record it does not itself emit must contribute a non-empty `version_fragment`. Mechanised
+  as: *a sidecar declaring a non-empty `provides` must return a non-empty fragment when enabled* —
+  a provided slot exists only to be consumed, i.e. to change someone else's bytes.
+- Conversely a sidecar that only *adds* records and feeds nothing declares *no* fragment
+  (`translate`, `acoustic`, `injected_caption`): forking the whole chunk's dialect on an additive
+  toggle would re-key the primary for a change that never touched it.
+- **R2 — `INDEPENDENCE` `RIDER`.** Two records may describe the same second only if a consumer can
+  use either *without* the other; every sidecar record is *self-anchored* (carries its own app,
+  region, offsets inside its own `content.text`).
+- *Corollary 2:* where record B's specific strings are *grounded in* record A's (OCR text injected
+  into the caption, D-09), the pair is *one witness rendered on two channels* — no consumer may
+  treat their agreement as corroboration.
+- **R3 — `DIALECT`-`HONESTY` `RIDER`.** `pipeline_version` states the *attempted* dialect, never
+  what succeeded (it is resolved before any stage runs).
+- Hence: (a) `best_effort` ⇒ additive-only, never a mutate, never upstream of a required stage;
+  (b) *never `best_effort` + a non-empty fragment*; (c) never use `discriminator` as a back-door
+  dialect carrier; (d) absence is diagnosed by record presence + a metric, never by the dialect
+  string and never by a fabricated placeholder claim; (e) cross-service: continuum must never
+  infer "no on-screen text" from an absent OCR record.
 - **R4 — SET-`STABILITY` `RIDER`.** The record *set*, count, discriminators, spans, is a pure
   function of `(chunk bytes, settings)` and must not depend on model output, decoder build, *stage
-  outcome*, or which siblings survived a filter. Discriminators are quantised from a grid that is
-  itself a pure function of the declared C1 span — never a survivor ordinal, never a raw decoder
-  frame index, never a hash of model output.
+  outcome*, or which siblings survived a filter.
+- Discriminators are quantised from a grid that is itself a pure function of the declared C1 span
+  — never a survivor ordinal, never a raw decoder frame index, never a hash of model output.
 - **R5 — `BUDGET` `RIDER`.** Every new record class names (i) its consumer today and (ii) its
   characters-per-second-of-life budget against the day-log block. A class that cannot answer both
   does not ship.

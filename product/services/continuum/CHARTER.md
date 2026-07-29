@@ -435,24 +435,28 @@ protocol (manager notes + running logs) per [../../ORG.md](../../ORG.md).
 
 - **The consolidation research line (`nucleus-research` @ `b3c58e1`) — Morpheus's source.**
   Two-timescale memory on frozen Qwen3-VL, validated across a 32-day corpus: nightly consolidation
-  into one standard PEFT life adapter (vLLM-servable as-is), fast memory + think-back paging on the
-  serving side, raw day logs as fact authority. Recipe v1.0 + the eval gate are Morpheus's M0/M2
-  substance; our port (clean reimplementation, parity-tested) is [handoff/ws-morpheus-port.md](handoff/ws-morpheus-port.md).
-  Two laws inherited as design constraints: components compose by *routing*, never merging; and
+  into one standard PEFT life adapter (vLLM-servable as-is), fast memory + think-back paging on
+  the serving side, raw day logs as fact authority.
+- Recipe v1.0 + the eval gate are Morpheus's M0/M2 substance; our port (clean reimplementation,
+  parity-tested) is [handoff/ws-morpheus-port.md](handoff/ws-morpheus-port.md).
+- Two laws inherited as design constraints: components compose by *routing*, never merging; and
   forgetting is *access* decay, not destruction — replay re-teaches, paging revives, raw logs are
   kept forever.
 - **[poc/live_stream_stability](../../../poc/live_stream_stability/README.md)** — direct lineage.
-  Phase-3.1 (capability-first anti-forgetting replay mixture, vision replay as the fragile bucket),
-  Phase-3.2 (Day-0/Day-N personal-recall + general-forgetting eval suites; frozen held-out split;
-  blind cross-family judging), Phase-4 (continual-pretrain recipe: describe-targets, vision
-  positions masked, LR re-warm). Caveat: the POC trains full-parameter; v0 service is LoRA —
-  translating its replay ratios and forgetting thresholds is open question #5. Live state:
+- Phase-3.1 (capability-first anti-forgetting replay mixture, vision replay as the fragile
+  bucket), Phase-3.2 (Day-0/Day-N personal-recall + general-forgetting eval suites; frozen
+  held-out split; blind cross-family judging), Phase-4 (continual-pretrain recipe:
+  describe-targets, vision positions masked, LR re-warm).
+- Caveat: the POC trains full-parameter; v0 service is LoRA — translating its replay ratios and
+  forgetting thresholds is open question #5. Live state:
   [HANDOFF.md](../../../poc/live_stream_stability/HANDOFF.md).
-- **[poc/recursive_finetuning_stability](../../../poc/recursive_finetuning_stability/HANDOFF.md)** —
-  the recursive loop V0→VN that our production cycle structurally is. Locked defaults to inherit as
-  starting points: KL anchor always to V0, replay window over past rounds, LoRA merge-each-round,
-  loss-mask design (train stamps/outcomes, mask boilerplate), collapse auto-detection. Also its
-  weights-vs-context (CTRL) arm — the honest baseline for "did fine-tuning beat a context window?".
+- **[poc/recursive_finetuning_stability](../../../poc/recursive_finetuning_stability/HANDOFF.md)**
+  — the recursive loop V0→VN that our production cycle structurally is.
+- Locked defaults to inherit as starting points: KL anchor always to V0, replay window over past
+  rounds, LoRA merge-each-round, loss-mask design (train stamps/outcomes, mask boilerplate),
+  collapse auto-detection.
+- Also its weights-vs-context (CTRL) arm — the honest baseline for "did fine-tuning beat a context
+  window?".
 - **Outside precedents** (trail kept in the POC handoffs): Ibrahim 2024 (LR re-warm/decay + replay
   for continual pretraining); Shumailov 2024 / Gerstgrasser 2024 (collapse vs bounded accumulation);
   STaR/ReST-family filtered self-training; multi-LoRA serving (vLLM, S-LoRA, Punica) — serving side

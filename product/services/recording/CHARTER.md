@@ -158,10 +158,11 @@ standing + VAD gate), *VAD-cut chunking* (OQ4 → D-M1-2), and *three capture cl
 - **Browser extension** (`clients/extension/`) — *M4 essentially met* (consent path deferred,
   D13): passive active-tab capture (video+audio via `tabCapture`, D-E7), flows through the same
   chunk/retry path, C1 carries the browser `device_id`/modality.
-- **Mac CLI** (`clients/mac/`) — *partial M1*: screen + mic capture (ffmpeg avfoundation) with
-  the offline queue, real-avfoundation verified. *Still open for full M1:* webcam, the pairing
-  flow, and a full-workday soak (alpha was minutes, not a workday); a mac menu-bar/GUI app
-  (ScreenCaptureKit, visible capture indicator) is a later surface — capability exists via the CLI.
+- **Mac CLI** (`clients/mac/`) — *partial M1*: screen + mic capture (ffmpeg avfoundation) with the
+  offline queue, real-avfoundation verified.
+- *Still open for full M1:* webcam, the pairing flow, and a full-workday soak (alpha was minutes,
+  not a workday); a mac menu-bar/GUI app (ScreenCaptureKit, visible capture indicator) is a later
+  surface — capability exists via the CLI.
 Client transport pinned **segmented-HTTP for all v0 surfaces** (D-M1-5; streaming ingest a
 deferred additive leg — recorded on the founders' board as D14).
 
@@ -171,21 +172,24 @@ deferred additive leg — recorded on the founders' board as D14).
 
 **Engineering**
 1. Wearable hardware: off-the-shelf body cam with an SDK vs. small custom build (RPi-class) —
-   drives buffering, codec, and upload design. The device is **camera + mic only (no
-   speaker)** — speech output is routed to the mobile app (§Ownership splits). Split: we own
-   device + capture firmware; input owns interaction UX. Decide before M3.
-2. Delete-last-N-minutes after upload: v0 lean is an on-device **holdback buffer** (chunks
-   upload only after the delete window expires) so deletion never needs downstream cooperation.
-   If holdback latency is unacceptable for data-processing, server-side deletes fall through
-   to storage's `/raw` purge primitives (platform orchestrates) — raise with CTO/ARCHITECTURE.md.
-3. Codec/bitrate ladder: what fidelity does data-processing actually need per modality? Sets
-   battery, disk, and upload budgets. Joint decision with data-processing. **Alpha datapoint
-   (2026-07-19):** mac screen video at the CLI default (`--max-width 1728`, CRF 28) is readable
-   but soft on fine text — `--max-width 2560+` is the current user lever; per-modality fidelity
-   targets remain this open joint decision, not a per-client flag.
-   *Resolved per-modality (2026-07-19, joint recording × data-processing)*, with the real
-   pipelines standing: faster-whisper ASR, pyannote diarization, AST acoustic and Qwen3-VL
-   keyframe captioning plus OCR, all node-7-verified.
+   drives buffering, codec, and upload design.
+   - The device is **camera + mic only (no speaker)** — speech output is routed to the mobile app
+     (§Ownership splits).
+   - Split: we own device + capture firmware; input owns interaction UX.
+   - Decide before M3.
+2. Delete-last-N-minutes after upload: v0 lean is an on-device **holdback buffer** (chunks upload
+   only after the delete window expires) so deletion never needs downstream cooperation.
+   - If holdback latency is unacceptable for data-processing, server-side deletes fall through to
+     storage's `/raw` purge primitives (platform orchestrates) — raise with CTO/ARCHITECTURE.md.
+3. Codec/bitrate ladder: what fidelity does data-processing actually need per modality?
+   - Sets battery, disk, and upload budgets.
+   - Joint decision with data-processing.
+   - **Alpha datapoint (2026-07-19):** mac screen video at the CLI default (`--max-width 1728`,
+     CRF 28) is readable but soft on fine text — `--max-width 2560+` is the current user lever;
+     per-modality fidelity targets remain this open joint decision, not a per-client flag.
+   - *Resolved per-modality (2026-07-19, joint recording × data-processing)*, with the real
+     pipelines standing: faster-whisper ASR, pyannote diarization, AST acoustic and Qwen3-VL
+     keyframe captioning plus OCR, all node-7-verified.
 
    **Why it's this way**
 
@@ -261,14 +265,14 @@ deferred additive leg — recorded on the founders' board as D14).
    - Uploads run **async and concurrent**: a new chunk starts uploading immediately, and the C1
      push fires on that chunk's *upload-complete callback*, so capture is never blocked on an
      upload.
-   *Status (2026-07-19):* the *demux half is BUILT + proven* (`app/demux.py`, ffmpeg;
-   exercised by all three alpha clients — muxed mp4/webm → separate audio + video C1 streams).
-   The *transport is decided (D-M1-5 / founders' D14): segmented HTTP upload* for all v0
-   surfaces (each client posts self-contained ~10 s segments to `/capture/segments`; the server
-   spools → demuxes → emits). *Still open:* the *direct-to-GCS signed-URL* upload path (M0 +
-   all three clients still proxy bytes through storage's `PUT /raw/blobs`); the
-   mint→upload→confirm handshake with storage + platform is the remaining OQ8 work, needed before
-   tens-of-GB/day/user scale.
+   - *Status (2026-07-19):* the *demux half is BUILT + proven* (`app/demux.py`, ffmpeg; exercised
+     by all three alpha clients — muxed mp4/webm → separate audio + video C1 streams).
+   - The *transport is decided (D-M1-5 / founders' D14): segmented HTTP upload* for all v0
+     surfaces (each client posts self-contained ~10 s segments to `/capture/segments`; the server
+     spools → demuxes → emits).
+   - *Still open:* the *direct-to-GCS signed-URL* upload path (M0 + all three clients still proxy
+     bytes through storage's `PUT /raw/blobs`); the mint→upload→confirm handshake with storage +
+     platform is the remaining OQ8 work, needed before tens-of-GB/day/user scale.
 
 **Research**
 9. Capture-everything vs. activity-gated capture (VAD/motion gating): gating saves battery and

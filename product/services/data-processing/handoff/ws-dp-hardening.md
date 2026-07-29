@@ -26,29 +26,29 @@ Branch: `svc/dp-hardening` (4 commits, one per workstream), from `main@86acb95`.
 One model closes both: **who may touch a slot is declared, enforced by construction,
 and encoded in the dialect.**
 
-- **`SlotView` capability proxy** (`stage.py`): every stage's `run_*` receives a
-  stage-scoped view of the slot blackboard, not the dict. A *sidecar is refused even a
-  read of the primary's `mutable_slots`* — you cannot scribble on an object you were
-  never handed, and ALL direct writes are refused except a mutate's declared `writes`.
-  Violations raise `SlotAccessError` (a `RuntimeError`) at the offending line,
-  synchronously, order-independently. The old end-of-run fingerprint guard (which missed
-  any illegal write landing before the last mutate finished — finding #6) is *deleted*,
-  not just backstopped.
+- **`SlotView` capability proxy** (`stage.py`): every stage's `run_*` receives a stage-scoped view
+  of the slot blackboard, not the dict.
+- A *sidecar is refused even a read of the primary's `mutable_slots`* — you cannot scribble on an
+  object you were never handed, and ALL direct writes are refused except a mutate's declared
+  `writes`. Violations raise `SlotAccessError` (a `RuntimeError`) at the offending line,
+  synchronously, order-independently.
+- The old end-of-run fingerprint guard (which missed any illegal write landing before the last
+  mutate finished — finding #6) is *deleted*, not just backstopped.
 - **Declared commits:** `provides` is now authoritative, not documentation — a
   `StageResult.slots` key outside `provides` (∪ `mutable_slots` for the primary) fails
   the chunk loudly even for `best_effort` stages (a stage may skip, never scribble), and
   `provides` sets must be disjoint per modality (resolution error).
-- **Mutate `writes` + overlap chaining** (finding #7): a mutate declares `writes`
-  (⊆ primary `mutable_slots`; enforced at registration AND resolution). Two enabled
-  mutates with intersecting `writes` get an implicit dep chain by `(order, name)` —
-  overlapping mutates can never run concurrently, so the mutated record stays a
-  deterministic function of config (C2 idempotency). An explicit `needs` contradicting
-  the chain order is a loud cycle error, never a silent reorder. Disjoint mutates still
-  run concurrently.
-- **Dialect encodes the order:** `pipeline_version = base + mutate fragments in chain
-  order + sorted(other fragments)`. diarize→speaker_id and the reverse are different
-  dialects — as they must be, their records genuinely differ. All shipped dialects
-  (`asr-mock-v0`, `asr-mock-v0+diar-mock-v1`, `asr-fw-v1+diar-pyannote-v1`,
+- **Mutate `writes` + overlap chaining** (finding #7): a mutate declares `writes` (⊆ primary
+  `mutable_slots`; enforced at registration AND resolution).
+- Two enabled mutates with intersecting `writes` get an implicit dep chain by `(order, name)` —
+  overlapping mutates can never run concurrently, so the mutated record stays a deterministic
+  function of config (C2 idempotency).
+- An explicit `needs` contradicting the chain order is a loud cycle error, never a silent reorder.
+- Disjoint mutates still run concurrently.
+- **Dialect encodes the order:** `pipeline_version = base + mutate fragments in chain order +
+  sorted(other fragments)`. diarize→speaker_id and the reverse are different dialects — as they
+  must be, their records genuinely differ.
+- All shipped dialects (`asr-mock-v0`, `asr-mock-v0+diar-mock-v1`, `asr-fw-v1+diar-pyannote-v1`,
   `vidproc-*-v0`) unchanged byte-for-byte (sidecars contribute no fragment today).
 - Shipping declarations added: `DiarizeStage.writes=('segments','enrichments')`,
   `CaptionsStage.provides=('captions',)`.
@@ -59,12 +59,13 @@ them), which is the intended model for shared enrichment slots.
 
 ## 2. Fair dispatch — finding #3 (`ingest_queue.py`, full rewrite)
 
-- **Permit-at-dispatch:** a worker takes the modality permit atomically (same event-loop
-  tick) as it removes a job, and only removes a job whose permit is available — scanning
-  Past capped-modality jobs to the first eligible. A capped burst queues without
-  occupying a worker; other modalities flow around it. (The old design dequeued then
-  acquired, so one blocked worker HOL-blocked the pool — worse than no limit. The
-  startup experimental warning died with the flaw; `INGEST_MODALITY_LIMITS` is now
+- **Permit-at-dispatch:** a worker takes the modality permit atomically (same event-loop tick) as
+  it removes a job, and only removes a job whose permit is available — scanning Past
+  capped-modality jobs to the first eligible.
+- A capped burst queues without occupying a worker; other modalities flow around it.
+- (The old design dequeued then acquired, so one blocked worker HOL-blocked the pool — worse than
+  no limit.
+- The startup experimental warning died with the flaw; `INGEST_MODALITY_LIMITS` is now
   production-safe.)
 - **Backpressure unchanged:** ONE shared bound counts every queued job regardless of
   modality → the bounded-queue 503 story is exactly as before. Empty knob (default) →
@@ -81,11 +82,11 @@ them), which is the intended model for shared enrichment slots.
 
 Closes the two failure classes the in-process pool structurally cannot contain:
 
-- **Poison-chunk blast radius:** a segfault / native OOM / `os._exit` in model code
-  kills ONE child, not the service. The parent applies the normal
-  transient-retry-then-dead-letter taxonomy (each retry a fresh child) — a true poison
-  chunk dead-letters visibly while every other chunk keeps flowing. Previously it
-  crash-looped the entire service through the durable re-drive cap, redoing all
+- **Poison-chunk blast radius:** a segfault / native OOM / `os._exit` in model code kills ONE
+  child, not the service.
+- The parent applies the normal transient-retry-then-dead-letter taxonomy (each retry a fresh
+  child) — a true poison chunk dead-letters visibly while every other chunk keeps flowing.
+- Previously it crash-looped the entire service through the durable re-drive cap, redoing all
   co-pending work each lap.
 - **Ghost computation on cancel:** a drain-timeout cancel SIGKILLs the child; the kernel
   reclaims CPU/GPU immediately. Previously the cancelled task's threadpool thread ran
@@ -111,31 +112,31 @@ contract preservation, test gaps) → every finding attacked by 2 independent re
 (correctness + reproduce lenses); only findings surviving both were acted on.
 
 **Fixed in code (9):**
-1. **[high, queue]** Backoff retriers were starved unboundedly under a sustained
-   capped-modality backlog: a finishing worker's same-tick rescan always stole the
-   freed permit for a newer queued job before the parked retrier's wakeup ran
-   (empirically reproduced: the retry ran only after a 30-job backlog fully drained).
-   Fix: parked re-acquirers hold a *permit reservation* the dispatch scan must
-   respect (`_reacquiring` counters — no permit transfer, so cancellation still can't
-   strand one). Also closes the FIFO-inversion contract regression (same root cause).
-2. **[high, slots]** A sidecar declaring `provides` on a primary mutable slot passed
-   resolution (the primary need not repeat mutable_slots in provides) and could
-   blind-clobber the mutate cohort's output via a "declared" StageResult commit.
-   Fix: `resolve()` seeds the ownership map with the primary's `mutable_slots`.
-3. **[med, slots]** A mutate could in-place-mutate mutable slots outside its declared
-   `writes` through a read reference (aliasing bypasses `__setitem__`), evading the
-   overlap chain. Fix: a mutate's `deny_read` = `mutable_slots − writes` — the
-   reference itself is withheld (reading a slot other mutates write is also a race,
-   so read access legitimately requires declaring it).
-4. **[high, isolation]** Under `spawn`, `proc.start()` pickles the args (incl. the
-   full chunk blob — MBs) and blocks writing them through the child's 64KB bootstrap
-   pipe ON THE event loop until the fresh interpreter boots and drains. Fix: spawn +
-   collect now run in ONE executor-thread call (`_spawn_and_collect`, holder-based
-   kill-on-cancel with a raced-cancel check around start).
-5. **[med, isolation]** A child `ProcessingError` with an unpicklable `detail` blew up
-   the send and exited cleanly → the parent misread a terminal failure as transient
-   "died (exitcode 0)". Fix: every child send has a string-only fallback preserving
-   the transient/status flags (sanitized `repr` detail).
+1. **[high, queue]** Backoff retriers were starved unboundedly under a sustained capped-modality
+   backlog: a finishing worker's same-tick rescan always stole the freed permit for a newer queued
+   job before the parked retrier's wakeup ran (empirically reproduced: the retry ran only after a
+   30-job backlog fully drained).
+   - Fix: parked re-acquirers hold a *permit reservation* the dispatch scan must respect
+     (`_reacquiring` counters — no permit transfer, so cancellation still can't strand one).
+   - Also closes the FIFO-inversion contract regression (same root cause).
+2. **[high, slots]** A sidecar declaring `provides` on a primary mutable slot passed resolution
+   (the primary need not repeat mutable_slots in provides) and could blind-clobber the mutate
+   cohort's output via a "declared" StageResult commit.
+   - Fix: `resolve()` seeds the ownership map with the primary's `mutable_slots`.
+3. **[med, slots]** A mutate could in-place-mutate mutable slots outside its declared `writes`
+   through a read reference (aliasing bypasses `__setitem__`), evading the overlap chain.
+   - Fix: a mutate's `deny_read` = `mutable_slots − writes` — the reference itself is withheld
+     (reading a slot other mutates write is also a race, so read access legitimately requires
+     declaring it).
+4. **[high, isolation]** Under `spawn`, `proc.start()` pickles the args (incl. the full chunk blob
+   — MBs) and blocks writing them through the child's 64KB bootstrap pipe ON THE event loop until
+   the fresh interpreter boots and drains.
+   - Fix: spawn + collect now run in ONE executor-thread call (`_spawn_and_collect`, holder-based
+     kill-on-cancel with a raced-cancel check around start).
+5. **[med, isolation]** A child `ProcessingError` with an unpicklable `detail` blew up the send
+   and exited cleanly → the parent misread a terminal failure as transient "died (exitcode 0)".
+   - Fix: every child send has a string-only fallback preserving the transient/status flags
+     (sanitized `repr` detail).
 6. **[med, isolation]** `_collect` parked one *shared asyncio default-executor*
    thread per in-flight child (cap `min(32, cpus+4)`) — saturation wedged unrelated
    loop work (`getaddrinfo`). Fix: dedicated lazy `ThreadPoolExecutor(64)`.
@@ -160,11 +161,11 @@ per retry attempt (pins the contract a warm-pool change must renegotiate); 3-wri
 transitive mutate chain + 3-fragment version order.
 
 **Accepted, documented (not fixed):**
-- Interior mutation of NON-mutable committed slots (e.g. a sidecar scribbling on the
-  `asr` result object it legitimately reads): the capability boundary is per-slot
-  reference-scoped, not deep-frozen. Deep immutability of slot values (frozen result
-  dataclasses) is a candidate follow-up; today it is the same trust level as any
-  shared in-process object.
+- Interior mutation of NON-mutable committed slots (e.g. a sidecar scribbling on the `asr` result
+  object it legitimately reads): the capability boundary is per-slot reference-scoped, not
+  deep-frozen.
+- Deep immutability of slot values (frozen result dataclasses) is a candidate follow-up; today it
+  is the same trust level as any shared in-process object.
 - `ctx.resources` stays unproxied (app-owned live handles — metrics, pools, are mutable
   by design).
 
@@ -176,15 +177,16 @@ unpinned drain property for capped queued jobs.
 
 Asked: "moving at speed with async, can we retire the sync path?" Evaluation:
 
-- **C8 needs it (charter M6):** the synchronous pipeline API for input's QueryBuilder is
-  a charter deliverable, and the charter pins ONE code path for both profiles. The
-  inline handler is that profile's precedent; `ingest_core.process_chunk` is already the
+- **C8 needs it (charter M6):** the synchronous pipeline API for input's QueryBuilder is a charter
+  deliverable, and the charter pins ONE code path for both profiles.
+- The inline handler is that profile's precedent; `ingest_core.process_chunk` is already the
   single shared core — the "duplication" is ~40 lines of HTTP mapping in `_ingest_inline`.
   Deleting inline deletes the C8 skeleton.
 - **The wire default is a joint decision:** recording's capturer speaks the inline reply
-  (`INGEST_ASYNC` defaults off). Flipping the default is a D16-class inter-service
-  decision with recording (their canvas records the reply wire jointly), not a DP-local
-  cleanup — and the D16 condition (a re-drive drill) is still open.
+  (`INGEST_ASYNC` defaults off).
+- Flipping the default is a D16-class inter-service decision with recording (their canvas records
+  the reply wire jointly), not a DP-local cleanup — and the D16 condition (a re-drive drill) is
+  still open.
 - **Dev/smoke value:** inline is the loop every headless test + fixture drives with zero
   queue machinery; it is also the byte-identical baseline every port has been proven
   against (a real verification asset).
@@ -218,15 +220,16 @@ child; dead-letter backfill tooling; `processed` retention (all pre-existing M7-
 items remain tracked in [ws-dp-stage-graph.md](ws-dp-stage-graph.md) §Deferred).
 
 ## Worklog
-- 2026-07-21 — Findings #6+#7 closed structurally (SlotView + writes/chaining +
-  chain-order dialect; fingerprint guard deleted); finding #3 closed
-  (permit-at-dispatch rewrite; experimental warning removed); subprocess isolation
-  landed (poison blast radius → one chunk; drain cancel → SIGKILL, journal row stays
-  re-drivable). 23 tests added (stagegraph 19→28, +6 fairness incl. the HOL regression
-  drill, +5 isolation incl. poison/ghost drills). Suite 128 → 151 green.
-- 2026-07-21 — **Adversarial review workflow** over the full diff (47 agents: 5
-  dimension reviewers → 2 refuters per finding; 2.4M tokens): 19 confirmed / 2
-  refuted → *9 code fixes + 7 gap drills* (§4), incl. one high empirically-reproduced
-  starvation in the new dispatch and one high event-loop stall in spawn isolation.
-  Byte-identity re-proven post-fix (identical output digests vs main across dialects
-  AND under isolation). Suite *163 green* (stable across repeat runs).
+- 2026-07-21 — Findings #6+#7 closed structurally (SlotView + writes/chaining + chain-order
+  dialect; fingerprint guard deleted); finding #3 closed (permit-at-dispatch rewrite; experimental
+  warning removed); subprocess isolation landed (poison blast radius → one chunk; drain cancel →
+  SIGKILL, journal row stays re-drivable). 23 tests added (stagegraph 19→28, +6 fairness incl. the
+  HOL regression drill, +5 isolation incl. poison/ghost drills).
+- Suite 128 → 151 green.
+- 2026-07-21 — **Adversarial review workflow** over the full diff (47 agents: 5 dimension
+  reviewers → 2 refuters per finding; 2.4M tokens): 19 confirmed / 2 refuted → *9 code fixes + 7
+  gap drills* (§4), incl. one high empirically-reproduced starvation in the new dispatch and one
+  high event-loop stall in spawn isolation.
+- Byte-identity re-proven post-fix (identical output digests vs main across dialects AND under
+  isolation).
+- Suite *163 green* (stable across repeat runs).

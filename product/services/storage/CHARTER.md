@@ -448,11 +448,11 @@ with its output. Continuum's local path is **not deleted until the narrowed diff
 
 **Why it's this way**
 
-- **The bar was narrowed 2026-07-27 (D20) after the first run failed it**, because the bar as first
-  written contradicted D18's own materialization rule and no code could satisfy both. Continuum's
-  `seg_id` *was* `floor((t − window_start)/segment_seconds)` over an *event-time* window origin,
-  while D18 deletes the window origin from storage's grid and puts storage's window on the
-  *ingest* axis, where a backlog record yields a *negative* index.
+- **The bar was narrowed 2026-07-27 (D20) after the first run failed it**, because the bar as
+  first written contradicted D18's own materialization rule and no code could satisfy both.
+- Continuum's `seg_id` *was* `floor((t − window_start)/segment_seconds)` over an *event-time*
+  window origin, while D18 deletes the window origin from storage's grid and puts storage's window
+  on the *ingest* axis, where a backlog record yields a *negative* index.
 - `seg_id` is written to `segments.jsonl` and **read by nothing** — the trainer and amplifier
   consume `blocks.jsonl` via `load_blocks`. The only reader anywhere is `phase3_daylog.py:88`,
   counting `len(b.seg_ids)` for a histogram, which is invariant under relabelling.
@@ -595,10 +595,11 @@ Engineering:
      first draft also advanced on `skipped_no_data`)*. Gate failure, freeze, crash, no data and
      *too little* data all leave it, so the next window is a strict *superset*.
    - That is the design-of-record's *failed-day merge* obtained structurally rather than by
-     bookkeeping — it demotes continuum's `_UserState.debt` to reporting, and it makes the min-data
-     floor nearly free: a below-floor night just does not advance, so material accumulates until a
-     run is worth it. Named cost: an inactive user's open window grows and is re-scanned nightly,
-     which is correct and cheap at v0 scale.
+     bookkeeping — it demotes continuum's `_UserState.debt` to reporting, and it makes the
+     min-data floor nearly free: a below-floor night just does not advance, so material
+     accumulates until a run is worth it.
+   - Named cost: an inactive user's open window grows and is re-scanned nightly, which is correct
+     and cheap at v0 scale.
    - **Reprocessed records: one dialect per record, latest `ingest_time` wins**, keyed
      `(chunk_id, content.kind, within-chunk discriminator)`. Keyed on `ingest_time` because
      `pipeline_version` is a *composed* string and therefore not orderable; keyed on `content.kind`
@@ -632,12 +633,12 @@ Engineering:
      one timestamp, and D19's prototype posture makes an additive contract edit cheap.
    - *Original text:* the one-dialect rule needs to group by `(chunk_id, content.kind,
      discriminator)`, but the discriminator is today folded into the `record_id` hash and exists
-     as no independent field (`../data-processing/app/pipeline.py:33-46`). The build must either
-     **(a)** surface it as an additive-optional C2 field — a schema edit, so ARCHITECTURE first,
-     then the schema, then *both* pydantic mirrors, which are `extra="forbid"` on DP *and*
-     storage and will reject it otherwise (the exact trap D17 hit), or *(b)* prove `(chunk_id,
-     kind, t_start)` unique per dialect and key on that. Do not start the materializer before
-     this is chosen.
+     as no independent field (`../data-processing/app/pipeline.py:33-46`).
+   - The build must either **(a)** surface it as an additive-optional C2 field — a schema edit, so
+     ARCHITECTURE first, then the schema, then *both* pydantic mirrors, which are `extra="forbid"`
+     on DP *and* storage and will reject it otherwise (the exact trap D17 hit), or *(b)* prove
+     `(chunk_id, kind, t_start)` unique per dialect and key on that.
+   - Do not start the materializer before this is chosen.
 8. **Double exposure across a dialect bump (accepted, tracked).** Because a reprocessed record
    re-enters a later window, the same lived moment can be trained twice.
    - Suppressing already-rendered chunks would stop the double exposure, but it would equally stop

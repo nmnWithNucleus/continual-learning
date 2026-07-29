@@ -53,9 +53,10 @@ model to reach a test-only source would have weakened the production surface for
 
 A tour day is 18.8–26.0 h of stream; the consolidation window is 24 h.
 
-* With the real clock there is **no boundary that fits even the eight days under 24 h**:
-  day 13 needs a boundary ≥ 08:59 local, day 28 needs ≤ 08:49 — disjoint. Day 17 is
-  26.03 h and fits no 24 h window at all. (`rwt` is also non-monotonic and partly blank.)
+* With the real clock there is **no boundary that fits even the eight days under 24 h**: day 13
+  needs a boundary ≥ 08:59 local, day 28 needs ≤ 08:49 — disjoint.
+* Day 17 is 26.03 h and fits no 24 h window at all.
+* (`rwt` is also non-monotonic and partly blank.)
 * So each day is laid **contiguously from its own window start** on a *whole-minute
   grid*: chunk *i* starts at `window_start + Σ ceil(duration/60)·60` over the chunks
   before it, while the chunk keeps its real duration as its C1 span.
@@ -205,9 +206,11 @@ segments plus two short ones; the rule-bend does what it says.
 
 Two consequences to hold onto when reading the number:
 1. **565 of 1401 blocks (40%) exceed `EXCERPT_CHARS = 6000`**, the amplifier's excerpt cap
-   (`profiles/speed.py:79`). At 5-min cadence that cap never bound (max 2546); here it
-   truncates the tail of two blocks in five. It is a profile constant, not a recipe knob —
-   changing it would be tuning, so it was left alone and is reported instead.
+   (`profiles/speed.py:79`).
+   - At 5-min cadence that cap never bound (max 2546); here it truncates the tail of two blocks in
+     five.
+   - It is a profile constant, not a recipe knob — changing it would be tuning, so it was left
+     alone and is reported instead.
 2. The day-log renderer labels the caption channel once and concatenates
    (`daylog.py:152,160`), so a block reads `Scene: Headline: … Audio: … Headline: …`. That is
    the real product renderer over five caption records; nothing here was special-cased.
@@ -262,32 +265,33 @@ variable Phase 3 set out to change.
 Every one of these is a real thing the product path wanted and did not have. None was
 worked around in a way that hides it.
 
-1. **C10 has no `kind` filter.** Arm 1 is descriptions-only, so continuum fetches every
-   record in the window and discards the transcripts client-side — day 13 pulls 1,480
-   records to keep 1,237. At fleet scale the transcript half is the larger half by bytes.
-   A `kind=caption` (or `kind in [...]`) parameter on the range read would make the
-   caption-only day-log a server-side projection instead of a client-side filter.
-2. **A range read cannot express "this consolidation window's records".** Consecutive tour
-   days in different timezones give overlapping 04:00-local windows (day 12 Chicago / day
-   13 New York overlap by an hour), so `(user, from, to)` legitimately returns a
-   neighbour's records. Today the caller resolves it. If storage ever owns day-log
-   materialization (the lean-architecture plan), the *window* — not a time range, is the
-   unit it should be addressed by.
-3. **No by-reference blob registration (OQ8).** 23 GB of audio was re-PUT into `/raw` that
-   already existed in GCS, purely to satisfy the mandatory `blob_ref` sha-check. The
-   bridge's whole I/O cost was that copy. A registration that carries a URI + sha would
-   have made this leg free.
+1. **C10 has no `kind` filter.** Arm 1 is descriptions-only, so continuum fetches every record in
+   the window and discards the transcripts client-side — day 13 pulls 1,480 records to keep 1,237.
+   At fleet scale the transcript half is the larger half by bytes.
+   - A `kind=caption` (or `kind in [...]`) parameter on the range read would make the caption-only
+     day-log a server-side projection instead of a client-side filter.
+2. **A range read cannot express "this consolidation window's records".** Consecutive tour days in
+   different timezones give overlapping 04:00-local windows (day 12 Chicago / day 13 New York
+   overlap by an hour), so `(user, from, to)` legitimately returns a neighbour's records.
+   - Today the caller resolves it.
+   - If storage ever owns day-log materialization (the lean-architecture plan), the *window* — not
+     a time range, is the unit it should be addressed by.
+3. **No by-reference blob registration (OQ8).** 23 GB of audio was re-PUT into `/raw` that already
+   existed in GCS, purely to satisfy the mandatory `blob_ref` sha-check.
+   - The bridge's whole I/O cost was that copy.
+   - A registration that carries a URI + sha would have made this leg free.
 4. **The range read has no cursor and no cap.** One day is ~1,480 records / ~57 MB of JSON
    in a single response. Fine at pilot volume, not a shape that survives a real fleet.
-5. **There is no way to retract a window.** A replay mints fresh ULID `chunk_id`s, so a
-   re-run writes a disjoint record set into the same window and the day-log double-counts
-   it (observed on a 2-chunk smoke: 40 captions in 20 segments). The bridge now wipes the
-   store per run; a real service needs delete-by-(user, window) or an idempotency key that
-   survives re-delivery.
+5. **There is no way to retract a window.** A replay mints fresh ULID `chunk_id`s, so a re-run
+   writes a disjoint record set into the same window and the day-log double-counts it (observed on
+   a 2-chunk smoke: 40 captions in 20 segments).
+   - The bridge now wipes the store per run; a real service needs delete-by-(user, window) or an
+     idempotency key that survives re-delivery.
 6. **Dev sqlite on NFS does not take concurrent writers.** Measured before the run: 8-way
-   concurrent C2 writes on the NFS home take the lock ~2% of the time (HTTP 500) and run
-   27× slower than on local disk. The bridge puts `STORAGE_DB_PATH`/`STORAGE_RAW_DIR` on
-   the node SSD and copies the DB back. Neither knob exists in `platform/deploy/learn.env`.
+   concurrent C2 writes on the NFS home take the lock ~2% of the time (HTTP 500) and run 27×
+   slower than on local disk.
+   - The bridge puts `STORAGE_DB_PATH`/`STORAGE_RAW_DIR` on the node SSD and copies the DB back.
+   - Neither knob exists in `platform/deploy/learn.env`.
 
 ## 6. What was deliberately NOT done (spec boundaries, held)
 

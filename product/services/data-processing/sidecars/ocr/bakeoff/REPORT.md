@@ -11,18 +11,20 @@
   sidecar serves clears the O-2 gate at 1728 px: *key-string recall 0.988 (lenient substring,
   key-pooled) / 1.000 (fuzzy), CER 0.070* — and passes but weakens at 1152 px (recall 0.869).
 - **CRF 28 is not the bottleneck.** A raw-vs-CRF-28 ablation at 1728 px shows the codec costs
-  essentially nothing (substring recall 0.981 → 0.983, fuzzy 1.000 → 1.000). Where accuracy drops it
-  is the *downscale* (resolution), not the encoder — direct evidence for `VIDEO_OCR_FRAME_WIDTH=1728`
-  (no resample) over a smaller OCR width.
+  essentially nothing (substring recall 0.981 → 0.983, fuzzy 1.000 → 1.000).
+- Where accuracy drops it is the *downscale* (resolution), not the encoder — direct evidence for
+  `VIDEO_OCR_FRAME_WIDTH=1728` (no resample) over a smaller OCR width.
 - **BUT this does NOT satisfy the O-2 gate**, which is defined over *200 hand-labelled real macOS
-  frames*. This corpus is synthetic (a headless build cannot capture a real mac screen). It measures
-  the real failure mechanism — small UI text surviving a real x264 CRF-28 encode, with exact ground
-  truth, but it cannot stand in for real CoreText rendering and real screen content, and is likely
-  *optimistic*.
+  frames*.
+- This corpus is synthetic (a headless build cannot capture a real mac screen).
+- It measures the real failure mechanism — small UI text surviving a real x264 CRF-28 encode, with
+  exact ground truth, but it cannot stand in for real CoreText rendering and real screen content,
+  and is likely *optimistic*.
 - **Recommendation (unchanged from O-2's own): ship `VIDEO_OCR_BACKEND=mock` as the production
-  default.** Flip to `ppocr@1728` only after this same harness is run over the real-frame corpus and
-  clears ≥ 0.85 recall / ≤ 0.10 CER. The harness + scorer are validated and run on real frames with
-  *zero code change* (drop frames + `ground_truth.json` in the same format).
+  default.** Flip to `ppocr@1728` only after this same harness is run over the real-frame corpus
+  and clears ≥ 0.85 recall / ≤ 0.10 CER.
+- The harness + scorer are validated and run on real frames with *zero code change* (drop frames +
+  `ground_truth.json` in the same format).
 
 ---
 
@@ -71,22 +73,25 @@ on English UI strings.
 
 ## 3. Method
 
-- **Scorer** (`score.py`, unit-tested): a ≥5-char key string is *recalled* if — after case-folding,
-  whitespace removal, and full-width→ASCII punctuation folding (an engine artefact, not a mis-read),
-  it is a *substring* of the frame's OCR text (`substring` tier), or its best windowed edit
-  similarity is ≥ 0.85 (`fuzzy` tier, tolerating a couple of scattered OCR substitutions). `fuzzy`
-  implies `substring`.
-- **Micro vs macro.** Recall is reported two ways: *micro* = key-pooled = keys-recalled / total-keys
-  (3,026 keys), and *macro* = mean of per-frame recall ratios (one vote per frame). They differ when
-  frame key-density varies: `sheet-light` alone carries 42.7 % of all keys but only 16.7 % of the
-  frames, so macro over-weights sparse frames. *The gate is scored on the micro (key-pooled) metric*
-  — the literal "fraction of key strings recalled"; macro is shown alongside for context.
+- **Scorer** (`score.py`, unit-tested): a ≥5-char key string is *recalled* if — after
+  case-folding, whitespace removal, and full-width→ASCII punctuation folding (an engine artefact,
+  not a mis-read), it is a *substring* of the frame's OCR text (`substring` tier), or its best
+  windowed edit similarity is ≥ 0.85 (`fuzzy` tier, tolerating a couple of scattered OCR
+  substitutions).
+- `fuzzy` implies `substring`.
+- **Micro vs macro.** Recall is reported two ways: *micro* = key-pooled = keys-recalled /
+  total-keys (3,026 keys), and *macro* = mean of per-frame recall ratios (one vote per frame).
+- They differ when frame key-density varies: `sheet-light` alone carries 42.7 % of all keys but
+  only 16.7 % of the frames, so macro over-weights sparse frames.
+- *The gate is scored on the micro (key-pooled) metric* — the literal "fraction of key strings
+  recalled"; macro is shown alongside for context.
 - **CER** is computed over the focused region only: reference = the focused block's text, hypothesis =
   the OCR regions whose centre falls inside the (width-scaled) focus box, in reading order.
-- **Why leniency matters, shown concretely:** the real engine returns `class Screentextstage(Stage):`
-  (a case flip) and `build_c2（chunk_id,pipeline_version)` (a full-width `（`). Exact equality scores
-  both as misses; lenient scoring correctly counts them as reads. This is the exact 0.000-strict /
-  high-lenient gap the POC hit.
+- **Why leniency matters, shown concretely:** the real engine returns `class
+  Screentextstage(Stage):` (a case flip) and `build_c2（chunk_id,pipeline_version)` (a full-width
+  `（`).
+- Exact equality scores both as misses; lenient scoring correctly counts them as reads.
+- This is the exact 0.000-strict / high-lenient gap the POC hit.
 - **Arms:** `ppocr@1728`, `ppocr@1152` — the det+rec ONNX the sidecar serves, in-process (same engine
   as the HTTP service). Re-runnable via `run_bakeoff.py`.
 
@@ -112,15 +117,17 @@ Per-archetype (recall = micro-substring):
 
 Reading the table honestly:
 
-- **At 1728 the aggregate clears both gate halves** (recall 0.988 ≥ 0.85, CER 0.070 ≤ 0.10). But the
-  gate is a conjunction, and *at the per-archetype level two of six archetypes breach the CER half*:
-  `browser-article` (0.115) and `slack-dark` (0.113), both just above 0.10 — long light-on-dark body
-  paragraphs where a few dropped spaces/'·' accumulate. Recall clears everywhere (≥ 0.908). So "1728
-  passes" is true at the aggregate, not uniformly per archetype.
+- **At 1728 the aggregate clears both gate halves** (recall 0.988 ≥ 0.85, CER 0.070 ≤ 0.10).
+- But the gate is a conjunction, and *at the per-archetype level two of six archetypes breach the
+  CER half*: `browser-article` (0.115) and `slack-dark` (0.113), both just above 0.10 — long
+  light-on-dark body paragraphs where a few dropped spaces/'·' accumulate.
+- Recall clears everywhere (≥ 0.908).
+- So "1728 passes" is true at the aggregate, not uniformly per archetype.
 - **At 1152 the weaknesses are real and localized:** `sheet-light` recall drops to 0.769 and
-  `terminal-dark` CER rises to 0.277 — dense small text (spreadsheets, monospace terminals) is where a
-  smaller OCR width bites. The aggregate micro recall (0.869) only just clears 0.85, and is *below* the
-  macro figure (0.912) precisely because the worst, densest archetype is key-heavy.
+  `terminal-dark` CER rises to 0.277 — dense small text (spreadsheets, monospace terminals) is
+  where a smaller OCR width bites.
+- The aggregate micro recall (0.869) only just clears 0.85, and is *below* the macro figure
+  (0.912) precisely because the worst, densest archetype is key-heavy.
 
 ## 5. The CRF-28 ablation — is the *codec* the problem?
 
@@ -200,8 +207,9 @@ focus_text}]` (bbox in the source image's own pixel coords; the runner scales it
 - **Encode:** ffmpeg 7.1, libx264, CRF 28, yuv420p, JPEG extract `-q:v 2`.
 - **Corpus:** synthetic, 204 frames, deterministic (`gen_corpus.py`). Frame binaries are not committed
   (regenerable; house rule: no binaries). `ground_truth.json` and `results.json` are committed.
-- **Throughput (measured, CPU, 4 threads):** OCR alone *~0.93–0.97 s/frame at 1728* (204-frame wall
-  189 s / an isolated 60-frame OCR-only timing of 0.97 s/frame), ~0.55 s/frame at 1152; end-to-end
-  including the (non-production) x264 encode ~1.17 s/frame. This is *above* the design's §7.1
-  assumption of 0.6 s/frame for PP-OCRv6 — worth folding into the pilot CPU-budget sizing, and a real
-  reason to prefer a v5/v6 or a quantized rec model if OCR CPU becomes the constraint.
+- **Throughput (measured, CPU, 4 threads):** OCR alone *~0.93–0.97 s/frame at 1728* (204-frame
+  wall 189 s / an isolated 60-frame OCR-only timing of 0.97 s/frame), ~0.55 s/frame at 1152;
+  end-to-end including the (non-production) x264 encode ~1.17 s/frame.
+- This is *above* the design's §7.1 assumption of 0.6 s/frame for PP-OCRv6 — worth folding into
+  the pilot CPU-budget sizing, and a real reason to prefer a v5/v6 or a quantized rec model if OCR
+  CPU becomes the constraint.

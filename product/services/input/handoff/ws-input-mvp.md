@@ -28,10 +28,10 @@ modalities/surfaces.
   - Unreachable-inference fallback: emits a C9-conformant end frame with `error` (empty
     answer + `U+001E` + end frame) so the browser always gets a parseable stream, not a 500.
 - **Surface** (`app/static/index.html` + `app/static/app.js`): textbox, Send, answer area.
-  JS reads the fetch stream, splits on `U+001E`, renders the answer, shows end-frame usage.
-  *Markdown seam left explicit*: `renderAnswer` uses `textContent` (plain text) with a
-  clear comment that the integrator wires in output's `services/output/app/static/c9_reader.js`
-  for C9 parsing + markdown — no markdown lib duplicated here.
+- JS reads the fetch stream, splits on `U+001E`, renders the answer, shows end-frame usage.
+- *Markdown seam left explicit*: `renderAnswer` uses `textContent` (plain text) with a clear
+  comment that the integrator wires in output's `services/output/app/static/c9_reader.js` for C9
+  parsing + markdown — no markdown lib duplicated here.
 - **Tests (19, all green)**: `test_query_builder.py` (C3 validates against the JSON Schema,
   id minting/passthrough, capabilities, empty-text reject, ISO-UTC `created_at`);
   `test_api_turn.py` (byte-for-byte C9 relay; C3 sent to inference is schema-valid; session

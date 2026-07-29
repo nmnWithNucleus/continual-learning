@@ -37,21 +37,21 @@ per-user isolation enforced by the mandatory `user_id`).
 
 - **C12 profile** — `GET/PUT /users/{user_id}/profile`. *404 on absence, no server-side default*,
   so a user without `home_tz` is *not schedulable*: an operational alert, never a silent skip.
-  *Declared, never inferred* ([D19](../../DECISIONS.md)) — storage never writes it unprompted, so
+- *Declared, never inferred* ([D19](../../DECISIONS.md)) — storage never writes it unprompted, so
   it does not chase a travelling user's device.
-- **Training-window ledger + the sole `window_id` minter** — `POST /training/windows` (get-or-create
-  the user's *open* window), `GET /training/windows` (enumerate, continuum's source for prior
-  windows), `POST /training/windows/{window_id}/close`. `window_id` is `w<YYYYMMDD>T<HHMMSS>Z`
-  (`window_id.py`: mint format `w%Y%m%dT%H%M%SZ`, validator `^w\d{8}T\d{6}Z$`), minted *once from
-  the window's end instant* and *parsed by nobody*. Storage is the only minter and the only
-  validator.
+- **Training-window ledger + the sole `window_id` minter** — `POST /training/windows`
+  (get-or-create the user's *open* window), `GET /training/windows` (enumerate, continuum's source
+  for prior windows), `POST /training/windows/{window_id}/close`. `window_id` is
+  `w<YYYYMMDD>T<HHMMSS>Z` (`window_id.py`: mint format `w%Y%m%dT%H%M%SZ`, validator
+  `^w\d{8}T\d{6}Z$`), minted *once from the window's end instant* and *parsed by nobody*.
+- Storage is the only minter and the only validator.
 - **Day-log materialization (C10 evolved)** — `GET /training/daylog?user_id=&window_id=`,
   materialized *on demand at fetch* ([D19](../../DECISIONS.md)) rather than by a scheduler.
-  Reprocessed records resolve *latest `ingest_time` wins per `(chunk_id, content.kind,
+- Reprocessed records resolve *latest `ingest_time` wins per `(chunk_id, content.kind,
   discriminator)`* — on `ingest_time` because `pipeline_version` is a composed string and not
-  orderable, on `kind` because captions and transcripts can share one `pipeline_version`. Every body
-  is stamped with its `recipe_id` *and* `daylog_format_version`, and continuum *refuses* a body
-  whose stamps are not the ones it trains under.
+  orderable, on `kind` because captions and transcripts can share one `pipeline_version`. Every
+  body is stamped with its `recipe_id` *and* `daylog_format_version`, and continuum *refuses* a
+  body whose stamps are not the ones it trains under.
 - **C13 recipe registry** (`GET /recipes/{recipe_id}`, `GET /policies/{policy_id}`) and
   *C14 reservoir* (`GET/POST /reservoir/{user_id}`, `/reservoir/{user_id}/{window_id}`). C14 serves
   a *ledger, not corpora* — by design.

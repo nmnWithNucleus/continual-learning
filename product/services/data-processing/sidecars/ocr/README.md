@@ -114,11 +114,11 @@ service or the chunk down.
 
 Selected by env `OCR_MODE`:
 
-- `mock` (default) — no models, no deps, no network, no GPU. The HTTP layer
-  is **Python-stdlib only**; the mock engine imports nothing third-party. Regions
-  are a deterministic function of the request image bytes (identical bytes →
-  identical regions), so the wire and the DP `screentext` stage are exercisable
-  in headless CI. This is the CI/integration backend.
+- `mock` (default) — no models, no deps, no network, no GPU.
+- The HTTP layer is **Python-stdlib only**; the mock engine imports nothing third-party.
+- Regions are a deterministic function of the request image bytes (identical bytes → identical
+  regions), so the wire and the DP `screentext` stage are exercisable in headless CI.
+- This is the CI/integration backend.
 - `ppocr` — PP-OCR det+rec ONNX on CPU via onnxruntime (rapidocr-onnxruntime).
   Real text. Requires the sidecar venv. Heavy deps are imported **lazily** at
   engine construction, so nothing leaks into the mock path.

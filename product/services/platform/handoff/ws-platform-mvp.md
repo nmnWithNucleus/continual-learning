@@ -10,11 +10,12 @@ output(8082) → input(8081)** in order (each `/health`-gated), print `http://lo
 + a checklist, and support `--stop` / `--status`. Infra glue only — no app logic.
 
 ## Done
-- `deploy/run_all.sh` — the bring-up. One shared venv at `deploy/.venv`; installs each
-  service's `requirements.txt`; ordered `/health`-gated start; per-service logs to
-  `deploy/logs/<svc>.log`; PIDs in `deploy/run/<svc>.pid`. Commands: default (up), `--stop`,
-  `--status`, `--restart`, `--skip-install`, `--help`. Launches each sibling via its own
-  `run.sh` (contract below); falls back to `uvicorn app.main:app` if a `run.sh` is absent.
+- `deploy/run_all.sh` — the bring-up.
+- One shared venv at `deploy/.venv`; installs each service's `requirements.txt`; ordered
+  `/health`-gated start; per-service logs to `deploy/logs/<svc>.log`; PIDs in
+  `deploy/run/<svc>.pid`. Commands: default (up), `--stop`, `--status`, `--restart`,
+  `--skip-install`, `--help`. Launches each sibling via its own `run.sh` (contract below); falls
+  back to `uvicorn app.main:app` if a `run.sh` is absent.
 - `deploy/.env.example` — `MODEL_BACKEND=mock`, `MODEL_ID`, `HOST`, the 4 ports + `VLLM_PORT`,
   the inter-service `*_URL`s, `PYTHON_BIN`, `HEALTH_TIMEOUT`. Documents the `mock→vllm` flip
   and the deferred cloudflared HTTPS story. Everything falls back to built-in defaults, so
@@ -30,9 +31,9 @@ output(8082) → input(8081)** in order (each `/health`-gated), print `http://lo
 
 ## Verified (this box, 2026-07-09)
 - `bash selftest/run_selftest.sh` → **10/10 `PASS`** from a clean state (fresh venv build path
-  included). Confirms: up exits 0; all four `/health` up; storage healthy-before-input
-  ordering; `--status` reports ≥4 up; the streamed turn parses as a valid C9 body; `--stop`
-  brings all ports down.
+  included).
+- Confirms: up exits 0; all four `/health` up; storage healthy-before-input ordering; `--status`
+  reports ≥4 up; the streamed turn parses as a valid C9 body; `--stop` brings all ports down.
 - `--help`, and `--status` with nothing running (reports all four `down`) — both correct.
 - `bash -n` clean on all shell scripts; `py_compile` clean on `_server.py`.
 - Env available: Python 3.12.12 (no 3.11 on box — auto-detect handles it), venv, pip (with
@@ -63,10 +64,10 @@ Exported to every child: `HOST`, `MODEL_BACKEND`, `MODEL_ID`, `STORAGE_URL`, `IN
 `OUTPUT_URL`, `INPUT_URL`, `VLLM_URL`, the five `*_PORT`s, and per-service `PORT`.
 
 ## Gotchas / decisions
-- **Siblings not built yet.** At write time `services/{storage,inference,output,input}/` hold
-  only CHARTER/HANDOFF — no `run.sh`. So `run_all.sh` was written against the documented
-  contract and validated with fake services; it cannot run the *real* mock loop until the
-  siblings land. This is called out honestly rather than faked.
+- **Siblings not built yet.** At write time `services/{storage,inference,output,input}/` hold only
+  CHARTER/HANDOFF — no `run.sh`. So `run_all.sh` was written against the documented contract and
+  validated with fake services; it cannot run the *real* mock loop until the siblings land.
+- This is called out honestly rather than faked.
 - **Launch via `run.sh`, not re-implementing services.** `run_all.sh` owns the venv + installs
   and delegates process start to each sibling's `run.sh`. If a service ships without one, the
   `uvicorn app.main:app` fallback keeps it booting.

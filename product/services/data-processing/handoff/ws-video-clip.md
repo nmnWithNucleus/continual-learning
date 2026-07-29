@@ -58,10 +58,11 @@ So A's cutover is **gated on O-8** (below): a $15 / ~40 s blind-vs-injected A/B,
 1. **§9 O-8** — the blind-vs-injected gate above. WS-H adds one pack file `screen-clip-blind-v1`
    (+ `screen-clip-hint-v1` for the D fallback) to `prompt_ab.py`; arms fork `pipeline_version` by
    pack digest so they cannot collide.
-2. **D-09 / §8 counter** — widen `dp_caption_ungrounded_quote_total` from double-quoted spans to all
-   named ≥4-char strings (measured 32.6 % of OCR-derived strings enter the caption unquoted and
-   escape the current check). One regex in the WS-H scorer. This is what makes A's headline safety
-   property actually hold.
+2. **D-09 / §8 counter** — widen `dp_caption_ungrounded_quote_total` from double-quoted spans to
+   all named ≥4-char strings (measured 32.6 % of OCR-derived strings enter the caption unquoted
+   and escape the current check).
+   - One regex in the WS-H scorer.
+   - This is what makes A's headline safety property actually hold.
 3. **§4.3 R2 Corollary 2** — added inline above.
 4. **§4.3 R4 `stage outcome`** — added inline above.
 5. **§8 finding #3** — reclassify "OCR fork is correct" from *Fixed* to *Accepted caveat* (it is a
@@ -148,13 +149,22 @@ Per 8 h day: 11,520 calls, 5.67 M prefill, 11,520 records, 17,280 subprocesses, 
 ### 1.5 What is specifically wrong for SCREEN content
 
 1. **Per-frame calls cannot describe change.** The prompt says *"Describe what is happening in the frame."* A full application switch at t=5 s produces two unrelated static descriptions and *no record anywhere states that a switch occurred.* This is a property of the call shape, not a tuning parameter.
-2. **Massive redundancy.** Measured SSIM between consecutive selected keyframes: near-static email + caret *0.99983 / 0.99986 / 0.99999*; app-switch clip 0.99997 / 0.27299 / 0.99986. 60–75 % of the 1,440 calls/hour describe pixels a prior call already described. There is no similarity check anywhere in the codebase.
-3. **Scene detection is inert on screens.** Measured *0 cuts* on full-screen scrolling code whose SSIM fell to 0.47; *0 cuts* on typing (scores `0.000011`, `0.000029`). It fires once, at score `1.000000`, on a whole-screen light→dark swap — landing 67 ms from a grid point and minting a *67 ms record* whose source frames SSIM at 0.999951.
+2. **Massive redundancy.** Measured SSIM between consecutive selected keyframes: near-static email
+   + caret *0.99983 / 0.99986 / 0.99999*; app-switch clip 0.99997 / 0.27299 / 0.99986. 60–75 % of
+   the 1,440 calls/hour describe pixels a prior call already described.
+   - There is no similarity check anywhere in the codebase.
+3. **Scene detection is inert on screens.** Measured *0 cuts* on full-screen scrolling code whose
+   SSIM fell to 0.47; *0 cuts* on typing (scores `0.000011`, `0.000029`).
+   - It fires once, at score `1.000000`, on a whole-screen light→dark swap — landing 67 ms from a
+     grid point and minting a *67 ms record* whose source frames SSIM at 0.999951.
 4. **768 px destroys the text OCR exists to read.** Chain: display 3024 → capture `min(1728,iw)` → DP `min(iw,768)` = *×0.254 net*. A 13 pt UI em arrives at *6.6 px*; a monospace cell at *3.98 px*.
 5. **One token budget for two jobs.** A truncated reply silently degrades to "no on-screen text" via `vlm.py:75-76` — no error, no metric.
 6. **The prompt is invisible to record identity.** Editing `_SYSTEM` changes every caption while `pipeline_version` stays `vidproc-vlm-v0`, so the reprocess *upserts over `/context`* at `storage/app/db.py:302`. This is exactly the failure class `app/audio/diarize/__init__.py:4-10` was built to make impossible.
 7. **Identity is decoder-dependent.** `_probe_duration` measured *9.933 vs 9.867 s* across nominally identical segments, rescaling every grid point; `record_id` folds the keyframe *index*, so a heterogeneous fleet upserts the same id with a different span and a different caption.
-8. **The training target is a wall.** 48 caption strings space-joined into one `Scene:` line (`daylog.py:160`) = 9,600–19,200 chars per 2-min block, of which *38–69 % is truncated by `EXCERPT_CHARS=6000`* before the amplifier reads it. Dose ≈ 5.2×, against 32× for the validated baseline and 8.6× for the Phase-3 arm that failed.
+8. **The training target is a wall.** 48 caption strings space-joined into one `Scene:` line
+   (`daylog.py:160`) = 9,600–19,200 chars per 2-min block, of which *38–69 % is truncated by
+   `EXCERPT_CHARS=6000`* before the amplifier reads it.
+   - Dose ≈ 5.2×, against 32× for the validated baseline and 8.6× for the Phase-3 arm that failed.
 
 ---
 
@@ -392,7 +402,10 @@ if len(selected) > VIDEO_OCR_MAX_EVENTS:
 Post-read, chunk-local only (cross-chunk state is forbidden — a per-process buffer would break fleet determinism):
 
 1. drop boxes with `confidence < VIDEO_OCR_MIN_CONF` (0.60);
-2. **use the bbox** to sort into reading order and assign a *region role* — `titlebar | tab | sidebar | main | compose | message | toolbar | statusbar | dialog | notification`. This is the semantically useful 80 % of "location", delivered as a word, at zero contract cost. The pixel geometry is then *discarded* (D-08);
+2. **use the bbox** to sort into reading order and assign a *region role* — `titlebar | tab |
+   sidebar | main | compose | message | toolbar | statusbar | dialog | notification`. This is the
+   semantically useful 80 % of "location", delivered as a word, at zero contract cost.
+   - The pixel geometry is then *discarded* (D-08);
 3. drop lines shorter than `VIDEO_OCR_MIN_CHARS` (4);
 4. **deterministic secret redaction** — AWS-key shapes, `sk-` / `ghp_` / `xox[baprs]-`, ≥32-char base64 runs, PEM headers, Luhn-valid 13–19-digit runs, and all-bullet/asterisk fields → `[redacted:secret]`. A prompt rule is not an access control; this is. Counted as `dp_ocr_redactions_total`;
 5. drop an event whose normalized text is ≥ `VIDEO_OCR_DEDUP_RATIO` (0.92) similar to the previous kept event **in this chunk**;
@@ -1089,18 +1102,19 @@ Slot contract: `clipprep` → `clip_frames: ClipFrames`, `delta: Delta`, `vision
 A build session picking up any WS below follows these six rules. They exist because eight branches
 touch one 173-test service.
 
-1. **Own your files, and only yours.** Edit only the files your WS's *Files owned* list names. Never
-   touch shared core you do not own: `app/main.py`, `app/ingest_core.py`, `app/pipeline.py`,
-   `app/processing/base.py`, `app/stagegraph/**`, and `app/vision/config.py` (WS-D's alone). WS-F is
-   the sole owner of `main.py`/`ingest_core.py`; WS-E2 is the sole (last) editor of
-   `app/stagegraph/stage.py`.
+1. **Own your files, and only yours.** Edit only the files your WS's *Files owned* list names.
+   - Never touch shared core you do not own: `app/main.py`, `app/ingest_core.py`,
+     `app/pipeline.py`, `app/processing/base.py`, `app/stagegraph/**`, and `app/vision/config.py`
+     (WS-D's alone).
+   - WS-F is the sole owner of `main.py`/`ingest_core.py`; WS-E2 is the sole (last) editor of
+     `app/stagegraph/stage.py`.
 2. **Ship disabled-by-default; keep the suite green on your branch alone.** Every new clip stage's
-   `enabled()` returns `resolve_pipeline() == "clip"`, and the default is `keyframe`, so the legacy
-   graph runs and your stages stay dormant under the existing fixtures. Before you call anything
-   done, run `ASR_BACKEND=mock ./.venv/bin/python -m pytest -q` from
-   `product/services/data-processing` — it must show *≥ 173 passed*. The full clip-mode E2E is an
-   *integration* deliverable (the per-window consolidation tab), not yours — your unit tests drive
-   your stage directly.
+   `enabled()` returns `resolve_pipeline() == "clip"`, and the default is `keyframe`, so the
+   legacy graph runs and your stages stay dormant under the existing fixtures.
+   - Before you call anything done, run `ASR_BACKEND=mock ./.venv/bin/python -m pytest -q` from
+     `product/services/data-processing` — it must show *≥ 173 passed*.
+   - The full clip-mode E2E is an *integration* deliverable (the per-window consolidation tab),
+     not yours — your unit tests drive your stage directly.
 3. **Foundation files are committed — import, never redefine.** `app/vision/clip_types.py`
    (the frozen dataclasses) and `app/vision/mode.py` (`resolve_pipeline`) are already in the tree.
    Import from them. Do not edit or re-create them.
@@ -1313,8 +1327,9 @@ thoughts.md` pipeline is therefore only implementable on the det+rec shape; the 
   transcripts* in-window. The earlier 12,391/629 split was not in the source.
 - **WS-G's "zero `vidproc-*` records"** was scoped correctly: true of the Phase-3 replay corpus,
   but `storage/app/dev.db` holds *86 `vidproc-mock-v0` caption records* (125 total) from earlier
-  dev runs. Mock dialect, dev users — the fresh-`user_id` cutover rule is unaffected, but the
-  sentence now says what is actually on disk.
+  dev runs.
+- Mock dialect, dev users — the fresh-`user_id` cutover rule is unaffected, but the sentence now
+  says what is actually on disk.
 
 ---
 

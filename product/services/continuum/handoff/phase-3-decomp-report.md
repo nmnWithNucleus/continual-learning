@@ -17,11 +17,11 @@
 
 ## What changed from Phase 3 (three config changes, no code)
 
-1. Replay index built from the **5-min** descriptions with `--with-anchor`, so a caption
-   record carries the parity block text verbatim, tour anchor and all
-   (`[Day 21 of 35 · Oklahoma City + Kansas City, OK + KS · 5min clip · ~10:19 AM CT]`).
-   Phase 3 dropped that line; the probes are day-indexed and the recipe's rule is
-   anchors-in-prose, so this was the largest residual.
+1. Replay index built from the **5-min** descriptions with `--with-anchor`, so a caption record
+   carries the parity block text verbatim, tour anchor and all (`[Day 21 of 35 · Oklahoma City +
+   Kansas City, OK + KS · 5min clip · ~10:19 AM CT]`).
+   - Phase 3 dropped that line; the probes are day-indexed and the recipe's rule is
+     anchors-in-prose, so this was the largest residual.
 2. New recipe `consolidation-test-5min-v1.0`: `segment_seconds=300, block_segments=1` — ONE
    description per block, no concatenation. Byte-identical to `consolidation-v1.0` on every
    training knob (48×, neg_frac 0.15, LoRA r128/α256, 3 epochs, replay amp 0.30).

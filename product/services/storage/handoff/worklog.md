@@ -44,10 +44,12 @@ detail is lost; where it disagrees with the board, **the board is right** — th
     `[last_trained_t, now)`); either bound omittable. Per-user isolation enforced by the
     mandatory `user_id` filter.
 - **Storage:** SQLite dev file DB (`STORAGE_DB_PATH`, default `app/dev.db`) + local dev blob dir
-  (`STORAGE_RAW_DIR`, default `app/raw_store/`, gitignored). Tables: `turns`, `model_directory`,
-  `raw_blobs` (PK `chunk_id`, index on `blob_ref`; bytes on disk at the ref's hex-sharded
-  path), `context_records` (PK `record_id`, index `(user_id, t_start)`, full C2 as JSON).
-  Fresh connection per op (dev volume). GCS is the prod target for the bytes; metadata stays here.
+  (`STORAGE_RAW_DIR`, default `app/raw_store/`, gitignored).
+- Tables: `turns`, `model_directory`, `raw_blobs` (PK `chunk_id`, index on `blob_ref`; bytes on
+  disk at the ref's hex-sharded path), `context_records` (PK `record_id`, index `(user_id,
+  t_start)`, full C2 as JSON).
+- Fresh connection per op (dev volume).
+- GCS is the prod target for the bytes; metadata stays here.
 - **Tested (isolated `.venv`, FastAPI TestClient, in-process — no real port bound):** *26 pytest
   pass*, the original *10* (serve-loop, unregressed) + *16* new: `/raw` PUT→GET round-trip +
   sha256 verify + idempotent-on-`chunk_id` (same ref, no dup) + distinct-chunk refs + sha/bytes
@@ -66,12 +68,13 @@ detail is lost; where it disagrees with the board, **the board is right** — th
 - **✅ done (this session): capture slice (learn-loop MVP) storage M0.** C1 + C2 were *frozen*
   (2026-07-09, D10/D11 — `../../contracts/c1_raw_stream_envelope.v0.json`,
   `c2_processed_record.v0.json`); storage M0 built the shared write targets (see Current state for
-  the exact wire). One deviation from the earlier sketch below, pinned by the integrator's frozen
-  wire spec: *`GET /raw/blobs?ref=<blob_ref>` takes the ref as a query param, not a path segment*
-  (`GET /raw/blobs/{blob_ref}`) — because a `blob_ref` may contain `/`. recording + data-processing
-  must call the query-param form. Remaining fan-out: recording M0 (mic → `/raw` PUT → C1 emit) +
-  data-processing M0 (C1 → ASR → C2 → `/context`) target these endpoints; integrator wires + runs
-  one chunk end to end.
+  the exact wire).
+- One deviation from the earlier sketch below, pinned by the integrator's frozen wire spec: *`GET
+  /raw/blobs?ref=<blob_ref>` takes the ref as a query param, not a path segment* (`GET
+  /raw/blobs/{blob_ref}`) — because a `blob_ref` may contain `/`. recording + data-processing must
+  call the query-param form.
+- Remaining fan-out: recording M0 (mic → `/raw` PUT → C1 emit) + data-processing M0 (C1 → ASR → C2
+  → `/context`) target these endpoints; integrator wires + runs one chunk end to end.
 - `/context` time-ranged read hardening (per CHARTER M1).
 - C5 adapter registration → per-user overrides in `model_directory` (M3).
 - Encryption at rest + per-user isolation tests (M4); deletion primitives (M5).
@@ -91,11 +94,13 @@ become false where it sat. Kept verbatim for the build order and the reasoning b
 > §Contracts *C10 evolved* · [CHARTER.md](../CHARTER.md) §Scope + §Open questions 6–9 + M5/M8/M9.
 
 **Build order is forced by dependencies, not preference:**
-1. **C12 profile** (`../../contracts/c12_user_profile.v0.json` — the one schema minted at ratification). It
-   lands *first*, because day-log materialization inherits D17's timezone resolution and therefore *reads the
-   profile*. 404 on absence; tzdata resolution on write (a regex cannot be the authority on IANA ids — it only
-   excludes abbreviations); and `home_tz` is *declared, not inferred*, the user sets it, storage never writes
-   it unprompted, so it does not chase a travelling user's device (D19, correcting D18's first draft).
+1. **C12 profile** (`../../contracts/c12_user_profile.v0.json` — the one schema minted at
+   ratification).
+   - It lands *first*, because day-log materialization inherits D17's timezone resolution and
+     therefore *reads the profile*. 404 on absence; tzdata resolution on write (a regex cannot be
+     the authority on IANA ids — it only excludes abbreviations); and `home_tz` is *declared, not
+     inferred*, the user sets it, storage never writes it unprompted, so it does not chase a
+     travelling user's device (D19, correcting D18's first draft).
 2. **Resolve the blocking discriminator question** (CHARTER OQ7) — the one-dialect rule groups by
    `(chunk_id, content.kind, discriminator)`, and the discriminator is today folded into the
    `record_id` hash with no independent field. Additive-optional C2 field, or prove
@@ -105,11 +110,13 @@ become false where it sat. Kept verbatim for the build order and the reasoning b
    idempotent get-or-create.
 4. **Day-log materialization.** Lift `../continuum/app/daylog.py` (`build_daylog` +
    `_render_block`) — *not* `Profile.render_block`, which is recipe-coupled and stays in
-   continuum. Two changes ride along: membership by `ingest_time`, and segment buckets on a
-   *global epoch grid* instead of window-relative (continuum's `_bucket_index` as it stood at
-   D18; *F4 has since moved continuum's own reference renderer onto the global grid too*, so the
-   two now differ only on membership). *Exit bar is the M9 differential diff, and continuum's
-   local path is not deleted until it is green.*
+   continuum.
+   - Two changes ride along: membership by `ingest_time`, and segment buckets on a *global epoch
+     grid* instead of window-relative (continuum's `_bucket_index` as it stood at D18; *F4 has
+     since moved continuum's own reference renderer onto the global grid too*, so the two now
+     differ only on membership).
+   - *Exit bar is the M9 differential diff, and continuum's local path is not deleted until it is
+     green.*
 5. **C13 registry + C14 reservoir**, then continuum's cutover.
 
 **Cutover act — Wipe, DO NOT migrate (D19).** Everything captured so far is experiment output, not
@@ -140,10 +147,11 @@ every deletion's cascade.
 settled that storage owns the learn-loop **data jobs** (continuum stays a lean training engine) —
 details in [CHARTER.md](../CHARTER.md) § Scope note + [../continuum/handoff/ws-morpheus-port.md](../../continuum/handoff/ws-morpheus-port.md):
 - **Day-log materialization** — a scheduled job renders a user-day's `/context` (C2) into the
-  segment/block *day-log* (incl. `render_block` anchored text). This is where *C10 evolves*: from a
-  raw record range read to a *day-log fetch*. The day-log format is recipe-versioned. (continuum has a
-  working reference builder — `daylog.py`/`window.py`/`renderer.py` in the scaffold, to lift from;
-  render_block must stay byte-parity with the research @ `b3c58e1`.)
+  segment/block *day-log* (incl. `render_block` anchored text).
+- This is where *C10 evolves*: from a raw record range read to a *day-log fetch*.
+- The day-log format is recipe-versioned.
+- (continuum has a working reference builder — `daylog.py`/`window.py`/`renderer.py` in the
+  scaffold, to lift from; render_block must stay byte-parity with the research @ `b3c58e1`.)
 - **Recipe registry** — versioned recipe/config hosting; fetch API for continuum + inference.
 - **Reservoir custody** — amplified-corpus store (continuum writes via API); replay re-reads prior
   day-logs, so this is audit/provenance, not the replay hot path.
@@ -172,9 +180,10 @@ details in [CHARTER.md](../CHARTER.md) § Scope note + [../continuum/handoff/ws-
 - **✅ done (this session): capture slice (learn-loop MVP) storage M0.** C1 + C2 were *frozen*
   (2026-07-09, D10/D11 — `../../contracts/c1_raw_stream_envelope.v0.json`,
   `c2_processed_record.v0.json`); storage M0 built the shared write targets (see Current state for
-  the exact wire). One deviation from the earlier sketch below, pinned by the integrator's frozen
-  wire spec: *`GET /raw/blobs?ref=<blob_ref>` takes the ref as a query param, not a path segment*
-  (`GET /raw/blobs/{blob_ref}`) — because a `blob_ref` may contain `/`. recording + data-processing
-  must call the query-param form. Remaining fan-out: recording M0 (mic → `/raw` PUT → C1 emit) +
-  data-processing M0 (C1 → ASR → C2 → `/context`) target these endpoints; integrator wires + runs
-  one chunk end to end.
+  the exact wire).
+- One deviation from the earlier sketch below, pinned by the integrator's frozen wire spec: *`GET
+  /raw/blobs?ref=<blob_ref>` takes the ref as a query param, not a path segment* (`GET
+  /raw/blobs/{blob_ref}`) — because a `blob_ref` may contain `/`. recording + data-processing must
+  call the query-param form.
+- Remaining fan-out: recording M0 (mic → `/raw` PUT → C1 emit) + data-processing M0 (C1 → ASR → C2
+  → `/context`) target these endpoints; integrator wires + runs one chunk end to end.

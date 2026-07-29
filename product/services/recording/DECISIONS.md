@@ -34,15 +34,17 @@ ratification condition (a named + drilled re-drive path for accepted-unconfirmed
 `emitter.redrive_accepted_chunks`, callable on restart / periodically) re-pushes each `dp_state='accepted'` chunk's original C1; DP's dedup makes it
 idempotent (a done chunk short-circuits to 200+record_ids → `confirm_chunk` → `clean`; still-pending re-ACKs 202). Detail:
 [../data-processing/handoff/ws-async-observability.md](../data-processing/handoff/ws-async-observability.md).
-- **DP-side alignment (DP v1 + hardening, merged 2026-07-21):** DP now carries a *durable
-  ingest journal* — an accepted chunk survives a DP kill/restart and *auto-recovers on the
-  DP side* (its `/continuity` `processed`/`dead_lettered` sets rehydrate from the journal, so
-  a DP restart can no longer mis-report intact history as a gap). Net: the guarantee is now
-  durable on *both* legs. Recording's `/redrive` stays the belt-and-suspenders (and the
-  means to converge a chunk lost past DP's drain-timeout / a hard kill, which DP's journal
-  marks re-drivable but does not itself re-push to us). No recording change needed; the async
-  seam is unchanged (120 tests at the time; *144* as of 2026-07-27). Flipping `INGEST_ASYNC=1` on the fleet remains the
-  open D16 re-drive-drill decision.
+- **DP-side alignment (DP v1 + hardening, merged 2026-07-21):** DP now carries a *durable ingest
+  journal* — an accepted chunk survives a DP kill/restart and *auto-recovers on the DP side* (its
+  `/continuity` `processed`/`dead_lettered` sets rehydrate from the journal, so a DP restart can
+  no longer mis-report intact history as a gap).
+- Net: the guarantee is now durable on *both* legs.
+- Recording's `/redrive` stays the belt-and-suspenders (and the means to converge a chunk lost
+  past DP's drain-timeout / a hard kill, which DP's journal marks re-drivable but does not itself
+  re-push to us).
+- No recording change needed; the async seam is unchanged (120 tests at the time; *144* as of
+  2026-07-27).
+- Flipping `INGEST_ASYNC=1` on the fleet remains the open D16 re-drive-drill decision.
 
 ### R-1 — client transport: recording's side
 

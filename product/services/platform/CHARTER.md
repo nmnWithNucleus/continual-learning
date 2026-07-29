@@ -172,10 +172,12 @@ without manual steps.
 
 **Research**
 7. **Deletion vs trained weights** (flagged for CTO + continuum): data deleted from stores may
-   already be distilled into a user's LoRA adapter. Policy + technique needed — candidates:
-   windowed retrain from retained data (C5's training-window provenance makes this tractable),
-   adapter rollback to a pre-window version, or machine unlearning. Owner: platform (policy) +
-   continuum (technique). Blocks a truthful "your data is deleted" claim.
+   already be distilled into a user's LoRA adapter.
+   - Policy + technique needed — candidates: windowed retrain from retained data (C5's
+     training-window provenance makes this tractable), adapter rollback to a pre-window version,
+     or machine unlearning.
+   - Owner: platform (policy) + continuum (technique).
+   - Blocks a truthful "your data is deleted" claim.
 
 ## Risks
 

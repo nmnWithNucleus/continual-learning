@@ -122,13 +122,15 @@ causes, which is what it is for.
 ### What is genuinely open
 
 - **Our spread is 2.2x the reference's** (sd 0.0720 vs 0.0325), entirely from seed 0, whose
-  seen-mean of 0.1167 sits below every reference run and whose day-5 retention collapsed
-  (0.25 -> 0.05, against the reference holding 0.23 -> 0.23). With 4 reference samples we
-  cannot say whether that is the reference distribution's own low tail or a distinct failure
-  mode we can hit. *More seeds is the cheap answer* (~5 GPU-h each, parallelizable).
-- **Seed 2 trips the publish gate on contamination**: heldout 0.0833 against the recipe ceiling
-  of 0.05 (5/60 probes vs the reference's 2/60). Not significant alone, but it is a gate-relevant
-  observation and the gate would have blocked that adapter — which is the gate working.
+  seen-mean of 0.1167 sits below every reference run and whose day-5 retention collapsed (0.25 ->
+  0.05, against the reference holding 0.23 -> 0.23).
+- With 4 reference samples we cannot say whether that is the reference distribution's own low tail
+  or a distinct failure mode we can hit.
+- *More seeds is the cheap answer* (~5 GPU-h each, parallelizable).
+- **Seed 2 trips the publish gate on contamination**: heldout 0.0833 against the recipe ceiling of
+  0.05 (5/60 probes vs the reference's 2/60).
+- Not significant alone, but it is a gate-relevant observation and the gate would have blocked
+  that adapter — which is the gate working.
 - Diagnostic decomposition of seed 0, for whoever picks this up: our full chain scored 0.15 on
   day 21; our night-5 training continued from the *reference's* `adapter_s4_d17` scored 0.32;
   the reference from that same point scored 0.45. So most of seed 0's gap is accumulated across
@@ -171,10 +173,11 @@ is 3.9× faster, which is why it is the production path.
 
 ## 4. Exec model
 
-- Both environments are invoked by **absolute interpreter path**. `PinnedEnv.preflight()` imports
-  the required modules in one second before any GPU work — the reference chain's `phased_run.sh`
-  died precisely here (`conda activate` did not reorder path in a non-interactive shell, and the
-  `python` that ran lacked peft, after the corpus was already built).
+- Both environments are invoked by **absolute interpreter path**.
+- `PinnedEnv.preflight()` imports the required modules in one second before any GPU work — the
+  reference chain's `phased_run.sh` died precisely here (`conda activate` did not reorder path in
+  a non-interactive shell, and the `python` that ran lacked peft, after the corpus was already
+  built).
 - `MORPHEUS_DEVICE` is a real knob and GPU-0 hardcoding is gone. The three chains run on GPUs
   7 / 2 / 4 concurrently.
 - Lockfiles captured to `env/`: `train.pip.lock.txt` (186 pkgs), `judge.pip.lock.txt` (247),

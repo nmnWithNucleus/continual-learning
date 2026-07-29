@@ -137,7 +137,11 @@ active/rolled-back status) is continuum's call; honoring it per request is ours.
 6. vLLM multi-LoRA at request granularity: adapters resident in memory, eviction policy, swap latency — all-layer LoRA is heavier than typical attention-only adapters.
 7. Sandbox isolation: per-turn container vs per-user persistent env; network policy for tool calls.
 8. C4 record size: full mentor traces are large — format/retention negotiated with storage.
-9. Clarification-relay turns block on the user. The user-facing legs are pinned: questions go out as C9 mid-turn frames (output delivers), answers come back as the C3 clarification-answer variant (input binds it to the pending turn). Open here: our pending-turn state, timeouts, resumption semantics.
+9. Clarification-relay turns block on the user.
+   - The user-facing legs are pinned: questions go out as C9 mid-turn frames (output delivers),
+     answers come back as the C3 clarification-answer variant (input binds it to the pending
+     turn).
+   - Open here: our pending-turn state, timeouts, resumption semantics.
 10. Mentor fan-out: one mentor per turn vs an ensemble; provider selection; cost ceiling per turn.
 11. Proactive triggers (future, not v0): output's proactive channel names inference/continuum jointly as trigger owner — when that channel lands, trigger generation lives here (with continuum); see output's charter OQ.
 

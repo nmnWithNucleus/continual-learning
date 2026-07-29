@@ -1194,10 +1194,11 @@ The **designed** flow. C8, C11 and C7 are `designed`, not built — a v0 turn to
 1. User speaks, types or snaps via a surface (input) → payload envelope.
 2. QueryBuilder normalizes the payload through data-processing (C8) and assembles the UserPrompt (C3).
    It may also pull same-day grounding via the recent-context read (C11).
-3. Inference resolves the user's latest adapter (C6), builds the system and user prompt, and runs the
-   agentic harness (tools, sandbox). If the model wants help it fires the mentor protocol (C7);
-   mentor clarification questions relay to the user as C9 mid-turn frames, and the user's answers
-   return as C3 clarification-answer variants.
+3. Inference resolves the user's latest adapter (C6), builds the system and user prompt, and runs
+   the agentic harness (tools, sandbox).
+   - If the model wants help it fires the mentor protocol (C7); mentor clarification questions
+     relay to the user as C9 mid-turn frames, and the user's answers return as C3
+     clarification-answer variants.
 4. The grounded response streams to output (C9) → device. The turn, with all traces, lands via C4.
 
 ## Day walkthrough (learn loop)
@@ -1207,11 +1208,12 @@ Built end to end as of 2026-07-27, with one designed-not-built leg named below.
 1. **All day:** wearable and computer stream via C1. Data-processing denoises, diarizes, transcribes
    and captions, injects timestamps, and enriches with world data (known faces, geolocation, place
    tags); records land in `/context` (C2).
-2. **Nightly:** continuum opens tonight's training window and fetches the day-log (C10), then curates
-   it into a training mixture with anti-forgetting replay, trains the user's LoRA, runs the eval
-   gates (personal recall + general-capability forgetting), and publishes or rolls back (C5).
-   *The `/sessions` mentor-trace leg of C10 is designed, not built — v0's day-log derives from
-   `/context` only.*
+2. **Nightly:** continuum opens tonight's training window and fetches the day-log (C10), then
+   curates it into a training mixture with anti-forgetting replay, trains the user's LoRA, runs
+   the eval gates (personal recall + general-capability forgetting), and publishes or rolls back
+   (C5).
+   - *The `/sessions` mentor-trace leg of C10 is designed, not built — v0's day-log derives from
+     `/context` only.*
 3. **Morning:** inference resolves the new adapter (C6). The model knows yesterday.
 
 ## Founding posture (inherited, never ratified)

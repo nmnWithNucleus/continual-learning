@@ -1633,10 +1633,10 @@ Pinned so WS A–E produce compatible pieces; the integrator may finalize proces
 - **Stack:** Python 3.11, *FastAPI + uvicorn* per backend service; `httpx` for inter-service
   calls; *pydantic* models mirroring the JSON Schemas in [../contracts/](../contracts/);
   `pytest`. Surface = static HTML/CSS/JS, *no build step*, served by input.
-- **Model backend switch (critical):** env `MODEL_BACKEND=mock|vllm`. *`mock` is the default*
-  — a canned, streamed answer, *no GPU needed*, so the whole loop runs on any box. `vllm` =
-  OpenAI-compatible client to a vLLM server (real Qwen3-VL-32B, needs the a3mega node). Ship
-  Both; only `mock` is expected to run tonight.
+- **Model backend switch (critical):** env `MODEL_BACKEND=mock|vllm`. *`mock` is the default* — a
+  canned, streamed answer, *no GPU needed*, so the whole loop runs on any box.
+- `vllm` = OpenAI-compatible client to a vLLM server (real Qwen3-VL-32B, needs the a3mega node).
+- Ship Both; only `mock` is expected to run tonight.
 - **Ports (localhost dev):** input `8081`, inference `8010`, output `8082`, storage `8083`
   (vLLM `8000` when real).
 - **Storage:** SQLite file DB for dev — a `/sessions` turns table (C4) + a model-directory
@@ -1692,14 +1692,16 @@ Pinned so WS A–E produce compatible pieces; the integrator may finalize proces
 | **total** | **81 passed, 0 failed** |
 
 #### Integration deltas (seam fixes applied)
-1. **Render seam wired (primary).** Input's surface rendered answers as *plain text* with a
-   TODO to adopt output's renderer. Fixed: *vendored* `output/app/static/c9_reader.js` →
-   `input/app/static/c9_reader.js` (same-origin so the browser ES-module import needs no CORS
-   to `:8082`), rewrote `input/app/static/app.js` to `import { renderC9Stream }` and hand it the
-   `fetch()` response (streams + safe-markdown-renders into `#answer`, surfaces usage via
-   `onEndFrame`), and updated `index.html` (`<pre>`→`<div id="answer">`, `<script type="module">`,
-   markdown/code/error CSS). Canonical source stays output's copy — re-copy on change (a
-   build-time copy step is the future fix to kill the duplication).
+1. **Render seam wired (primary).** Input's surface rendered answers as *plain text* with a TODO
+   to adopt output's renderer.
+   - Fixed: *vendored* `output/app/static/c9_reader.js` → `input/app/static/c9_reader.js`
+     (same-origin so the browser ES-module import needs no CORS to `:8082`), rewrote
+     `input/app/static/app.js` to `import { renderC9Stream }` and hand it the `fetch()` response
+     (streams + safe-markdown-renders into `#answer`, surfaces usage via `onEndFrame`), and
+     updated `index.html` (`<pre>`→`<div id="answer">`, `<script type="module">`,
+     markdown/code/error CSS).
+   - Canonical source stays output's copy — re-copy on change (a build-time copy step is the
+     future fix to kill the duplication).
 2. **inference `run.sh` now honors `PORT`/`HOST`.** It hardcoded `--host 0.0.0.0 --port 8010`,
    ignoring the platform↔service contract (read `HOST`/`PORT` from env). Values matched the
    defaults so nothing broke, but it now binds what `run_all.sh` passes.
@@ -1731,9 +1733,9 @@ The mock ceiling is lifted — the loop now runs on the **real base model**, ver
 - **Full serve-loop turn on real weights:** `POST :8081/api/turn {"text":"…Eiffel Tower…"}` →
   streamed C9 (real answer *"The Eiffel Tower is a wrought-iron lattice tower located in Paris,
   France."* + single `U+001E` + end frame, `model_id:"Qwen/Qwen3-VL-32B-Instruct"`, real usage
-  62→19) → C4 persisted with the real answer, re-readable by turn id. Flip was just
-  `MODEL_BACKEND=vllm` in `deploy/.env` + `run_all.sh --restart` (inference `/health` reports
-  `backend:"vllm"`).
+  62→19) → C4 persisted with the real answer, re-readable by turn id.
+- Flip was just `MODEL_BACKEND=vllm` in `deploy/.env` + `run_all.sh --restart` (inference
+  `/health` reports `backend:"vllm"`).
 
 **Exit criterion for v0.0 is now MET on the real base model, not just mock.** One variable was
 changed vs. the mock loop (the backend) — everything else (contracts, wiring, persistence) was
@@ -1792,28 +1794,32 @@ gain: user-facing, and it gives the beta tester a touch-and-feel surface.
 - Capture surfaces to build behind the `ChunkSource` seam are **bodycam (device)** and *computer*
   — mic, screen recording, and browser-extension screen capture.
 - **Capture-modeling note.** Screen *video* and any system or tab *audio* are separate C1 streams,
-  each with its own `stream_id`, like the wearable's A/V demux. Browsers expose tab and system
-  audio via `getDisplayMedia`/`tabCapture` only on some platforms — Chrome carries tab audio
-  broadly, system audio on Windows and ChromeOS, and macOS needs a native-app loopback. The mic is
-  always captured as its own stream, never through the screen recorder.
+  each with its own `stream_id`, like the wearable's A/V demux.
+- Browsers expose tab and system audio via `getDisplayMedia`/`tabCapture` only on some platforms —
+  Chrome carries tab audio broadly, system audio on Windows and ChromeOS, and macOS needs a
+  native-app loopback.
+- The mic is always captured as its own stream, never through the screen recorder.
 - A recording-lead session (Prompt B plus this scope) owns the slice.
 
 **Founders' refinement (2026-07-18, second pass).**
 
 - Consent gate → back-burner ([D13](../DECISIONS.md)): pre-pilot, not pre-beta.
 - Capture-surface order (1): **phone web client** — camera and mic via `getUserMedia` over
-  HTTPS/tunnel. The bodycam stand-in and the structured beta handover: Gnandeep gets a press-record
-  URL. The `live_video_chat` POC already proved iOS capture, MediaRecorder and tunnel on this exact
-  leg — reference, not lift ([D7](../DECISIONS.md)).
+  HTTPS/tunnel.
+- The bodycam stand-in and the structured beta handover: Gnandeep gets a press-record URL.
+- The `live_video_chat` POC already proved iOS capture, MediaRecorder and tunnel on this exact leg
+  — reference, not lift ([D7](../DECISIONS.md)).
 - Capture-surface order (2): **computer** — screen video via app and browser-extension screen
   share, tab audio via the extension (`tabCapture`). System audio out of scope for now; computer
   mic continues from M0.
 - The recording server demuxes phone A/V into per-modality C1 streams (charter OQ8 pattern).
 - **Chunk-length lean** (OQ4, pinned in-session with DP): variable-length chunks cut at VAD speech
-  pauses within ~5–30 s bounds. Frozen C1 already supports it — per-chunk `t_start`/`t_end`, and
-  `sequence` density is length-independent. Semantic cuts avoid mid-sentence splits and may obviate
-  audio overlap, since exact `t_end[n] == t_start[n+1]` adjacency becomes a clean second continuity
-  signal. Fixed windows remain fine for video and screen streams.
+  pauses within ~5–30 s bounds.
+- Frozen C1 already supports it — per-chunk `t_start`/`t_end`, and `sequence` density is
+  length-independent.
+- Semantic cuts avoid mid-sentence splits and may obviate audio overlap, since exact `t_end[n] ==
+  t_start[n+1]` adjacency becomes a clean second continuity signal.
+- Fixed windows remain fine for video and screen streams.
 
 ### Learn-loop MVP slice — the capture skeleton (2026-07-09)
 
@@ -1876,8 +1882,9 @@ on `:8083`. So:
    existing service. It is the shared dependency both A and B write to.
 2. **recording M0** (mic → `/raw` PUT → C1 emit) and *data-processing M0* (C1 → ASR → C2 →
    `/context`) *fan out in parallel* against the frozen C1/C2, both targeting storage's dev
-   endpoints. Shared *C1/C2 conformance fixtures* (recording ⇄ data-processing) from day one, as
-   the recording charter's C1-churn mitigation requires.
+   endpoints.
+   - Shared *C1/C2 conformance fixtures* (recording ⇄ data-processing) from day one, as the
+     recording charter's C1-churn mitigation requires.
 3. **platform** provides the box + ASR runtime alongside.
 4. An **integrator** session wires them and drives one chunk end to end.
 
@@ -1915,11 +1922,11 @@ real-ASR transcript byte-for-byte). Honest result below.
 
 #### What runs (executed, not claimed — independently re-verified)
 - **The mock capture loop runs end to end on real uvicorn ports** (`run_learn.sh` health-gates
-  storage:8083 → data-processing:8085 → recording:8084 — *first try, zero seam fixes*). One
-  `/capture/run` carved a 12 s sample WAV into *3 dense, zero-based, wall-clock-stamped chunks*
-  (`sequence=[0,1,2]`, one `stream_id`), each going *blob-first*: `PUT /raw/blobs` (storage mints
-  the opaque `blob_ref`) → *push C1* to data-processing `/ingest` → C1 schema-validated → *pull
-  bytes by `blob_ref`* → mock ASR → *C2* → `POST /context/records`.
+  storage:8083 → data-processing:8085 → recording:8084 — *first try, zero seam fixes*).
+- One `/capture/run` carved a 12 s sample WAV into *3 dense, zero-based, wall-clock-stamped
+  chunks* (`sequence=[0,1,2]`, one `stream_id`), each going *blob-first*: `PUT /raw/blobs`
+  (storage mints the opaque `blob_ref`) → *push C1* to data-processing `/ingest` → C1
+  schema-validated → *pull bytes by `blob_ref`* → mock ASR → *C2* → `POST /context/records`.
 - **Persistence + reads proven:** every C2 re-read by `record_id` *and* by `(user_id, time)`
   range (half-open `[from,to)`, matching C10), each provably sourced from a re-pullable `/raw` blob
   whose sha256 matches; per-user isolation holds (another user sees zero).
@@ -1980,8 +1987,9 @@ parallel skeleton agents (DP seam + recording `ChunkSource` seam) + an adversari
   return `{ok, record_ids:[…]}`. Audio moved behind the seam *unchanged* (its `record_id` is
   byte-identical to the pre-seam value — backward compatible).
 - **`Processor` seam** (`app/processing/`): a plugin sets `modality`+`content_kind` and implements
-  `process(c1, blob, …) -> list[ProcessedUnit]` (a *list*, so *one chunk → many records* is native).
-  Self-registering via `@register` + package auto-import — *adding a modality is one new file + a
+  `process(c1, blob, …) -> list[ProcessedUnit]` (a *list*, so *one chunk → many records* is
+  native).
+- Self-registering via `@register` + package auto-import — *adding a modality is one new file + a
   fixture, no core edit.* `record_id = sha256(chunk_id ∥ pipeline_version [∥ discriminator])`.
 - **Stubs (mock transforms):** image→1 `caption` (OCR woven in per D8), *video→3 keyframe
   `caption`s (one-chunk-many-records, discriminator=index)*, text→1 `text`. All four `content.kind`s
@@ -2006,15 +2014,17 @@ needs a version bump now** (recorded as DP charter OQs; the frozen C2 was not to
   on storage's `(user_id, t_start)` index. Fix is an *internal seam hook* (optional per-`ProcessedUnit`
   `t_start/t_end`; C2 already has per-record timestamps) — *no schema change.* Defer to the video session.
 - **Image / keyframe OCR frame-location (bbox):** C2 `content` has no home for structured region
-  geometry (OCR *text* survives, woven into the caption; only the bbox is lost). Fix = an *additive
-  optional* field (`content.regions` / `enrichments.text_regions`) — touches the schema additively
-  (old records still validate). Freeze-additive *when a real OCR pass lands.* Defer to the image session.
+  geometry (OCR *text* survives, woven into the caption; only the bbox is lost).
+- Fix = an *additive optional* field (`content.regions` / `enrichments.text_regions`) — touches
+  the schema additively (old records still validate).
+- Freeze-additive *when a real OCR pass lands.* Defer to the image session.
 
 **Launch a modality session (the seam handoff).** To bolster video / image / text end-to-end:
 1. DP: drop `app/processing/processors/<modality>.py` (a `Processor` subclass, `@register`) + a
-   `tests/fixtures/<modality>.*` C1+blob — **no core edit**. Build the real pipeline (video: VidProc +
-   keyframe captioning, wire per-keyframe timing via the seam hook; image: ImgProc + OCR-specialist +
-   dense caption, add the bbox field additively; text: real normalization).
+   `tests/fixtures/<modality>.*` C1+blob — **no core edit**.
+   - Build the real pipeline (video: VidProc + keyframe captioning, wire per-keyframe timing via
+     the seam hook; image: ImgProc + OCR-specialist + dense caption, add the bbox field
+     additively; text: real normalization).
 2. Recording (when its real capturer is wanted): drop `app/sources/<modality>_source.py` + one
    `SOURCE_BUILDERS` entry — no `capturer.py` edit, no C1 change.
 3. Both write to the same frozen C1/C2 + the running storage `/raw`+`/context`; verify against
@@ -2028,42 +2038,46 @@ needs a version bump now** (recorded as DP charter OQs; the frozen C2 was not to
 `~/nmn/cl-dp-async`), launched in parallel with this founders' session. Its charge is work the
 canvases already pin, bundled because it shares one service pair (DP + recording) and one node:
 
-1. **Async `/ingest`** — DP charter *M7 territory arriving early* (the charter allows M4–M7
-   to interleave after M3; video/M3 landed 2026-07-19). ACK `202` fast + process on a worker so
-   capture cadence decouples from pipeline latency; retry safety rides the existing `chunk_id`
-   dedup + deterministic `record_id`. Motivated by the verification-round finding that a fully
-   loaded chunk (real ASR + diarization + VLM captions) can lawfully outlive recording's
-   delivery timeout (fleet-mitigated today via `RECORDING_HTTP_TIMEOUT=120`). Resolves DP OQ13.
-   *Scope discipline: this is the ACK+queue half of M7* — backpressure policy, dead-letter +
-   backfill stay M7-proper; the queue lands observable by construction (queue depth is a
-   chartered M8 metric in the same slice).
-2. **D9 metrics emission** (DP *M8* + recording *M6*): `/metrics` Prometheus text + each
-   service's Grafana dashboard JSON. *Emission half only* — Platform's shared
-   Prometheus/Grafana backbone is the follow-on small slice (D15 below), so recording M6's
-   "scraped by the shared Prometheus" exit criterion closes only when that backbone lands.
+1. **Async `/ingest`** — DP charter *M7 territory arriving early* (the charter allows M4–M7 to
+   interleave after M3; video/M3 landed 2026-07-19).
+   - ACK `202` fast + process on a worker so capture cadence decouples from pipeline latency;
+     retry safety rides the existing `chunk_id` dedup + deterministic `record_id`. Motivated by
+     the verification-round finding that a fully loaded chunk (real ASR + diarization + VLM
+     captions) can lawfully outlive recording's delivery timeout (fleet-mitigated today via
+     `RECORDING_HTTP_TIMEOUT=120`).
+   - Resolves DP OQ13. *Scope discipline: this is the ACK+queue half of M7* — backpressure policy,
+     dead-letter + backfill stay M7-proper; the queue lands observable by construction (queue
+     depth is a chartered M8 metric in the same slice).
+2. **D9 metrics emission** (DP *M8* + recording *M6*): `/metrics` Prometheus text + each service's
+   Grafana dashboard JSON.
+   - *Emission half only* — Platform's shared Prometheus/Grafana backbone is the follow-on small
+     slice (D15 below), so recording M6's "scraped by the shared Prometheus" exit criterion closes
+     only when that backbone lands.
 3. **node-7 smokes of the real audio backends** (pyannote diarization / whisper translation /
    AST acoustic events — built 2026-07-19 as correct-by-inspection seams, explicitly unrun):
    run each genuinely (GPU + HF-gated pyannote) before anyone trusts a switch-flip.
 4. **The OQs the work naturally answers** — headline *recording OQ3, the codec/bitrate ladder
-   (joint recording × DP)*: real pipelines + smokes say what fidelity each modality actually
-   needs (alpha datapoint: CRF-28 mac screen video is readable but soft on fine text). Also
-   informed: DP OQ3 (GPU placement for pipeline models vs continuum's future nightly window).
+   (joint recording × DP)*: real pipelines + smokes say what fidelity each modality actually needs
+   (alpha datapoint: CRF-28 mac screen video is readable but soft on fine text).
+   - Also informed: DP OQ3 (GPU placement for pipeline models vs continuum's future nightly
+     window).
 
 **Founders' ratification posture — the async `/ingest` reply shape.** It is an **inter-service
 wire change, not a C-number**: C1 governs the envelope, not the reply, so the accepted shape
 gets pinned as prose in the DP canvas exactly as the `/raw` blob leg rides D11. The deep
 session proposes; this standing founders' session ratifies. The bar the proposal must clear:
 
-- **At-least-once safety intact end-to-end.** Re-pushing a queued/in-flight `chunk_id` must be
-  a cheap idempotent ACK, not a second enqueue. And the new loss window is named honestly:
-  today, inline processing means a mid-processing DP crash fails recording's push → un-acked →
-  recording retries → covered. *A `202` ACK closes that coverage* — once acked, recording
-  never re-pushes, and DP's continuity detector notes "seen" at accept time, so a crash between
-  ACK and processing would today be *silent* record-level loss. The proposal must either make
-  the queue survive restart (durable spool, DP re-drains — the recording-side spool precedent)
-  or make the loss *detected* (an accepted-vs-processed split visible to the gap report) with a
-  re-drive path. "Accepted-risk + named mitigation" is not enough here — this is the zero-
-  silent-loss guarantee itself.
+- **At-least-once safety intact end-to-end.** Re-pushing a queued/in-flight `chunk_id` must be a
+  cheap idempotent ACK, not a second enqueue.
+- And the new loss window is named honestly: today, inline processing means a mid-processing DP
+  crash fails recording's push → un-acked → recording retries → covered.
+- *A `202` ACK closes that coverage* — once acked, recording never re-pushes, and DP's continuity
+  detector notes "seen" at accept time, so a crash between ACK and processing would today be
+  *silent* record-level loss.
+- The proposal must either make the queue survive restart (durable spool, DP re-drains — the
+  recording-side spool precedent) or make the loss *detected* (an accepted-vs-processed split
+  visible to the gap report) with a re-drive path. "Accepted-risk + named mitigation" is not
+  enough here — this is the zero- silent-loss guarantee itself.
 - **Recording's consumer side moves in the same slice.** The capturer reads `/ingest` replies
   (`record_ids` today) and the gap report cross-checks DP `/continuity`; "accepted" and
   "processed" split under async, and the report must not read async lag as loss *nor claim
@@ -2083,12 +2097,12 @@ recording's `_dp_missing_unacked` reconciliation trusts `dp_acked=1` to mean "C2
 `clean`, and made the fix *non-negotiable: preserve the invariant `dp_acked` == "C2 durably
 written"*, dropping the original "zero recording change" claim as unsound (recording moves
 in-slice, as the bar required). Ratified wire, pinned as prose in the DP canvas at merge:
-- `INGEST_ASYNC=0` default, inline path byte-unchanged. Async: **202**
-  `{ok, accepted, chunk_id}` on accept (+`duplicate:true` on a queued/in-flight dedup hit);
-  *200 + record_ids* on a done-dedup-hit; deterministic rejections (400/422/501) resolve
-  *synchronously pre-claim*, never deferred into a dead-letter; *503* = honest
-  backpressure on a bounded queue (finite `INGEST_QUEUE_MAX` default — unbounded+volatile
-  would OOM-lose-all and read `clean`).
+- `INGEST_ASYNC=0` default, inline path byte-unchanged.
+- Async: **202** `{ok, accepted, chunk_id}` on accept (+`duplicate:true` on a queued/in-flight
+  dedup hit); *200 + record_ids* on a done-dedup-hit; deterministic rejections (400/422/501)
+  resolve *synchronously pre-claim*, never deferred into a dead-letter; *503* = honest
+  backpressure on a bounded queue (finite `INGEST_QUEUE_MAX` default — unbounded+volatile would
+  OOM-lose-all and read `clean`).
 - `/continuity/{stream_id}` gains **additive** `processed` (C2-durably-written runs) +
   `dead_lettered`; "covered ≠ processed". C1/C2 schemas untouched.
 - Recording in-slice: `finalize_chunk(accepted=)` + additive `dp_state='accepted'` column;
@@ -2142,34 +2156,38 @@ continuum's nightly window ran on node-7 via SLURM without disturbing Gnandeep's
 
 *Original D15 plan (for the record):*
 
-1. **Continuum kickoff is the next founders-led slice.** It is the last unstarted pillar and
-   the thesis itself: every upstream leg now stands (serve loop proven on real Qwen3-VL-32B;
-   capture alpha-complete on three real surfaces; DP real for both live modalities; `/context`
-   filling with pipeline-versioned records) — captured days are inert exactly until continuum
-   runs. *Gate: a C10 v0 interface freeze first* (storage × continuum jointly propose, founders
-   ratify — the pattern that made C1/C2 interoperate first try), frozen against the beta-proven
-   range read (`GET /context/records?user_id=&from=&to=`, half-open `[from,to)`, deliberately
-   C10's shape since D12). Kickoff is also the deliberate forcing function for two parked
-   conversations: the *cluster split* (agenda item 2 — nightly training window vs Gnandeep's
-   wider-cluster occupancy vs serving) and *DP OQ5 reprocess policy* (mixed `pipeline_version`
-   dialects inside a training window). The long-parked *D6 OCR spot-check* rides the vLLM
-   relaunch that continuum-era eval needs anyway.
+1. **Continuum kickoff is the next founders-led slice.** It is the last unstarted pillar and the
+   thesis itself: every upstream leg now stands (serve loop proven on real Qwen3-VL-32B; capture
+   alpha-complete on three real surfaces; DP real for both live modalities; `/context` filling
+   with pipeline-versioned records) — captured days are inert exactly until continuum runs.
+   - *Gate: a C10 v0 interface freeze first* (storage × continuum jointly propose, founders ratify
+     — the pattern that made C1/C2 interoperate first try), frozen against the beta-proven range
+     read (`GET /context/records?user_id=&from=&to=`, half-open `[from,to)`, deliberately C10's
+     shape since D12).
+   - Kickoff is also the deliberate forcing function for two parked conversations: the *cluster
+     split* (agenda item 2 — nightly training window vs Gnandeep's wider-cluster occupancy vs
+     serving) and *DP OQ5 reprocess policy* (mixed `pipeline_version` dialects inside a training
+     window).
+   - The long-parked *D6 OCR spot-check* rides the vLLM relaunch that continuum-era eval needs
+     anyway.
 2. **Platform D9 backbone as the small parallel slice:** the one shared Prometheus + Grafana on
-   node-7, scraping what the deep session emits, provisioning both dashboard JSONs + the
-   standard node/dcgm exporters. No file/service contention with kickoff; closes D9 end-to-end
-   so both founders open one Grafana URL.
-3. **DP image/text pipelines (charter M2) explicitly deferred until a producing surface
-   exists.** Nothing on the fleet emits an `image` or `text` C1 stream today (phone camera →
-   video; extension/mac → video+audio), and the image pipeline's chartered payload — on-screen
-   text, already flows through the video keyframe OCR weave (D8). The OQ14b bbox additive C2
-   field waits with it, by design. Revisit trigger: a screenshot-still / document / clipboard
-   capture surface, or continuum finding keyframe-caption density insufficient for training.
+   node-7, scraping what the deep session emits, provisioning both dashboard JSONs + the standard
+   node/dcgm exporters.
+   - No file/service contention with kickoff; closes D9 end-to-end so both founders open one
+     Grafana URL.
+3. **DP image/text pipelines (charter M2) explicitly deferred until a producing surface exists.**
+   Nothing on the fleet emits an `image` or `text` C1 stream today (phone camera → video;
+   extension/mac → video+audio), and the image pipeline's chartered payload — on-screen text,
+   already flows through the video keyframe OCR weave (D8).
+   - The OQ14b bbox additive C2 field waits with it, by design.
+   - Revisit trigger: a screenshot-still / document / clipboard capture surface, or continuum
+     finding keyframe-caption density insufficient for training.
 
 Considered and passed, on the record so we don't re-litigate:
 - **Mobile app + C8 sync API now** — mobile's v0 roles (chat surface + speech-output sink) get
   their differentiated value from a personalized model, and C8's one-dialect duty binds when
-  interactive requests carry media. Their moment is when the personalization era opens (first
-  adapter serving), not before.
+  interactive requests carry media.
+- Their moment is when the personalization era opens (first adapter serving), not before.
 - **Standalone C10 freeze without kickoff** — freezing a contract without its consumer at the
   table breaks the freeze-with-both-sides pattern that made C1/C2 land clean; meanwhile the
   beta is not blocked (it uses the range read as-is).

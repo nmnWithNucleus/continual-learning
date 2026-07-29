@@ -89,10 +89,10 @@ and that ambiguity is exactly what a 60-probe suite cannot resolve.
 1. **Use all 222 heldout probes** the suite already contains (the harness caps at 60 —
    `HELDOUT_LIMIT` in `morpheus/eval.py`). This is free: no generation, no new data.
 2. **Replace the fixed ceiling with a one-sided exact test against the run's OWN base-model
-   heldout at matched n**, α=0.01. At n=222 that blocks above 5/222 (0.023) with 99% power
-   against 5% contamination — stricter where it matters and far less trigger-happy.
-   Testing against the run's own base control (rather than a constant) also survives a change
-   of base model, which a fixed ceiling does not.
+   heldout at matched n**, α=0.01. At n=222 that blocks above 5/222 (0.023) with 99% power against
+   5% contamination — stricter where it matters and far less trigger-happy.
+   - Testing against the run's own base control (rather than a constant) also survives a change of
+     base model, which a fixed ceiling does not.
 3. **Keep an absolute backstop** at 0.15 for the case where the base model is itself
    contaminated and the differential test would see nothing.
 

@@ -74,16 +74,18 @@ which is exactly what P1/P3 would have measured, and what capacity did not allow
 
 Full analysis in [gate-threshold-proposal.md](gate-threshold-proposal.md). Headlines:
 
-- **Traps:** the 0.40 floor blocks *71% of the reference recipe's own nights*. Worse, the
-  reference's night-to-night sd (0.090) equals the binomial noise at n=28 (0.090) to three
-  decimals — *the metric currently measures nothing but sampling*. Proposed 0.15 interim
-  (0.9% false-block, 98.8% collapse detection), 0.25 once the suite reaches ~150 probes.
+- **Traps:** the 0.40 floor blocks *71% of the reference recipe's own nights*.
+- Worse, the reference's night-to-night sd (0.090) equals the binomial noise at n=28 (0.090) to
+  three decimals — *the metric currently measures nothing but sampling*.
+- Proposed 0.15 interim (0.9% false-block, 98.8% collapse detection), 0.25 once the suite reaches
+  ~150 probes.
 - **Heldout:** base scores 0/60 on all seven runs and our seed 0 scored 0/60, so *no systematic
-  leak exists*. But n=60 has 12% power against 2% contamination while sitting two probes from a
-  false block. The suite already contains *222 probes and the harness uses 60*. Proposed: use
-  all 222, and replace the fixed ceiling with a one-sided exact test against each run's *own*
-  base control (α=0.01 → blocks above 5/222, 99% power at 5% contamination), with a 0.15
-  absolute backstop for a contaminated base.
+  leak exists*.
+- But n=60 has 12% power against 2% contamination while sitting two probes from a false block.
+- The suite already contains *222 probes and the harness uses 60*.
+- Proposed: use all 222, and replace the fixed ceiling with a one-sided exact test against each
+  run's *own* base control (α=0.01 → blocks above 5/222, 99% power at 5% contamination), with a
+  0.15 absolute backstop for a contaminated base.
 
 ## 4. 32B M0 dry run
 

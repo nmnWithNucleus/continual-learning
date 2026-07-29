@@ -130,10 +130,10 @@ WS-D's shipped registry, that reasoning does not hold**, and following it litera
 a production incident:
 
 * `PACK_DIGEST = compute_digest(_PACKS, _ROUTES)` is a digest over **every loaded pack**
-  (`app/vision/prompts/__init__.py`), and `load_registry` globs `*.prompt.md` in the source
-  dir. Two extra files in the flat directory change the aggregate digest → change
-  `version_tag(vs)` → change the clip primary's `version_fragment` → *fork `record_id` for
-  every production caption*, for an experiment that never ran.
+  (`app/vision/prompts/__init__.py`), and `load_registry` globs `*.prompt.md` in the source dir.
+* Two extra files in the flat directory change the aggregate digest → change `version_tag(vs)` →
+  change the clip primary's `version_fragment` → *fork `record_id` for every production caption*,
+  for an experiment that never ran.
 * WS-D's `tests/test_prompt_pack.py:47,200,452` asserts the loaded pack set is exactly the
   six shipped ids, so the same drop-in reddens the suite — in a file WS-H does not own.
 
@@ -374,8 +374,9 @@ Whether 15.1× dose is right is A-8 / O-5, which is continuum's fork to run.
    literal wording forks every production caption's `record_id` and reddens WS-D's suite.
 3. **The O-8 gate is built and unrun.** It needs one served captioner (E-3(a)) and a labelled
    corpus; `capture_chunkset.py synth --count 200` produces the latter in ~10 minutes with no
-   capture and no binaries. Until it runs, the addendum's ratified position stands: A is built
-   as designed and its cutover is gated.
+   capture and no binaries.
+   - Until it runs, the addendum's ratified position stands: A is built as designed and its
+     cutover is gated.
 4. **The Gemini oracle and the blind judge are built and unrun** for want of a credential. The
    mechanical scorers stand alone; they are the gate, the oracle is corroboration.
 5. `dp_caption_ungrounded_quote_total` (declared by WS-F, currently unwired) should be fed

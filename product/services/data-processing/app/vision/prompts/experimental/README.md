@@ -20,10 +20,11 @@ registry, that reasoning does not hold, and dropping them in the flat directory 
 production incident:
 
 * `PACK_DIGEST` is `compute_digest(_PACKS, _ROUTES)` — a digest over **every** loaded pack
-  (`app/vision/prompts/__init__.py`). `load_registry` globs `*.prompt.md` in the source dir,
-  so two extra files in the flat dir change the aggregate digest, change
-  `prompts.version_tag(vs)`, change the clip primary's `version_fragment`, and therefore
-  *fork `record_id` for every production caption* — for an experiment that never ran.
+  (`app/vision/prompts/__init__.py`).
+* `load_registry` globs `*.prompt.md` in the source dir, so two extra files in the flat dir change
+  the aggregate digest, change `prompts.version_tag(vs)`, change the clip primary's
+  `version_fragment`, and therefore *fork `record_id` for every production caption* — for an
+  experiment that never ran.
 * WS-D's `tests/test_prompt_pack.py` asserts `_ALL == set(all_packs())` over the six shipped
   ids, so the same drop-in reddens the suite (house rule 2: ≥ 465 green), in a file WS-H
   does not own (house rule 1).

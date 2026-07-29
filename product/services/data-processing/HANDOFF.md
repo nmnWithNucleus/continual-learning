@@ -92,8 +92,8 @@ poison chunk can no longer take down the service.
   *Choosing Frame Rate and Resolution for Screen Recording of Desktop Use* (the 5 fps floor /
   10–15 fps balanced operating point for desktop activity, and the 1080p legibility argument) and
   *OCR processing — thoughts* (the event-driven, region-level, temporally-aggregated OCR design
-  that [handoff/ws-video-clip.md](handoff/ws-video-clip.md) D-07 implements). Read both before
-  touching sampling rates or the OCR gate.
+  that [handoff/ws-video-clip.md](handoff/ws-video-clip.md) D-07 implements).
+- Read both before touching sampling rates or the OCR gate.
 
 ## Processor seam — how to add a modality (READ THIS before owning image/video/text)
 The core (`app/main.py` `POST /ingest` + `app/pipeline.py` `build_c2`) is **modality-agnostic**:
@@ -101,10 +101,10 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
 **dispatch by `envelope.modality` to a Processor** → for *each* returned unit assemble a C2 and
 `POST` it to `/context` → return `{ok, record_ids:[…]}`.
 
-- **A modality = ONE disjoint file** in `app/processing/processors/` that subclasses
+- **A modality is one disjoint file** in `app/processing/processors/` that subclasses
   `processing.base.Processor`, sets `modality` + `content_kind`, implements `pipeline_version(settings)`
   + `process(c1, blob, settings, span_seconds) -> list[ProcessedUnit]`, and is decorated with
-  `@register` (`processing.registry`). The registry **auto-imports** every module in that package, so
+  `@register` (`processing.registry`). The registry *auto-imports* every module in that package, so
   *you never edit a shared-core file* (not even a registry line) — just drop the file + a fixture.
 - **`process` returns a list** (≥1): audio/image/text → 1 unit; *video → many* (one keyframe →
   one unit, `discriminator = keyframe index`). `discriminator=''` is the 1:1 case.
@@ -134,24 +134,26 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
   span; `enrichments` present-but-empty; `speaker` null (no diarization in v0).
 - Blob integrity: `blob_sha256` verified against pulled bytes (502 on mismatch); a missing/deleted
   blob → 502 and NOT marked done, so an at-least-once retry can still reprocess.
-- **Tests: 9 passed** (isolated `.venv`, `ASR_BACKEND=mock`, storage faked via httpx `MockTransport`,
-  FastAPI `TestClient` in-process — no real port bound). Covers: C1 validate + bad-C1 422; emitted
-  C2 schema-valid + provenance carried; `record_id` determinism + version sensitivity; dedup
-  (storage POSTed at most once); segment times within span; blob integrity/missing.
+- **Tests: 9 passed** (isolated `.venv`, `ASR_BACKEND=mock`, storage faked via httpx
+  `MockTransport`, FastAPI `TestClient` in-process — no real port bound).
+- Covers: C1 validate + bad-C1 422; emitted C2 schema-valid + provenance carried; `record_id`
+  determinism + version sensitivity; dedup (storage POSTed at most once); segment times within
+  span; blob integrity/missing.
 - **Capture M1 (2026-07-18, [handoff/ws-m1-continuity-asr.md](handoff/ws-m1-continuity-asr.md)):**
-  - **Continuity detector** (`app/continuity.py`): every schema-valid `/ingest` (incl. dedup
-    hits) is noted per `(stream_id, sequence, chunk_id)`; `GET /continuity` +
-    `GET /continuity/{stream_id}` report max_sequence, merged seen-intervals, *missing*
-    (incl. leading gap), duplicate_deliveries, sequence_conflicts. In-memory single-process
-    (DedupStore posture). Recording's gap report cross-checks it live — "zero silent loss" is
-    now checked on the C1 leg, not assumed.
-  - **faster-whisper is standing** (in requirements.txt, lazy-imported; `ASR_BACKEND=mock`
-    stays default). *VAD gate* (`ASR_VAD`, default on): Silero `vad_filter` before ASR —
-    all-silence chunk → honest empty transcript (kills Whisper silence-hallucination).
-    `PIPELINE_VERSION` → `asr-fw-v1` (version-forward fork; mock dialect untouched).
-    `ASR_LANGUAGE` pins the ASR language (beta fleet: `en`) — auto-detect hallucinated
-    other scripts on faint room audio in the first real phone session (runtime knob, no
-    version fork).
+  - **Continuity detector** (`app/continuity.py`): every schema-valid `/ingest` (incl. dedup hits)
+    is noted per `(stream_id, sequence, chunk_id)`; `GET /continuity` + `GET
+    /continuity/{stream_id}` report max_sequence, merged seen-intervals, *missing* (incl. leading
+    gap), duplicate_deliveries, sequence_conflicts.
+  - In-memory single-process (DedupStore posture).
+  - Recording's gap report cross-checks it live — "zero silent loss" is now checked on the C1 leg,
+    not assumed.
+  - **faster-whisper is standing** (in requirements.txt, lazy-imported; `ASR_BACKEND=mock` stays
+    default).
+  - *VAD gate* (`ASR_VAD`, default on): Silero `vad_filter` before ASR — all-silence chunk →
+    honest empty transcript (kills Whisper silence-hallucination).
+  - `PIPELINE_VERSION` → `asr-fw-v1` (version-forward fork; mock dialect untouched).
+  - `ASR_LANGUAGE` pins the ASR language (beta fleet: `en`) — auto-detect hallucinated other
+    scripts on faint room audio in the first real phone session (runtime knob, no version fork).
   - **Audio pipeline shape** behind the seam: explicit stages asr → diarize → translate →
     acoustic_events; the last three are documented no-op stubs pinning their future contracts
     (speaker fill, `translation` unit, `acoustic` caption unit). Output today byte-identical.
@@ -162,18 +164,22 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
     clients (phone / Chrome extension / mac CLI) drove real media through `/ingest` — e.g. the
     extension run produced 7 real ASR transcripts of a captured tab's audio, the phone run 4 of
     room-mic audio — with `/continuity` cross-checked clean by recording's gap report each time.
-    DP itself needed *no change* for the two new clients (they speak recording's client wire,
-    which demuxes to the same C1 the phone already used). Suite unregressed at 38.
+  - DP itself needed *no change* for the two new clients (they speak recording's client wire,
+    which demuxes to the same C1 the phone already used).
+  - Suite unregressed at 38.
 
 ## Next
-- **The screen-video clip path (WS-VC) is BUILT and integrated** (2026-07-25) — [handoff/ws-video-clip.md](handoff/ws-video-clip.md).
-  All 8 workstreams landed and merged to `svc/video-clip`; DP suite *765* (+21 skip). Shape:
-  behind `VIDEO_PIPELINE=clip`, a video chunk yields *exactly 2 C2 records* (`caption` + `ocr`,
-  fixed discriminators, C1 span verbatim) instead of 4–8 per-keyframe records — `clipprep(5)` →
-  `screentext(15)` → `clipcap(20)`. The default (`keyframe`) stays byte-identical to the shipped
-  legacy path (`vidproc-*-v0`). Every lead-verified (mutation-tested the emission law; a masked
-  order/registration bug in the OCR seam was caught and returned before merge). *The build is done;
-  what remains are the cutover gates (below) and small follow-ups — none block the merge to main.*
+- **The screen-video clip path (WS-VC) is BUILT and integrated** (2026-07-25) —
+  [handoff/ws-video-clip.md](handoff/ws-video-clip.md).
+- All 8 workstreams landed and merged to `svc/video-clip`; DP suite *765* (+21 skip).
+- Shape: behind `VIDEO_PIPELINE=clip`, a video chunk yields *exactly 2 C2 records* (`caption` +
+  `ocr`, fixed discriminators, C1 span verbatim) instead of 4–8 per-keyframe records —
+  `clipprep(5)` → `screentext(15)` → `clipcap(20)`. The default (`keyframe`) stays byte-identical
+  to the shipped legacy path (`vidproc-*-v0`).
+- Every lead-verified (mutation-tested the emission law; a masked order/registration bug in the
+  OCR seam was caught and returned before merge).
+- *The build is done; what remains are the cutover gates (below) and small follow-ups — none block
+  the merge to main.*
 - **Gates before flipping `VIDEO_PIPELINE=clip` on for a real user** (all documented in
   [handoff/ws-video-clip.md](handoff/ws-video-clip.md); the code ships `VIDEO_OCR_BACKEND=mock` +
   `keyframe` default until these clear):

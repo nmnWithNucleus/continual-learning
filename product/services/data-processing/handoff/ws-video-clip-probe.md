@@ -86,9 +86,9 @@ and does the design's one-message K-image call (D-02, `VIDEO_CLIP_MAX_FRAMES=12`
   `get_supported_mm_limits → {"image": None, "video": None}` (`models/qwen2_vl.py:868-869`; no override
   in `qwen3_vl.py`) = unlimited, so the net image ceiling with no flag = **999**.
 - N `image_url` parts → N distinct image items, count-validated on each add
-  (`entrypoints/chat_utils.py:600,616`); over-limit raises `VLLMValidationError("At most {N} image(s)
-  may be provided in one prompt.")` → mapped to **HTTP 400** in the OpenAI server. Since 999 ≥ 12, this
-  never fires for the design.
+  (`entrypoints/chat_utils.py:600,616`); over-limit raises `VLLMValidationError("At most {N}
+  image(s) may be provided in one prompt.")` → mapped to **HTTP 400** in the OpenAI server.
+- Since 999 ≥ 12, this never fires for the design.
 - Qwen3-VL is inherently multimodal, so the vision tower loads even under today's **text-only**
   `serve_vllm.sh`; media just isn't being sent yet. `--max-model-len 32768` is ample (12×360 = 4,320
   vision tokens ≪ 32,768). *⇒ the current `serve_vllm.sh`, unmodified, already admits the K=12 call.*
@@ -159,9 +159,10 @@ the backend*:
   `merge_size=2`. HF/vLLM call `smart_resize(factor=patch×merge=32)`
   (`transformers …/image_processing_qwen2_vl.py:174`, `vllm …/qwen3_vl.py:929`), overriding the legacy
   `factor=28` default. *The factor-28 (470) branch does not apply to this model.*
-- **768×480 → 360.** `smart_resize` rounds each edge to a multiple of 32: 768→768, 480→480 (already
-  exact); area 368,640 px is within `[min,max]` so it is *unchanged*. Patches `48×30 = 1,440`; merged
-  tokens `1,440 // 2² = 360`. Reproduced locally by `vlm_probe._smart_resize(768,480,32) = 360`.
+- **768×480 → 360.** `smart_resize` rounds each edge to a multiple of 32: 768→768, 480→480
+  (already exact); area 368,640 px is within `[min,max]` so it is *unchanged*.
+- Patches `48×30 = 1,440`; merged tokens `1,440 // 2² = 360`. Reproduced locally by
+  `vlm_probe._smart_resize(768,480,32) = 360`.
 - **`size` is an *area* (min/max pixels), not an edge length.**
   `size={shortest_edge:65536, longest_edge:16777216}` in `preprocessor_config.json` means
   `min_pixels 65,536 (256²)` and `max_pixels 16,777,216 (4096² = 16 Mpx)`.
@@ -276,10 +277,10 @@ probe SKIPs honestly (exit 2) and states the contract WS-C must expose and the a
   **at graph resolution** and fails loud on mismatch (D-06; WS-C exit criteria). The probe checks these
   keys are present.
 - `POST /ocr {image: data-URI, …}` → `[{text, bbox, confidence}, …]`.
-- **§7.1 assumption under test:** PP-OCRv6 det+rec CPU at *~0.6 s / 1728×1080 frame, 4 threads*. The
-  probe times it either through the running sidecar or via a *separate* interpreter passed with
-  `--python` (it imports *nothing* heavy into the DP venv — honouring the numpy-2.5.1-vs-`numpy<2.4`
-  quarantine confirmed in §12.3).
+- **§7.1 assumption under test:** PP-OCRv6 det+rec CPU at *~0.6 s / 1728×1080 frame, 4 threads*.
+- The probe times it either through the running sidecar or via a *separate* interpreter passed
+  with `--python` (it imports *nothing* heavy into the DP venv — honouring the
+  numpy-2.5.1-vs-`numpy<2.4` quarantine confirmed in §12.3).
 - This is **gated on O-2** (WS-C's own bake-off: can PP-OCRv6 read 13 pt macOS UI text at 1728 px
   through CRF 28?), so the production default stays `VIDEO_OCR_BACKEND=mock` until O-2 passes. WS-A does
   not pre-empt that call; it ships the instrument.

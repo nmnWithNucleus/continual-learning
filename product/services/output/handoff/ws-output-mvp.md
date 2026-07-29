@@ -26,17 +26,20 @@ jsonschema. Port 8082.
     `response.text()` where streaming isn't available.
   - `renderMarkdown`/`markdownToHtml`, `escapeHtml`, `RECORD_SEPARATOR`.
   - Markdown subset: headings, **bold**, *italic*, `inline code`, fenced code blocks, paragraphs,
-    ordered/unordered lists. *HTML is escaped before any markup is added* — the security
-    foundation. Inline-code spans are stashed before emphasis so markers inside code stay literal;
-    `_`/`__` require non-word boundaries so `snake_case` is not mangled.
+    ordered/unordered lists.
+  - *HTML is escaped before any markup is added* — the security foundation.
+  - Inline-code spans are stashed before emphasis so markers inside code stay literal; `_`/`__`
+    require non-word boundaries so `snake_case` is not mangled.
 - `app/static/selftest.html` — feeds a synthetic C9 stream (built in-page from a mock
   streaming `Response`) through the reader and renders it; buttons for a markdown answer, an XSS
   attempt (must be inert), an error end frame, and a **"Run assertions"** in-page test.
-- `app/main.py` — FastAPI relay. `POST /deliver` (body `{upstream_url, payload?, method?,
-  turn_id?}`) opens a streaming httpx request upstream and relays bytes verbatim via a
-  `StreamingResponse`; delivery ack in headers (`X-Delivery-Id/-Turn-Id/-Upstream/-Ack`). `GET
-  /health`, `GET /` index. Mounts the browser client at `/static/*`. `create_app(client=…)` lets
-  tests inject an httpx client.
+- `app/main.py` — FastAPI relay.
+- `POST /deliver` (body `{upstream_url, payload?, method?, turn_id?}`) opens a streaming httpx
+  request upstream and relays bytes verbatim via a `StreamingResponse`; delivery ack in headers
+  (`X-Delivery-Id/-Turn-Id/-Upstream/-Ack`).
+- `GET /health`, `GET /` index.
+- Mounts the browser client at `/static/*`. `create_app(client=…)` lets tests inject an httpx
+  client.
 - `app/relay.py` — relay core (`relay_c9`, `build_ack`, error-frame synth), client injectable
   for tests. On upstream connect error or HTTP ≥ 400 it appends a schema-valid C9 **error end
   frame** so the caller always gets a valid terminus.
@@ -56,10 +59,11 @@ jsonschema. Port 8082.
     schema-valid C9 error frame. Upstream faked with `httpx.MockTransport`.
 - **Ran for real** (honesty rule): `run.sh` → uvicorn :8082. `/health`, `/static/c9_reader.js`
   (10.8 KB), `/static/selftest.html` all 200. Relayed a live streamed C9 body from a local
-  upstream over real HTTP — body byte-exact, ack headers present, round-trips through the parser to
-  the correct answer + a schema-valid end frame. Also observed the error path against a real
-  sibling inference service on :8010 (it rejected a bare C3 with HTTP 422; relay surfaced it as a
-  schema-valid C9 error frame) and a connect-failure (same, clean error frame).
+  upstream over real HTTP — body byte-exact, ack headers present, round-trips through the parser
+  to the correct answer + a schema-valid end frame.
+- Also observed the error path against a real sibling inference service on :8010 (it rejected a
+  bare C3 with HTTP 422; relay surfaced it as a schema-valid C9 error frame) and a connect-failure
+  (same, clean error frame).
 
 ## In flight
 - Nothing — WS-C deliverables complete.

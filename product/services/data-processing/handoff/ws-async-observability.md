@@ -34,10 +34,11 @@ recording's timeout to 30).
   the M0 handler, byte-for-byte). It raises `ProcessingError(http_status, transient)` — the
   inline path maps it to the exact M0 HTTP status; the worker uses `transient` to decide
   retry-vs-dead-letter.
-- `DedupStore.claim_for_async` atomically returns `done` (→ 200 record_ids) / `inflight` (→
-  202 duplicate) / `claimed` (→ enqueue). The claim is released in a `finally` on every worker
-  exit — success (`put`), dead-letter, terminal error, or **drain-cancel**, so a claim is
-  never orphaned (an orphan would ACK every future redelivery as 202-duplicate forever).
+- `DedupStore.claim_for_async` atomically returns `done` (→ 200 record_ids) / `inflight` (→ 202
+  duplicate) / `claimed` (→ enqueue).
+- The claim is released in a `finally` on every worker exit — success (`put`), dead-letter,
+  terminal error, or **drain-cancel**, so a claim is never orphaned (an orphan would ACK every
+  future redelivery as 202-duplicate forever).
 - `IngestQueue`: a bounded `asyncio.Queue` + N workers, pinned to the running loop
   (lifespan). **Disjoint counters** `queued` vs `processing` (never `qsize+inflight`, which
   double-counts). `task_done()` runs in a `finally` so a mid-process cancel can't wedge
@@ -82,15 +83,15 @@ it. (Surfaced by the pre-implementation design review; would have shipped in the
 "zero-recording-change" plan.)
 
 **Fix — preserve `dp_acked=1 ⇔ C2 durably written`:**
-- **DP `/continuity/{stream_id}`** gains two *additive* fields (C2 stays frozen):
-  `processed` (`[lo,hi]` runs of sequences with a C2 written, set at `dedup.put` in both
-  modes) and `dead_lettered` (sequences that exhausted retries / hit a terminal error). Still
-  `note()`d at accept, so the never-arrived-gap detector is unchanged.
+- **DP `/continuity/{stream_id}`** gains two *additive* fields (C2 stays frozen): `processed`
+  (`[lo,hi]` runs of sequences with a C2 written, set at `dedup.put` in both modes) and
+  `dead_lettered` (sequences that exhausted retries / hit a terminal error).
+- Still `note()`d at accept, so the never-arrived-gap detector is unchanged.
 - **Recording ledger** (`chunks.dp_state` column, additive-migrated): a 202 accept →
   `finalize_chunk(accepted=True)` → `dp_acked=0, dp_state='accepted'`. A 200 → unchanged
-  (`dp_acked=1, dp_state='processed'`). `confirm_chunk` promotes an accepted chunk to
-  confirmed (persisted) once DP reports it processed — so a later DP restart (volatile
-  processed set) can't un-confirm it.
+  (`dp_acked=1, dp_state='processed'`).
+- `confirm_chunk` promotes an accepted chunk to confirmed (persisted) once DP reports it processed
+  — so a later DP restart (volatile processed set) can't un-confirm it.
 - **Recording gap report** reconciles: `acked` = `dp_acked=1` rows only; a chunk DP reports
   `processed` is lazily confirmed; a `dead_lettered` chunk → verdict `gaps`; an
   accepted-but-unconfirmed chunk → verdict `recording` (in-flight). `leg["dp"]` keeps its
@@ -171,37 +172,42 @@ torch-2.x compat bugs** (weights_only default; webm decode). Full detail + cavea
   worker pool, off by default, dedup/record_id keep at-least-once safe; visible-not-silent
   loss for accepted-then-lost chunks; full durability (dead-letter+backfill journal) stays M7.
   Recorded in CHARTER.md.
-- **Recording OQ3 (codec/bitrate ladder) — informed** (joint recording × DP): with real
-  pipelines + alpha data, DP states the fidelity it actually needs per modality. Recorded in
-  recording/CHARTER.md (dated). Summary: audio → 16 kHz mono is ASR/diarization/AST-native
-  (recording already demuxes to `audio/wav` 16 kHz mono s16le; no higher rate helps the
-  models); video → keyframe VLM captioning is resolution-bound not bitrate-bound
-  (`VIDEO_FRAME_MAX_WIDTH=768`), so container-copy (no re-encode) at capture quality is
-  sufficient — the cost dial is keyframe cadence, not bitrate.
+- **Recording OQ3 (codec/bitrate ladder) — informed** (joint recording × DP): with real pipelines
+  + alpha data, DP states the fidelity it actually needs per modality.
+- Recorded in recording/CHARTER.md (dated).
+- Summary: audio → 16 kHz mono is ASR/diarization/AST-native (recording already demuxes to
+  `audio/wav` 16 kHz mono s16le; no higher rate helps the models); video → keyframe VLM captioning
+  is resolution-bound not bitrate-bound (`VIDEO_FRAME_MAX_WIDTH=768`), so container-copy (no
+  re-encode) at capture quality is sufficient — the cost dial is keyframe cadence, not bitrate.
 
 ## Worklog
 - 2026-07-19 — Pre-implementation design review (workflow, 6 agents): caught the
   `dp_acked`-at-accept silent-loss flaw → the recording seam change + `/continuity`
-  processed/dead_lettered fields. Built DP async (`ingest_core`/`ingest_queue`/`dedup` claim/
-  `continuity` processed-dead_lettered/`main` freeze+lifespan+reply-shape) + D9 metrics both
-  services + dashboards. Recording seam (ledger `dp_state`+migration+confirm_chunk, emitter
-  branch, report reconciliation). Node-7 smoke green (+2 pyannote fixes). Pre-fix suites: DP
-  97 / recording 115 / storage 26 green.
-- 2026-07-19 — **Adversarial review round** (workflow, 6 finders → per-finding skeptic verify
-  → synthesis; 18 agents, 9 confirmed / 0 uncertain). *5 fix-before-merge, all fixed +
-  regression-tested:* (1) pyannote cold-load raced the process-global `torch.load` swap +
-  `_PIPELINE_CACHE` populate under the worker pool → a `threading.Lock` now serializes the
-  whole load; (2) an unexpected error out of `processor.process` (model cold-load 503 / CUDA
-  OOM / ffmpeg) was dead-lettered terminal, diverging from inline's retry-via-recording → now
-  *transient* (retry-then-dead-letter), matching inline resilience; (3) a `/metrics` scrape
-  re-ran the ledger snapshot 7× → memoized per-scrape (one DB pass); (4) the `dp_state`
-  migration didn't backfill → pre-slice `dp_acked=1` rows now backfill to `'processed'`;
-  (5) blob-fetch retry classification storming permanent 4xx → retry only 5xx/408/429. Plus
-  the 3 requested coverage tests (migration+backfill, broken-source scrape isolation,
-  inline-confirm no-op) + a transient-processor-retry test. *1 deferred (finding #6, fails
-  Safe — caveat above).* Suites after fixes: *DP 98 / recording 118 / storage 26* green.
+  processed/dead_lettered fields.
+- Built DP async (`ingest_core`/`ingest_queue`/`dedup` claim/ `continuity`
+  processed-dead_lettered/`main` freeze+lifespan+reply-shape) + D9 metrics both services +
+  dashboards.
+- Recording seam (ledger `dp_state`+migration+confirm_chunk, emitter branch, report
+  reconciliation).
+- Node-7 smoke green (+2 pyannote fixes).
+- Pre-fix suites: DP 97 / recording 115 / storage 26 green.
+- 2026-07-19 — **Adversarial review round** (workflow, 6 finders → per-finding skeptic verify →
+  synthesis; 18 agents, 9 confirmed / 0 uncertain).
+- *5 fix-before-merge, all fixed + regression-tested:* (1) pyannote cold-load raced the
+  process-global `torch.load` swap + `_PIPELINE_CACHE` populate under the worker pool → a
+  `threading.Lock` now serializes the whole load; (2) an unexpected error out of
+  `processor.process` (model cold-load 503 / CUDA OOM / ffmpeg) was dead-lettered terminal,
+  diverging from inline's retry-via-recording → now *transient* (retry-then-dead-letter), matching
+  inline resilience; (3) a `/metrics` scrape re-ran the ledger snapshot 7× → memoized per-scrape
+  (one DB pass); (4) the `dp_state` migration didn't backfill → pre-slice `dp_acked=1` rows now
+  backfill to `'processed'`; (5) blob-fetch retry classification storming permanent 4xx → retry
+  only 5xx/408/429. Plus the 3 requested coverage tests (migration+backfill, broken-source scrape
+  isolation, inline-confirm no-op) + a transient-processor-retry test.
+- *1 deferred (finding #6, fails Safe — caveat above).* Suites after fixes: *DP 98 / recording 118
+  / storage 26* green.
 - 2026-07-19 — **Founders ratified the reply shape (D16)**, same wire, and the deep session's
-  design memo cleared + strengthened their bar. Satisfied the one ratification condition
-  in-slice: the *re-drive path* for accepted-unconfirmed chunks (`POST /…/redrive` +
-  `emitter.redrive_accepted_chunks`, idempotent via DP's done-claim short-circuit) + 2 drill
-  tests. Recording *120* green.
+  design memo cleared + strengthened their bar.
+- Satisfied the one ratification condition in-slice: the *re-drive path* for accepted-unconfirmed
+  chunks (`POST /…/redrive` + `emitter.redrive_accepted_chunks`, idempotent via DP's done-claim
+  short-circuit) + 2 drill tests.
+- Recording *120* green.
