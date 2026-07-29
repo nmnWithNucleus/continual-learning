@@ -2,7 +2,7 @@
 
 **Status:** ready to build — reproduction baseline landed (Phase 1 ✅), architecture + decisions
 locked (cofounders, 2026-07-23) · **Owner:** a dedicated implementation session, works on the
-cluster node (data + H100 + envs are there) · **Supersedes:** the retired `ws-engram-port.md`.
+cluster node (data + H100 + envs are there) · *Supersedes:* the retired `ws-engram-port.md`.
 
 > **Morpheus** = our nightly-consolidation core. It is *our* service; we do not use the
 > upstream experiment's nomenclature. Methods/recipe derived from the nucleus-research
@@ -35,13 +35,13 @@ everything recipe-coupled-training lives in Morpheus.
 | # | Decision |
 |---|---|
 | Recipe | **v1.0: 48× amplification + 15% deny-then-correct (`neg_frac=0.15`) in amplification + LoRA r128/α256 CPT 3ep + 30% replay.** This is the Phase-2 target. |
-| Calibration | **Do NOT over-calibrate.** The 40% `replay_neg_boost` arm (h12_calib) *lobotomizes* (recall→0.021, denies to pass traps). Long-horizon trap erosion is an open problem handled at the **gate** (traps ≥0.40 blocks publish + triggers a refresher night). `replay_neg_boost` stays a ≤10% tunable, **default 0 / off**. |
-| Replay source | **raw is a tie** with amplified → replay re-fetches **prior day-logs** (raw). The amplified reservoir is audit/provenance, not on the replay hot path. |
+| Calibration | **Do NOT over-calibrate.** The 40% `replay_neg_boost` arm (h12_calib) *lobotomizes* (recall→0.021, denies to pass traps). Long-horizon trap erosion is an open problem handled at the *gate* (traps ≥0.40 blocks publish + triggers a refresher night). `replay_neg_boost` stays a ≤10% tunable, *default 0 / off*. |
+| Replay source | **raw is a tie** with amplified → replay re-fetches *prior day-logs* (raw). The amplified reservoir is audit/provenance, not on the replay hot path. |
 | Base model | **32B** (BWM=D6; adapter must match the served base). Recipe is base-agnostic; 32B chain is proven recipe-identical. 32B==8B is a *tie* (write-bound) — we pay 32B compute for serve-quality, not memory-quality. |
-| Ownership | **Storage owns** day-log materialization + recipe registry + reservoir + model directory. **Continuum owns** amplify + finetune + gate + publish. |
+| Ownership | **Storage owns** day-log materialization + recipe registry + reservoir + model directory. *Continuum owns* amplify + finetune + gate + publish. |
 | Code | Clean, lean, ours — **parity harness is the contract**, not code fidelity. |
 | Naming | **Morpheus**, versioned. No "engram" in our surface. |
-| Speed-specificity | Isolated behind a single **`Profile`** seam (§6). |
+| Speed-specificity | Isolated behind a single `Profile` seam (§6). |
 | Exec model | Production-close: pinned env / container, absolute interpreter (never `conda activate`), device + `gpu_memory_utilization` configurable. |
 
 ## 2. Reproduction baseline + golden references (all on the cluster node)
@@ -55,7 +55,7 @@ Phase 1 verdict: **reproduced** — our `repro_replay_f30` seen-mean 0.286 == hi
 - **Prebuilt inputs:** `~/engram/data/corpus/day{D}.blocks.jsonl` (30 days), `~/engram/data/narrative/day{D}_x48neg.corpus.txt` (29 days) — the amplifier output to diff against.
 - **Root data:** `~/speed_lora/data/descriptions/{1,5,10,20}min/` (5min=9063), `~/speed_lora/data/holdout_manifest.csv`.
 - **Reference code:** `~/nmn/cl-research/research/engram/code/` @ `b3c58e1` — read to understand behavior, do not import.
-- **Envs:** conda `speedlora` (train/serve), `vllm23` (judge/litellm/Vertex). **H100 80GB** on the node (8× shared — GPU 0 is busiest, make it configurable). Judge: Gemini-2.5-flash via litellm on Vertex `poetic-avenue-438401-a7` (team access; export `VERTEX_PROJECT`).
+- **Envs:** conda `speedlora` (train/serve), `vllm23` (judge/litellm/Vertex). *H100 80GB* on the node (8× shared — GPU 0 is busiest, make it configurable). Judge: Gemini-2.5-flash via litellm on Vertex `poetic-avenue-438401-a7` (team access; export `VERTEX_PROJECT`).
 - **Day set:** train 5,9,12,13,17,21; heldout control 6,16,28.
 
 ## 3. Port manifest — behavior → home → parity test
@@ -81,7 +81,7 @@ Reimplement each **behavior** cleanly; prove it with the listed test. Discard al
 
 - **Deterministic** (assert exact): `render_block` text, `chunk_corpus` boundaries, LoRA target set + `adapter_config`, `sample_replay` selection at a fixed seed, `trap_score`/`TRAP_MARKERS`.
 - **Stochastic** (assert distributional): amplify → neg-frac 0.150 ± tol, ok-rate ~1.0, corpus ratio 1.0 ± 0.05; judge → recall distribution on a fixed pred set.
-- **End-to-end** (assert in-band, **seed ensemble, not a single run** — his spread is ~0.075 wide): full cycle on days 5/9/12/13/17/21 → seen-mean ~0.28, separation inside +0.178…+0.269, micro 0.152–0.183, heldout ≤0.05, day-5 retention high.
+- **End-to-end** (assert in-band, *seed ensemble, not a single run* — his spread is ~0.075 wide): full cycle on days 5/9/12/13/17/21 → seen-mean ~0.28, separation inside +0.178…+0.269, micro 0.152–0.183, heldout ≤0.05, day-5 retention high.
 
 A kernel is "ported" only when its parity test is green. No green, no merge.
 
@@ -110,7 +110,7 @@ A kernel is "ported" only when its parity test is green. No green, no merge.
     device — relative index 0 within the job, not an absolute node index. `MORPHEUS_DEVICE` must
     not override a SLURM allocation, or the job writes to the wrong card.
   - **(b)** SLURM hides GPUs without `--gpus-per-node=N`, even on the exclusive partition.
-  - **(c)** `sbatch --export=NAME=a,b` **splits on commas** and silently truncates a list to its
+  - **(c)** `sbatch --export=NAME=a,b` *splits on commas* and silently truncates a list to its
     first element. This cost the research chain a 12-day run that became 1-day; pass dot-separated
     or `--export=ALL`.
   - **(d)** Never deploy over an sbatch file a running job is executing from NFS.
@@ -143,7 +143,7 @@ Phases 2a–2c; do not build the lifestream profile yet, just keep the seam clea
   - Write-ups: [phase-2a-report.md](phase-2a-report.md),
     [overnight-diagnosis-report.md](overnight-diagnosis-report.md).
   - **Seed 0 — closed (2026-07-24): a measurement artifact, not a defect.** At matched depth
-    (reference n=8, ours n=10) the ensembles are indistinguishable, permutation **p=0.82**.
+    (reference n=8, ours n=10) the ensembles are indistinguishable, permutation *p=0.82*.
   - The reference's own low tail holds a 0.042 chain, lower than any of our ten.
   - The "2× variance" was the reference under-sampled at n=4. No action. Kept in §10 for the two
     falsified hypotheses, so nobody re-derives them.
@@ -153,7 +153,7 @@ Phases 2a–2c; do not build the lifestream profile yet, just keep the seam clea
   - "Separation" in §2 is **seen-mean − final heldout** (0.2694 / 0.1778 / 0.2028 across the three
     seeds), which is what reproduces the quoted +0.178…+0.269 spread.
 - **2b — full nightly cycle + M0. ✅ done (2026-07-24).** A 32B life adapter trained by our own
-  pipeline — sharded 2-GPU, 4203 steps, loss 1.718→0.263, 1.97 h — went gate v1.1 → C5 publish →
+  pipeline — sharded 2-GPU, 4203 steps, loss 1.718→0.263, 1.97 h, went gate v1.1 → C5 publish →
   loaded in vLLM and answered, recall 0.267.
   - M0 is met on the production base model. **The bar was M0 mechanics plus in-band sanity, not
     strict parity**, because no 32B golden exists at this probe set to diff against. It cleared.
@@ -199,21 +199,21 @@ against a measured distribution. Adopt [gate-threshold-proposal.md](gate-thresho
 
 | check | was | now | why |
 |---|---|---|---|
-| traps | ≥0.40 | **≥0.15 interim; ≥0.25 once the suite reaches ~150 probes** | 0.40 blocks **71% of the reference recipe's own nights**. Decisive: reference night-to-night sd (0.090) **equals binomial noise at n=28 (0.090) to three decimals — the metric currently measures nothing but sampling.** 0.15 gives 0.9% false-block, 98.8% collapse detection |
+| traps | ≥0.40 | **≥0.15 interim; ≥0.25 once the suite reaches ~150 probes** | 0.40 blocks **71% of the reference recipe's own nights**. Decisive: reference night-to-night sd (0.090) *equals binomial noise at n=28 (0.090) to three decimals — the metric currently measures nothing but sampling.* 0.15 gives 0.9% false-block, 98.8% collapse detection |
 | heldout | ≤0.05 on 60 probes | **all 222 probes + one-sided exact test vs each run's OWN base control (α=0.01 → blocks above 5/222), 0.15 absolute backstop** | No systematic leak exists (base 0/60 on all seven runs; seed 0 also 0/60). But n=60 has 12% power against 2% contamination while sitting two probes from a false block. The suite already holds 222 probes and the harness was using 60 |
 | min_probes | ≥150 | **148** (or grow the suites) | The harness supplies exactly 148 (60+60+28) — the floor was **unpassable by construction** |
 
 **Shipped 2026-07-24** as `app/policy.py` + `policies/gate-policy-v1.1.json`, split from the
 training recipe (`recipe_id` unchanged, so no training cache was invalidated). Re-scored: the
-reference now passes **4/4** (was 71% of its nights blocked); the **lobotomy control is blocked**.
+reference now passes **4/4** (was 71% of its nights blocked); the *lobotomy control is blocked*.
 
 Two follow-ups the re-scoring surfaced:
 - **The lobotomy passes the traps check at 0.393** — it *denies its way* to a mid-reference
-  calibration score — and is caught **only by the recall floor**. Design principle to keep:
-  **calibration checks cannot be the primary safety net; a lobotomized model scores well on them.**
+  calibration score, and is caught *only by the recall floor*. Design principle to keep:
+  *calibration checks cannot be the primary safety net; a lobotomized model scores well on them.*
   Never let the gate degrade to traps-only.
-- **The heldout policy is not yet fully exercised:** it specifies all **222** probes, but the
-  re-scoring ran on **60** (seed 2's p=0.029 pass is a 60-probe result). Generating predictions for
+- **The heldout policy is not yet fully exercised:** it specifies all *222* probes, but the
+  re-scoring ran on *60* (seed 2's p=0.029 pass is a 60-probe result). Generating predictions for
   the full 222-probe heldout suite is outstanding before the policy is truly in force.
 - Honest limit: at n=28 traps, **0.15 is the smallest floor with any teeth**, and it still blocks
   one of 24 reference nights (its own minimum, 4/28 = 0.143). The floor gets meaningful only when
@@ -223,7 +223,7 @@ Two follow-ups the re-scoring surfaced:
 `recipes/consolidation-v1.0.json`, and `cycle.py` hashes `recipe_id` into the **amplify and train**
 stage keys. So editing a *publish-policy* threshold forks `recipe_id` → invalidates the amplify and
 train caches → re-runs hours of GPU work, and falsely implies the trained artifact changed.
-**Split them:** the training recipe (parity-critical, frozen) and the **gate policy** (tunable,
+*Split them:* the training recipe (parity-critical, frozen) and the *gate policy* (tunable,
 separately versioned) become two artifacts, both storage-hosted per the lean architecture. Only the
 training recipe may enter a stage key. Ratifying these thresholds must not fork `recipe_id`.
 
@@ -243,16 +243,16 @@ re-derives them:**
 1. *"Seed 0's draws under-sampled day 5."* **Impossible — the rehearsal draw is not seed-dependent
    at all.** The rehearsal RNG is a separate `Random` instance on a constant seed (the reference
    hardcodes `random.Random(7)`, `phase_d_driver.py:313`); `transformers.set_seed()` touches the
-   *global* `random` and cannot reach an independent instance. `--seed` fixes **LoRA init only**.
-   Verified empirically: all three of our chains trained on **byte-identical rehearsal text**, and
+   *global* `random` and cannot reach an independent instance. `--seed` fixes *LoRA init only*.
+   Verified empirically: all three of our chains trained on *byte-identical rehearsal text*, and
    seeds 1/2 saw exactly what seed 0 saw and landed in-band. Draw variance is excluded.
 2. *"Per-night draw noise (sd 0.074) ÷ √6 ≈ 0.030 ≈ the reference's chain sd 0.033, so their
    spread is explained by draw noise."* **A coincidence, comparing different variance sources.**
    The draw sweep varied the *rehearsal seed*; real chains hold it fixed at 7. So 0.074 measures
-   rehearsal-draw sensitivity, which real chains do not exercise. We have **no calibrated model**
+   rehearsal-draw sensitivity, which real chains do not exercise. We have *no calibrated model*
    for how much chain variance LoRA-init + GPU non-determinism should produce.
 
-**What that leaves:** the only differences between chains — ours or the reference's — are **LoRA-A
+**What that leaves:** the only differences between chains — ours or the reference's, are **LoRA-A
 initialization and non-deterministic GPU reductions**. So either the recipe has an init-sensitive
 failure mode, or seed 0 is a tail draw. Only more chains settle it (ref n→8, ours n→10, in flight).
 
@@ -274,7 +274,7 @@ That plausibly links to the trap-erosion-at-horizon seen at 12 nights. Validated
 nights (fine) and 12 (erosion); nobody has measured 30+.
 **Candidates if long-horizon retention degrades:** the reference's abandoned `--replay-floor`
 (per-day dose floor), spaced-repetition scheduling (decaying but non-zero per-day dose), or
-periodic re-consolidation. **Take to Gnandeep as a finding** — it is upstream research, not a port
+periodic re-consolidation. *Take to Gnandeep as a finding* — it is upstream research, not a port
 gap, and v1.0 stays the parity target regardless.
 
 ## 9. Divergence log (record every deliberate departure from `b3c58e1` behavior)

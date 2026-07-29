@@ -17,19 +17,19 @@
 > Full posture + what changes at dev/prod: [ARCHITECTURE.md](../../ARCHITECTURE.md) §Stage.
 
 
-**Status:** chartered · **ratified as a service 2026-07-09 (D1)** · **Last updated:** 2026-07-09
+**Status:** chartered · **ratified as a service 2026-07-09 (D1)** · *Last updated:* 2026-07-09
 
 ## Why this service exists (ratified 2026-07-09, D1)
 
 This service was **not in the original high-level design** — it was proposed as an addition and
 **ratified by the CTO** (Decisions log D1). The original rationale, kept for the record:
 Rationale: an always-on life-recording product makes privacy/compliance and shared infra
-**load-bearing from day one**, not a later hardening pass. Every sibling needs the GCP project,
+*load-bearing from day one*, not a later hardening pass. Every sibling needs the GCP project,
 GPU allocation, CI/CD, secrets, observability, and a security envelope; today nobody owns them.
 The alternative is folding each concern into a sibling (deletion orchestration into storage; the
-consent-record store into **recording**, the named fallback owner if this service folds) —
+consent-record store into *recording*, the named fallback owner if this service folds) —
 workable, but the concerns are inherently cross-service (a deletion must reach raw blobs,
-processed records, session traces, **and trained adapters**). The alternative was declined; the
+processed records, session traces, *and trained adapters*). The alternative was declined; the
 concerns live here. Recording remains the named fallback owner of the consent-record store if
 this service is ever unwound.
 
@@ -53,8 +53,8 @@ providing paved roads, not gates.
 | Secrets management (mentor API keys, HF token, service accounts) | Schemas, DB/GCS layout for /context and /sessions (**Storage** — platform sets encryption/retention standards) |
 | **Observability backbone**: run the shared Prometheus + Grafana, scrape every service, and provision their dashboards ([↓](#observability-backbone)) | QueryBuilder, chat surfaces (**Input**) |
 | Encryption standards in transit + at rest; network boundary; least-privilege access | Serving, agentic harness, mentor calls (**Inference**) |
-| Consent policy + consent-record store (per user / device / modality) + consent gate primitive | Response delivery (**Output**); on-device consent enforcement — pause/mute/delete-last-N, capture indicators (**Recording**, its M2) |
-| Per-user deletion: cross-store orchestration + proof-of-deletion, calling storage/continuum delete primitives (split pinned in ARCHITECTURE §Ownership splits) | Fine-tuning pipeline, adapter training (**Continuum**); model directory internals + per-store delete primitives incl. /raw and adapter artifacts (**Storage** — continuum publishes via C5) |
+| Consent policy + consent-record store (per user / device / modality) + consent gate primitive | Response delivery (**Output**); on-device consent enforcement — pause/mute/delete-last-N, capture indicators (*Recording*, its M2) |
+| Per-user deletion: cross-store orchestration + proof-of-deletion, calling storage/continuum delete primitives (split pinned in ARCHITECTURE §Ownership splits) | Fine-tuning pipeline, adapter training (**Continuum**); model directory internals + per-store delete primitives incl. /raw and adapter artifacts (*Storage* — continuum publishes via C5) |
 | Per-user cost tracking (ingest, storage, GPU-hours, mentor API spend) | Each service's application code and runbooks (**each service**) |
 
 ## Position in the system
@@ -192,8 +192,8 @@ without manual steps.
 ## Team shape
 
 v0 = **one lead session + on-demand workstream agents** (house model). As load grows, expected
-sub-teams: **infra/SRE** (cluster, environments, CI/CD), **security & privacy engineering**
-(consent, deletion, encryption, audit), **compliance/policy** (with outside counsel), **FinOps**
+sub-teams: **infra/SRE** (cluster, environments, CI/CD), *security & privacy engineering*
+(consent, deletion, encryption, audit), *compliance/policy* (with outside counsel), *FinOps*
 (cost + capacity). Org conventions in [../../ORG.md](../../ORG.md).
 
 ## Related work

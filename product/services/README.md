@@ -12,7 +12,7 @@ input :8081  ──C3──►  inference :8010  ──C6 resolve / C4 write─�
       relayed to the browser     vendored into the input surface) + a standalone /deliver relay
 ```
 
-Default backend is **`mock`** (canned streamed answer, **no GPU** — runs on any box).
+Default backend is `mock` (canned streamed answer, **no GPU** — runs on any box).
 Contracts: [`../contracts/*.json`](../contracts) (C3, C6, C9, C4). Status +
 integration notes: [`../handoff/engineering.md`](../handoff/engineering.md).
 

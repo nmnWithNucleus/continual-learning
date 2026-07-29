@@ -2,11 +2,11 @@
 
 **Status:** done (this session, 2026-07-22) · **Branch:** `svc/continuum-scaffold`
 
-The M0 skeleton: the full nightly consolidation cycle runs end-to-end on a synthetic
-day with `TRAINER_BACKEND=mock` — no GPU, no storage service, no research code —
-exercising every orchestration path the real backend will plug into. **46 tests green**
-after an adversarial review round (31-agent find→verify workflow): 26 confirmed findings,
-all fixed same-session — headline fixes: the gate/publish tail is now terminal-guarded
+The M0 skeleton: the full nightly consolidation cycle runs end-to-end on a synthetic day
+with `TRAINER_BACKEND=mock` — no GPU, no storage service, no research code, exercising
+every orchestration path the real backend will plug into. **46 tests green** after an
+adversarial review round (31-agent find→verify workflow): 26 confirmed findings, all
+fixed same-session — headline fixes: the gate/publish tail is now terminal-guarded
 (re-runs replay the recorded outcome with zero side effects — no double strikes, no
 duplicate C5 rows, no alias regression), strike/freeze accounting is window-monotonic,
 replay-mix stage keys hash reservoir content, rollback is re-entrant stack-replay down to
@@ -51,7 +51,7 @@ Run everything: `./run.sh` (venv bootstrap → pytest → one synthetic night).
   next night's corpus is ws-morpheus-port scope (debt is already tracked).
 - **First night has no replay** (empty reservoir) — matches the research recipe; the
   sequential-collapse risk begins night 2, which is exactly when replay kicks in.
-- **`skipped_no_data`** (empty window) is not a strike — the charter M4 min-data rule's
+- `skipped_no_data` (empty window) is not a strike — the charter M4 min-data rule's
   trivial case; a char-floor threshold is deferred to M4 proper.
 
 ## Known gaps (deliberate, tracked)

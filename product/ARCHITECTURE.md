@@ -122,7 +122,7 @@ Additive optional fields need no ceremony. A **breaking** change bumps the versi
 **not** use the word *frozen* while the stage is PROTOTYPE ([D19](DECISIONS.md)): it promises an
 immutability the stage explicitly withholds, and an agent who believes it will circle a contract
 looking for a workaround instead of proposing the two-line edit that fixes the problem. The real
-signal is the **schema link** on a card's status line — it means code validates against that shape,
+signal is the *schema link* on a card's status line — it means code validates against that shape,
 so breaking it fails CI. The word comes back at production stage.
 
 ### Vocabulary
@@ -133,7 +133,7 @@ Terms this repo coined. Nobody arrives knowing them.
 |---|---|
 | **envelope** | The metadata describing a captured chunk: who, which device and stream, when, and where the bytes live. |
 | **chunk** | A few seconds of captured stream. The unit of dedup, via `chunk_id`. |
-| **`/context`** | The durable store of processed records — what was said, seen and read, timestamped. |
+| `/context` | The durable store of processed records — what was said, seen and read, timestamped. |
 | **record** | One processed unit in `/context`: a transcript, a caption, an OCR pass. |
 | **dialect** | *Which processing produced this text.* The trainer must see only one dialect per unit. |
 | **discriminator** | What tells a chunk's several records apart — an `ocr` beside a `caption`. `""` when there is only one. |
@@ -197,12 +197,12 @@ Envelope leg  recording ──push──▶ data-processing
   wire.
 - **Blob first.** The bytes are durable in `/raw` before the envelope is emitted, so `blob_ref`
   cannot dangle at emit. Consumers still tolerate a since-deleted blob — `/raw` deletion is a feature.
-- Delivery is **push, at-least-once.** Consumers are idempotent on **`chunk_id`**, a client-minted
+- Delivery is **push, at-least-once.** Consumers are idempotent on `chunk_id`, a client-minted
   ULID that is stable across retries.
 - `sequence` is **dense, zero-based, +1 per chunk** inside a globally-unique `stream_id`. Any break —
-  including a non-zero first-seen value — is a lost chunk. This is the "zero silent loss" mechanism.
+  including a non-zero first-seen value, is a lost chunk. This is the "zero silent loss" mechanism.
 - `t_start`/`t_end` are the canonical **instant**, RFC3339 UTC.
-- The capturing device reports **`device_tz`** (IANA zone id) and **`device_utc_offset_minutes`**,
+- The capturing device reports `device_tz` (IANA zone id) and `device_utc_offset_minutes`,
   both optional-additive. A client that omits them degrades to the user's profile `home_tz` (C12).
 - Only storage resolves a `blob_ref`. Data-processing pulls the bytes by ref.
 
@@ -248,7 +248,7 @@ Envelope leg  recording ──push──▶ data-processing
 > · schema [c2_processed_record.v0.json](contracts/c2_processed_record.v0.json)
 
 **In one line.** Data-processing writes down what a chunk actually contained — the words spoken, the
-scene described, the text on screen — with the timestamps that let separate devices be lined up
+scene described, the text on screen, with the timestamps that let separate devices be lined up
 against each other.
 
 **Shape**
@@ -276,7 +276,7 @@ against each other.
 - `enrichments` is **present-but-empty** in v0, so diarization and world data never reshape the
   record when they land.
 - `source.device_tz`, `source.device_utc_offset_minutes` and `source.device_location` are carried
-  **verbatim** from the C1 envelope. Data-processing performs **no timezone logic whatsoever** — it
+  **verbatim** from the C1 envelope. Data-processing performs *no timezone logic whatsoever* — it
   does not derive, validate, normalize or infer a zone.
 - `t_start`/`t_end` stay UTC-canonical and are the sole ordering and range-query axis. The zone is
   context stored *beside* the instant, never instead of it.
@@ -320,7 +320,7 @@ against each other.
     while the schema had mandated the discriminator since v0.
   - **Changed** — corrected the summary.
   - **Now** — schema and prose agree.
-  - **Payoff** — explicitly **not** a contract change. The authoritative artifact was right all
+  - **Payoff** — explicitly *not* a contract change. The authoritative artifact was right all
     along and only its summary lagged, which is a shape of defect [ORG.md](ORG.md) names because it
     recurs.
 - **2026-07-09 — D10: minted with the learn-loop skeleton.** ASR only — transcript plus segment
@@ -367,7 +367,7 @@ exchanged with the mentors.
 **Rules**
 
 - **Never truncate the traces.** They are continuum's training data.
-- Trace arrays are empty in v0 — no harness and no mentors yet — but present, so the shape does not
+- Trace arrays are empty in v0 — no harness and no mentors yet, but present, so the shape does not
   change when they arrive.
 
 ### C5 — the adapter publish
@@ -394,7 +394,7 @@ per-user `entries.jsonl`.
 - **`gate_failed` is the audit row for a candidate the gate blocked** — appended for lineage, never
   eligible to serve, with `adapter_dir` and `base_model_hash` NULL (`publish.py:101-114`).
 - C6 eligibility **replays the log** — `active` pushes, `rolled_back` pops, `gate_failed` does
-  neither — rather than taking the latest row.
+  neither, rather than taking the latest row.
 
 **Watch out for**
 
@@ -489,8 +489,8 @@ carrying `{error:"..."}`.
 > · [c10_training_window.v1.json](contracts/c10_training_window.v1.json)
 
 **In one line.** Continuum asks storage *"what should I train on tonight?"* and storage answers with
-a window plus the day-log rendered over it. Continuum issues a warrant — `(user_id, window_id)` —
-and takes what comes back; it never builds the day-log itself.
+a window plus the day-log rendered over it. Continuum issues a warrant — `(user_id, window_id)`, and
+takes what comes back; it never builds the day-log itself.
 
 **Shape** — four operations, plus the range read they did *not* replace.
 
@@ -522,10 +522,10 @@ Day-log body:
 
 **Rules**
 
-- The window is `[last_trained_t, now−δ)` on storage's **`ingest_time`** axis — not event time, not
+- The window is `[last_trained_t, now−δ)` on storage's `ingest_time` axis — not event time, not
   a local date. `δ` defaults to 60 s and covers in-flight writes racing the boundary.
 - `last_trained_t` advances **only when a cycle publishes.** Every other outcome — `gate_failed`,
-  `frozen`, `crashed`, `skipped_no_data` — leaves it where it is, so the next window is a strict
+  `frozen`, `crashed`, `skipped_no_data`, leaves it where it is, so the next window is a strict
   superset (`services/continuum/app/cycle.py:53`).
 - Storage opens windows; continuum never computes one. `POST /training/windows` returns the
   already-open window, so a retry re-opens the same `window_id` and the cycle's crash-safe journal
@@ -556,7 +556,7 @@ Day-log body:
   gate-failed night is absorbed into the next window rather than lost.
 - **Advancing only on a publish makes the failed-day merge structural.** Each failed night's window
   is a strict superset of the last — the design-of-record's failed-day merge obtained by
-  construction rather than by `_UserState.debt` bookkeeping — and it is what would make a min-data
+  construction rather than by `_UserState.debt` bookkeeping, and it is what would make a min-data
   floor nearly free to add, since a thin night simply would not advance.
 - **It also keeps the watermark's name true**, which is what makes it auditable: `last_trained_t` is
   the high-water mark of what has actually been trained into this user's adapter.
@@ -579,7 +579,7 @@ Day-log body:
 **Watch out for**
 
 - **An inactive user's open window grows unboundedly** and is re-scanned nightly. Correct — there is
-  nothing to train — and cheap at v0 scale, but a real cost taken on purpose.
+  nothing to train, and cheap at v0 scale, but a real cost taken on purpose.
 - **Do not tidy away the fixed width or the zero padding.** They are the entire basis of "string
   order == chronological order", relied on at four sites:
   - `publish.py:83` — `active_before`, the resume-from lineage.
@@ -609,7 +609,7 @@ Day-log body:
   *continuum's* `recipe_id` into C5, so the adapter would be audited as trained under a recipe it
   was not trained under.
 - **A `pipeline_version` bump is a forward-only correction.** New records get new `ingest_time`s
-  and land in the next window, so the day-log renders the new dialect. The old dialect is **not**
+  and land in the next window, so the day-log renders the new dialect. The old dialect is *not*
   un-trained, which on an append-only weight chain is irreducible.
 - Accepted cost: the same lived moment can be trained twice, in two dialects.
 - Suppressing already-rendered chunks would stop the double exposure and would also stop the
@@ -621,13 +621,13 @@ Day-log body:
   window and so strikes once, and `active_before` still resumes from the last `active` entry because
   a `gate_failed` row never enters the activation stack.
 - **`w-day5` is a mess, not a precedent.** The literal was written by a pre-D18 continuum smoke
-  script, **retired 2026-07-28**. It breaks the total order twice over: `w-day10` < `w-day5`, and
+  script, *retired 2026-07-28*. It breaks the total order twice over: `w-day10` < `w-day5`, and
   every `w-day*` sorts below every real id.
 - Two on-disk C5 entries still carry it. The validator rejects the shape
   (`services/storage/tests/test_window_id.py`), so it cannot recur, which is exactly why the single
   minter plus validator exist.
 - **A fifth outcome is designed but does not exist.** D19's min-data floor (`min_block_chars`)
-  would add a *too-little-data* outcome that also leaves the watermark. It is **not built** —
+  would add a *too-little-data* outcome that also leaves the watermark. It is *not built* —
   `cycle.py:53` defines four outcomes and `min_block_chars` appears nowhere in the repo. Tracked as
   [HANDOFF.md](HANDOFF.md) §Next item 5; do not read the rule above as covering it.
 - **The `/sessions` leg of this contract (C4 mentor traces) is unchanged and remains unbuilt.** v0's
@@ -638,10 +638,10 @@ Day-log body:
 - **2026-07-27 — F4: both renderers moved to the global epoch grid.**
   - **Was** — continuum bucketed segments relative to the window start, and storage's M9
     differential proof hid the disagreement behind a fixture whose event-window origin happened to
-    be *aligned* to the segment grid — the one origin at which the two rules agree, and one no real
+    be *aligned* to the segment grid, the one origin at which the two rules agree, and one no real
     window has.
   - **Changed** — both renderers moved to `floor(t_start / segment_seconds)`, and the proof now runs
-    its whole origin-dependent bar over an aligned **and** a misaligned origin.
+    its whole origin-dependent bar over an aligned *and* a misaligned origin.
   - **Now** — a segment's bucket is stable across re-materialization, and no window origin appears
     in the calculation.
   - **Payoff** — measured before the fix, shifting that fixture's origin by 1–9 s broke M9 tier A
@@ -668,13 +668,13 @@ Day-log body:
   - **Payoff** — one rule replaces five cases, and the four places that stated it collapse to one.
 - **2026-07-27 — built and cut over.**
   - **Was** — continuum built the day-log in-process from the raw range read and recomputed the
-    window from `now` on every attempt — which on a retry would have minted a fresh id, a fresh
+    window from `now` on every attempt, which on a retry would have minted a fresh id, a fresh
     journal, and therefore a full re-train, a second C5 entry and a second reservoir admission.
   - **Changed** — materialization, the window ledger and the sole `window_id` minter moved to
     storage; continuum consumes over `HttpDayLogClient`. `Window.local_date` and
     `ReservoirEntry.local_window_date()` were deleted, along with the code that rebuilt prior windows
     by re-deriving their bounds under *tonight's* timezone.
-  - **Now** — prior windows are **enumerated and fetched**, never reconstructed, which is what makes
+  - **Now** — prior windows are *enumerated and fetched*, never reconstructed, which is what makes
     the enumeration read load-bearing rather than a convenience.
   - **Payoff** — the day-log storage renders is proven byte-identical to continuum's over two
     window origins including a misaligned one (D20's bar). Costs accepted: filesystem paths,
@@ -734,9 +734,9 @@ GET /users/{user_id}/profile
 
 **Rules**
 
-- v0 carries exactly one policy field: **`home_tz`** (IANA, required).
+- v0 carries exactly one policy field: `home_tz` (IANA, required).
 - `home_tz` has two jobs and no others — **scheduling** the nightly cycle, and serving as the
-  **fallback** when a record carries no `device_tz`.
+  *fallback* when a record carries no `device_tz`.
 - **404 when no profile exists.** There is no server-side default timezone anywhere.
 - A user with no `home_tz` is **not schedulable.** That is an operational alert, never a silent skip.
 - **Storage never writes `home_tz` on its own.** The user declares it. A client may *suggest* the
@@ -758,9 +758,9 @@ GET /users/{user_id}/profile
 
 - The **write** surface is storage-owned and prose-pinned (D11's `/raw` precedent) until input ships
   a settings consumer.
-- The expected second field — a per-user `boundary_local_time` override — is deliberately **not
-  minted until it has a consumer** (the E-5 precedent). Today it is a *global* recipe knob, which
-  cannot express a night-shift worker. It cannot ride C13 either: `recipe_id` is global and versioned
+- The expected second field — a per-user `boundary_local_time` override, is deliberately **not minted
+  until it has a consumer** (the E-5 precedent). Today it is a *global* recipe knob, which cannot
+  express a night-shift worker. It cannot ride C13 either: `recipe_id` is global and versioned
   (`recipe_id` == filename stem), so a per-user value there would fork `recipe_id` per user.
 
 **How it got here**
@@ -796,7 +796,7 @@ GET /policies/{policy_id}  → the eval-gate policy (separate artifact, separate
 
 **Rules**
 
-- `recipe_id` **==** the filename stem. Recipes are **global and versioned** — a recipe is never
+- `recipe_id` **==** the filename stem. Recipes are *global and versioned* — a recipe is never
   per-user.
 - The **gate policy is a separate artifact with its own id** (ratified with gate v1.1, 2026-07-24).
 - Only the *training recipe* may enter a cycle stage key. `policy_id` never does.
@@ -857,7 +857,7 @@ read    GET /reservoir/{user_id} → the ledger
 Where a responsibility naturally touches several services, the split is decided **here**, once — and
 the charters cross-reference it rather than restating it. Each split gets a card below the index,
 following the same template as the contracts ([STYLE.md](STYLE.md)), with **The split** in place of
-**Shape**.
+*Shape*.
 
 | Concern | The split, in one line | Card |
 |---|---|---|
@@ -905,7 +905,7 @@ following the same template as the contracts ([STYLE.md](STYLE.md)), with **The 
 **The split**
 
 - **Input** owns it as an interaction chat surface.
-- **Output** uses it as the **speech-output sink**.
+- **Output** uses it as the *speech-output sink*.
 
 **Watch out for**
 
@@ -944,8 +944,8 @@ following the same template as the contracts ([STYLE.md](STYLE.md)), with **The 
 **Rules**
 
 - M0 proxies the bytes through storage's `PUT /raw/blobs`.
-- The production lean is that storage mints a **signed GCS URL** and recording uploads **directly to
-  GCS** — the bytes bypass storage's process, and `blob_ref` then points at that object.
+- The production lean is that storage mints a **signed GCS URL** and recording uploads *directly to
+  GCS* — the bytes bypass storage's process, and `blob_ref` then points at that object.
 - Uploads run async. The C1 push fires on upload-complete.
 
 ### Deletion (right-to-be-forgotten)
@@ -977,8 +977,8 @@ happened.
 
 **The split**
 
-- **Platform** owns consent policy, the consent-record store, and the gate: **no consent record ⇒ no
-  ingest.**
+- **Platform** owns consent policy, the consent-record store, and the gate: *no consent record ⇒ no
+  ingest.*
 - **Recording** owns on-device enforcement — pause, mute, delete-last-N, and the capture indicators.
 - Bystander-consent policy is **decided by platform, enforced by recording.**
 
@@ -1019,7 +1019,7 @@ was trained against.
 
 **Watch out for**
 
-- Voice-to-person linking — known versus unknown *speakers* — rides the same registry. Whether that
+- Voice-to-person linking — known versus unknown *speakers*, rides the same registry. Whether that
   is v0 or deferred is data-processing's call, recorded in its charter.
 
 ### Same-day context
@@ -1043,15 +1043,15 @@ different owners — and conflating them was the original bug.
 
 **The split**
 
-- **The fact — where the user actually was at a moment** — is owned by the **capturing device**.
+- **The fact — where the user actually was at a moment**, is owned by the *capturing device*.
   Reported per chunk as `device_tz` + `device_utc_offset_minutes` on C1, carried verbatim by
   data-processing into C2 `source{}`, and persisted by storage beside the UTC instant.
-- **The policy — when is this user's night** — is owned by **storage**, as the per-user profile value
+- **The policy — when is this user's night**, is owned by *storage*, as the per-user profile value
   `home_tz` ([C12](#c12--the-user-profile-read)).
 
 **Rules**
 
-- `home_tz` has exactly two jobs: **scheduling** the nightly consolidation, and **fallback** when a
+- `home_tz` has exactly two jobs: **scheduling** the nightly consolidation, and *fallback* when a
   record carries no `device_tz`. It is not the pipeline's time semantics.
 - **Timestamps stay UTC-canonical everywhere.** UTC is the sole ordering and range-query axis —
   `GET /context/records?from=&to=` needs no zone at all. The zone is context stored *beside* the
@@ -1065,7 +1065,7 @@ different owners — and conflating them was the original bug.
 
 - **The device is the only thing that can know the fact, and it already does** — every capture client
   computes the local instant and discards the zone converting to UTC. Keeping it costs nothing at the
-  edge, and the result is **correct under travel** by construction.
+  edge, and the result is *correct under travel* by construction.
 - Why `home_tz` is *declared rather than inferred*, and what that buys, is stated once on
   [C12's card](#c12--the-user-profile-read).
 
@@ -1080,7 +1080,7 @@ contract neither service may move alone.
 
 - **Storage's, to change freely:** `seg_id` labelling, ordering labels, the `content_fingerprint`
   algorithm, table schema, endpoint shapes, caching, and *when* materialization happens.
-- **Not storage's, and the distinction is the point:** the block **`text`** and its **`anchors`**.
+- **Not storage's, and the distinction is the point:** the block `text` and its `anchors`.
 
 **Rules**
 
@@ -1093,14 +1093,14 @@ contract neither service may move alone.
 
 - **That string *is* the training corpus.** It is what the amplifier reads and what replay pools
   (`blocks_text` joins `b.text`), so reshaping the anchor line or the Scene/Heard/World labels
-  changes what the model learns — and makes every number measured to date incomparable, **silently
-  and with no error.**
+  changes what the model learns — and makes every number measured to date incomparable, *silently
+  and with no error.*
 - It is exactly why the C10 body carries `daylog_format_version` and `recipe_id` at all: so such a
   change is *announced*, never shipped as an implementation detail.
 
 **Watch out for**
 
-- Continuum issues a warrant — `(user_id, window_id)` — and takes what comes back. It has no say in
+- Continuum issues a warrant — `(user_id, window_id)`, and takes what comes back. It has no say in
   how the artifact is built, and should not grow one.
 
 ### Day-log and training-window custody
@@ -1113,19 +1113,19 @@ materializes, continuum consumes.
 **The split**
 
 - **Storage owns** the scheduled materialization (C2 records → ~10 s segment rows → gap-bounded scene
-  blocks → anchored block text), the **retained** day-logs, the per-user training-window ledger and
+  blocks → anchored block text), the *retained* day-logs, the per-user training-window ledger and
   its `ingest_time` watermark, and the sole `window_id` minter.
 - **Continuum owns** the amplifier's renderer — `Profile.render_block`
   (`services/continuum/app/morpheus/profiles/`), which is recipe-coupled and is the surface locked
-  byte-identical against the research line — plus trainer-seam file materialization
+  byte-identical against the research line, plus trainer-seam file materialization
   (`segments.jsonl` / `blocks.jsonl` / `day.txt`, `app/renderer.py`).
 
 **Rules**
 
 - **There are two renderers and only one of them moved.** `daylog.py:183 _render_block` — the product
-  labeled-lines renderer over C2 records — went to storage and never had a research golden.
+  labeled-lines renderer over C2 records, went to storage and never had a research golden.
   `Profile.render_block` (`morpheus/profiles/speed.py:89`, the 1427/1427 parity surface over 5-minute
-  description dicts) **stays**.
+  description dicts) *stays*.
 - **Materialization depends on the profile contract.** The renderer needs both `device_tz` (per
   record) and `home_tz` (per user, C12).
 - **Deletion must cascade to the day-log.** It is a second copy of user content, so storage's M5
@@ -1164,15 +1164,15 @@ health — so instrumenting is every service's job, and running the backbone is 
 
 - Baseline, every service emits **request rate, request-latency histogram, and error rate.**
   Non-HTTP work emits equivalent counters.
-- Service-specific additions: **inference → GPU** (via dcgm-exporter) · **storage → DB and query**
-  · **data-processing → pipeline throughput and queue depth** · **recording → ingest rate and
-  capture health** · **continuum → training-job and eval-gate**.
+- Service-specific additions: **inference → GPU** (via dcgm-exporter) · *storage → DB and query*
+  · *data-processing → pipeline throughput and queue depth* · *recording → ingest rate and
+  capture health* · *continuum → training-job and eval-gate*.
 - Build split: service agents instrument; platform builds the backbone.
 
 **Why it's this way**
 
 - **This is a convention, not a contract.** It is a design pattern rather than an inter-service
-  payload, so it is deliberately **not** a C-series number — it is pinned here, with the ports in
+  payload, so it is deliberately *not* a C-series number — it is pinned here, with the ports in
   [STACK.md](STACK.md).
 
 **Watch out for**
@@ -1181,7 +1181,7 @@ health — so instrumenting is every service's job, and running the backbone is 
   shares one box. The metrics that mean something *now* are app latency, error rate, and GPU. We wire
   the plumbing anyway, so the graphs light up for free when services spread across nodes. *(CTO scope
   note.)*
-- The first two services to ship `/metrics` — data-processing and recording, 2026-07-19 — use a
+- The first two services to ship `/metrics` — data-processing and recording, 2026-07-19, use a
   **zero-dependency in-house emitter** (`app/metrics.py`, a pure-ASGI middleware that touches no
   bodies) rather than pull `prometheus-fastapi-instrumentator` into the pinned requirements, so the
   headless CI suite stays dependency-free. Other services may use a library if they prefer.

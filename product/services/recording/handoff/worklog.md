@@ -30,13 +30,13 @@ detail survives; the board now carries open items only.*
 - ~~Alpha test~~ **alpha complete 2026-07-19** — the CTO drove all three surfaces per
   [handoff/alpha-runbook.md](alpha-runbook.md), each landing verdict `clean` on real
   hardware with blobs sha256-verified + ffprobe-decoded in storage and real ASR transcripts in
-  `/context`: **phone** (iPhone Safari, mic+camera, 4/4), **extension** (Comet, tab video+audio,
-  7/7 — the run that drove the D-E7 pivot), **mac CLI** (real avfoundation screen+mic, 7/7).
+  `/context`: *phone* (iPhone Safari, mic+camera, 4/4), *extension* (Comet, tab video+audio,
+  7/7 — the run that drove the D-E7 pivot), *mac CLI* (real avfoundation screen+mic, 7/7).
   Results in the runbook §Worklog + each ws file. The fleet was purged + restarted fresh before
   the pass so results read from zero; it remains UP on node-7.
 
 - **THE capture surfaces ARE done (v0 alpha bar).** ~~Founders' sequenced next: metrics
-  emission (D9)~~ **done 2026-07-19 (WS-AO, M6):** `/metrics` (Prometheus text, zero new deps)
+  emission (D9)~~ *done 2026-07-19 (WS-AO, M6):* `/metrics` (Prometheus text, zero new deps)
   + `dashboards/recording.json` — segments received/emitted/failed, chunks per modality + DP
   state, sessions, client-leg missing/dup, received→emitted latency, downstream retry counts.
   Emission side only (platform scrapes/provisions). Same slice landed the async-ingest seam

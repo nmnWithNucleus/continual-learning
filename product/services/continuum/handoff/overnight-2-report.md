@@ -1,8 +1,8 @@
 # Overnight run 2 — composition, gate recalibration, 32B M0, ensemble depth
 
 **Window:** 2026-07-24, unattended · **Branch:** `svc/continuum-morpheus-2a` · all GPU work via
-SLURM (jobs 733 wave-a, 734 wave-d) · **Nothing applied to the live gate or merged without
-sign-off.**
+SLURM (jobs 733 wave-a, 734 wave-d) · *Nothing applied to the live gate or merged without
+sign-off.*
 
 ---
 
@@ -25,7 +25,7 @@ Per-source-day dose (identical across every chain, ours and reference):
 | s4_d17 | 989 | 1015 | 958 | 1034 | — | 25% |
 | s5_d21 | 565 | 567 | 513 | 561 | 646 | 20% |
 
-Uniform pooling gives no per-day floor — day-5's absolute dose falls 6× across the chain — which
+Uniform pooling gives no per-day floor — day-5's absolute dose falls 6× across the chain, which
 is the concern behind the abandoned `--replay-floor`, now quantified. But the reference dilutes
 identically and retains day 5 fine, so this is not seed 0's cause either.
 
@@ -49,7 +49,7 @@ Re-scoring every run (`scripts/gate_rescore.py`, offline):
 | **Control h12_calib** | **0.021** | **0.393** | 1/60 | **Block** |
 
 The control is load-bearing and instructive: the 40%-neg-boost lobotomy **passes the traps check
-at 0.393** — it denies its way to a clean calibration score — and is caught only by the recall
+at 0.393** — it denies its way to a clean calibration score, and is caught only by the recall
 floor. A calibration-only gate ships it. The previous 0.40 traps floor blocked 71% of the
 reference recipe's own nights; the ratified 0.15 blocks exactly one of 24 reference nights (its
 own minimum, 4/28), which is the least a floor with any teeth can do at n=28.
@@ -104,7 +104,7 @@ Exact permutation test on seen-mean: **p = 0.82** — emphatically the same dist
 settles it: the reference's own low tail, unmeasured at n=4, contains a **0.042 chain — lower
 than any of our ten.** The "2× variance" reported after run 1 was an artifact of the reference
 being sampled at n=4 where its four seeds happened to be middling. At matched depth the
-reference's spread is **wider** than ours (0.072 vs 0.066), its mean is **below** ours (0.209 vs
+reference's spread is *wider* than ours (0.072 vs 0.066), its mean is *below* ours (0.209 vs
 0.217), and the two ensembles are statistically indistinguishable. This is exactly what lane B
 (the 4 extra reference chains) was for, and it is the cleanest outcome available: our low chains
 are not a defect, they are the same tail the reference has.

@@ -31,7 +31,7 @@ inside a computer or a phone, and two structural problems remain.
 
 **1 — Context length is a bound, not a solution.** 128k became 1M and will become 10M; it is
 still a ceiling. Everything built on top — condensation, summarize-and-restart, thread
-juggling — is coping machinery. The user's knowledge never truly accumulates; it gets lossily
+juggling, is coping machinery. The user's knowledge never truly accumulates; it gets lossily
 compressed and hopefully survives the next session.
 
 **2 — Personalization doesn't exist yet.** Frontier models are static between releases and

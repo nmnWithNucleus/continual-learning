@@ -2,8 +2,8 @@
 
 Infra glue that runs the **capture skeleton** on one box: a continuous audio
 source is carved into chunks, each blob lands in storage `/raw`, a **C1** envelope
-is pushed to data-processing, which runs **ASR** and writes a **C2** record to
-storage `/context`. This directory is **infra only** — no app logic. The product
+is pushed to data-processing, which runs *ASR* and writes a *C2* record to
+storage `/context`. This directory is *infra only* — no app logic. The product
 lives in the three sibling services; `run_learn.sh` just starts them in order,
 tracks them, and can trigger one capture run.
 
@@ -21,7 +21,7 @@ recording:
 storage (8083)  ──►  data-processing (8085, ASR_BACKEND=mock)  ──►  recording (8084)
 ```
 
-Default ASR backend is **`mock`** (canned transcript + fake segments spanning the
+Default ASR backend is `mock` (canned transcript + fake segments spanning the
 chunk, **no GPU, no torch** — runs on any box). Contracts:
 [`../../../contracts/c1_raw_stream_envelope.v0.json`](../../../contracts/c1_raw_stream_envelope.v0.json)
 (C1) and [`../../../contracts/c2_processed_record.v0.json`](../../../contracts/c2_processed_record.v0.json)
@@ -130,8 +130,8 @@ built-in defaults, so the script also runs with no `learn.env` at all.
 
 `run_learn.sh` owns the venv and the installs; each sibling `run.sh` must:
 
-- read **`HOST`** and **`PORT`** from the environment and bind uvicorn to them;
-- expose **`GET /health`** returning HTTP 200 when ready to serve
+- read `HOST` and `PORT` from the environment and bind uvicorn to them;
+- expose `GET /health` returning HTTP 200 when ready to serve
   (data-processing's body advertises `{ok:true, asr_backend:...}`);
 - use the **active venv** already on `PATH` (do not create a private venv);
 - **data-processing** additionally reads `ASR_BACKEND`, `STORAGE_URL`;

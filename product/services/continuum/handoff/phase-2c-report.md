@@ -1,7 +1,7 @@
 # Phase 2c — lean architecture + storage client seams
 
 **Branch:** `svc/continuum-morpheus-2c` off main · **Status:** the three seams landed, cycle runs
-the 5-verb loop against them, parity byte-identical · **Cofounder review before merge.**
+the 5-verb loop against them, parity byte-identical · *Cofounder review before merge.*
 
 A self-contained continuum refactor: no other service, no GPU, no new experiments. Continuum now
 consumes storage across three client interfaces, each with a local backend today and an
@@ -36,14 +36,14 @@ Proven byte-identical, three ways:
 - `test_rendered_daylog_files_are_byte_identical` — `segments.jsonl` / `blocks.jsonl` / `day.txt`
   compare equal byte-for-byte.
 - **The render_block parity suite still passes byte-identical** (tier B, pinned train env): the
-  full `tests/parity/` run is **83 passed, 1 skipped** — `render_block` 1427/1427, the chain
+  full `tests/parity/` run is *83 passed, 1 skipped* — `render_block` 1427/1427, the chain
   fingerprint, and amplify parity all green. The migration touched no kernel.
 
 ## The 5-verb loop
 
 `run_cycle(win, *, daylog_client, registry, recipe, policy, force)` now reads as the lean loop:
-**fetch recipe** (registry) · **fetch day-log** (client) · **amplify** · **finetune** (backend) ·
-**gate** (policy) · **publish** (C5). Recipe and gate policy are fetched **by id** from the
+**fetch recipe** (registry) · **fetch day-log** (client) · *amplify* · *finetune* (backend) ·
+*gate* (policy) · *publish* (C5). Recipe and gate policy are fetched *by id* from the
 registry, not by file path — the id is what a night records, and only `recipe_id` enters a stage
 key (`policy_id` never does, preserving the 2b structural split).
 
@@ -58,7 +58,7 @@ amplified store is audit/provenance). Recipe v1.0 pins `source="amp"` because th
 were produced that way and parity diffs against them — that path is **unchanged and byte-identical**
 (the pooled sampler was factored out, same inputs, same output). `source="rawlog"` is now wired
 through the day-log client (it resolved the standing `NotImplementedError` in the replay stage), so
-flipping a future recipe to raw is a **recipe change, not a code change**. Both are tested end to
+flipping a future recipe to raw is a *recipe change, not a code change*. Both are tested end to
 end through the cycle.
 
 ## Tests

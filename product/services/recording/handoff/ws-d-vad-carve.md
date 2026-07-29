@@ -15,7 +15,7 @@ Chunking is decided **per client/source**, by who owns a continuous feed:
 
 | Source | Chunker | Why |
 |---|---|---|
-| Continuous audio the server owns (M0 WAV source today; bodycam device link later) | **Server carve, VAD-cut variable length**: cut at detected speech pauses, chunk duration within **[5 s, 30 s]**; hard-cut at 30 s when no pause offers | Semantic cuts avoid mid-word/mid-utterance splits (better ASR per chunk, no overlap needed); exact `t_end[n] == t_start[n+1]` adjacency holds → a second continuity signal on top of dense `sequence` |
+| Continuous audio the server owns (M0 WAV source today; bodycam device link later) | **Server carve, VAD-cut variable length**: cut at detected speech pauses, chunk duration within *[5 s, 30 s]*; hard-cut at 30 s when no pause offers | Semantic cuts avoid mid-word/mid-utterance splits (better ASR per chunk, no overlap needed); exact `t_end[n] == t_start[n+1]` adjacency holds → a second continuity signal on top of dense `sequence` |
 | Phone web client (WS-B) | **Edge chunking, fixed ~10 s segments** (recorder restart) | MediaRecorder fragments aren't self-contained; self-contained segments are the durable upload/offline-queue unit; VAD in client JS = complexity + battery for little gain; restart gaps would corrupt a server-side re-carve's time spine |
 | Video / screen streams | **Fixed windows** | Founders' note: fine as-is; VAD is meaningless for video |
 

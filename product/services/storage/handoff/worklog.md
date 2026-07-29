@@ -14,7 +14,7 @@
 *The canvas was rewritten to describe today. Its prior text is kept here verbatim so no wire
 detail is lost; where it disagrees with the board, **the board is right** — this is history.*
 
-**Status:** serve-loop MVP (v0.0) built + tested + **integrated E2E** (integrator ran the live loop 2026-07-09: C4 written by inference, re-read by `turn_id` + `session_id`; C6 resolved base). **Learn-loop capture M0: `/raw` blob leg (C1) + `/context` store (C2) built + tested (26 pass) + integrated E2E + independently verified 2026-07-09** (blob-first + push loop live; idempotency proven on both legs); unchanged through the 2026-07-10 DP modality-seam pass; **32 tests** post-D17 · **Last updated:** 2026-07-26 (**D18** — scope expansion + C10 evolution ratified, all **decided, not built**; see § ratified below)
+**Status:** serve-loop MVP (v0.0) built + tested + **integrated E2E** (integrator ran the live loop 2026-07-09: C4 written by inference, re-read by `turn_id` + `session_id`; C6 resolved base). *Learn-loop capture M0: `/raw` blob leg (C1) + `/context` store (C2) built + tested (26 pass) + integrated E2E + independently verified 2026-07-09* (blob-first + push loop live; idempotency proven on both legs); unchanged through the 2026-07-10 DP modality-seam pass; *32 tests* post-D17 · *Last updated:* 2026-07-26 (*D18* — scope expansion + C10 evolution ratified, all *decided, not built*; see § ratified below)
 ### Current state
 - **Built (v0.0 serve-loop):** FastAPI + SQLite storage service on `:8083`. Endpoints:
   - `POST /sessions/turns` — validates a **C4** turn record against
@@ -24,18 +24,18 @@ detail is lost; where it disagrees with the board, **the board is right** — th
   - `GET /sessions/{session_id}/turns` — the session's C4 turns, ordered by `created_at`.
   - `GET /model-directory/resolve?user_id=…` — **C6** body (seeded base entry, `adapter_path:null`).
   - `GET /health` → `{ok:true}`.
-- **Built (capture M0 — learn-loop) — the exact wire the integrator + recording + data-processing bind to:**
+- **Built (capture M0 — learn-loop), the exact wire the integrator + recording + data-processing bind to:**
   - `PUT /raw/blobs?user_id=&device_id=&chunk_id=&codec=&sha256=&bytes=` — body = raw bytes
     (`application/octet-stream`). Verifies the body's SHA-256 == `sha256` (and `len` == `bytes`
-    if sent) → **422** on mismatch; mints an **opaque** `blob_ref`; stores the bytes under the
-    dev blob dir. **Idempotent on `chunk_id`** (re-PUT → same `blob_ref`, no dup blob/row).
+    if sent) → **422** on mismatch; mints an *opaque* `blob_ref`; stores the bytes under the
+    dev blob dir. *Idempotent on `chunk_id`* (re-PUT → same `blob_ref`, no dup blob/row).
     → `200 {blob_ref, bytes, sha256}`. `blob_ref` is storage-owned, may contain `/`.
   - `GET /raw/blobs?ref=<blob_ref>` — `ref` is a **query param** (not a path segment, since it
-    may contain `/`) → `200` raw bytes (`application/octet-stream`); **404** if the ref is
-    unknown **or the blob was since-deleted** (consumers must tolerate the latter).
+    may contain `/`) → `200` raw bytes (`application/octet-stream`); *404* if the ref is
+    unknown *or the blob was since-deleted* (consumers must tolerate the latter).
   - `POST /context/records` — body = **C2** JSON. Validates against
     `../../contracts/c2_processed_record.v0.json` (same authoritative-gate style as the C4 write) →
-    **422** on violation; **idempotent upsert on `record_id`**; stores the full C2 verbatim,
+    *422* on violation; *idempotent upsert on `record_id`*; stores the full C2 verbatim,
     time-indexed on `(user_id, t_start)`; assigns its own `ingest_time` (audit axis, NOT in C2,
     preserved across reprocess). → `200 {ok:true, record_id}`.
   - `GET /context/records/{record_id}` — the stored C2 (404 if absent). `record_id` is URL-safe.
@@ -45,29 +45,29 @@ detail is lost; where it disagrees with the board, **the board is right** — th
     mandatory `user_id` filter.
 - **Storage:** SQLite dev file DB (`STORAGE_DB_PATH`, default `app/dev.db`) + local dev blob dir
   (`STORAGE_RAW_DIR`, default `app/raw_store/`, gitignored). Tables: `turns`, `model_directory`,
-  **`raw_blobs`** (PK `chunk_id`, index on `blob_ref`; bytes on disk at the ref's hex-sharded
-  path), **`context_records`** (PK `record_id`, index `(user_id, t_start)`, full C2 as JSON).
+  `raw_blobs` (PK `chunk_id`, index on `blob_ref`; bytes on disk at the ref's hex-sharded
+  path), `context_records` (PK `record_id`, index `(user_id, t_start)`, full C2 as JSON).
   Fresh connection per op (dev volume). GCS is the prod target for the bytes; metadata stays here.
-- **Tested (isolated `.venv`, FastAPI TestClient, in-process — no real port bound):** **26 pytest
-  pass** — the original **10** (serve-loop, unregressed) + **16** new: `/raw` PUT→GET round-trip +
+- **Tested (isolated `.venv`, FastAPI TestClient, in-process — no real port bound):** *26 pytest
+  pass*, the original *10* (serve-loop, unregressed) + *16* new: `/raw` PUT→GET round-trip +
   sha256 verify + idempotent-on-`chunk_id` (same ref, no dup) + distinct-chunk refs + sha/bytes
   mismatch → 422 + unknown-ref 404 + since-deleted 404; `/context` round-trip + schema-validate +
   idempotent upsert on `record_id` + time-range ordering/bounds + per-user isolation + invalid-C2
-  → 422. Also **live-smoke-run** against real uvicorn (blob-first PUT, idempotent re-PUT, GET-by-ref
+  → 422. Also *live-smoke-run* against real uvicorn (blob-first PUT, idempotent re-PUT, GET-by-ref
   byte round-trip with `/` in ref, C2 POST/GET/time-range) — all green; server torn down.
 
 ### Scope boundary (v0.0)
 - **Built so far: `/sessions` + model directory.** `/raw` (C1 blob leg) + `/context` (C2) are the
-  **now-active capture slice** (C1/C2 frozen 2026-07-09 — see Next). The training-window read (C10)
-  and the recency/semantic index (C11) remain **later slices** — deliberately absent. Model
+  *now-active capture slice* (C1/C2 frozen 2026-07-09 — see Next). The training-window read (C10)
+  and the recency/semantic index (C11) remain *later slices* — deliberately absent. Model
   directory is trivial (everyone → base, no adapter) until continuum ships C5 registration.
 
 ### Next
-- **✅ done (this session): capture slice (learn-loop MVP) storage M0.** C1 + C2 were **frozen**
+- **✅ done (this session): capture slice (learn-loop MVP) storage M0.** C1 + C2 were *frozen*
   (2026-07-09, D10/D11 — `../../contracts/c1_raw_stream_envelope.v0.json`,
   `c2_processed_record.v0.json`); storage M0 built the shared write targets (see Current state for
   the exact wire). One deviation from the earlier sketch below, pinned by the integrator's frozen
-  wire spec: **`GET /raw/blobs?ref=<blob_ref>` takes the ref as a query param, not a path segment**
+  wire spec: *`GET /raw/blobs?ref=<blob_ref>` takes the ref as a query param, not a path segment*
   (`GET /raw/blobs/{blob_ref}`) — because a `blob_ref` may contain `/`. recording + data-processing
   must call the query-param form. Remaining fan-out: recording M0 (mic → `/raw` PUT → C1 emit) +
   data-processing M0 (C1 → ASR → C2 → `/context`) target these endpoints; integrator wires + runs
@@ -91,26 +91,25 @@ become false where it sat. Kept verbatim for the build order and the reasoning b
 > §Contracts *C10 evolved* · [CHARTER.md](../CHARTER.md) §Scope + §Open questions 6–9 + M5/M8/M9.
 
 **Build order is forced by dependencies, not preference:**
-1. **C12 profile** (`../../contracts/c12_user_profile.v0.json` — the one schema minted at
-   ratification). It lands **first**, because day-log materialization inherits D17's timezone
-   resolution and therefore *reads the profile*. 404 on absence; tzdata resolution on write (a
-   regex cannot be the authority on IANA ids — it only excludes abbreviations); and `home_tz` is **declared, not
-   inferred** — the user sets it, storage never writes it unprompted, so it does not chase a
-   travelling user's device (D19, correcting D18's first draft).
+1. **C12 profile** (`../../contracts/c12_user_profile.v0.json` — the one schema minted at ratification). It
+   lands *first*, because day-log materialization inherits D17's timezone resolution and therefore *reads the
+   profile*. 404 on absence; tzdata resolution on write (a regex cannot be the authority on IANA ids — it only
+   excludes abbreviations); and `home_tz` is *declared, not inferred*, the user sets it, storage never writes
+   it unprompted, so it does not chase a travelling user's device (D19, correcting D18's first draft).
 2. **Resolve the blocking discriminator question** (CHARTER OQ7) — the one-dialect rule groups by
    `(chunk_id, content.kind, discriminator)`, and the discriminator is today folded into the
    `record_id` hash with no independent field. Additive-optional C2 field, or prove
-   `(chunk_id, kind, t_start)` unique per dialect. **Do not start the materializer first.**
+   `(chunk_id, kind, t_start)` unique per dialect. *Do not start the materializer first.*
 3. **Window ledger + the `window_id` minter** — `w<YYYYMMDD>T<HHMMSS>Z` from the window's end
-   instant, **one minter + one validator**, bounds immutable once opened, `POST /training/windows`
+   instant, *one minter + one validator*, bounds immutable once opened, `POST /training/windows`
    idempotent get-or-create.
 4. **Day-log materialization.** Lift `../continuum/app/daylog.py` (`build_daylog` +
-   `_render_block`) — **not** `Profile.render_block`, which is recipe-coupled and stays in
+   `_render_block`) — *not* `Profile.render_block`, which is recipe-coupled and stays in
    continuum. Two changes ride along: membership by `ingest_time`, and segment buckets on a
-   **global epoch grid** instead of window-relative (continuum's `_bucket_index` as it stood at
-   D18; **F4 has since moved continuum's own reference renderer onto the global grid too**, so the
-   two now differ only on membership). **Exit bar is the M9 differential diff, and continuum's
-   local path is not deleted until it is green.**
+   *global epoch grid* instead of window-relative (continuum's `_bucket_index` as it stood at
+   D18; *F4 has since moved continuum's own reference renderer onto the global grid too*, so the
+   two now differ only on membership). *Exit bar is the M9 differential diff, and continuum's
+   local path is not deleted until it is green.*
 5. **C13 registry + C14 reservoir**, then continuum's cutover.
 
 **Cutover act — Wipe, DO NOT migrate (D19).** Everything captured so far is experiment output, not
@@ -119,17 +118,17 @@ defend, no seed discontinuity to reconcile, and the two `w-day5` C5 rows disappe
 needing a rule. **Scope corrected 2026-07-27 after measuring it — the original wording would have destroyed
 research evidence for zero benefit.** The wipe was specified as "continuum's `var_dir`
 (`journal/`, `cycles/`, `adapters/`, `reservoir/`, `model_directory/`) plus the fleet DBs". Measured
-on the box: **none of those five directories exists anywhere** — there is no old-format cycle state
-to clear, so the continuum half is a **no-op**. What `continuum/var/` actually holds is **66 GB of
-research output** (`diag` 49 G, `phase3` 14 G, `parity` 4 G, `slurm` 217 M) — the evidence behind the
-Phase-1/2/3 parity proofs. **Do not delete it.** The wipe is therefore only the three fleet SQLite
+on the box: *none of those five directories exists anywhere* — there is no old-format cycle state
+to clear, so the continuum half is a *no-op*. What `continuum/var/` actually holds is *66 GB of
+research output* (`diag` 49 G, `phase3` 14 G, `parity` 4 G, `slurm` 217 M) — the evidence behind the
+Phase-1/2/3 parity proofs. *Do not delete it.* The wipe is therefore only the three fleet SQLite
 DBs: storage `dev.db` (128 `context_records`, 71 `raw_blobs`), recording `ledger.db` (68 chunks,
-40 segments, 19 streams, 12 sessions), DP `dp.db`. Note this is **cleanliness, not correctness** —
+40 segments, 19 streams, 12 sessions), DP `dp.db`. Note this is *cleanliness, not correctness* —
 storage's migrations are additive, so the old records survive the new code fine; the reason to clear
 them is that they predate `device_tz`/`home_tz` and would sit in a fresh store as permanently
-zone-less rows. **Back up first anyway** — D17's precedent used SQLite's
+zone-less rows. *Back up first anyway* — D17's precedent used SQLite's
 online-backup API into `/home/ubuntu/nmn/backups/`, which costs seconds and has already paid for
-itself once. **Consequence to expect, not to debug:** the first post-wipe run needs `home_tz` set
+itself once. *Consequence to expect, not to debug:* the first post-wipe run needs `home_tz` set
 explicitly for the user (D19 removed auto-seed — `home_tz` is declared, not inferred), and until it
 is set that user does not consolidate. That is visible by design, not a fault.
 
@@ -141,19 +140,19 @@ every deletion's cascade.
 settled that storage owns the learn-loop **data jobs** (continuum stays a lean training engine) —
 details in [CHARTER.md](../CHARTER.md) § Scope note + [../continuum/handoff/ws-morpheus-port.md](../../continuum/handoff/ws-morpheus-port.md):
 - **Day-log materialization** — a scheduled job renders a user-day's `/context` (C2) into the
-  segment/block **day-log** (incl. `render_block` anchored text). This is where **C10 evolves**:
-  from a raw record range read to a **day-log fetch**. The day-log format is recipe-versioned.
-  (continuum has a working reference builder — `daylog.py`/`window.py`/`renderer.py` in the scaffold —
-  to lift from; render_block must stay byte-parity with the research @ `b3c58e1`.)
+  segment/block *day-log* (incl. `render_block` anchored text). This is where *C10 evolves*: from a
+  raw record range read to a *day-log fetch*. The day-log format is recipe-versioned. (continuum has a
+  working reference builder — `daylog.py`/`window.py`/`renderer.py` in the scaffold, to lift from;
+  render_block must stay byte-parity with the research @ `b3c58e1`.)
 - **Recipe registry** — versioned recipe/config hosting; fetch API for continuum + inference.
 - **Reservoir custody** — amplified-corpus store (continuum writes via API); replay re-reads prior
   day-logs, so this is audit/provenance, not the replay hot path.
-- ~~**C10 watermark semantics** (charter OQ, still open)~~ **ratified (D18):** the window watermarks
-  on **`ingest_time`**, not event time — which dissolves late data rather than handling it;
-  `last_trained_t` advances **iff** `published`/`skipped_no_data`, making the failed-day merge
-  structural; reprocessed records resolve **latest `ingest_time` wins** per
-  `(chunk_id, content.kind, discriminator)`. Contract IDs minted: **C12** profile · **C13** recipe
-  registry · **C14** reservoir; **C10 evolves in place**.
+- ~~**C10 watermark semantics** (charter OQ, still open)~~ *ratified (D18):* the window watermarks
+  on `ingest_time`, not event time — which dissolves late data rather than handling it;
+  `last_trained_t` advances *iff* `published`/`skipped_no_data`, making the failed-day merge
+  structural; reprocessed records resolve *latest `ingest_time` wins* per
+  `(chunk_id, content.kind, discriminator)`. Contract IDs minted: *C12* profile · *C13* recipe
+  registry · *C14* reservoir; *C10 evolves in place*.
 
 **Sharpened by continuum's 2c build (2026-07-24) — concrete requirements the seam surfaced:**
 - **Day-log fetch must serve ANY prior window on demand, by `(user_id, window_id)`** — not just the
@@ -170,11 +169,11 @@ details in [CHARTER.md](../CHARTER.md) § Scope note + [../continuum/handoff/ws-
 
 *Relocated 2026-07-27 from the canvas `§Next`, where it had sat as a struck-through done item.*
 
-- **✅ done (this session): capture slice (learn-loop MVP) storage M0.** C1 + C2 were **frozen**
+- **✅ done (this session): capture slice (learn-loop MVP) storage M0.** C1 + C2 were *frozen*
   (2026-07-09, D10/D11 — `../../contracts/c1_raw_stream_envelope.v0.json`,
   `c2_processed_record.v0.json`); storage M0 built the shared write targets (see Current state for
   the exact wire). One deviation from the earlier sketch below, pinned by the integrator's frozen
-  wire spec: **`GET /raw/blobs?ref=<blob_ref>` takes the ref as a query param, not a path segment**
+  wire spec: *`GET /raw/blobs?ref=<blob_ref>` takes the ref as a query param, not a path segment*
   (`GET /raw/blobs/{blob_ref}`) — because a `blob_ref` may contain `/`. recording + data-processing
   must call the query-param form. Remaining fan-out: recording M0 (mic → `/raw` PUT → C1 emit) +
   data-processing M0 (C1 → ASR → C2 → `/context`) target these endpoints; integrator wires + runs

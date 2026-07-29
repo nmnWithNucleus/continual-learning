@@ -22,13 +22,12 @@
 ## Mission
 
 Serve the personalized per-user model — the base BWM with the user's all-layer LoRA
-hot-swapped in vLLM — behind an agentic harness (tools, code sandbox, think/act/observe),
-and run the mentor protocol so answer quality is frontier-grade while the personal model
-matures: decide when to consult Claude/GPT/Gemini, build the assistance prompt, relay
-mentor clarification questions through our model to the user and back, integrate the
-handoff into one grounded response, and log every turn with full mentor thinking/plan/output
-traces — those traces are the training data that eventually graduates the model out of
-mentorship.
+hot-swapped in vLLM, behind an agentic harness (tools, code sandbox, think/act/observe), and
+run the mentor protocol so answer quality is frontier-grade while the personal model
+matures: decide when to consult Claude/GPT/Gemini, build the assistance prompt, relay mentor
+clarification questions through our model to the user and back, integrate the handoff into
+one grounded response, and log every turn with full mentor thinking/plan/output traces —
+those traces are the training data that eventually graduates the model out of mentorship.
 
 ## Scope — v0
 
@@ -91,14 +90,14 @@ back to the user through our own model, and fold the answer into one grounded re
 **Rules**
 
 - Emit the baseline request rate, latency histogram and error rate.
-- **Plus GPU via dcgm-exporter** — util, mem, temp, power — and tokens/sec, time-to-first-token,
+- **Plus GPU via dcgm-exporter** — util, mem, temp, power, and tokens/sec, time-to-first-token,
   the model backend (mock/vllm), and generation queue depth.
 - Shape: [../../ARCHITECTURE.md](../../ARCHITECTURE.md) §Observability.
 
 ## Position in the system
 
 Upstream: **input** hands us a ready UserPrompt; **continuum** publishes the adapters we
-resolve. Downstream: **storage** receives the turn record; **output** delivers the response
+resolve. Downstream: *storage* receives the turn record; *output* delivers the response
 we produce (C9). Payload shapes are defined once in
 [../../ARCHITECTURE.md](../../ARCHITECTURE.md) § Contracts — referenced here by ID only.
 

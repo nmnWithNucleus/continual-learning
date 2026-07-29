@@ -18,7 +18,7 @@
 
 
 **Status:** chartered; **capture M1 + computer surfaces alpha-complete** (see §v0 deliverables
-milestone-progress note) · **Last updated:** 2026-07-19
+milestone-progress note) · *Last updated:* 2026-07-19
 
 ---
 
@@ -96,9 +96,9 @@ data-processing where they landed.
 
 **Shape** — two legs.
 
-- **Blob leg** — we `PUT` the raw bytes to storage `/raw` **first**, and storage mints an opaque
+- **Blob leg** — we `PUT` the raw bytes to storage `/raw` *first*, and storage mints an opaque
   `blob_ref`.
-- **Envelope leg** — we **push** the C1 envelope to data-processing: `user_id`, `device_id`,
+- **Envelope leg** — we *push* the C1 envelope to data-processing: `user_id`, `device_id`,
   `stream_id`, `sequence`, `chunk_id`, modality, codec, wall-clock `t_start`/`t_end`, `blob_ref`
   plus sha256 and bytes, optional device location and clock, and the optional `device_tz` +
   `device_utc_offset_minutes` added by D17.
@@ -142,7 +142,7 @@ Ordered; each milestone ships client and/or ingest pieces together with its exit
 
 ~~Consent (M2) intentionally lands **before** the wearable (M3)~~ — **re-sequenced 2026-07-18
 (D13, founders):** consent controls move to the back-burner while the capture surfaces + learn
-loop mature; they land **before any non-team pilot user** (beta testers are consenting
+loop mature; they land *before any non-team pilot user* (beta testers are consenting
 teammates). The M2 red-team exit bar is unchanged whenever it lands. Milestone numbers keep
 their names (M-numbers are identifiers, not a fixed order — sequencing is owned by the
 founders' board + this note).
@@ -150,16 +150,16 @@ founders' board + this note).
 **Milestone progress — capture M1 + computer surfaces (Alpha complete 2026-07-19):** the
 recording service was wrapped to the alpha bar (detail: [HANDOFF.md](HANDOFF.md)). Delivered:
 the M0 ingest spine hardened into a **checked "zero silent loss" guarantee** (continuity
-ledger + DP break/dup detector + two-leg gap report), the **fuller ASR pipeline** (faster-whisper
-standing + VAD gate), **VAD-cut chunking** (OQ4 → D-M1-2), and **three capture clients** on one
+ledger + DP break/dup detector + two-leg gap report), the *fuller ASR pipeline* (faster-whisper
+standing + VAD gate), *VAD-cut chunking* (OQ4 → D-M1-2), and *three capture clients* on one
 `/capture/*` wire, each alpha-verified `clean` on real hardware:
 - **Phone web** (`clients/web/`) — mic + camera over HTTPS/tunnel; the bodycam stand-in + the
   beta press-record surface. (Not an M-milestone itself; M3 wearable hardware swaps in later.)
-- **Browser extension** (`clients/extension/`) — **M4 essentially met** (consent path deferred,
+- **Browser extension** (`clients/extension/`) — *M4 essentially met* (consent path deferred,
   D13): passive active-tab capture (video+audio via `tabCapture`, D-E7), flows through the same
   chunk/retry path, C1 carries the browser `device_id`/modality.
-- **Mac CLI** (`clients/mac/`) — **partial M1**: screen + mic capture (ffmpeg avfoundation) with
-  the offline queue, real-avfoundation verified. **Still open for full M1:** webcam, the pairing
+- **Mac CLI** (`clients/mac/`) — *partial M1*: screen + mic capture (ffmpeg avfoundation) with
+  the offline queue, real-avfoundation verified. *Still open for full M1:* webcam, the pairing
   flow, and a full-workday soak (alpha was minutes, not a workday); a mac menu-bar/GUI app
   (ScreenCaptureKit, visible capture indicator) is a later surface — capability exists via the CLI.
 Client transport pinned **segmented-HTTP for all v0 surfaces** (D-M1-5; streaming ingest a
@@ -183,7 +183,7 @@ deferred additive leg — recorded on the founders' board as D14).
    (2026-07-19):** mac screen video at the CLI default (`--max-width 1728`, CRF 28) is readable
    but soft on fine text — `--max-width 2560+` is the current user lever; per-modality fidelity
    targets remain this open joint decision, not a per-client flag.
-   **Resolved per-modality (2026-07-19, joint recording × data-processing)**, with the real
+   *Resolved per-modality (2026-07-19, joint recording × data-processing)*, with the real
    pipelines standing: faster-whisper ASR, pyannote diarization, AST acoustic and Qwen3-VL
    keyframe captioning plus OCR, all node-7-verified.
 
@@ -194,16 +194,16 @@ deferred additive leg — recorded on the founders' board as D14).
      bitrate buys the models nothing.
    - Recording already demuxes to `audio/wav` 16 kHz mono s16le, which is ASR-native and exactly
      right, so **no audio bitrate ladder is needed**. Capture can use whatever codec the device
-     prefers — webm/opus, m4a/aac — because the demux normalizes it.
+     prefers — webm/opus, m4a/aac, because the demux normalizes it.
    - **Video → resolution-bound, not bitrate-bound**, and data-processing wants container-copy at
      capture quality. Keyframe VLM captioning downscales frames to `VIDEO_FRAME_MAX_WIDTH=768`
      before the caption, so body-cam and webcam video is caption-bound and 768-px-sufficient.
    - The **exception is OCR-heavy screen capture**: the OCR-strong VL pass reads on-screen text
      from keyframes, and fine text needs enough *capture* resolution. The alpha's
-     `--max-width 1728` is soft on small text, so **`--max-width ~2560` for text-dense screens**.
-   - So data-processing's ask is **no re-encode** — container-copy, avoiding generational loss —
-     **plus high capture resolution for screens**. The per-user-day cost dial is keyframe
-     **cadence** (`VIDEO_KEYFRAME_INTERVAL_S` / `VIDEO_MAX_KEYFRAMES`), not video bitrate.
+     `--max-width 1728` is soft on small text, so *`--max-width ~2560` for text-dense screens*.
+   - So data-processing's ask is **no re-encode** — container-copy, avoiding generational loss,
+     *plus high capture resolution for screens*. The per-user-day cost dial is keyframe
+     *cadence* (`VIDEO_KEYFRAME_INTERVAL_S` / `VIDEO_MAX_KEYFRAMES`), not video bitrate.
    - Net: no multi-rung "ladder", just one sensible per-modality target — 16 kHz mono audio,
      container-copy screen at ≥2560-px, body-cam at capture default.
 
@@ -233,8 +233,8 @@ deferred additive leg — recorded on the founders' board as D14).
 
    **Watch out for**
 
-   - **The alpha (2026-07-19) ran on macOS** (mac CLI), **Chromium/Comet** (extension) and **iOS
-     Safari** (phone) — the current tester's stack.
+   - **The alpha (2026-07-19) ran on macOS** (mac CLI), *Chromium/Comet* (extension) and *iOS
+     Safari* (phone) — the current tester's stack.
    - That is *not* yet pinned as the pilot fleet. A Windows desktop client, if pilots need one, is
      unbuilt.
 6. Device identity/auth: platform-owned identity with device-scoped tokens, or self-issued
@@ -248,24 +248,24 @@ deferred additive leg — recorded on the founders' board as D14).
    **Rules**
 
    - **M0** proxies bytes through storage's `PUT /raw/blobs`.
-   - The wearable sends **combined A/V** on the device→backend link, and **we demux** into
+   - The wearable sends **combined A/V** on the device→backend link, and *we demux* into
      per-modality C1 streams — each its own `stream_id`, same `device_id`, wall-clock-aligned.
    - C1's `modality` is per-envelope, so that split happens **here**, before emission.
 
    **Why it's this way**
 
-   - **Prod lean (2026-07-09):** storage mints a **signed GCS URL**, we upload the bytes directly
+   - **Prod lean (2026-07-09):** storage mints a *signed GCS URL*, we upload the bytes directly
      to GCS, and `blob_ref` points at that object. That is the POC's "GCS is source of truth,
      signed URLs" pattern.
    - Direct upload keeps storage from being a bandwidth bottleneck for tens-of-GB/day/user.
    - Uploads run **async and concurrent**: a new chunk starts uploading immediately, and the C1
-     push fires on that chunk's **upload-complete callback**, so capture is never blocked on an
+     push fires on that chunk's *upload-complete callback*, so capture is never blocked on an
      upload.
-   **Status (2026-07-19):** the **demux half is BUILT + proven** (`app/demux.py`, ffmpeg;
+   *Status (2026-07-19):* the *demux half is BUILT + proven* (`app/demux.py`, ffmpeg;
    exercised by all three alpha clients — muxed mp4/webm → separate audio + video C1 streams).
-   The **transport is decided (D-M1-5 / founders' D14): segmented HTTP upload** for all v0
+   The *transport is decided (D-M1-5 / founders' D14): segmented HTTP upload* for all v0
    surfaces (each client posts self-contained ~10 s segments to `/capture/segments`; the server
-   spools → demuxes → emits). **Still open:** the **direct-to-GCS signed-URL** upload path (M0 +
+   spools → demuxes → emits). *Still open:* the *direct-to-GCS signed-URL* upload path (M0 +
    all three clients still proxy bytes through storage's `PUT /raw/blobs`); the
    mint→upload→confirm handshake with storage + platform is the remaining OQ8 work, needed before
    tens-of-GB/day/user scale.
@@ -313,12 +313,12 @@ stable reference, and the canvas is rewritten every session.
 **segment** = client→server
 upload unit (~10 s self-contained clip; `seq` dense per capture session) · **chunk** =
 server→DP single-modality unit (one `/raw` blob + one C1 envelope; `sequence` dense per
-stream) · **stream** = one continuous single-modality flow from one device session
-(`stream_id` — the identity that crosses service boundaries) · **capture session** = one
+stream) · *stream* = one continuous single-modality flow from one device session
+(`stream_id` — the identity that crosses service boundaries) · *capture session* = one
 start→stop on a device (press-record→stop / CLI run→Ctrl-C / extension click→click);
-first-class in the ledger, **never travels past C1** (C1 carries `stream_id`, not
-`session_id`) · **record** = one `/context` row conforming to the C2 contract.
-Disambiguation: a **capture session** (recording) is NOT the serve-loop **chat session**
+first-class in the ledger, *never travels past C1* (C1 carries `stream_id`, not
+`session_id`) · *record* = one `/context` row conforming to the C2 contract.
+Disambiguation: a *capture session* (recording) is NOT the serve-loop *chat session*
 (`session_id` in C3/C4, storage `/sessions`) — qualify the word when both are in frame.
 
 ## Related work

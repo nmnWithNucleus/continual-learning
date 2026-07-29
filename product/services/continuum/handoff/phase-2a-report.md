@@ -1,8 +1,8 @@
 # Phase 2a — Morpheus core + parity harness
 
 **Branch:** `svc/continuum-morpheus-2a` · **Status:** kernels + harness landed; E2E seed
-ensemble complete — **parity** (permutation test p = 0.514, all per-night shapes exact) ·
-**Cofounder review gate before 2b.**
+ensemble complete — *parity* (permutation test p = 0.514, all per-night shapes exact) ·
+*Cofounder review gate before 2b.*
 
 Deliverable: the §3 kernels reimplemented cleanly under `app/morpheus/`, behind
 `TRAINER_BACKEND=morpheus`, with a parity harness that differences every one of them against
@@ -102,20 +102,20 @@ Three chains (seeds 0/1/2), 6 nights each on days 5,9,12,13,17,21, through the r
 C(7,3)=35 splits: ours n=3 mean 0.2167 vs reference n=4 mean 0.2549, **p = 0.514**. The
 hypothesis that our chains and the reference chains are drawn from the same distribution
 cannot be rejected. Base-model floor is identical (0.0111 on every run, ours and theirs), and
-every per-night training shape is exact: **54/54 integers** across 3 chains x 6 nights x
+every per-night training shape is exact: *54/54 integers* across 3 chains x 6 nights x
 (chunks, chunks_per_epoch, steps).
 
 ### The criterion had to be replaced first
 
 The harness originally gated on membership in the min-max envelope of the 3 reference seeds,
 and by that rule only 1 of our 3 chains passed. That looked damning until the criterion was
-tested against the reference itself. **Leave-one-out: the reference satisfies its own band
-2 times in 4.** A min-max range over n runs admits a further exchangeable run only (n-1)/(n+1)
-of the time — 50% at n=3 — and the gate required three metrics simultaneously. It fails working
+tested against the reference itself. **Leave-one-out: the reference satisfies its own band 2
+times in 4.** A min-max range over n runs admits a further exchangeable run only (n-1)/(n+1) of
+the time — 50% at n=3, and the gate required three metrics simultaneously. It fails working
 ports as a matter of arithmetic, and 1-of-3 is what a correct port looks like under it.
 
 `Band` is now documented as reportable-but-not-gating, and `same_distribution()` — the exact
-permutation test — is the gate. A large p is not proof of parity: with a handful of runs the
+permutation test, is the gate. A large p is not proof of parity: with a handful of runs the
 test has little power against small shifts. It rules out the large regressions a port bug
 causes, which is what it is for.
 
@@ -125,7 +125,7 @@ causes, which is what it is for.
   seen-mean of 0.1167 sits below every reference run and whose day-5 retention collapsed
   (0.25 -> 0.05, against the reference holding 0.23 -> 0.23). With 4 reference samples we
   cannot say whether that is the reference distribution's own low tail or a distinct failure
-  mode we can hit. **More seeds is the cheap answer** (~5 GPU-h each, parallelizable).
+  mode we can hit. *More seeds is the cheap answer* (~5 GPU-h each, parallelizable).
 - **Seed 2 trips the publish gate on contamination**: heldout 0.0833 against the recipe ceiling
   of 0.05 (5/60 probes vs the reference's 2/60). Not significant alone, but it is a gate-relevant
   observation and the gate would have blocked that adapter — which is the gate working.
@@ -243,13 +243,13 @@ one new file.
 
 1. **`replay_source` stays `amp` in recipe v1.0**, though the locked decision is raw day-logs.
    - Both are implemented and selectable today, and the tie is confirmed on the node:
-     `h12_rawres_s0` mean final recall **0.1250** vs `h12_replay_s0` **0.1250**, identical.
+     `h12_rawres_s0` mean final recall **0.1250** vs `h12_replay_s0` *0.1250*, identical.
    - But the goldens were produced with `amp`, so parity has to be run against `amp`, and flipping
      the knob forks `recipe_id`.
    - The natural moment to fork to v1.1 is **2c**, when the day-log fetch client makes raw logs
      fetchable at all. Flag if you want it sooner; it costs one E2E ensemble to validate.
 2. **Calibration is not over-tuned, and the data on the node backs the decision**:
-   `h12_calib_s0` (40 % neg-boost) scores **0.0208** mean final recall against **0.1250** for the
+   `h12_calib_s0` (40 % neg-boost) scores *0.0208* mean final recall against *0.1250* for the
    uncalibrated arm — a lobotomy. `replay_neg_boost` ships as a ≤10 % tunable, default 0.
 3. **Research arms deliberately not ported** (`smart`, `dream`, `smartdream`, `olora`, `agem`,
    `joint`, `replay_floor`) — see the divergence log. None is recipe v1.0; reviving one is a

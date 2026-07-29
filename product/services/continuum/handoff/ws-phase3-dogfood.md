@@ -1,12 +1,9 @@
 # WS-P3 — Phase 3: the DP dogfood (Speed data through the real pipeline)
 
-**Status:** ✅ **complete — learn-loop integration proven end to end.** 3a bridged real Speed
-audio through recording→DP→storage; 3b (1-min rule-bend) collapsed on **dose**, not the pipeline;
-the **decomposition run (parity content, `segment_seconds=300 block_segments=1`) reproduced the
-baseline separation** — 0.137 vs baseline 0.179, permutation **p=0.148 (same distribution)**,
-p=0.018 above the no-consolidation control, p=0.016 above the failed 1-min run. Verdict: **pipeline sound**. Reports: [phase-3-report.md](phase-3-report.md), [phase-3-decomp-report.md](phase-3-decomp-report.md).
-· design locked (cofounders, 2026-07-24) · **Spans:** recording + DP + storage + continuum ·
-**Driven by:** continuum (learn-loop validation) · Prereq: Phase 2 (2a/2b/2c) done on main.
+**Status:** ✅ **complete — learn-loop integration proven end to end.** 3a bridged real Speed audio through recording→DP→storage; 3b (1-min rule-bend) collapsed on *dose*, not the pipeline; the *decomposition
+run (parity content, `segment_seconds=300 block_segments=1`) reproduced the baseline separation*, 0.137 vs baseline 0.179, permutation *p=0.148 (same distribution)*, p=0.018 above the no-consolidation control,
+p=0.016 above the failed 1-min run. Verdict: *pipeline sound*. Reports: [phase-3-report.md](phase-3-report.md), [phase-3-decomp-report.md](phase-3-decomp-report.md). · design locked (cofounders, 2026-07-24) ·
+*Spans:* recording + DP + storage + continuum · *Driven by:* continuum (learn-loop validation) · Prereq: Phase 2 (2a/2b/2c) done on main.
 
 > **Bottom line:** our real product services carry the learn loop without losing the model's
 > ability to learn. The only residual is a **recipe/dose** property (amplification is fixed at
@@ -27,7 +24,7 @@ Almost all of it is config; only two small files are net-new. Grounded findings:
 
 - **Rule-bend = pure config.** `segment_seconds` + `block_segments` are recipe knobs that flow into
   `build_daylog` (buckets by the first, groups by the second — `daylog.py:68,134`). A test recipe
-  with `segment_seconds=60, block_segments=5` gives 1-min segments / 5-min blocks, **no code change**.
+  with `segment_seconds=60, block_segments=5` gives 1-min segments / 5-min blocks, *no code change*.
 - **Continuum needs zero changes to consume real data.** `record_provider` already defaults to the
   real `/context` read (`fetch_window_records` over C10) — 2c wired this. Phase 3's "swap" is the
   existing default (`nightly.py:51`, `clients/__init__.py:43`).
@@ -40,10 +37,10 @@ Almost all of it is config; only two small files are net-new. Grounded findings:
 
 | # | Decision |
 |---|---|
-| Test-type | **Config profile + naming convention, NOT a contract field.** C1/C2 are v0-frozen (`additionalProperties:false`) — a `request_type` field is a v0→v1 bump across recording+DP, not worth it. Instead: a dedicated DP env profile + `user_id="replay-speed"` (out-of-band tag; replayed chunks are indistinguishable-by-design, the intended posture). True per-request mode, if ever needed, is the designed-but-unbuilt **C8 interactive profile** (`resolve()` mechanism ready) — do NOT invent a parallel enum. |
+| Test-type | **Config profile + naming convention, NOT a contract field.** C1/C2 are v0-frozen (`additionalProperties:false`) — a `request_type` field is a v0→v1 bump across recording+DP, not worth it. Instead: a dedicated DP env profile + `user_id="replay-speed"` (out-of-band tag; replayed chunks are indistinguishable-by-design, the intended posture). True per-request mode, if ever needed, is the designed-but-unbuilt *C8 interactive profile* (`resolve()` mechanism ready) — do NOT invent a parallel enum. |
 | Rule-bend | Test recipe `recipes/consolidation-test-1min-v1.0.json`: `segment_seconds=60, block_segments=5`; `recipe_id` == filename stem == `settings.recipe_id` (registry rule). Forks `recipe_id` — fine for a test profile. Use the **1-min descriptions** as segments → grouped into 5-min blocks. (Expect different block content than parity: 5×1-min vs 1×5-min descriptions — hence "does separation survive," not "match the number.") |
 | Captions | Injected via a **new DP sidecar** (§ wiring), NOT the video caption backend (keyframe-coupled/awkward). |
-| Arms | **Arm 1 (the measurement): descriptions-only recall.** ASR runs for real (Arm 2) but its transcripts are **excluded from the recall day-log** via a caption-only record-provider filter (zero core change). Arm 3 (descriptions+ASR) is deferred — flip the filter later. |
+| Arms | **Arm 1 (the measurement): descriptions-only recall.** ASR runs for real (Arm 2) but its transcripts are *excluded from the recall day-log* via a caption-only record-provider filter (zero core change). Arm 3 (descriptions+ASR) is deferred — flip the filter later. |
 
 ## End-to-end wiring (service by service)
 
@@ -51,9 +48,9 @@ Almost all of it is config; only two small files are net-new. Grounded findings:
 "drop in one file". It downloads a Speed **audio** track's bytes (extracted from the 20-min video
 blob in GCS) and yields it as chunk(s); driven through the existing `POST /capture/run` (accepts
 `modality, source, chunk_seconds, user_id, device_id, base_wallclock` — `models.py:49-64`).
-- **Blob leg needs the bytes** — storage has no by-reference/GCS-URL registration (**recording's**
-  OQ8, unbuilt — `../../recording/CHARTER.md:175`; this line said "storage OQ8", which does not
-  exist and the mislabel propagated into the storage/C10 launch prompt — corrected by D18), so
+- **Blob leg needs the bytes** — storage has no by-reference/GCS-URL registration (*recording's*
+  OQ8, unbuilt, `../../recording/CHARTER.md:175`; this line said "storage OQ8", which does not
+  exist and the mislabel propagated into the storage/C10 launch prompt, corrected by D18), so
   re-PUT through `/raw/blobs`. Fine at test volume; `/capture/run` avoids the 64 MB segment cap.
 - Feed **audio** (not video): the blob then serves double duty — real ASR runs on it AND it resolves
   the mandatory `blob_ref` sha-check that DP does before any stage.
@@ -79,11 +76,11 @@ blob in GCS) and yields it as chunk(s); driven through the existing `POST /captu
 ## Arms
 
 - **Arm 1 — recall (the answer).** Caption-only day-log, rule-bent, real pipe → Morpheus over the 6
-  days → seen/heldout/separation table vs the 5-min parity baseline. Verdict: **does separation
-  survive** (clear seen>heldout)? One line.
-- **Arm 2 — DP integration validation (bonus).** ASR+diarize ran for real on Speed audio — report the
+  days → seen/heldout/separation table vs the 5-min parity baseline. Verdict: *does separation
+  survive* (clear seen>heldout)? One line.
+- **Arm 2 — DP integration validation (bonus).** ASR+diarize ran for real on Speed audio, report the
   stages produced sane transcripts (spot-check a few). NOT part of the recall number.
-- **Arm 3 — Deferred.** Descriptions+ASR day-log (drop the filter), measured separately — a later
+- **Arm 3 — Deferred.** Descriptions+ASR day-log (drop the filter), measured separately, a later
   "does adding transcripts help/hurt" finding, not now.
 
 ## Staging
@@ -95,8 +92,8 @@ blob in GCS) and yields it as chunk(s); driven through the existing `POST /captu
   and spot-checks sane.
   Original scope: replay `ChunkSource` + injected-caption sidecar + test recipe + DP env profile
   → Speed's 6 train days (5,9,12,13,17,21) + heldout (6,16,28) land in `/context` as rule-bent C2 for
-  `user_id="replay-speed"`, via **real recording→DP→storage**. Arm 2's real ASR runs here.
-  **Exit:** real C2 (caption + transcript) queryable by `(user, window)`; ASR spot-checked sane.
+  `user_id="replay-speed"`, via *real recording→DP→storage*. Arm 2's real ASR runs here.
+  *Exit:* real C2 (caption + transcript) queryable by `(user, window)`; ASR spot-checked sane.
 - **3b — the measurement. ✅ done (2026-07-24, job 767). Verdict: separation did *not*
   survive.** 5 seeds: separation 0.077 vs the 5-min baseline's 0.179 (p = 0.0067) and
   statistically indistinguishable from the rehearsal-off control (p = 0.80). The rule-bent
@@ -108,7 +105,7 @@ blob in GCS) and yields it as chunk(s); driven through the existing `POST /captu
   same services, same spine, parity block content. Full write-up:
   [phase-3-report.md](phase-3-report.md).
   Original scope: continuum fetches (caption-only filter) → Morpheus over the 6 days →
-  Arm-1 verdict. **Exit:** the separation-survives table + one-line verdict.
+  Arm-1 verdict. *Exit:* the separation-survives table + one-line verdict.
 
 **Deferred (do NOT start):** real VLM keyframe captioning (the true caption-shape test), Arm 3,
 C8 per-request profiles, GCS by-reference blobs (OQ8).

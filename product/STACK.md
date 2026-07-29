@@ -33,8 +33,8 @@
 |---|---|---|
 | Base model (BWM) | **Qwen/Qwen3-VL-32B-Instruct** (dense) | cached in the HF hub cache on node-7 (~63 GB) |
 | Server | **vLLM**, OpenAI-compatible, TP=8 | see the per-env rows below |
-| Serving env (primary) | **`vllm-cu13`** · vLLM 0.24.0 · torch 2.11.0 · transformers 5.13.0 · CUDA-13 wheels + flashinfer | validated E2E 2026-07-09 on node-7 (driver 580); the current serving stack |
-| Serving env (fallback) | **`vllm-vlm`** · vLLM 0.19.1 · torch 2.10/cu128 · transformers 5.12.1 | the POC-proven stack that first closed v0.0; kept as the known-good fallback |
+| Serving env (primary) | `vllm-cu13` · vLLM 0.24.0 · torch 2.11.0 · transformers 5.13.0 · CUDA-13 wheels + flashinfer | validated E2E 2026-07-09 on node-7 (driver 580); the current serving stack |
+| Serving env (fallback) | `vllm-vlm` · vLLM 0.19.1 · torch 2.10/cu128 · transformers 5.12.1 | the POC-proven stack that first closed v0.0; kept as the known-good fallback |
 | Launch recipe | [`services/inference/serve_vllm.sh`](services/inference/serve_vllm.sh) | defaults to `vllm-cu13`; `VLLM_BIN=…/vllm-vlm/bin/vllm` to fall back |
 
 ## Observability endpoints & ports (pinned)

@@ -1,7 +1,7 @@
 # Overnight diagnosis — rehearsal proof, draw sweep, gate recalibration, 32B M0
 
 **Run window:** 2026-07-23 ~09:00–19:00 UTC, unattended · **Branch:** `svc/continuum-morpheus-2a`
-**Nothing here changes product behaviour.** No gate threshold was altered, no recipe knob was
+*Nothing here changes product behaviour.* No gate threshold was altered, no recipe knob was
 forked, nothing real was published. The 32B run is a dry run on Speed data serving no one, with
 the gate in report-only mode.
 
@@ -17,7 +17,7 @@ suspect for seed 0.
 There was no dump of the reference's rehearsal text, but there did not need to be: the reference
 sampler is deterministic given (seed, corpora) and both are on disk. Extracted verbatim from
 `b3c58e1` into a bare namespace — a **test oracle**, not an import into product code, with no
-torch/peft/speed_lora side effects — and run over the same chain sequence:
+torch/peft/speed_lora side effects, and run over the same chain sequence:
 
 | night | ref paragraphs | our paragraphs | ref chars | our chars | identical |
 |---|---|---|---|---|---|
@@ -41,7 +41,7 @@ one distribution, doubling the sample at no cost.
 
 Same pinned start (`repro_replay_f30/adapter_s4_d17`), same night 5, **only the rehearsal seed
 varies**. Anchors: the reference reached **0.45** on day 21 from this exact state; our full seed-0
-chain reached **0.15**.
+chain reached *0.15*.
 
 | rehearsal seed | day 21 (just written) | day 5 (retention canary) | loss_last |
 |---|---|---|---|
@@ -62,7 +62,7 @@ chain reached **0.15**.
 
 **Verdict.** The reference's 0.45 sits at the **70th percentile of our own single-night draws** —
 an ordinary result from our distribution, not a level we fail to reach. Seed 0's chain values are
-**below everything a single night produces**: day 21 at 0.15 against our minimum of 0.2167,
+*below everything a single night produces*: day 21 at 0.15 against our minimum of 0.2167,
 day 5 at 0.05 against our minimum of 0.0833.
 
 **Seed 0's deficit is therefore accumulated across the six nights, not made in any one of them.**
@@ -74,13 +74,13 @@ which is exactly what P1/P3 would have measured, and what capacity did not allow
 
 Full analysis in [gate-threshold-proposal.md](gate-threshold-proposal.md). Headlines:
 
-- **Traps:** the 0.40 floor blocks **71% of the reference recipe's own nights**. Worse, the
+- **Traps:** the 0.40 floor blocks *71% of the reference recipe's own nights*. Worse, the
   reference's night-to-night sd (0.090) equals the binomial noise at n=28 (0.090) to three
-  decimals — **the metric currently measures nothing but sampling**. Proposed 0.15 interim
+  decimals — *the metric currently measures nothing but sampling*. Proposed 0.15 interim
   (0.9% false-block, 98.8% collapse detection), 0.25 once the suite reaches ~150 probes.
-- **Heldout:** base scores 0/60 on all seven runs and our seed 0 scored 0/60, so **no systematic
-  leak exists**. But n=60 has 12% power against 2% contamination while sitting two probes from a
-  false block. The suite already contains **222 probes and the harness uses 60**. Proposed: use
+- **Heldout:** base scores 0/60 on all seven runs and our seed 0 scored 0/60, so *no systematic
+  leak exists*. But n=60 has 12% power against 2% contamination while sitting two probes from a
+  false block. The suite already contains *222 probes and the harness uses 60*. Proposed: use
   all 222, and replace the fixed ceiling with a one-sided exact test against each run's *own*
   base control (α=0.01 → blocks above 5/222, 99% power at 5% contamination), with a 0.15
   absolute backstop for a contaminated base.
@@ -146,8 +146,8 @@ the co-tenant alone. Judged against "leave the co-tenant headroom", this session
 ## 6. Standing conclusions, unchanged by tonight
 
 - Kernel parity green; `render_block` 1427/1427 byte-identical; LoRA target set 252/252.
-- The eval path is independently validated: the **reference's** adapter scores **0.45 through our
-  eval code — its exact golden value**.
+- The eval path is independently validated: the **reference's** adapter scores *0.45 through our
+  eval code — its exact golden value*.
 - E2E ensemble (n=3 vs n=4) is statistically indistinguishable from the reference: exact
   permutation test on run-level seen-mean, **p = 0.514**.
 - The min–max "in band" criterion was miscalibrated and has been replaced; by leave-one-out the
@@ -156,7 +156,7 @@ the co-tenant alone. Judged against "leave the co-tenant headroom", this session
 ## 7. Harness defects found in this session's own tooling
 
 Recorded because the results below were carried by tooling less reliable than they are. None
-corrupted a measurement — every draw and the M0 run are verified by their own output files — but
+corrupted a measurement — every draw and the M0 run are verified by their own output files, but
 the monitoring was blind for stretches, and that is worth knowing before trusting the next
 unattended run.
 

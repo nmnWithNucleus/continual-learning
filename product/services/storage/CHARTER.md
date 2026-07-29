@@ -20,16 +20,16 @@ expansion is `built` (`a5a48fb`, 310 tests). Lineage: [§How this charter got he
 
 ## Mission
 
-Own every byte the product persists — every durable store lives here, per
-[ARCHITECTURE §Ownership splits](../../ARCHITECTURE.md): raw capture blobs (`/raw`), the processed
-life-stream (`/context`), every conversation with the model (`/sessions`, incl. full mentor + tool
-traces), and the registry of per-user adapters (model directory). Make all of it trivially
-retrievable by **(user, time)** — the axis every consumer leans on, from continuum's
-training-window reads (C10) to "what happened Tuesday" recall — and make per-user isolation,
-encryption at rest, and per-store deletion primitives properties of the layer itself, not
-obligations on its callers. Platform composes those primitives into the cross-store
-right-to-be-forgotten pipeline with proof-of-deletion (its M2). Storage produces no data and
-trains no models; it keeps what others produce safe, ordered, and fast to read.
+Own every byte the product persists — every durable store lives here, per [ARCHITECTURE §Ownership
+splits](../../ARCHITECTURE.md): raw capture blobs (`/raw`), the processed life-stream
+(`/context`), every conversation with the model (`/sessions`, incl. full mentor + tool traces),
+and the registry of per-user adapters (model directory). Make all of it trivially retrievable by
+**(user, time)** — the axis every consumer leans on, from continuum's training-window reads (C10)
+to "what happened Tuesday" recall, and make per-user isolation, encryption at rest, and per-store
+deletion primitives properties of the layer itself, not obligations on its callers. Platform
+composes those primitives into the cross-store right-to-be-forgotten pipeline with
+proof-of-deletion (its M2). Storage produces no data and trains no models; it keeps what others
+produce safe, ordered, and fast to read.
 
 ## Scope — v0
 
@@ -98,7 +98,7 @@ segment/block day-log, a derived view over `/context` that continuum fetches via
 - Serve it random-access by `(user_id, window_id)`. The wire is
   [ARCHITECTURE §Contracts → C10](../../ARCHITECTURE.md), never restated here.
 - Stamp the body with `daylog_format_version` and `recipe_id`; the format is recipe-versioned.
-- Membership is by **`ingest_time`**, which is what the watermark window requires.
+- Membership is by `ingest_time`, which is what the watermark window requires.
 - Segment buckets sit on a **global epoch grid** rather than window-relative (`daylog.py:74`).
 - Apply the **one-dialect-per-record** rule: latest `ingest_time` wins per
   `(chunk_id, content.kind, discriminator)`.
@@ -106,7 +106,7 @@ segment/block day-log, a derived view over `/context` that continuum fetches via
 **Why it's this way**
 
 - **We inherit `daylog.py`'s `build_daylog` + `_render_block`** — the *product* renderer over C2
-  records. We do **not** inherit continuum's parity-locked `Profile.render_block`, which is
+  records. We do *not* inherit continuum's parity-locked `Profile.render_block`, which is
   recipe-coupled and stays with the amplifier.
 - The global epoch grid is required once membership sits on the ingest axis, and it also makes a
   bucket stable across re-materialization.
@@ -179,7 +179,7 @@ provenance.
 > `built` 2026-07-27 · [D18](../../DECISIONS.md) · schema [`c12_user_profile.v0.json`](../../contracts/c12_user_profile.v0.json)
 
 **In one line.** One durable row per user holding **policy** values — things that are neither
-sensor data nor recipe config — of which v0 carries exactly one, `home_tz`.
+sensor data nor recipe config, of which v0 carries exactly one, `home_tz`.
 
 **Shape** — physically **one table keyed by `user_id`** (CTO, 2026-07-27). The day-log renderer
 resolves `home_tz` by looking the row up, exactly as every other store already carries `user_id` as
@@ -188,11 +188,11 @@ a column.
 **Rules**
 
 - `home_tz` is an IANA zone with exactly two jobs: **scheduling**, deciding when this user's
-  nightly consolidation fires — a question asked before any of that night's records exist — and
-  **fallback**, when a record carries no `device_tz`.
+  nightly consolidation fires — a question asked before any of that night's records exist, and
+  *fallback*, when a record carries no `device_tz`.
 - **Declared, not inferred.** The user sets it; storage never writes it on its own initiative. A
   device's zone may be *suggested* in a UI, never stored as an answer.
-- A missing profile is a **404**, and a user with no `home_tz` is **not schedulable** — an
+- A missing profile is a **404**, and a user with no `home_tz` is *not schedulable* — an
   operational alert, never a silent skip, because D17 abolished default timezones.
 - **Identity is not policy.** This row holds only values the *system* reads to decide its own
   behaviour. An account name, email or avatar belongs to a different table behind a different
@@ -208,7 +208,7 @@ a column.
   producing a 15 h night followed by a 33 h one. That is the whole point.
 - It **cannot ride the recipe registry**: `recipe_id` is global and versioned (`recipe_id` ==
   filename stem), so a per-user value there would fork `recipe_id` per user.
-- It is **not** the pipeline's time semantics — that is per-record `device_tz` — and **not** part
+- It is **not** the pipeline's time semantics — that is per-record `device_tz`, and *not* part
   of the C10 range arithmetic.
 - On the foreign key: today `user_id` is a bare string with no owning table anywhere in the system,
   so a validating FK would mean a user must be provisioned before capture works, which blocks the
@@ -305,14 +305,14 @@ redefined.
 **On C10.** It evolved in place and is `built` ([D18](../../DECISIONS.md), 2026-07-27). Its shape,
 rules, reasoning and full evolution live in one home,
 [ARCHITECTURE §Contracts → C10](../../ARCHITECTURE.md). Two things worth knowing from here: the
-window is `[last_trained_t, now−δ)` on the **`ingest_time`** axis, and the raw range read
+window is `[last_trained_t, now−δ)` on the `ingest_time` axis, and the raw range read
 `GET /context/records?user_id=&from=&to=` is **not** retired — it stays first-class as D12's beta
 training feed, the debugging path, and C11-adjacent. C10-evolved is additive.
 
 ### The time index (the load-bearing decision)
 
 **In one line.** Every record is placed on two clocks — the device's wall-clock and storage's own
-ingest clock — and which one answers a question is decided here, once.
+ingest clock, and which one answers a question is decided here, once.
 
 **Rules**
 
@@ -328,7 +328,7 @@ ingest clock — and which one answers a question is decided here, once.
 - Never accept a timezone *abbreviation* — `PST` and `MST` are ambiguous and DST-sensitive. IANA
   ids only.
 - One timeline per user, indexed `(user_id, t_start)`, with modality and device as filter columns.
-  A user's streams overlap — body cam and computer at the same moment — and these are not parallel
+  A user's streams overlap — body cam and computer at the same moment, and these are not parallel
   timelines.
 - Both axes are indexed.
 
@@ -339,10 +339,10 @@ ingest clock — and which one answers a question is decided here, once.
   ([D17](../../DECISIONS.md)); this line had promised it since 2026-07-08 while `context_records`
   had no such column, and the gap is now closed rather than the promise withdrawn.
 - The zone is *context beside* the instant, never a replacement for it, and never an index.
-- **Two timezone concepts, deliberately distinct** (see
-  [ARCHITECTURE §Ownership splits](../../ARCHITECTURE.md) → *User timezone*): the per-record
-  `device_tz` is the **fact** — where the user was, owned by the device, correct under travel —
-  while the per-user profile `home_tz` is the **policy**, when this user's night is, owned by us.
+- **Two timezone concepts, deliberately distinct** (see [ARCHITECTURE §Ownership
+  splits](../../ARCHITECTURE.md) → *User timezone*): the per-record `device_tz` is the *fact* —
+  where the user was, owned by the device, correct under travel, while the per-user profile
+  `home_tz` is the *policy*, when this user's night is, owned by us.
 - **`t_start` and `ingest_time` are two axes and D18 assigns each a job.** Conflating them is the
   same class of error D17 fixed for timezones. Event time is the *content* axis: recall queries,
   day-log bucketing, block anchors, and deletion ranges — "delete last Tuesday" is a claim about a
@@ -353,8 +353,8 @@ ingest clock — and which one answers a question is decided here, once.
   axis** ([D18](../../DECISIONS.md)). A single index-range scan must satisfy it at v0 scale, a
   handful of pilot users.
 - Three properties follow, and they are the reason for the choice: **storage needs no timezone to
-  serve C10 at all**; a missed or gate-failed night is **absorbed** into the next window rather
-  than lost; and **late data cannot exist**, because `ingest_time` is assigned by us at write, so a
+  serve C10 at all**; a missed or gate-failed night is *absorbed* into the next window rather
+  than lost; and *late data cannot exist*, because `ingest_time` is assigned by us at write, so a
   record can never land below an already-closed boundary.
 
 **Watch out for**
@@ -395,7 +395,7 @@ pipeline.
 **Rules — E-2's shape** (board-reviewed 2026-07-26)
 
 - `DELETE /context/records?user_id=&from=&to=&kind=&pipeline_version=`, with `user_id` required.
-- `from`/`to` are half-open on **`t_start`** — event time, because a retraction is about a lived
+- `from`/`to` are half-open on `t_start` — event time, because a retraction is about a lived
   period.
 - `kind` and `pipeline_version` are optional filters.
 - It returns an **auditable manifest** of counts by `kind` × `pipeline_version`, and `dry_run=true`
@@ -417,7 +417,7 @@ pipeline.
 **Exit criterion**
 
 - The profile read serves `home_tz` with a 404 on absence and **declared-not-inferred** semantics —
-  storage never writes `home_tz` on its own initiative — validated against
+  storage never writes `home_tz` on its own initiative, validated against
   [`c12_user_profile.v0.json`](../../contracts/c12_user_profile.v0.json), with tzdata resolution on
   write.
 - The registry serves recipes and the gate policy by id.
@@ -450,9 +450,9 @@ with its output. Continuum's local path is **not deleted until the narrowed diff
 
 - **The bar was narrowed 2026-07-27 (D20) after the first run failed it**, because the bar as first
   written contradicted D18's own materialization rule and no code could satisfy both. Continuum's
-  `seg_id` *was* `floor((t − window_start)/segment_seconds)` over an **event-time** window origin,
+  `seg_id` *was* `floor((t − window_start)/segment_seconds)` over an *event-time* window origin,
   while D18 deletes the window origin from storage's grid and puts storage's window on the
-  **ingest** axis, where a backlog record yields a *negative* index.
+  *ingest* axis, where a backlog record yields a *negative* index.
 - `seg_id` is written to `segments.jsonl` and **read by nothing** — the trainer and amplifier
   consume `blocks.jsonl` via `load_blocks`. The only reader anywhere is `phase3_daylog.py:88`,
   counting `len(b.seg_ids)` for a histogram, which is invariant under relabelling.
@@ -462,7 +462,7 @@ with its output. Continuum's local path is **not deleted until the narrowed diff
 **Watch out for**
 
 - **The bar was widened 2026-07-27 (F4), in the other direction.** D20 had narrowed *what* is
-  compared; F4 found that the *one window* it was compared over had a grid-**aligned** origin —
+  compared; F4 found that the *one window* it was compared over had a grid-*aligned* origin —
   which no window this service mints has, since `[watermark, now−δ)` is second-granular.
 - That alignment was the only reason continuum's then window-relative bucket grid agreed with
   storage's global one.
@@ -492,7 +492,7 @@ that ships even though the *policy* does not.
 
 **Why it's this way**
 
-- The founders' instinct — that this belongs in *service config*, not in code — is right, and this
+- The founders' instinct — that this belongs in *service config*, not in code, is right, and this
   section pins the shape so the dev/prod conversation is a config edit rather than an excavation.
 - **Changing what we keep must never require a deploy.** It is a *policy*, and we already learned
   this shape once: the gate policy was split from the training recipe (2026-07-24) precisely so a
@@ -513,10 +513,10 @@ that ships even though the *policy* does not.
 **Watch out for**
 
 - **v0 concretely:** one versioned `retention.v0` document, every store `keep_forever`, read and
-  surfaced on `/metrics`, and **no sweeper implemented**. That is a few lines, and it is the
+  surfaced on `/metrics`, and *no sweeper implemented*. That is a few lines, and it is the
   cheapest possible way to buy the future decision.
 - The reservoir's own charter line already anticipates the posture — *deletion there is a
-  deliberate privacy act, never housekeeping* — and this generalises it to every store.
+  deliberate privacy act, never housekeeping*, and this generalises it to every store.
 
 **What changes at dev/prod** (tracked, not forgotten): choose real per-store values; build the
 sweeper and its manifest; decide whether retention tiers by consent state; and reconcile with the
@@ -545,20 +545,20 @@ Engineering:
      GCS. It is near the top of the list the moment we leave prototype, because day-logs-forever is
      the first store that grows without bound.
    - **What keeps that migration cheap is a rule, not foresight:** every new store goes behind a
-     **narrow interface** in storage from day one, so the swap is a backend change rather than a
+     *narrow interface* in storage from day one, so the swap is a backend change rather than a
      rewrite.
    - Continuum already proved the shape on the client side (`app/clients/` — local today,
      HTTP-to-storage later, the cycle unchanged); storage owes the same on the server side.
    - Two existing properties help and must be preserved: `blob_ref` is already **opaque and
-     storage-owned**, and `record_json` is served **byte-verbatim**, so neither leaks the substrate
+     storage-owned**, and `record_json` is served *byte-verbatim*, so neither leaks the substrate
      to a caller.
 2. **Adapter artifact placement.** The directory holds adapter artifacts and metadata only — base
    world model weights custody is inference's (ARCHITECTURE §Ownership splits). Adapter weight
    files must sit where vLLM can hot-swap fast (GCS vs NFS vs node-local cache) — split with
    inference and platform.
 3. ~~**Clock skew.** Does data-processing normalize device clocks before C2, or does storage keep
-   raw + corrected times?~~ **Resolved ([D17](../../DECISIONS.md), 2026-07-26) — the lean was
-   right, and is now built.**
+   raw + corrected times?~~ *Resolved ([D17](../../DECISIONS.md), 2026-07-26) — the lean was
+   right, and is now built.*
 
    **Why it's this way**
 
@@ -577,7 +577,7 @@ Engineering:
    integrity on C4 writes, or trust writers?
 6. ~~**C10 watermark semantics.** Late-arriving records, reprocessed records, `pipeline_version`
    bumps — what advances `last_trained_t`, and what happens to a record landing with a `t_start`
-   inside an already-trained window?~~ **Resolved ([D18](../../DECISIONS.md), 2026-07-26)** — this
+   inside an already-trained window?~~ *Resolved ([D18](../../DECISIONS.md), 2026-07-26)*, this
    was the session's substantive design work. Full statement in
    [ARCHITECTURE.md](../../ARCHITECTURE.md) § Contracts → *C10 evolved*; the four rules:
 
@@ -593,33 +593,33 @@ Engineering:
      today's.
    - **`last_trained_t` advances if and only if the cycle publishes** *(refined 2026-07-27 — the
      first draft also advanced on `skipped_no_data`)*. Gate failure, freeze, crash, no data and
-     **too little** data all leave it, so the next window is a strict **superset**.
+     *too little* data all leave it, so the next window is a strict *superset*.
    - That is the design-of-record's *failed-day merge* obtained structurally rather than by
-     bookkeeping — it demotes continuum's `_UserState.debt` to reporting — and it makes the
-     min-data floor nearly free: a below-floor night just does not advance, so material accumulates
-     until a run is worth it. Named cost: an inactive user's open window grows and is re-scanned
-     nightly, which is correct and cheap at v0 scale.
+     bookkeeping — it demotes continuum's `_UserState.debt` to reporting, and it makes the min-data
+     floor nearly free: a below-floor night just does not advance, so material accumulates until a
+     run is worth it. Named cost: an inactive user's open window grows and is re-scanned nightly,
+     which is correct and cheap at v0 scale.
    - **Reprocessed records: one dialect per record, latest `ingest_time` wins**, keyed
      `(chunk_id, content.kind, within-chunk discriminator)`. Keyed on `ingest_time` because
      `pipeline_version` is a *composed* string and therefore not orderable; keyed on `content.kind`
      because Phase-3 proved captions and transcripts can share one `pipeline_version`, so a
      kind-blind rule drops transcripts to drop captions.
    - **This is what actually fixes the re-consolidation double-count** (`daylog.py` filters on
-     neither field today), and it is why **E-2 is no longer a correctness blocker for the WS-VC
-     cutover**.
+     neither field today), and it is why *E-2 is no longer a correctness blocker for the WS-VC
+     cutover*.
    - **A `pipeline_version` bump is a forward-only correction.** It improves future training; it
      does not repair past weights, which on an append-only weight chain is irreducible.
    - The remedy for a dialect bad enough to need repair is a deliberate **rebuild from base over
      retained history** — named as the escape hatch, not built. Accepted, named cost: the same
      lived moment can train twice in two dialects (OQ8 below).
 7. ~~**The within-chunk discriminator is not readable from C2 — a blocking sub-item for the build
-   slice.**~~ **Resolved (2026-07-27) — option (a) taken: it is surfaced.**
+   slice.**~~ *Resolved (2026-07-27), option (a) taken: it is surfaced.*
 
    **Why it's this way**
 
    - `discriminator` is an additive-optional top-level field on C2
      (`contracts/c2_processed_record.v0.json`), emitted by DP only when non-empty — absence, not
-     `""`, is the 1:1 contract, the shape D17 used for the civil-time fields — with both
+     `""`, is the 1:1 contract, the shape D17 used for the civil-time fields, with both
      `extra="forbid"` pydantic mirrors moved alongside it.
    - It adds no new promise: DP already rejected duplicate discriminators within a chunk
      (`stagegraph/executor.py:396-401`), so this only makes an enforced invariant readable.
@@ -628,16 +628,16 @@ Engineering:
    - The day-log's one-dialect rule keys on `(chunk_id, content.kind, discriminator)` and is
      covered by unit tests plus the live seam check.
    - **Chosen over the cheaper alternative** — proving `(chunk_id, kind, t_start)` unique per
-     dialect — because that is a proof that expires silently the day a stage emits two records at
+     dialect, because that is a proof that expires silently the day a stage emits two records at
      one timestamp, and D19's prototype posture makes an additive contract edit cheap.
-   - *Original text:* the one-dialect rule needs to group by
-     `(chunk_id, content.kind, discriminator)`, but the discriminator is today folded into the
-     `record_id` hash and exists as no independent field
-     (`../data-processing/app/pipeline.py:33-46`). The build must either **(a)** surface it as an
-     additive-optional C2 field — a schema edit, so ARCHITECTURE first, then the schema, then
-     **both** pydantic mirrors, which are `extra="forbid"` on DP *and* storage and will reject it
-     otherwise (the exact trap D17 hit) — or **(b)** prove `(chunk_id, kind, t_start)` unique per
-     dialect and key on that. Do not start the materializer before this is chosen.
+   - *Original text:* the one-dialect rule needs to group by `(chunk_id, content.kind,
+     discriminator)`, but the discriminator is today folded into the `record_id` hash and exists
+     as no independent field (`../data-processing/app/pipeline.py:33-46`). The build must either
+     **(a)** surface it as an additive-optional C2 field — a schema edit, so ARCHITECTURE first,
+     then the schema, then *both* pydantic mirrors, which are `extra="forbid"` on DP *and*
+     storage and will reject it otherwise (the exact trap D17 hit), or *(b)* prove `(chunk_id,
+     kind, t_start)` unique per dialect and key on that. Do not start the materializer before
+     this is chosen.
 8. **Double exposure across a dialect bump (accepted, tracked).** Because a reprocessed record
    re-enters a later window, the same lived moment can be trained twice.
    - Suppressing already-rendered chunks would stop the double exposure, but it would equally stop

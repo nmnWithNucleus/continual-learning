@@ -14,8 +14,8 @@ wire, claim/dedup/epoch semantics, chunk-atomicity, the single-bounded-queue 503
 Inline mode + mock defaults byte-identical — **proven empirically**: sha256 of the full
 C2 output (processed_at stripped) over audio/video/image/text fixtures is identical
 across main, this branch, and this branch under subprocess isolation, for both the
-default and diarize-mock dialects. Suite: **DP 163 green** (was 128). **Owner session:**
-DP deep session (continued) · **Last updated:** 2026-07-21
+default and diarize-mock dialects. Suite: *DP 163 green* (was 128). *Owner session:*
+DP deep session (continued) · *Last updated:* 2026-07-21
 
 Branch: `svc/dp-hardening` (4 commits, one per workstream), from `main@86acb95`.
 
@@ -27,12 +27,12 @@ One model closes both: **who may touch a slot is declared, enforced by construct
 and encoded in the dialect.**
 
 - **`SlotView` capability proxy** (`stage.py`): every stage's `run_*` receives a
-  stage-scoped view of the slot blackboard, not the dict. A **sidecar is refused even a
-  read of the primary's `mutable_slots`** — you cannot scribble on an object you were
-  never handed — and ALL direct writes are refused except a mutate's declared `writes`.
+  stage-scoped view of the slot blackboard, not the dict. A *sidecar is refused even a
+  read of the primary's `mutable_slots`* — you cannot scribble on an object you were
+  never handed, and ALL direct writes are refused except a mutate's declared `writes`.
   Violations raise `SlotAccessError` (a `RuntimeError`) at the offending line,
   synchronously, order-independently. The old end-of-run fingerprint guard (which missed
-  any illegal write landing before the last mutate finished — finding #6) is **deleted**,
+  any illegal write landing before the last mutate finished — finding #6) is *deleted*,
   not just backstopped.
 - **Declared commits:** `provides` is now authoritative, not documentation — a
   `StageResult.slots` key outside `provides` (∪ `mutable_slots` for the primary) fails
@@ -115,7 +115,7 @@ contract preservation, test gaps) → every finding attacked by 2 independent re
    capped-modality backlog: a finishing worker's same-tick rescan always stole the
    freed permit for a newer queued job before the parked retrier's wakeup ran
    (empirically reproduced: the retry ran only after a 30-job backlog fully drained).
-   Fix: parked re-acquirers hold a **permit reservation** the dispatch scan must
+   Fix: parked re-acquirers hold a *permit reservation* the dispatch scan must
    respect (`_reacquiring` counters — no permit transfer, so cancellation still can't
    strand one). Also closes the FIFO-inversion contract regression (same root cause).
 2. **[high, slots]** A sidecar declaring `provides` on a primary mutable slot passed
@@ -136,7 +136,7 @@ contract preservation, test gaps) → every finding attacked by 2 independent re
    the send and exited cleanly → the parent misread a terminal failure as transient
    "died (exitcode 0)". Fix: every child send has a string-only fallback preserving
    the transient/status flags (sanitized `repr` detail).
-6. **[med, isolation]** `_collect` parked one **shared asyncio default-executor**
+6. **[med, isolation]** `_collect` parked one *shared asyncio default-executor*
    thread per in-flight child (cap `min(32, cpus+4)`) — saturation wedged unrelated
    loop work (`getaddrinfo`). Fix: dedicated lazy `ThreadPoolExecutor(64)`.
 7. **[low, slots]** `run_graph` accepted `units` from ANY stage kind. Fix: only
@@ -146,8 +146,8 @@ contract preservation, test gaps) → every finding attacked by 2 independent re
    could corrupt chunk-identity fields (record_id/journal inputs) and then "skip".
    Fix: stages get a read-only `MappingProxyType` view of c1.
 9. **[low, config]** `_choice` failed open silently (`INGEST_ISOLATION=1` → isolation
-   off, no signal). Fix: warn-once on unrecognized values. **`forkserver` removed
-   entirely** — it freezes `os.environ` at server launch, breaking the
+   off, no signal). Fix: warn-once on unrecognized values. *`forkserver` removed
+   entirely* — it freezes `os.environ` at server launch, breaking the
    child-inherits-parent-env premise (stale-config child under a fresh parent-stamped
    `pipeline_version`).
 
@@ -165,8 +165,8 @@ transitive mutate chain + 3-fragment version order.
   reference-scoped, not deep-frozen. Deep immutability of slot values (frozen result
   dataclasses) is a candidate follow-up; today it is the same trust level as any
   shared in-process object.
-- `ctx.resources` stays unproxied (app-owned live handles — metrics, pools — are
-  mutable by design).
+- `ctx.resources` stays unproxied (app-owned live handles — metrics, pools, are mutable
+  by design).
 
 **Refuted by the verify pass (2):** a claimed forever-zombie on non-EOF recv errors
 (join runs regardless; the rewrite moved it into a `finally` anyway) and a claimed
@@ -205,7 +205,7 @@ surface. No code deleted in this slice.
 | M4 | Cross-source time spine (skew) | **NOT started** (absolute timestamps exist; skew handling/alignment tests don't) |
 | M5 | World-data enrichment | **NOT started** (`enrichments` carry only diarization speakers; faces/places/objects empty) |
 | M6 | C8 synchronous API | **NOT started** (mechanism ready: inline path + stage-subset profiles; blocked on input's C8 shape) |
-| M7 | Production hardening | **Substantially done after this slice**: backpressure ✓, dead-letter ✓, durable journal + kill-recovery ✓, epochs ✓, bounded re-drive ✓, fairness ✓ (now safe), poison/ghost isolation ✓ (opt-in). **Remaining:** dead-letter backfill tooling, reprocess-by-version drill at scale (a full pilot day), `processed` retention, warm child pool + wall-clock kill knob, and the ops story for WHO restarts DP (no supervisor config exists in-repo — platform owns the deploy layer; must be confirmed before the M7 exit box is checked) |
+| M7 | Production hardening | **Substantially done after this slice**: backpressure ✓, dead-letter ✓, durable journal + kill-recovery ✓, epochs ✓, bounded re-drive ✓, fairness ✓ (now safe), poison/ghost isolation ✓ (opt-in). *Remaining:* dead-letter backfill tooling, reprocess-by-version drill at scale (a full pilot day), `processed` retention, warm child pool + wall-clock kill knob, and the ops story for WHO restarts DP (no supervisor config exists in-repo — platform owns the deploy layer; must be confirmed before the M7 exit box is checked) |
 | M8 | Metrics + dashboard | **done** (`/metrics` + `dashboards/data-processing.json`; per-graph-stage latency landed with the stage graph) |
 
 **Sequencing reality:** M0/M3/M7(core)/M8 done; M1 needs its exit measurement; the
@@ -226,7 +226,7 @@ items remain tracked in [ws-dp-stage-graph.md](ws-dp-stage-graph.md) §Deferred)
   drill, +5 isolation incl. poison/ghost drills). Suite 128 → 151 green.
 - 2026-07-21 — **Adversarial review workflow** over the full diff (47 agents: 5
   dimension reviewers → 2 refuters per finding; 2.4M tokens): 19 confirmed / 2
-  refuted → **9 code fixes + 7 gap drills** (§4), incl. one high empirically-reproduced
+  refuted → *9 code fixes + 7 gap drills* (§4), incl. one high empirically-reproduced
   starvation in the new dispatch and one high event-loop stall in spawn isolation.
   Byte-identity re-proven post-fix (identical output digests vs main across dialects
-  AND under isolation). Suite **163 green** (stable across repeat runs).
+  AND under isolation). Suite *163 green* (stable across repeat runs).

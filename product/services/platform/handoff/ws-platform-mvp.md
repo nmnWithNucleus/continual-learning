@@ -54,8 +54,8 @@ output(8082) → input(8081)** in order (each `/health`-gated), print `http://lo
   bring-up; none of that is in this slice.
 
 ## Platform ↔ service contract (what each sibling `run.sh` must honour)
-- read **`HOST`** and **`PORT`** from env and bind uvicorn to them;
-- expose **`GET /health`** → HTTP 200 when ready;
+- read `HOST` and `PORT` from env and bind uvicorn to them;
+- expose `GET /health` → HTTP 200 when ready;
 - use the **active venv** already on `PATH` (do not create a private venv — `run_all.sh` owns it);
 - **inference** also reads `MODEL_BACKEND`, `MODEL_ID`, `VLLM_URL`, `STORAGE_URL`;
 - **input/output** read `INFERENCE_URL`, `STORAGE_URL`, `OUTPUT_URL` as needed.

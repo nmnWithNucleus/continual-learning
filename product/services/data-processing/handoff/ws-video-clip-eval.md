@@ -2,19 +2,19 @@
 
 **Workstream:** WS-H (`§11 → WS-H` of `handoff/ws-video-clip.md`).
 **Scope:** the offline A/B, the ground-truth corpora, the Gemini oracle, the mechanical scorers.
-**Status:** built, green, and *honest about what it could not measure in a headless build*.
-**Suite:** 502 passed (baseline 465 + 37 new) with `ASR_BACKEND=mock`.
+*Status:* built, green, and *honest about what it could not measure in a headless build*.
+*Suite:* 502 passed (baseline 465 + 37 new) with `ASR_BACKEND=mock`.
 
 ---
 
 ## 0. What this is, in one paragraph
 
 `scripts/prompt_ab.py` runs a corpus of video chunks through the **real** video stage graph —
-`resolve()` + `run_graph()` + `pipeline.build_c2`, imported directly — once per experimental
+`resolve()` + `run_graph()` + `pipeline.build_c2`, imported directly, once per experimental
 arm, and prints the arms side by side under mechanical scorers. It exists to settle the one
 premise the design argued instead of measuring (**O-8**: does the captioner actually get
-better when it is shown the OCR text, and does it get worse when that text is wrong?), and
-to be cheap enough to run on every push, because *an eval expensive enough to skip will be
+better when it is shown the OCR text, and does it get worse when that text is wrong?), and to
+be cheap enough to run on every push, because *an eval expensive enough to skip will be
 skipped*.
 
 ---
@@ -73,9 +73,9 @@ Three independent mechanisms, none of which is a comment:
 1. **Below the writer.** The harness enters at `resolve()`/`run_graph()`/`build_c2`.
    `ingest_core.py`'s per-unit loop is the only `/context` writer in the system and it lives
    *above* the processor seam. No FastAPI, no `StorageClient`.
-2. **Enforced, not asserted.** `_forbid_storage()` poisons `StorageClient.__init__` **and**
+2. **Enforced, not asserted.** `_forbid_storage()` poisons `StorageClient.__init__` *and*
    `ingest_core.process_chunk` in the arm worker before a single stage is imported.
-   - The class object *is* reachable — `executor` imports `ingest_core` for `ProcessingError` —
+   - The class object *is* reachable — `executor` imports `ingest_core` for `ProcessingError`,
      so "we simply never call it" was not good enough.
    - A future refactor that reaches for storage from below the seam fails here, in an eval,
      instead of quietly minting
@@ -92,19 +92,19 @@ Three independent mechanisms, none of which is a comment:
 
 Each arm is assembled into its **own complete prompt registry** in a temp dir — the six
 packaged packs + `schemas.json` + the arm's experimental pack + a rewritten `routes.json`
-whose `family_defaults.clip` is the arm's pack + an `arm.json` — and runs in its **own
+whose `family_defaults.clip` is the arm's pack + an `arm.json`, and runs in its **own
 subprocess** with `VIDEO_PROMPT_DIR` pointed at it. (Packs load once per process at import,
 D-13's TOCTOU discipline, so one process physically cannot hold two arms.)
 
 The fork is then automatic and two-fold:
 
 * `prompt_dir_fingerprint` is `OUTPUT_AFFECTING`, so the arm dir's **contents** fold into
-  `cfg_tag` — arms fork under **every** backend, including `mock`, where `prompt_tag` is
+  `cfg_tag` — arms fork under *every* backend, including `mock`, where `prompt_tag` is
   `""` by design and would not fork on its own;
 * `PACK_DIGEST` + the pack id fork `prompt_tag` under `vlm`/`vertex`.
 
 `arm.json` is never read by anything. Its whole job is to be hashed: it is what makes
-`injected` and `injected-corrupt` — whose pack text is byte-identical — fork anyway.
+`injected` and `injected-corrupt` — whose pack text is byte-identical, fork anyway.
 `LOCK.json` is deliberately **not** copied into an arm dir, so an eval arm cannot claim the
 production pack's locked human version.
 
@@ -132,8 +132,8 @@ a production incident:
 * `PACK_DIGEST = compute_digest(_PACKS, _ROUTES)` is a digest over **every loaded pack**
   (`app/vision/prompts/__init__.py`), and `load_registry` globs `*.prompt.md` in the source
   dir. Two extra files in the flat directory change the aggregate digest → change
-  `version_tag(vs)` → change the clip primary's `version_fragment` → **fork `record_id` for
-  every production caption**, for an experiment that never ran.
+  `version_tag(vs)` → change the clip primary's `version_fragment` → *fork `record_id` for
+  every production caption*, for an experiment that never ran.
 * WS-D's `tests/test_prompt_pack.py:47,200,452` asserts the loaded pack set is exactly the
   six shipped ids, so the same drop-in reddens the suite — in a file WS-H does not own.
 
@@ -161,8 +161,8 @@ All mechanical. All pure functions in `scripts/prompt_ab.py`, all unit-tested.
 | parse-fallback rate | fraction of chunks whose `ClipDesc.parsed` is false |
 | `app != "unknown"` rate | fraction with a non-empty, non-`unknown` `app` |
 | change-verb rate | fraction of captions containing a verb from a frozen 40-word vocabulary — the mechanical proxy for "did this reason across frames" (O-4's headline) |
-| **`ungrounded_quote_rate`** | the `NARROW` measure the shipped counter implements: double-quoted spans absent from the chunk's OCR text |
-| **`ungrounded_named_rate`** | the **`WIDENED`** measure (addendum edit #2): *all* named ≥4-char strings |
+| `ungrounded_quote_rate` | the `NARROW` measure the shipped counter implements: double-quoted spans absent from the chunk's OCR text |
+| `ungrounded_named_rate` | the `WIDENED` measure (addendum edit #2): *all* named ≥4-char strings |
 | `named_entity_recall` | ground-truth entities recovered by the caption (lenient substring, casefolded) |
 | `app_correct` | the caption's `app` matches the chunk's truth app (either containing the other) |
 | `propagation_rate` | fraction of chunks whose caption contains a string the corrupted-OCR arm **falsified** |
@@ -186,7 +186,7 @@ those are real macOS application names, and noticing when a caption states one t
 never read is the scorer's entire job.
 
 **Why the widening matters, measured here:** across every run in §6 — mock captioner and
-stub captioner, 6 to 40 chunks, four arms — the corpus contained **0 double-quoted spans**
+stub captioner, 6 to 40 chunks, four arms, the corpus contained **0 double-quoted spans**
 and 5–24 named strings per arm. A quote-only counter had literally nothing to measure. The
 design's 32.6 % is its own figure; this harness's contribution is that the counter which is
 supposed to make injection safe was, on every caption we produced, measuring an empty set.
@@ -222,7 +222,7 @@ day-log       1 block, 1,960 chars, EXCERPT_CHARS=6,000, 67.3 % headroom, 0 over
 The day-log projection is the D-11 claim measured rather than argued, through continuum's
 own renderer: at `segment_seconds=60, block_segments=2` the block sits well inside the
 amplifier's excerpt window, so the OCR line — which renders **last**, and which truncation
-therefore kills **first** — survives.
+therefore kills **first**, survives.
 
 ### 6.3 The O-8 gate, validated against a stub captioner
 
@@ -261,8 +261,8 @@ at the design's 1.6 s single-stream decode, 200 chunks ÷ 8 ≈ 40 s).
 
 **The ~$0.02 target does not reconcile with §7.3's own arithmetic.** 200 chunks × 1,517
 prefill + 60 output tokens, at 12k/2k tok/s and $16/node-hour, is **$0.139** — which is just
-§7.3's own `$0.250/screen-hour ÷ 360 chunks/hour × 200`. The stated $0.02 is ~7× low. **The
-conclusion is unaffected** (14 cents is emphatically pre-push cheap), but the number in §11
+§7.3's own `$0.250/screen-hour ÷ 360 chunks/hour × 200`. The stated $0.02 is ~7× low. *The
+conclusion is unaffected* (14 cents is emphatically pre-push cheap), but the number in §11
 should be restated as ~$0.14, or the pre-push corpus scoped to ~30 chunks. The harness prints
 this reconciliation on every run rather than quietly reporting a figure that misses its
 stated target.
@@ -310,10 +310,10 @@ notes does not exist anywhere in the repo.
 
 `--arms keyframe,injected` gives the mechanical half today (records/chunk, chars/record, the
 day-log projection, change-verb rate, tokens). The *qualitative* half — the POC's
-frame-grounded rubric — is `oracle_gemini.py judge`, which is built and unrun for want of a
-credential. The judge is blinded by construction: presentation order is
-`sha256(chunk_id, arms)[0] % 2`, deterministic and uncorrelated with the arms, and the
-mapping is unblinded only after the verdict is read.
+frame-grounded rubric, is `oracle_gemini.py judge`, which is built and unrun for want of a
+credential. The judge is blinded by construction: presentation order is `sha256(chunk_id,
+arms)[0] % 2`, deterministic and uncorrelated with the arms, and the mapping is unblinded
+only after the verdict is read.
 
 One honest note on the keyframe arm: the legacy dialect is a frozen `""` exemption (D-14),
 so it cannot fork and gets no `VIDEO_PROMPT_DIR`. Its `pipeline_version` is literally
@@ -378,7 +378,7 @@ Whether 15.1× dose is right is A-8 / O-5, which is continuum's fork to run.
    as designed and its cutover is gated.
 4. **The Gemini oracle and the blind judge are built and unrun** for want of a credential. The
    mechanical scorers stand alone; they are the gate, the oracle is corroboration.
-5. **`dp_caption_ungrounded_quote_total`** (declared by WS-F, currently unwired) should be fed
+5. `dp_caption_ungrounded_quote_total` (declared by WS-F, currently unwired) should be fed
    by the widened definition in §5, not the quoted-span one — the counter's own declaration
    already carries a note deferring the name to WS-H. The scorer is
    `prompt_ab.grounding(caption, ocr_text)["named_ungrounded"]`; wiring it into the stage is a

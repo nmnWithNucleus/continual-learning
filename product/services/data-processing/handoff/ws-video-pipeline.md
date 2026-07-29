@@ -7,10 +7,10 @@
 > two shared-core files.
 
 **Status:** built + verified + adversarially reviewed — full suite **49 passed** (38 pre-existing
-green + 11 new); mock loop verified headless E2E out-of-process; **real Qwen3-VL-8B run captioned
-real keyframes end-to-end** (verbatim OCR woven, distinct per-keyframe sub-spans); a 6-dimension
+green + 11 new); mock loop verified headless E2E out-of-process; *real Qwen3-VL-8B run captioned
+real keyframes end-to-end* (verbatim OCR woven, distinct per-keyframe sub-spans); a 6-dimension
 adversarial review surfaced 3 real idempotency/robustness issues, all fixed + regression-tested ·
-**Owner session:** video-pipeline lead · **Last updated:** 2026-07-19
+*Owner session:* video-pipeline lead · *Last updated:* 2026-07-19
 
 ---
 
@@ -24,14 +24,14 @@ adversarial review surfaced 3 real idempotency/robustness issues, all fixed + re
     `VIDEO_MAX_KEYFRAMES=8`, `VIDEO_MIN_KEYFRAMES=1`, `VIDEO_SAMPLE_FPS=2.0`,
     `VIDEO_FRAME_MAX_WIDTH=768`, `VIDEO_VLM_URL`, `VIDEO_VLM_MODEL`, `VIDEO_VLM_API_KEY`,
     `VIDEO_VLM_TIMEOUT=120`, `VIDEO_VLM_MAX_TOKENS=256`, `VIDEO_OCR_RECORDS=0`.
-  - `frames.py` — **backend-independent** keyframe extraction via the **single canonical decoder,
-    ffmpeg** — scene-change detection (`select='gt(scene,thr)',metadata=print`) unioned with a
-    duration-driven **uniform base grid**, then JPEG extraction + downscale. ffmpeg absent / bytes
+  - `frames.py` — **backend-independent** keyframe extraction via the *single canonical decoder,
+    ffmpeg*, scene-change detection (`select='gt(scene,thr)',metadata=print`) unioned with a
+    duration-driven *uniform base grid*, then JPEG extraction + downscale. ffmpeg absent / bytes
     don't decode → returns `[]` → synthetic fallback (the same result on every worker). Selection is
-    **deterministic** given bytes+settings, and record identity is the keyframe's selected-times
-    index — both required by the C2 idempotency contract (see the review note below). No in-process
-    OpenCV fallback: a second decoder's scene metric differs from ffmpeg's, so a heterogeneous fleet
-    would select different keyframes for identical bytes under one `pipeline_version` — a silent
+    *deterministic* given bytes+settings, and record identity is the keyframe's selected-times index
+    — both required by the C2 idempotency contract (see the review note below). No in-process OpenCV
+    fallback: a second decoder's scene metric differs from ffmpeg's, so a heterogeneous fleet would
+    select different keyframes for identical bytes under one `pipeline_version` — a silent
     non-idempotent upsert. One decoder on purpose.
   - `result.py` — neutral `Keyframe` (JPEG + chunk-relative `[t_offset, t_end_offset)` sub-span;
     `image_jpeg=None` marks a *synthetic* timing-less keyframe) and `KeyframeCaption`
@@ -49,9 +49,9 @@ adversarial review surfaced 3 real idempotency/robustness issues, all fixed + re
 - **`app/processing/processors/video.py` rewritten** (seam unchanged): extract keyframes → caption
   via the selected backend → weave OCR into the caption → one `ProcessedUnit` per keyframe, each
   with its own sub-span. `discriminator=str(idx)`; `video.PIPELINE_VERSION` still resolves to
-  `vidproc-mock-v0` (the seam tests' handle). **Synthetic fallback**: undecodable bytes (the seam's
+  `vidproc-mock-v0` (the seam tests' handle). *Synthetic fallback*: undecodable bytes (the seam's
   47-byte fixture, or a box with no ffmpeg) → `SYNTHETIC_KEYFRAMES=3` timing-less keyframes
-  carrying the chunk span verbatim — **byte-identical to the old stub**, so the 38 stay green with
+  carrying the chunk span verbatim — *byte-identical to the old stub*, so the 38 stay green with
   or without video tooling installed.
 
 ### 2. Per-keyframe timing hook (CHARTER priority 2 — the ONE sanctioned additive core edit)
@@ -61,7 +61,7 @@ adversarial review surfaced 3 real idempotency/robustness issues, all fixed + re
   `t_end`). **No C2 schema change** — C2 already carries per-record timestamps. When a keyframe sets
   a sub-span, its record gets its own `[t_start,t_end)` instead of colliding with siblings on the
   shared chunk span (storage's `(user_id, t_start)` index). Defaulting to the C1 span keeps
-  audio/image/text and the mock video fallback **byte-identical** — the 38 pre-existing tests are
+  audio/image/text and the mock video fallback *byte-identical* — the 38 pre-existing tests are
   the proof. The outer boundaries reuse the C1 span strings verbatim, so the union of a chunk's
   keyframe sub-spans exactly equals the declared chunk span (no tz-format / float drift at edges).
 
@@ -70,7 +70,7 @@ adversarial review surfaced 3 real idempotency/robustness issues, all fixed + re
   written to /context (so the user model learns text from the description target, not by reading
   pixels at inference — D8). Optionally (`VIDEO_OCR_RECORDS=1`) also emits a distinct
   `content.kind="ocr"` record per keyframe (`discriminator="{idx}:ocr"`), default OFF.
-  **Structured bbox geometry is out of frozen scope** — a later additive-C2 field owned by the
+  *Structured bbox geometry is out of frozen scope* — a later additive-C2 field owned by the
   image build (CHARTER OQ14b).
 
 ## Contract discipline
@@ -78,7 +78,7 @@ adversarial review surfaced 3 real idempotency/robustness issues, all fixed + re
   vlm, ocr-record) validates against the frozen `c2_processed_record.v0.json`.
 - **File ownership:** touched only `processors/video.py`, the new `app/vision/*`, additive
   `base.py` + `pipeline.py`, `requirements-video.txt`, and NEW `tests/test_video_pipeline.py` +
-  `tests/fixtures/video_scenes.*`. Did **not** touch config.py, requirements.txt, main.py,
+  `tests/fixtures/video_scenes.*`. Did *not* touch config.py, requirements.txt, main.py,
   registry.py, models.py, schemas.py, asr/, audio/, or the audio/image/text processors — no merge
   surface with the concurrent audio session.
 
@@ -101,17 +101,17 @@ adversarial review surfaced 3 real idempotency/robustness issues, all fixed + re
   `temperature=0`, caption+OCR parsed and woven, `pipeline_version=vidproc-vlm-v0`.
 
 ## Verification runs
-- **Full suite:** `ASR_BACKEND=mock python3 -m pytest -q` → **47 passed** (38 pre-existing + 9 new).
+- **Full suite:** `ASR_BACKEND=mock python3 -m pytest -q` → *47 passed* (38 pre-existing + 9 new).
 - **Mock headless E2E (out-of-process):** real uvicorn DP (`VIDEO_BACKEND=mock`) + a real HTTP
   fake-storage; PUT the real `video_scenes.mp4` blob, POST its C1 → 4 keyframe C2 records in
   `/context` with distinct contiguous sub-spans (`00:00→02.667→05.333→06.0→08`, boundaries
   verbatim), OCR woven, idempotent re-ingest. No GPU/torch.
-- **Real VLM run (genuine, on this box):** served the cached **Qwen/Qwen3-VL-8B-Instruct** with
-  **vLLM 0.24.0** (conda `vllm-cu13`, TP=1, one H100, `HF_HUB_OFFLINE=1`) on an OpenAI-compatible
+- **Real VLM run (genuine, on this box):** served the cached *Qwen/Qwen3-VL-8B-Instruct* with
+  *vLLM 0.24.0* (conda `vllm-cu13`, TP=1, one H100, `HF_HUB_OFFLINE=1`) on an OpenAI-compatible
   `:8100`; pointed `VIDEO_BACKEND=vlm VIDEO_VLM_URL=http://127.0.0.1:8100
   VIDEO_VLM_MODEL=Qwen/Qwen3-VL-8B-Instruct` and drove `video_scenes.mp4` through `/ingest`.
-  Qwen3-VL-8B captioned all **4 real keyframes in ~3.2s**, reading each scene's on-screen text
-  **verbatim** and weaving it in, e.g.:
+  Qwen3-VL-8B captioned all *4 real keyframes in ~3.2s*, reading each scene's on-screen text
+  *verbatim* and weaving it in, e.g.:
   - kf0 `[00:00→02.667]` — "A solid blue background with centered white text describing a desk
     setup. On-screen text: 'desk laptop and coffee'."
   - kf2 `[05.333→06.0]` — "A terminal window displays a command prompt with the text 'terminal
@@ -141,14 +141,14 @@ adversarial review surfaced 3 real idempotency/robustness issues, all fixed + re
 - 2026-07-19 — **6-dimension adversarial review** (contract-frozen / mock-byte-identical /
   headless-latebind / determinism / file-ownership / correctness; each finding independently
   refuted-or-confirmed). 4 dimensions clean; 3 confirmed real issues fixed + regression-tested:
-  (1) **[medium]** a transient per-frame extraction drop re-indexed survivors → shifting record_ids
+  (1) *[medium]* a transient per-frame extraction drop re-indexed survivors → shifting record_ids
   → non-idempotent; fixed by keying identity to the deterministic selected-times index (a dropped
-  frame no longer renumbers survivors). (2) **[low]** the OpenCV fallback selected a *different*
+  frame no longer renumbers survivors). (2) *[low]* the OpenCV fallback selected a *different*
   keyframe set than ffmpeg under the same `pipeline_version` (empirically 3 vs 4 keyframes on the
-  fixture) → fleet non-idempotency; fixed by **removing the second decoder** — ffmpeg is now the
-  single canonical decoder, no-ffmpeg → synthetic (same everywhere). (3) **[low]** a 200 VLM
+  fixture) → fleet non-idempotency; fixed by *removing the second decoder* — ffmpeg is now the
+  single canonical decoder, no-ffmpeg → synthetic (same everywhere). (3) *[low]* a 200 VLM
   response lacking `choices` raised an opaque KeyError; fixed to a clear `ValueError` (chunk
-  retried, no degraded caption persisted). Suite → **49 passed**.
+  retried, no degraded caption persisted). Suite → *49 passed*.
 - 2026-07-19 — **independent verification round** (recording/DP integrator session: 3-lens
   claims audit + 2-skeptic confirmation, 27 agents). Claims that held empirically:
   record_id stability under frame drops, sub-span contiguity/clamping, webm(vp8)+mp4+
@@ -157,10 +157,10 @@ adversarial review surfaced 3 real idempotency/robustness issues, all fixed + re
   under `vlm` emitted '[no decodable frame]' placeholders as processed truth under the real
   dialect (transient ffmpeg timeouts conflated with corrupt bytes, never retried) — the vlm
   path now `RAISES` so at-least-once redelivery retries, mock keeps the synthetic dev
-  fallback; (2)+(3) partition-invariant holes — decoded-media-shorter-than-span left a tail
-  gap and a dropped head frame orphaned the chunk's opening slice — first/last records are
+  fallback; (2)+(3) partition-invariant holes, decoded-media-shorter-than-span left a tail
+  gap and a dropped head frame orphaned the chunk's opening slice, first/last records are
   now pinned to the C1 span edges verbatim; (4) vision config numerics parsed strictly (a
-  locale-comma typo = permanent 500 on every video ingest) — now lenient-with-warning,
+  locale-comma typo = permanent 500 on every video ingest), now lenient-with-warning,
   matching the audio config posture. Also: transient subprocess failures now log loudly.
   Known deferred (finding, not fixed here): inline processing under a fully-loaded config
   can exceed recording's client timeout — fleet mitigated (`RECORDING_HTTP_TIMEOUT=120` in

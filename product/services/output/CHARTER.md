@@ -25,11 +25,11 @@
 
 Deliver every response the system generates to the user — streaming text on the computer
 surfaces, synthesized speech to the mobile app (which plays it to connected headphones/earbuds,
-since the v0 wearable has no speaker) — with the right render format per surface,
-a delivery ack per turn, and sane failure handling when a device drops mid-stream. Output is
-**deliberately the thinnest v0 service**: it generates nothing and captures nothing; it moves
-what inference produced to where the user is. Its future is the **proactive channel**
-(notifications, nudges, coach-mode interventions) — sketched below, explicitly not built in v0.
+since the v0 wearable has no speaker), with the right render format per surface, a delivery ack
+per turn, and sane failure handling when a device drops mid-stream. Output is **deliberately
+the thinnest v0 service**: it generates nothing and captures nothing; it moves what inference
+produced to where the user is. Its future is the **proactive channel** (notifications, nudges,
+coach-mode interventions) — sketched below, explicitly not built in v0.
 
 ---
 
@@ -144,7 +144,7 @@ ID only, never redefined here):
 **Future (not v0)**
 6. Proactive channel: trigger ownership sits with inference + continuum (acknowledged as future
    scope in their charters — we own only the channel); notification transport (the v0 mobile app
-   gives us a push surface — APNs / FCM); rate limits + quiet hours; user consent model.
+   gives us a push surface, APNs / FCM); rate limits + quiet hours; user consent model.
 
 ---
 
@@ -177,8 +177,8 @@ v0 = **one lead session + on-demand workstream agents** (matching the org model 
 ## Related work
 
 - [../../../poc/live_video_chat/HANDOFF.md](../../../poc/live_video_chat/HANDOFF.md) —
-  **reference only, not code to lift** ([D7](../../DECISIONS.md) — code provenance).
-  Useful precedent for M1: token streaming shape (chunked `text/plain` over a fetch reader,
+  **reference only, not code to lift** ([D7](../../DECISIONS.md), code provenance). Useful
+  precedent for M1: token streaming shape (chunked `text/plain` over a fetch reader,
   metrics tail frame, `[error]`-line convention, markdown render on the client). Study the
   learnings; write the production path fresh.
 - Outside precedents: SSE vs WebSocket trade-offs for authenticated streaming POSTs; APNs/FCM

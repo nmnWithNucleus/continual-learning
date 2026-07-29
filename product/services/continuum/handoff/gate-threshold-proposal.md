@@ -24,8 +24,8 @@ own nights would be blocked **71% of the time**. A gate that rejects the thing i
 calibrated on is not measuring quality.
 
 It is worse than a bad constant. The reference's night-to-night sd is **0.090**, and the
-binomial sd of a 28-probe sample at p=0.365 is **0.090** — identical to three decimals. **All
-observed night-to-night variation is sampling noise.** At n=28 a single night's trap rate
+binomial sd of a 28-probe sample at p=0.365 is **0.090** — identical to three decimals. *All
+observed night-to-night variation is sampling noise.* At n=28 a single night's trap rate
 carries ±0.18 at 95% confidence, so the metric cannot currently distinguish a good night from a
 bad one at all.
 
@@ -42,8 +42,8 @@ h12 horizon-erosion endpoint):
 | **0.25 (proposed target)** | **150** | **0.1%** | **100%** |
 
 **Proposal.** Interim: **floor 0.15 at the current n=28** — ~1% false blocks, ~99% detection of
-a genuine calibration collapse. Target: grow the trap suite to **≥150 probes** (WS4 — it is the
-only suite that needs new generation) and then set the floor at **0.25**, which is both
+a genuine calibration collapse. Target: grow the trap suite to *≥150 probes* (WS4 — it is the
+only suite that needs new generation) and then set the floor at *0.25*, which is both
 essentially false-block-free and certain to catch collapse.
 
 Worth noting for whoever reviews: our seed 0's first night scored **0.036** on traps — a real

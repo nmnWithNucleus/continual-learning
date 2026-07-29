@@ -1,13 +1,13 @@
 # Nucleus OCR sidecar (WS-C · tab C1)
 
 A co-located, loopback HTTP service that reads on-screen text out of a single
-screen-capture frame **at native resolution on CPU**, and hands data-processing
-(DP) back `[(text, bbox, confidence)]`. It exists as a **separate deployable**
-(not a DP library) so the PP-OCR stack — onnxruntime, opencv, shapely, pyclipper,
-and `numpy<2.4` on the paddleocr path — stays quarantined in **its own venv** and
-never collides with DP's installed numpy 2.5.1 (design doc D-06). The model is a
-**file swap**: point `OCR_DET_MODEL` / `OCR_REC_MODEL` at a different det+rec ONNX
-pair and `/health` re-hashes it.
+screen-capture frame **at native resolution on CPU**, and hands data-processing (DP)
+back `[(text, bbox, confidence)]`. It exists as a **separate deployable** (not a DP
+library) so the PP-OCR stack — onnxruntime, opencv, shapely, pyclipper, and `numpy<2.4`
+on the paddleocr path, stays quarantined in *its own venv* and never collides with DP's
+installed numpy 2.5.1 (design doc D-06). The model is a *file swap*: point
+`OCR_DET_MODEL` / `OCR_REC_MODEL` at a different det+rec ONNX pair and `/health`
+re-hashes it.
 
 > Design of record: `product/services/data-processing/handoff/ws-video-clip.md`
 > — §3 D-06, D-07, D-08 and §11 → WS-C.
@@ -48,12 +48,12 @@ Response `200`:
   and assigns region roles; D-07). May be empty (`[]`) when nothing legible was
   found.
   - `text` — the recognized string, **verbatim, unfiltered**. The sidecar does
-    **no** confidence thresholding, **no** min-length drop, **no** dedup, **no**
+    *no* confidence thresholding, *no* min-length drop, *no* dedup, *no*
     secret redaction — all of that is DP-side post-processing (D-07). The sidecar
     is a dumb specialist: detect, recognize, return.
   - `bbox` — `[x0, y0, x1, y1]` in **pixels of the submitted image**, the
     axis-aligned envelope of the detected quad. Origin top-left. Used by DP for
-    reading order + role assignment, then discarded — **not** emitted to C2 (D-08).
+    reading order + role assignment, then discarded — *not* emitted to C2 (D-08).
   - `conf` — recognition confidence in `[0, 1]`.
 - `engine` — `"mock"` | `"ppocr"`.
 - `model_sha_det`, `model_sha_rec` — echo of the loaded model shas (so a caller
@@ -80,7 +80,7 @@ see below.)*
 
 - `ok` — `true` when the engine loaded.
 - `model_sha_det`, `model_sha_rec` — **sha256 of the two loaded ONNX model files**
-  (det + rec). DP pins these in config and asserts them at **graph resolution** —
+  (det + rec). DP pins these in config and asserts them at *graph resolution* —
   a swapped model file fails loud at resolve, never silently in the corpus (D-06).
 - `ort_version` — the ONNX Runtime version. Version-relevant because ORT is not
   guaranteed bit-exact across releases.
@@ -114,12 +114,12 @@ service or the chunk down.
 
 Selected by env `OCR_MODE`:
 
-- **`mock`** (default) — no models, no deps, no network, no GPU. The HTTP layer
+- `mock` (default) — no models, no deps, no network, no GPU. The HTTP layer
   is **Python-stdlib only**; the mock engine imports nothing third-party. Regions
   are a deterministic function of the request image bytes (identical bytes →
   identical regions), so the wire and the DP `screentext` stage are exercisable
   in headless CI. This is the CI/integration backend.
-- **`ppocr`** — PP-OCR det+rec ONNX on CPU via onnxruntime (rapidocr-onnxruntime).
+- `ppocr` — PP-OCR det+rec ONNX on CPU via onnxruntime (rapidocr-onnxruntime).
   Real text. Requires the sidecar venv. Heavy deps are imported **lazily** at
   engine construction, so nothing leaks into the mock path.
 
@@ -182,6 +182,6 @@ one `exec`, fail loud on a misconfigured real backend.
 Can PP-OCR (or any current OCR model) read 13 pt macOS UI text at 1728 px through
 CRF 28? This is the WS-C deliverable that **gates the production `ppocr` default**:
 ship `VIDEO_OCR_BACKEND=mock` until a model clears **≥ 0.85 key-string recall**
-(≥5-char strings, **lenient substring** matching — not exact equality) and
-**≤ 0.10 CER** on the focused region. The report, its scorer, and the corpus
+(≥5-char strings, *lenient substring* matching — not exact equality) and
+*≤ 0.10 CER* on the focused region. The report, its scorer, and the corpus
 provenance are in [`bakeoff/REPORT.md`](bakeoff/report.md).

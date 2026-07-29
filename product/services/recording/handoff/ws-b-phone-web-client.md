@@ -5,9 +5,9 @@
 > step**, served by the recording server and talking to it same-origin. Reference (not lift,
 > D7): `poc/live_video_chat` — iOS capture/MediaRecorder/tunnel lessons.
 
-**Status:** built + **real-phone verified** (M1 2026-07-18; **re-verified 2026-07-19 on the
-renamed `/capture/*` wire** — CTO's iPhone Safari, 4/4 `clean`, blobs sha256+ffprobe-checked)
-· **Owner session:** recording M1 lead
+**Status:** built + **real-phone verified** (M1 2026-07-18; *re-verified 2026-07-19 on the
+renamed `/capture/*` wire* — CTO's iPhone Safari, 4/4 `clean`, blobs sha256+ffprobe-checked)
+· *Owner session:* recording M1 lead
 
 ---
 
@@ -22,7 +22,7 @@ self-contained blobs. So the client **restarts MediaRecorder every `SEGMENT_SECO
 Cost, stated honestly: a small (~tens of ms) capture gap at each restart. That is a capture
 reality, not a loss: upload `seq` stays dense, per-segment `t_start`/`t_end` are stamped from
 the device wall-clock, and `t_end[n] < t_start[n+1]` by the restart gap. (Exact-adjacency as a
-continuity signal applies to server-carved continuous sources — WS-D — not to this client.)
+continuity signal applies to server-carved continuous sources — WS-D, not to this client.)
 
 ## Client behaviour (what to build)
 
@@ -38,8 +38,8 @@ same-origin fetch, no dependencies, phone-first layout (large record button).
 - **Segment loop:** start recorder (no timeslice); after `SEGMENT_SECONDS` stop it; on
   `dataavailable`+`stop` enqueue `{seq, blob, t_start, t_end, mime}` (wall-clock ms stamped at
   recorder start/stop) and immediately start the next segment from the same MediaStream (no
-  re-prompt). **Pause** = stop current segment, don't start the next; **Resume** = start next.
-  **Stop** = stop current, then after the queue drains POST the end marker.
+  re-prompt). *Pause* = stop current segment, don't start the next; *Resume* = start next.
+  *Stop* = stop current, then after the queue drains POST the end marker.
 - **Session identity:** on each record-press mint `session_id` (ULID-ish from
   `crypto.getRandomValues` + `Date.now()`); `seq` dense zero-based per session. `user_id` from a
   text input (default `beta-user`, localStorage-persisted). `device_id` = `phone-web-` + a
@@ -94,11 +94,11 @@ must be hard-refreshed or every upload 404s.**
   `/client/` locally AND over the cloudflared HTTPS tunnel; the full upload wire exercised
   E2E by a synthetic driver mimicking this client byte-for-byte (segments → demux → C1 →
   real ASR transcripts in `/context`; clean/gap/dup drills all behaved).
-- 2026-07-18 — **Real-Phone verified** (CTO, iPhone Safari via the tunnel): two sessions,
+- 2026-07-18 — **verified on a real phone** (CTO, iPhone Safari via the tunnel): two sessions,
   7/7 and 9/9 segments received+emitted, 0 failed, verdict `clean`, camera preview /
   pause / stop / report poll all behaved; transcripts + video-caption records landed in
   `/context` with correct spans. Three UI leaks found and fixed from the screenshots:
-  (1) the empty `upload`/`dropped: 0` rows showed despite `hidden` — the `.row`
+  (1) the empty `upload`/`dropped: 0` rows showed despite `hidden`, because the `.row`
   `display:flex` overrode the UA's `[hidden]` rule; fixed with a global
   `[hidden]{display:none !important}`; (2) session id was ellipsized — now shown in full
   (it's the "new session started" signal); (3) `dropped` wording de-jargonned. Also

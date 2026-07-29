@@ -78,8 +78,8 @@ defaults, so the script also runs with no `.env` at all.
 
 `run_all.sh` owns the venv and the installs; each sibling `run.sh` must:
 
-- read **`HOST`** and **`PORT`** from the environment and bind uvicorn to them;
-- expose **`GET /health`** returning HTTP 200 when ready to serve;
+- read `HOST` and `PORT` from the environment and bind uvicorn to them;
+- expose `GET /health` returning HTTP 200 when ready to serve;
 - use the **active venv** already on `PATH` (do not create a private venv);
 - **inference** additionally reads `MODEL_BACKEND`, `MODEL_ID`, `VLLM_URL`,
   `STORAGE_URL`;

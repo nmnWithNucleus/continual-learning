@@ -282,7 +282,7 @@ and `window_id` stops meaning anything.
 **What was decided**
 
 - Our capture path is the loss-intolerant, offline-resilient *archive/training* job — the
-  Axon-bodycam pattern — not low-latency live-view, the Ring/Nest pattern, which runs both paths
+  Axon-bodycam pattern, not low-latency live-view, the Ring/Nest pattern, which runs both paths
   separately.
 - **Continuous streaming ingest (WebSocket/RTSP/SRT → server segmenter) is a deferred additive
   leg**, terminating in the existing spool→demux→carve→emit machinery.

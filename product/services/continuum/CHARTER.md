@@ -23,13 +23,13 @@ Lineage: [§How this charter got here](#how-this-charter-got-here).
 ## Mission
 
 Own the periodic (nightly-ish) per-user fine-tuning loop that turns the product's core promise —
-"infinite context" + true personalization — into weights. Each cycle: curate a training mixture
-from the user's new `/context` and `/sessions` records since the last cycle (including mentor
-traces, distilling mentor competence into the personal model), blend in an anti-forgetting replay
-mixture, run a LoRA job over the base world model — v0 adapts **all layers of the language model,
-vision towers excluded**; "all layers" everywhere remains the standing intent, and §Scope names the
-gap — gate the candidate adapter on personal-recall *and* general-capability evals, and publish (or
-roll back) through the model directory. The service is research-heavy by design: continual-learning
+"infinite context" + true personalization, into weights. Each cycle: curate a training mixture from
+the user's new `/context` and `/sessions` records since the last cycle (including mentor traces,
+distilling mentor competence into the personal model), blend in an anti-forgetting replay mixture,
+run a LoRA job over the base world model — v0 adapts **all layers of the language model, vision
+towers excluded**; "all layers" everywhere remains the standing intent, and §Scope names the gap,
+gate the candidate adapter on personal-recall *and* general-capability evals, and publish (or roll
+back) through the model directory. The service is research-heavy by design: continual-learning
 stability, recency vs long-term retention, self-distillation, and the LoRA → MoE-experts-per-user
 scaling path live here.
 
@@ -79,7 +79,7 @@ for audit and provenance.
 
 **Why it's this way**
 
-- The reservoir is **not** on the replay hot path. Replay itself re-fetches prior **day-logs**,
+- The reservoir is **not** on the replay hot path. Replay itself re-fetches prior *day-logs*,
   the raw source being a validated tie.
 
 ### Block rendering — the half that stays
@@ -120,7 +120,7 @@ the product renderer over C2 records left for storage.
 
 - **These are a different renderer from the parity surface above, and they have never had a
   research golden.** The research line never materialized the 10 s-segment / 2 min-block schema —
-  zero producing code, and a research "block" is one 5-min description — so the move cannot break
+  zero producing code, and a research "block" is one 5-min description, so the move cannot break
   research parity.
 - What it must prove instead is a **differential byte-equality** against our own current output.
   See the storage charter's M9 exit bar.
@@ -129,7 +129,7 @@ the product renderer over C2 records left for storage.
 > `built` · as built at v0, not an architecture commitment
 
 **In one line.** Per-user LoRA over the language-model projection linears — all 36 language-model
-layers × 7 projections (`q,k,v,o,gate,up,down`) — with the vision towers deliberately excluded.
+layers × 7 projections (`q,k,v,o,gate,up,down`), with the vision towers deliberately excluded.
 
 **Rules**
 
@@ -170,7 +170,7 @@ layers × 7 projections (`q,k,v,o,gate,up,down`) — with the vision towers deli
 ### Observability
 > `designed` · [D9](../../DECISIONS.md)
 
-**In one line.** Expose `/metrics` — batch and job counters, off the request path — and own a
+**In one line.** Expose `/metrics` — batch and job counters, off the request path, and own a
 Grafana dashboard JSON (`dashboards/*.json`).
 
 **Rules**
@@ -197,7 +197,7 @@ Grafana dashboard JSON (`dashboards/*.json`).
 | Capture devices, user-facing I/O | Recording / Input / Output Services |
 
 **The serve-time memory harness** — fast-memory (SSM/mneme) runtime and per-user state, the
-think-back paging executor, day-log-grounded answering, and memory routing — is inference's, by the
+think-back paging executor, day-log-grounded answering, and memory routing, is inference's, by the
 kickoff decision of 2026-07-22, pending founders'-board ratification. **We train and publish the
 memory artifacts** (the mneme module, the reader-LoRA, the paging recipe); they execute them.
 
@@ -225,10 +225,10 @@ Upstream: **Storage Service** (we read via C10). Downstream: **model directory �
 **On C10.** We ask storage for "the day-log for `(user_id, window_id)`" and get rendered
 segment/block rows back. We no longer build it, and we no longer pull raw records to do so. Also
 consumed: window **enumeration** — which windows has this user consolidated, today inferred from
-the reservoir ledger (`cycle.py:204`) — and the window-ledger open/close calls. The window itself
+the reservoir ledger (`cycle.py:204`), and the window-ledger open/close calls. The window itself
 is storage's `[last_trained_t, now−δ)` ingest-time watermark, so we no longer compute it from a
 local date, and `window_for()` / `closed_window_before()` are deleted. The `/sessions`
-(mentor-trace) leg of this row is unchanged and remains **unbuilt**.
+(mentor-trace) leg of this row is unchanged and remains *unbuilt*.
 
 **On C12.** We use it for **nothing but** the scheduler's fire time. The window arithmetic needs no
 zone, and each block's rendered anchor is resolved by storage from the record's own `device_tz`.
@@ -332,38 +332,38 @@ published via C5 and **loaded in vLLM**, recall 0.267.
    not per token. Untouched research; v0 only needs the adapter artifacts + evals designed so the
    substrate can swap later.
 8. **Twin-emergence measurement.** The product narrative claims emergent behavioral mimicry — a
-   digital twin — yet our gates measure only recall + forgetting. What eval detects the twin, e.g.
+   digital twin, yet our gates measure only recall + forgetting. What eval detects the twin, e.g.
    behavior/preference prediction on held-out user actions? A future eval track beyond M2's gates.
 
 **Engineering**
 
 9. ~~**Watermark semantics (part of C10's design).** Late-arriving or reprocessed records
    (pipeline-version bumps) — does a cycle window close by wall-clock, by ingestion time, or both?~~
-   **Resolved ([D18](../../DECISIONS.md), 2026-07-26) — by ingestion time.**
+   *Resolved ([D18](../../DECISIONS.md), 2026-07-26), by ingestion time.*
 
    **Why it's this way**
 
    - The window is `[last_trained_t, now−δ)` on **storage's `ingest_time`**, which dissolves the
      late-data question instead of answering it: a record's `ingest_time` is assigned at write, so
-     it can never land below a closed boundary. **Late data cannot exist on this axis**, and a
+     it can never land below a closed boundary. *Late data cannot exist on this axis*, and a
      chunk captured Tuesday but uploaded Friday simply trains in Friday's window, in a block
      anchored to Tuesday.
    - What we own downstream of that: **`last_trained_t` advances if and only if we publish**
-     *(refined 2026-07-27)*. Gate failure, freeze, crash, no data and **too little** data all leave
+     *(refined 2026-07-27)*. Gate failure, freeze, crash, no data and *too little* data all leave
      it, so the next window is a strict superset of the failed one.
    - That is the design-of-record's **failed-day merge, obtained structurally**, and it demotes
      `_UserState.debt` (`cycle.py:88-118`) from mechanism to reporting.
    - Full statement: [../../ARCHITECTURE.md](../../ARCHITECTURE.md) § Contracts → *C10 evolved*.
 
 10. **Cycle trigger.** Clock ("nightly", timezone-aware per user) vs data-volume threshold vs
-    hybrid; what floor of new data makes a cycle worth running? **What remains open in OQ10 is only
-    the trigger policy** — clock vs volume vs hybrid, and the min-data floor.
+    hybrid; what floor of new data makes a cycle worth running? *What remains open in OQ10 is only
+    the trigger policy* — clock vs volume vs hybrid, and the min-data floor.
 
     **Why it's this way**
 
     - **The "timezone-aware" half is settled by [D17](../../DECISIONS.md)** (2026-07-26), and it is
       smaller than it looked. A timezone is needed for exactly one thing here — deciding when a
-      user's cycle fires, their local ~04:00 — and that reads storage's per-user profile `home_tz`.
+      user's cycle fires, their local ~04:00, and that reads storage's per-user profile `home_tz`.
     - It is **not** needed to compute the window, once the window becomes the watermark range
       `[last_trained_t, now)` — a plain UTC duration query, which retires
       `window_for(user, local_date, tz)` and its whole local-date-arithmetic class of bugs (23 h and
@@ -373,22 +373,22 @@ published via C5 and **loaded in vLLM**, recall 0.267.
       `nightly.py` no longer calls them, and the window is storage's ingest-time watermark.
     - **`window_id` was settled by [D18](../../DECISIONS.md)** (2026-07-26): an opaque, path-safe,
       lexicographically-ordered token `w<YYYYMMDD>T<HHMMSS>Z`, minted once from the window's end
-      instant, minted **only** by storage, and **parsed by nobody**.
+      instant, minted *only* by storage, and *parsed by nobody*.
     - That deletes `Window.local_date` and `ReservoirEntry.local_window_date()` and, with them,
       `cycle.py:217`'s reconstruction of prior windows under *tonight's* timezone. Prior windows are
       enumerated from storage instead. Also `built` 2026-07-27.
     - **Rendering** local times is not a scheduling concern at all — each record carries its own
       `device_tz`, so anchor lines are correct even for a day spent in another zone.
-    - **Partly settled 2026-07-27 ([D19](../../DECISIONS.md)):** the trigger is a **cron per user at
-      their `home_tz` boundary**, interval configurable in the service. A human-run CLI is the
+    - **Partly settled 2026-07-27 ([D19](../../DECISIONS.md)):** the trigger is a *cron per user at
+      their `home_tz` boundary*, interval configurable in the service. A human-run CLI is the
       prototype stand-in, not the design.
 
     **Watch out for**
 
     - The **min-data floor** — the volume of new block text below which a night is not worth a GPU
-      run — is designed as a **recipe knob** (`min_block_chars`), measured in *characters of
-      eligible block text* rather than block count, because Phase-3 showed recall depends on
-      retellings per unit of text.
+      run, is designed as a *recipe knob* (`min_block_chars`), measured in *characters of eligible
+      block text* rather than block count, because Phase-3 showed recall depends on retellings per
+      unit of text.
     - **Correction, 2026-07-27: the mechanism does not exist.** D19 recorded that "the mechanism
       exists so the value becomes a config change". That was false and is retracted here rather
       than caveated.
@@ -425,10 +425,10 @@ hot. On the deletion row: C2/C4 refs keep provenance, the open question is track
 ## Team shape
 
 v0 = **one lead session + on-demand workstream agents** (the POC operating model). As the service
-grows, expected sub-teams: **training pipeline** (jobs, mixtures, artifacts — eng), **evals &
-gates** (suites, judges, thresholds — research+eng), **data curation & distillation** (mixture
-design, mentor-trace shaping — research), **scheduling & infra** (fleet orchestration, cost — eng),
-**scaling research** (MoE-experts-per-user — research). Each sub-team follows the org documentation
+grows, expected sub-teams: **training pipeline** (jobs, mixtures, artifacts — eng), *evals &
+gates* (suites, judges, thresholds, research+eng), *data curation & distillation* (mixture
+design, mentor-trace shaping, research), *scheduling & infra* (fleet orchestration, cost, eng),
+*scaling research* (MoE-experts-per-user, research). Each sub-team follows the org documentation
 protocol (manager notes + running logs) per [../../ORG.md](../../ORG.md).
 
 ## Related work

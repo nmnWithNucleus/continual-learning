@@ -1,17 +1,12 @@
 # ws-video-clip.md — the mac-app screen-recording VIDEO path
 
-**Status:** **BUILT + integrated (2026-07-25).** All 8 workstreams (A–H) landed and merged to
-`svc/video-clip`; DP suite **765** (+21 skip). Clip pipeline live behind `VIDEO_PIPELINE=clip`
-(default `keyframe`, byte-identical legacy path). Each WS lead-verified (the emission law
-mutation-tested; discovery/resolve/E2-raise independently reran; a masked order/registration bug in
-the OCR seam caught + returned before merge). Remaining = the cutover gates (O-2, O-8, E-2, E-3(b))
-and small follow-ups, none blocking the merge to main. Per-WS Build logs are at the end of this file.
-*(Design history below is preserved as-written; where a build decision refined it — clip stage orders
-`5/15/20` not `0/10/20`; `+ocr-ppv4-cpu-v1` not `-ppv6`; E-3(a) downgraded to "recommended" — the
-correction is noted inline at that section or in the addendum.)*
-**Owner:** data-processing.
-**Supersedes:** `handoff/ws-video-pipeline.md` §3 (the D8 caption/OCR weave) and the keyframe-per-record shape.
-**Scope:** the `modality=video` stage graph, `app/vision/**`, `app/stages/video/**`, one new co-located OCR sidecar service. Audio is untouched. Browser and camera scenarios are named but not built.
+**Status:** **BUILT + integrated (2026-07-25).** All 8 workstreams (A–H) landed and merged to `svc/video-clip`; DP suite *765* (+21 skip). Clip pipeline live behind `VIDEO_PIPELINE=clip` (default
+`keyframe`, byte-identical legacy path). Each WS lead-verified (the emission law mutation-tested; discovery/resolve/E2-raise independently reran; a masked order/registration bug in the OCR seam
+caught + returned before merge). Remaining = the cutover gates (O-2, O-8, E-2, E-3(b)) and small follow-ups, none blocking the merge to main. Per-WS Build logs are at the end of this file.
+*(Design history below is preserved as-written; where a build decision refined it — clip stage orders `5/15/20` not `0/10/20`; `+ocr-ppv4-cpu-v1` not `-ppv6`; E-3(a) downgraded to "recommended",
+the correction is noted inline at that section or in the addendum.)* *Owner:* data-processing. *Supersedes:* `handoff/ws-video-pipeline.md` §3 (the D8 caption/OCR weave) and the
+keyframe-per-record shape. *Scope:* the `modality=video` stage graph, `app/vision/**`, `app/stages/video/**`, one new co-located OCR sidecar service. Audio is untouched. Browser and camera
+scenarios are named but not built.
 
 ---
 
@@ -21,8 +16,8 @@ A second design pass (17-agent fan-out: 4 grounds · 4 advocates A/B/C/D · 3 pr
 5 adversarial lenses · decision) settled the founder's question — *"why not a separate OCR record,
 woven only at consolidation?"* The separate `kind='ocr'` record already exists (D-08); the live
 question was whether the captioner **sees** the OCR text as input (Architecture **A**, injection,
-D-09) or is produced blind with fusion deferred to consolidation (**B** juxtapose / **C** fuse-at-
-consolidation / **D** minimal-hint).
+D-09) or is produced blind with fusion deferred to consolidation (*B* juxtapose / *C* fuse-at-
+consolidation / *D* minimal-hint).
 
 **`VERDICT`: keep A (injection), exactly as the stage graph is written — `clipcap.needs =
 ("clipprep","screentext")`, injection per D-09.** The stage graph does **not** change. Reasons,
@@ -48,7 +43,7 @@ each verified against source:
   (`pipeline.py:33-46`); a decoupled OCR stage either keeps its fragment (caption re-keys anyway) or
   drops it (silent overwrite). Same fork under A and B alike.
 - **B pays all of A's costs and delivers none of its benefit**, so the fallback if A fails its gate
-  is **D**, not B. C is unbuilt, unscheduled, blocked on M4, and breaks `build_daylog` purity.
+  is *D*, not B. C is unbuilt, unscheduled, blocked on M4, and breaks `build_daylog` purity.
 
 **Accepted costs of A (now in §8 caveats, not "fixed"):** +0.36 s @10 s / +1.8 s @60 s serialised
 OCR latency; a jointly-sourced pair the amplifier can reinforce 48× (bounded by new R2 Corollary 2);
@@ -56,8 +51,8 @@ an OCR knob honestly re-keys the day's captions (OCR is a real caption input).
 
 **The one thing the design got wrong: it argued the grounding premise instead of measuring it.**
 So A's cutover is **gated on O-8** (below): a $15 / ~40 s blind-vs-injected A/B, pre-registered rule
-— ship A iff `named_entity_recall(A) − named_entity_recall(B) > 0.25` **and**
-`propagation_rate < 0.10` on a 30 %-corrupted-OCR arm; else ship **D**.
+— ship A iff `named_entity_recall(A) − named_entity_recall(B) > 0.25` *and*
+`propagation_rate < 0.10` on a 30 %-corrupted-OCR arm; else ship *D*.
 
 **Six ratified edits (this addendum IS the record; fold into the numbered sections at integration):**
 1. **§9 O-8** — the blind-vs-injected gate above. WS-H adds one pack file `screen-clip-blind-v1`
@@ -70,18 +65,18 @@ So A's cutover is **gated on O-8** (below): a $15 / ~40 s blind-vs-injected A/B,
 3. **§4.3 R2 Corollary 2** — added inline above.
 4. **§4.3 R4 `stage outcome`** — added inline above.
 5. **§8 finding #3** — reclassify "OCR fork is correct" from *Fixed* to *Accepted caveat* (it is a
-   re-classification, not a fix; the re-key cost is real — A-15).
+   re-classification, not a fix; the re-key cost is real, A-15).
 6. **§11 WS-E2 is promoted from a tail item to a prerequisite of the clip cutover.**
    - Verified hole: `register_stage` binds `enabled()`↔`version_fragment()` only for `mutate`
      (`stage.py:221-230`).
-   - A **sidecar** with non-empty `provides` — which `screentext` is, under A — therefore has two
+   - A **sidecar** with non-empty `provides` — which `screentext` is, under A, therefore has two
      independent resolvers, re-opening the diarize silent-overwrite class for the *caption*.
    - A is the only architecture whose R1 correctness depends on WS-E2's registration-time raise, so
      WS-E2 ships **before** `VIDEO_PIPELINE=clip` is flipped on.
 
 **Consequence for the fan-out:** WS-C's `screentext` and WS-D's `clipcap` wiring is **confirmed = the
-current design (A)** — no pending decision remains; build them as written. **No new cross-service
-escalation** is created (choosing A actively *declines* the fusion ask C/B would have filed on
+current design (A)** — no pending decision remains; build them as written. *No new cross-service
+escalation* is created (choosing A actively *declines* the fusion ask C/B would have filed on
 continuum). WS-H gains the O-8 arm + the widened scorer. Everything else in §11 is unchanged.
 
 ---
@@ -152,14 +147,14 @@ Per 8 h day: 11,520 calls, 5.67 M prefill, 11,520 records, 17,280 subprocesses, 
 
 ### 1.5 What is specifically wrong for SCREEN content
 
-1. **Per-frame calls cannot describe change.** The prompt says *"Describe what is happening in the frame."* A full application switch at t=5 s produces two unrelated static descriptions and **no record anywhere states that a switch occurred.** This is a property of the call shape, not a tuning parameter.
-2. **Massive redundancy.** Measured SSIM between consecutive selected keyframes: near-static email + caret **0.99983 / 0.99986 / 0.99999**; app-switch clip 0.99997 / 0.27299 / 0.99986. 60–75 % of the 1,440 calls/hour describe pixels a prior call already described. There is no similarity check anywhere in the codebase.
-3. **Scene detection is inert on screens.** Measured **0 cuts** on full-screen scrolling code whose SSIM fell to 0.47; **0 cuts** on typing (scores `0.000011`, `0.000029`). It fires once, at score `1.000000`, on a whole-screen light→dark swap — landing 67 ms from a grid point and minting a **67 ms record** whose source frames SSIM at 0.999951.
-4. **768 px destroys the text OCR exists to read.** Chain: display 3024 → capture `min(1728,iw)` → DP `min(iw,768)` = **×0.254 net**. A 13 pt UI em arrives at **6.6 px**; a monospace cell at **3.98 px**.
+1. **Per-frame calls cannot describe change.** The prompt says *"Describe what is happening in the frame."* A full application switch at t=5 s produces two unrelated static descriptions and *no record anywhere states that a switch occurred.* This is a property of the call shape, not a tuning parameter.
+2. **Massive redundancy.** Measured SSIM between consecutive selected keyframes: near-static email + caret *0.99983 / 0.99986 / 0.99999*; app-switch clip 0.99997 / 0.27299 / 0.99986. 60–75 % of the 1,440 calls/hour describe pixels a prior call already described. There is no similarity check anywhere in the codebase.
+3. **Scene detection is inert on screens.** Measured *0 cuts* on full-screen scrolling code whose SSIM fell to 0.47; *0 cuts* on typing (scores `0.000011`, `0.000029`). It fires once, at score `1.000000`, on a whole-screen light→dark swap — landing 67 ms from a grid point and minting a *67 ms record* whose source frames SSIM at 0.999951.
+4. **768 px destroys the text OCR exists to read.** Chain: display 3024 → capture `min(1728,iw)` → DP `min(iw,768)` = *×0.254 net*. A 13 pt UI em arrives at *6.6 px*; a monospace cell at *3.98 px*.
 5. **One token budget for two jobs.** A truncated reply silently degrades to "no on-screen text" via `vlm.py:75-76` — no error, no metric.
-6. **The prompt is invisible to record identity.** Editing `_SYSTEM` changes every caption while `pipeline_version` stays `vidproc-vlm-v0`, so the reprocess **upserts over `/context`** at `storage/app/db.py:302`. This is exactly the failure class `app/audio/diarize/__init__.py:4-10` was built to make impossible.
-7. **Identity is decoder-dependent.** `_probe_duration` measured **9.933 vs 9.867 s** across nominally identical segments, rescaling every grid point; `record_id` folds the keyframe *index*, so a heterogeneous fleet upserts the same id with a different span and a different caption.
-8. **The training target is a wall.** 48 caption strings space-joined into one `Scene:` line (`daylog.py:160`) = 9,600–19,200 chars per 2-min block, of which **38–69 % is truncated by `EXCERPT_CHARS=6000`** before the amplifier reads it. Dose ≈ 5.2×, against 32× for the validated baseline and 8.6× for the Phase-3 arm that failed.
+6. **The prompt is invisible to record identity.** Editing `_SYSTEM` changes every caption while `pipeline_version` stays `vidproc-vlm-v0`, so the reprocess *upserts over `/context`* at `storage/app/db.py:302`. This is exactly the failure class `app/audio/diarize/__init__.py:4-10` was built to make impossible.
+7. **Identity is decoder-dependent.** `_probe_duration` measured *9.933 vs 9.867 s* across nominally identical segments, rescaling every grid point; `record_id` folds the keyframe *index*, so a heterogeneous fleet upserts the same id with a different span and a different caption.
+8. **The training target is a wall.** 48 caption strings space-joined into one `Scene:` line (`daylog.py:160`) = 9,600–19,200 chars per 2-min block, of which *38–69 % is truncated by `EXCERPT_CHARS=6000`* before the amplifier reads it. Dose ≈ 5.2×, against 32× for the validated baseline and 8.6× for the Phase-3 arm that failed.
 
 ---
 
@@ -188,7 +183,7 @@ Legacy graph (`keyframes` order 0 → `captions` order 10) is retained, gated of
 |---|---|---|---|
 | `name` | `clipprep` | `screentext` | `clipcap` |
 | `modality` | `video` | `video` | `video` |
-| `kind` | `sidecar` | `sidecar` | **`primary`** |
+| `kind` | `sidecar` | `sidecar` | `primary` |
 | `policy` | `required` | `required` | `required` |
 | `needs` | `()` | `("clipprep",)` | `("clipprep","screentext")` |
 | `provides` | `("clip_frames","delta","vision_settings")` | `("ocr_text",)` | `("clip",)` |
@@ -199,7 +194,7 @@ Legacy graph (`keyframes` order 0 → `captions` order 10) is retained, gated of
 | run mode | `run_sync` (subprocess + bytes) | `run_sync` (blocking HTTP to loopback) | `run_async` (one loop-native call) |
 
 **Order-scheme correction (lead, 2026-07-24, surfaced by WS-B).** The clip stages use orders
-**`clipprep=5, screentext=15, clipcap=20`**, NOT the `0/10/20` first sketched. Reason: the retained
+`clipprep=5, screentext=15, clipcap=20`, NOT the `0/10/20` first sketched. Reason: the retained
 legacy stages (`keyframes=0`, `captions=10`) coexist in the `video` modality, and `register_stage`
 enforces per-modality order uniqueness **unconditionally** — across every *registered* stage,
 regardless of `enabled()` (enabledness is settings-dependent and unknown at import). So the clip band
@@ -208,7 +203,7 @@ distinct; clip-mode assembly is unchanged (primary `clipcap` first, then enabled
 `(order,name)` → `clipprep` (no units) then `screentext` → the `ocr` unit still lands after the
 `caption`, D-05 order preserved). `order` is behaviourally inert beyond registration-uniqueness +
 sidecar assembly sequence, so this is a pure numbering choice, not a behaviour change. The legacy
-pair is deliberately **not** renumbered (it is merged, and its order is inert). Do not "restore" the
+pair is deliberately *not* renumbered (it is merged, and its order is inert). Do not "restore" the
 clip band to `0/10` — it will break stage discovery at import.
 
 **Legacy, unchanged except for a 4-line gate:**
@@ -261,8 +256,8 @@ vidclip-vlm-v1@p1.7f3a9c21#c4b2e01d+cp-v1+ocr-ppv6-cpu-v1
 | `VIDEO_CLIP_SECONDS_PER_FRAME` | **2.5** | K = `clamp(ceil(span/2.5), 2, 12)` → 4 frames @10 s, 12 @60 s (cap binds) |
 | `VIDEO_CLIP_MAX_FRAMES` | **12** | hard prefill ceiling: 12 × 360 = 4,320 vision tok. Must be ≤ the server's `--limit-mm-per-prompt image=N` |
 | `VIDEO_CLIP_MIN_FRAMES` | **2** | with one frame "what changed" is unanswerable and the model will confabulate |
-| `VIDEO_CLIP_FRAME_WIDTH` | **768** | 768×480 = 24×15 = **exactly 360 Qwen3-VL tokens**. The measured problem at 768 was *reading text* — which this design no longer asks the captioner to do (D-06). Clamped at **1024** in the lenient parser with a `WARN`; 1280 is 2.78× the vision tokens and is the single easiest accidental cost blowup |
-| `VIDEO_OCR_FRAME_WIDTH` | **1728** | the mac capture cap (`nucleus_capture.py:219`) — i.e. **no resample at all**, ×0.571 net, 13 pt em at **14.9 px**. CPU pixels are free |
+| `VIDEO_CLIP_FRAME_WIDTH` | **768** | 768×480 = 24×15 = **exactly 360 Qwen3-VL tokens**. The measured problem at 768 was *reading text* — which this design no longer asks the captioner to do (D-06). Clamped at *1024* in the lenient parser with a `WARN`; 1280 is 2.78× the vision tokens and is the single easiest accidental cost blowup |
+| `VIDEO_OCR_FRAME_WIDTH` | **1728** | the mac capture cap (`nucleus_capture.py:219`) — i.e. **no resample at all**, ×0.571 net, 13 pt em at *14.9 px*. CPU pixels are free |
 | `VIDEO_ANALYSIS_PERIOD_S` | **2.0** | delta-probe period. Measured: at 4 fps realistic typing collapses to 1–3/255 (indistinguishable from a blinking caret); at 0.5 fps it is **11–19 against a floor of 2**. Sensitivity beats precision here |
 | `VIDEO_CLIP_MAX_TOKENS` | **512** | ~2× the 260-token target. Today's 256 must carry caption *and* verbatim OCR |
 | `VIDEO_CHARS_PER_SECOND` | **22** (16 caption / 6 ocr) | the dose budget, D-11 |
@@ -326,19 +321,19 @@ Result: **2 subprocesses per chunk (was 6), ~1× realtime decode (was 2.5×).**
 | clip description | `caption` | `""` | `None` / `None` → `build_c2` carries the **C1 strings verbatim** (`pipeline.py:79-80`) |
 | screen-text digest | `ocr` | `"ocr"` | `None` / `None` → same |
 
-The record **set** — count, discriminators, spans — is a pure function of `(chunk_id, pipeline_version)`. It does not depend on model output, decoder build, threshold outcomes, or which siblings survived a filter.
+The record **set** — count, discriminators, spans, is a pure function of `(chunk_id, pipeline_version)`. It does not depend on model output, decoder build, threshold outcomes, or which siblings survived a filter.
 
 This single decision retires seven verified defect classes at once:
 
 - **Survivor-ordinal renumbering.** `ocr:{index}` derived from a selection means one flipped borderline frame renames every later discriminator, rewriting records in place and orphaning the rest. Gone.
-- **Decoder-dependent identity.** Measured: `fps=2.0` emits n=19 for a 9.667 s container and n=20 for 9.733 s — the 19↔20 boundary sits at ~9.7 s, **inside** the operating range (real segments measured 9.867/9.933 s). Any index-derived discriminator flips there. Gone.
+- **Decoder-dependent identity.** Measured: `fps=2.0` emits n=19 for a 9.667 s container and n=20 for 9.733 s — the 19↔20 boundary sits at ~9.7 s, *inside* the operating range (real segments measured 9.867/9.933 s). Any index-derived discriminator flips there. Gone.
 - **Span-from-selection.** An OCR event whose `t_end` is "the next selected event's start" makes its span a function of siblings while its id is not → in-place span rewrite via `db.py:302`. Gone.
 - **Model-output-dependent set.** An OCR pass returning `(none)` cannot change the record count. Gone.
 - **`_sub_span` drift.** Deleted (`captions.py:46-66`) along with the 67 ms-record class.
 - **Timestamp string-form mismatch — verified and severe.** `recording/app/timeutil.py:37-38`
   stamps `…Z`, while `app/timeutil.py:24`'s `abs_time` returns `.isoformat()` → `…+00:00`.
 - `storage/app/db.py:344-356` compares `t_start >= ?` as **plain strings**, and
-  `'2026-07-25T04:00:00+00:00' >= '2026-07-25T04:00:00Z'` is **False** (`+` = 0x2B, `Z` = 0x5A).
+  `'2026-07-25T04:00:00+00:00' >= '2026-07-25T04:00:00Z'` is *False* (`+` = 0x2B, `Z` = 0x5A).
 - So a record stamped in offset form at exactly the window boundary is silently dropped from the
   training window.
 - Because both units pass `t_start=None`, **neither ever calls `abs_time`**, and the defect is
@@ -357,18 +352,18 @@ unit `MUST` get a distinct `t_start`.*
 
 **Always emit the OCR unit**, with `content.text = ""` when nothing legible was found.
 
-- `""` validates at all four gates — `c2:35` is a bare string with no `minLength` — and
+- `""` validates at all four gates — `c2:35` is a bare string with no `minLength`, and
   `daylog.py:112-113` (`if not text: continue`) drops it downstream at zero cost.
 - Record *presence* is then the coverage signal, which is exactly what the cross-service invariant
   in R3 needs, and it keeps the set fixed at 2.
 
 ### D-06 — OCR: a deterministic CPU specialist at native resolution, behind an HTTP seam. Never the captioner.
 
-**Decision.** `VIDEO_OCR_BACKEND=ppocr` → a co-located loopback sidecar service (`sidecars/ocr/`, its own venv, its own `run.sh`, the `serve_vllm.sh` posture) running PP-OCRv6 det+rec ONNX on CPU. Returns `[(text, bbox, confidence)]`. Default execution provider **CPU**, and the EP is in the version tag because ONNX Runtime is not guaranteed bit-exact across providers. Both model files' sha256 are pinned in config and asserted against the sidecar's `GET /health` **at graph resolution** — a swapped model file fails loudly at resolve, not silently in the corpus.
+**Decision.** `VIDEO_OCR_BACKEND=ppocr` → a co-located loopback sidecar service (`sidecars/ocr/`, its own venv, its own `run.sh`, the `serve_vllm.sh` posture) running PP-OCRv6 det+rec ONNX on CPU. Returns `[(text, bbox, confidence)]`. Default execution provider **CPU**, and the EP is in the version tag because ONNX Runtime is not guaranteed bit-exact across providers. Both model files' sha256 are pinned in config and asserted against the sidecar's `GET /health` *at graph resolution* — a swapped model file fails loudly at resolve, not silently in the corpus.
 
-**Why not the VLM.** Measured cost: making the same 32B read tile-crops is **+1,558 node-s per screen-hour against the 19.6 the entire caption path costs — 3.1× the thing it augments**; full frames is 73×. CPU is **$0.0012–0.007 per screen-hour**. And the quality argument is worse than the cost argument: the POC's Phase-2 sweep, on real footage, measured **Qwen3-VL-32B OCR at 0.143** against Qwen2.5-VL-32B **0.857** and -72B **1.000** — while Qwen3-VL *beat* Qwen2.5-VL on public VideoMME. DP's configured captioner is the exact family the POC ruled out for this task. A CTC decoder can misread a glyph; it cannot fabricate a clause.
+**Why not the VLM.** Measured cost: making the same 32B read tile-crops is **+1,558 node-s per screen-hour against the 19.6 the entire caption path costs — 3.1× the thing it augments**; full frames is 73×. CPU is *$0.0012–0.007 per screen-hour*. And the quality argument is worse than the cost argument: the POC's Phase-2 sweep, on real footage, measured *Qwen3-VL-32B OCR at 0.143* against Qwen2.5-VL-32B *0.857* and -72B *1.000* — while Qwen3-VL *beat* Qwen2.5-VL on public VideoMME. DP's configured captioner is the exact family the POC ruled out for this task. A CTC decoder can misread a glyph; it cannot fabricate a clause.
 
-**Why a separate service and not a library.** Verified by `pip download`: `paddleocr 3.7.0` → `paddlex[ocr-core]` → **`numpy<2.4`**, which conflicts with DP's installed numpy 2.5.1 (transitive via the faster-whisper stack). It would also drag a pinned `opencv-contrib-python`, `shapely`, `pyclipper`, `pypdfium2`, `pandas`. The seam quarantines all of it and makes the model a **URL change**: PaddleOCR-VL (0.96 B), dots.ocr (3 B), GLM-OCR (1.3 B), or a second vLLM are all one config away.
+**Why a separate service and not a library.** Verified by `pip download`: `paddleocr 3.7.0` → `paddlex[ocr-core]` → `numpy<2.4`, which conflicts with DP's installed numpy 2.5.1 (transitive via the faster-whisper stack). It would also drag a pinned `opencv-contrib-python`, `shapely`, `pyclipper`, `pypdfium2`, `pandas`. The seam quarantines all of it and makes the model a **URL change**: PaddleOCR-VL (0.96 B), dots.ocr (3 B), GLM-OCR (1.3 B), or a second vLLM are all one config away.
 
 **Backends:** `off` | `mock` (headless default, no deps, no network) | `ppocr` | `vlm` (the A/B arm, so the comparison can be *run* rather than argued). Single resolver, unknown → `off` in **both** `select()` and `version_tag()` (`audio/diarize/__init__.py:24-33`).
 
@@ -397,7 +392,7 @@ if len(selected) > VIDEO_OCR_MAX_EVENTS:
 Post-read, chunk-local only (cross-chunk state is forbidden — a per-process buffer would break fleet determinism):
 
 1. drop boxes with `confidence < VIDEO_OCR_MIN_CONF` (0.60);
-2. **use the bbox** to sort into reading order and assign a **region role** — `titlebar | tab | sidebar | main | compose | message | toolbar | statusbar | dialog | notification`. This is the semantically useful 80 % of "location", delivered as a word, at zero contract cost. The pixel geometry is then **discarded** (D-08);
+2. **use the bbox** to sort into reading order and assign a *region role* — `titlebar | tab | sidebar | main | compose | message | toolbar | statusbar | dialog | notification`. This is the semantically useful 80 % of "location", delivered as a word, at zero contract cost. The pixel geometry is then *discarded* (D-08);
 3. drop lines shorter than `VIDEO_OCR_MIN_CHARS` (4);
 4. **deterministic secret redaction** — AWS-key shapes, `sk-` / `ghp_` / `xox[baprs]-`, ≥32-char base64 runs, PEM headers, Luhn-valid 13–19-digit runs, and all-bullet/asterisk fields → `[redacted:secret]`. A prompt rule is not an access control; this is. Counted as `dp_ocr_redactions_total`;
 5. drop an event whose normalized text is ≥ `VIDEO_OCR_DEDUP_RATIO` (0.92) similar to the previous kept event **in this chunk**;
@@ -405,7 +400,7 @@ Post-read, chunk-local only (cross-chunk state is forbidden — a per-process bu
 
 ### D-08 — OCR output shape: separate `kind='ocr'` records, region words in the text, **no bbox in C2**.
 
-**Decision, answering the founder's question 5 directly: both, at different layers.** OCR strings are *injected into the caption prompt* (input layer) **and** emitted as their own `kind='ocr'` record (record layer). The caption's `content.text` contains **no verbatim OCR dump** — `_weave_ocr` is deleted.
+**Decision, answering the founder's question 5 directly: both, at different layers.** OCR strings are *injected into the caption prompt* (input layer) **and** emitted as their own `kind='ocr'` record (record layer). The caption's `content.text` contains *no verbatim OCR dump* — `_weave_ocr` is deleted.
 
 **Why separate records win at the record layer:**
 
@@ -428,7 +423,7 @@ Post-read, chunk-local only (cross-chunk state is forbidden — a per-process bu
 
 This converts the #1 hallucination class into a **mechanically checkable property**: every double-quoted span in the caption must appear (case-folded, whitespace-collapsed) in the injected OCR block. Shipped as an eval scorer *and* as a production counter `dp_caption_ungrounded_quote_total`. The POC had to buy a second frontier-model verification pass over 39,547 windows to approximate this; here it is free and exact.
 
-It also resolves the low-res/high-res contradiction: the captioner reads layout at 768 px and *never reads text*, while the OCR pass reads text at 1728 px. Without the injection, a 768 px captioner instructed to "name the thread" would sit next to a 1728 px OCR record in the same block, and the amplifier — told to *"keep every exact colour, number, name and on-screen/world text verbatim"* (`profiles/speed.py:62-64`) — would amplify both sides of a contradiction 48 times.
+It also resolves the low-res/high-res contradiction: the captioner reads layout at 768 px and *never reads text*, while the OCR pass reads text at 1728 px. Without the injection, a 768 px captioner instructed to "name the thread" would sit next to a 1728 px OCR record in the same block, and the amplifier — told to *"keep every exact colour, number, name and on-screen/world text verbatim"* (`profiles/speed.py:62-64`), would amplify both sides of a contradiction 48 times.
 
 **Consequence (accepted):** `screentext` must complete before `clipcap` starts. They serialise. Cost quantified in §7; it is affordable at both 10 s and 60 s.
 
@@ -436,7 +431,7 @@ It also resolves the low-res/high-res contradiction: the captioner reads layout 
 
 **Decision.** The caption is **one paragraph, one line, ≤ budget**. No per-interval lines.
 
-**Rejected — the POC's timeline shape** (10 lines × 83 words at the 1-min tier). It re-creates the 48-fragment problem inside the new record: 12 chunks × 4 mandated interval lines = 48 fragments per 2-min block, each still scoped to a 2.5 s window. And a mandated line count *punishes honesty*: on a static screen — measured SSIM 0.9998 — the model must pad ~440 chars per chunk to satisfy "exactly N lines", which is precisely the redundancy this design exists to remove. The POC's own anti-padding rule does not transfer: a static screen has no "ambient context", only more UI chrome.
+**Rejected — the POC's timeline shape** (10 lines × 83 words at the 1-min tier). It re-creates the 48-fragment problem inside the new record: 12 chunks × 4 mandated interval lines = 48 fragments per 2-min block, each still scoped to a 2.5 s window. And a mandated line count *punishes honesty*: on a static screen — measured SSIM 0.9998, the model must pad ~440 chars per chunk to satisfy "exactly N lines", which is precisely the redundancy this design exists to remove. The POC's own anti-padding rule does not transfer: a static screen has no "ambient context", only more UI chrome.
 
 Cross-frame reasoning is delivered by the paragraph ("types a two-point reply, sends it, then switches to Slack"), which is the actual goal-2 ask.
 
@@ -457,7 +452,7 @@ This resolves the formula contradiction in the source proposals (4.7 chars/s at 
 
 **These are correctness knobs, not tuning knobs. Put that sentence in the stage docstring.** `VIDEO_CHARS_PER_SECOND=15` reaches dose 20×; `=30` drops to 11×. Continuum's `block_segments` is the stronger lever (halving block width doubles dose at fixed `R`) and it costs them 2× amplification generations — escalation E-4.
 
-**This also closes the ordinal-truncation defect.** `daylog.py:158-164` renders header → `Scene:` → `Heard:` → `World text (OCR):`, and `speed.py:117` slices `block.text[:6000]`. OCR is **last**, so truncation eats it whole. At today's caption lengths the `World text (OCR):` label begins at offset ~7,744 and **100 % of the OCR channel is cut before amplification, every block, all day** — silently, with every downstream assertion green. The budget keeps the whole block at ~3,300 chars, so the OCR line always survives. A renderer reorder is escalated (E-4) as belt-and-braces.
+**This also closes the ordinal-truncation defect.** `daylog.py:158-164` renders header → `Scene:` → `Heard:` → `World text (OCR):`, and `speed.py:117` slices `block.text[:6000]`. OCR is **last**, so truncation eats it whole. At today's caption lengths the `World text (OCR):` label begins at offset ~7,744 and *100 % of the OCR channel is cut before amplification, every block, all day* — silently, with every downstream assertion green. The budget keeps the whole block at ~3,300 chars, so the OCR line always survives. A renderer reorder is escalated (E-4) as belt-and-braces.
 
 ### D-12 — `content.text` is a single line.
 
@@ -480,7 +475,7 @@ PACK_DIGEST  = sha256(
 
 `normalised(spec)` = id + role + system + user template + output schema + declared decode params, with line endings normalised and trailing whitespace stripped per line. So a reflow, a CRLF checkout or a trailing newline does **not** fork the corpus; every model-facing byte, every decode parameter and the output schema **do**.
 
-Composed into the primary's fragment via the backend module, so the mock captioner — which never reads a prompt — contributes `""` and headless fixtures do not re-key on a prompt edit.
+Composed into the primary's fragment via the backend module, so the mock captioner — which never reads a prompt, contributes `""` and headless fixtures do not re-key on a prompt edit.
 
 **Plus `cfg_tag(vs)` = `#` + sha8 over an explicit `OUTPUT_AFFECTING` allowlist**, which is the half every source proposal got wrong:
 
@@ -503,11 +498,11 @@ OPERATIONAL_ONLY = ("vlm_url","vlm_api_key","vlm_timeout","ocr_url","ocr_timeout
 
 **Tooling** (goal 4 — evolvable without a code change): `python -m app.vision.prompts show --pack screen-clip-v1 --frames 12 --span 60` prints the exact assembled wire text; `python -m app.vision.prompts relock` bumps `PACK_VERSION`, rewrites `LOCK.json`, archives every pack's full text to `archive/p{N}.json`, and prints the before/after `pipeline_version` side by side. A researcher edits a markdown file and redeploys; the dialect forks automatically; there is no version bump to forget.
 
-**Scenario selection is per-deployment, not per-chunk.** `Stage.version_fragment(settings)` receives only `Settings` (`stage.py:179-182`); `main.py:358` computes the dialect before the blob is fetched. Making the scenario per-chunk requires touching **three** `pipeline_version` producer sites — `main.py:358` (accept), `main.py:204` (`_redrive_pending`), and `main.py:279` `_current_pv(modality)`, whose signature structurally cannot see `device_id`. Breaking the third one **defeats the durable dedup backstop for all video**: after any restart every redelivery would fail the receipt comparison at `journal.py:309-312` and fully reprocess, minting a second disjoint record set. Rejected. Instead: `VIDEO_SCENARIO` is env (in `OUTPUT_AFFECTING`), and a `device_id`-prefix **mismatch detector** (`mac-cli-` / `ext-chrome-` / `phone-web-`) emits `dp_video_scenario_mismatch_total{expected,seen}` + a once-per-prefix `WARN`, so a misrouted fleet is visible in ten seconds. Open question O-3.
+**Scenario selection is per-deployment, not per-chunk.** `Stage.version_fragment(settings)` receives only `Settings` (`stage.py:179-182`); `main.py:358` computes the dialect before the blob is fetched. Making the scenario per-chunk requires touching **three** `pipeline_version` producer sites — `main.py:358` (accept), `main.py:204` (`_redrive_pending`), and `main.py:279` `_current_pv(modality)`, whose signature structurally cannot see `device_id`. Breaking the third one *defeats the durable dedup backstop for all video*: after any restart every redelivery would fail the receipt comparison at `journal.py:309-312` and fully reprocess, minting a second disjoint record set. Rejected. Instead: `VIDEO_SCENARIO` is env (in `OUTPUT_AFFECTING`), and a `device_id`-prefix *mismatch detector* (`mac-cli-` / `ext-chrome-` / `phone-web-`) emits `dp_video_scenario_mismatch_total{expected,seen}` + a once-per-prefix `WARN`, so a misrouted fleet is visible in ten seconds. Open question O-3.
 
 ### D-14 — Legacy coexists byte-identically; the flip and the rollback are one env var and are honest about what they can undo.
 
-**Decision.** `VIDEO_PIPELINE ∈ {keyframe, clip}`, resolved by a **single** `resolve_pipeline()` with **unknown → `keyframe`** (the shipped, safe path). Both stage sets gate on the resolved name, never on the raw env string — otherwise a typo disables *both* graphs, `resolve()` finds zero enabled primaries and raises `GraphResolutionError` from `main.py:358` **before** the dedup fast path, 500-ing every video ingest.
+**Decision.** `VIDEO_PIPELINE ∈ {keyframe, clip}`, resolved by a **single** `resolve_pipeline()` with *unknown → `keyframe`* (the shipped, safe path). Both stage sets gate on the resolved name, never on the raw env string — otherwise a typo disables *both* graphs, `resolve()` finds zero enabled primaries and raises `GraphResolutionError` from `main.py:358` *before* the dedup fast path, 500-ing every video ingest.
 
 `keyframes.version_fragment()` returns `""` in legacy mode via a **single-entry frozen exemption** to the registration rule (R1), so the legacy dialect reproduces `vidproc-vlm-v0` **byte-for-byte**. The exemption set is a named frozen constant with a comment: *it exists solely to reproduce pre-migration record_ids; no new stage may join it.* A test asserts `pipeline_version(legacy) == "vidproc-vlm-v0"` exactly.
 
@@ -521,7 +516,7 @@ OPERATIONAL_ONLY = ("vlm_url","vlm_api_key","vlm_timeout","ocr_url","ocr_timeout
 
 Measured POC rate: `HIGH`@2fps = **527.5 prompt tok per second of video** → an 8 h screen day is 15.2 M prompt tokens → **$30.4/user-day online, $15.2 batched** at the POC's coded Pro pricing. That is 36–72× the self-hosted figure in §7. Indefensible for continuous capture.
 
-**The correct role, and it is worth doing:** a **one-off graded oracle** — 200 windows at `HIGH` ≈ **$70 total** — judged blind with the POC's frame-grounded rubric (`phase3.2_evals/judge_panel.py:35-43`). It is the only cheap way to get a quality *ceiling* for a local model whose family the POC's own data predicts will underperform. Budget it as a line item in WS-H, not as an architecture.
+**The correct role, and it is worth doing:** a **one-off graded oracle** — 200 windows at `HIGH` ≈ *$70 total*, judged blind with the POC's frame-grounded rubric (`phase3.2_evals/judge_panel.py:35-43`). It is the only cheap way to get a quality *ceiling* for a local model whose family the POC's own data predicts will underperform. Budget it as a line item in WS-H, not as an architecture.
 
 ---
 
@@ -544,58 +539,58 @@ Measured POC rate: `HIGH`@2fps = **527.5 prompt tok per second of video** → an
 
 Apply to any signal **S** derived from one C1 chunk.
 
-**T1 — `DERIVABLE`.** Is S a pure function of *this* chunk's bytes plus config — no neighbour chunk, no other stream, no day context?
-→ **No: not a DP record.** It belongs to continuum or to a windowed pass that does not exist. DP's ingest is per-chunk end to end: `process_chunk` takes one C1 + one blob; dedup is keyed on `chunk_id`; the journal is keyed on `chunk_id`; delivery is at-least-once; a chunk emitting zero units is a *terminal* dead-letter (`ingest_core.py:149-154`).
+**T1 — `DERIVABLE`.** Is S a pure function of *this* chunk's bytes plus config, no neighbour chunk, no other stream, no day context? → **No: not a DP record.** It belongs to continuum or to a windowed pass that does not exist. DP's ingest is per-chunk end to end: `process_chunk` takes one C1 + one blob; dedup is keyed on `chunk_id`; the journal
+is keyed on `chunk_id`; delivery is at-least-once; a chunk emitting zero units is a *terminal* dead-letter (`ingest_core.py:149-154`).
 
-**T2 — `REACHABLE`.** Does S reach a consumer that exists **today**? Only `content.text` of a frozen `kind` reaches the trainer. `content.segments` is read **only** for `kind=='transcript'` (`daylog.py:94`). `enrichments` is read **nowhere** in continuum.
-→ **Neither reachable nor read by any live consumer: do not emit it.** Store nothing you cannot spend. (Re-apply this test when a consumer lands; it is a gate on *when*, not a permanent veto.)
+**T2 — `REACHABLE`.** Does S reach a consumer that exists **today**? Only `content.text` of a frozen `kind` reaches the trainer. `content.segments` is read *only* for `kind=='transcript'` (`daylog.py:94`). `enrichments` is read *nowhere* in continuum.
+→ *Neither reachable nor read by any live consumer: do not emit it.* Store nothing you cannot spend. (Re-apply this test when a consumer lands; it is a gate on *when*, not a permanent veto.)
 
-**T3 — `SPINE`.** Is S the modality's answer to "what happened in these bytes" — the thing whose absence means the chunk was not processed?
-→ **`PRIMARY` unit(s)** from `assemble()`. Exactly one enabled primary per modality (`executor.py:114-119`); its fragment is the base dialect and must be non-empty (`:121-126`).
+**T3 — `SPINE`.** Is S the modality's answer to "what happened in these bytes", the thing whose absence means the chunk was not processed? → **`PRIMARY` unit(s)** from
+`assemble()`. Exactly one enabled primary per modality (`executor.py:114-119`); its fragment is the base dialect and must be non-empty (`:121-126`).
 
 **T4 — `EDITS`.** Does producing S change bytes a record already claims?
-→ **Structure-fill** — it fills a field the parent already declared and left empty (`segments[].speaker`, which `c2:47` pins as *required-nullable so the key never appears/disappears*; `enrichments.*`, whose stated purpose at `c2:64` is *"shape stable so world-data enrichment never changes C2"*) → **`MUTATE`**: `kind='mutate'`, `writes ⊆ primary.mutable_slots`, non-empty `version_fragment` mandatory and structural (`stage.py:184-188`, enforced at registration `:226-230`).
-→ **String-change** — it would make `content.text` differ from what a previous run wrote → **`FORBIDDEN` as a mutation.** `content.text` is the training target; a rewritten target under a stable `record_id` is invisible to every diff and silently overwrites. Either do the refinement *inside the producing stage before assembly*, so exactly one target string per claim ever exists, or fork `pipeline_version` and mint a new record.
+→ **Structure-fill** — it fills a field the parent already declared and left empty (`segments[].speaker`, which `c2:47` pins as *required-nullable so the key never appears/disappears*; `enrichments.*`, whose stated purpose at `c2:64` is *"shape stable so world-data enrichment never changes C2"*) → `MUTATE`: `kind='mutate'`, `writes ⊆ primary.mutable_slots`, non-empty `version_fragment` mandatory and structural (`stage.py:184-188`, enforced at registration `:226-230`).
+→ *String-change* — it would make `content.text` differ from what a previous run wrote → *`FORBIDDEN` as a mutation.* `content.text` is the training target; a rewritten target under a stable `record_id` is invisible to every diff and silently overwrites. Either do the refinement *inside the producing stage before assembly*, so exactly one target string per claim ever exists, or fork `pipeline_version` and mint a new record.
   *Mechanical test:* could two workers on different config both honestly claim to be right? If yes → fork, not edit.
 
 **T5 — `CHANNEL` / `SPAN`.** Does S own a frozen `kind` that routes to a different day-log line, **or** a span that is independently addressable at continuum's `segment_seconds`?
-→ **`NEW RECORD`** with its own discriminator. Otherwise it is a field of an existing record's text, or a stage-internal slot.
+→ `NEW RECORD` with its own discriminator. Otherwise it is a field of an existing record's text, or a stage-internal slot.
 
 **Fallthrough → `ENRICH`ment** (subject to T2) or **stage input**.
 
 ### 4.3 The five riders
 
-**R1 — `FORK` `RIDER` (mechanised).** *Any enabled stage whose configuration can change the bytes of a record it does not itself emit `MUST` contribute a non-empty `version_fragment`.* Mechanised as: **a sidecar declaring a non-empty `provides` must return a non-empty fragment when enabled** — a provided slot exists only to be consumed, i.e. to change someone else's bytes. One frozen exemption (`keyframes`, legacy reproduction only). Conversely, a sidecar that only **adds** records and feeds nothing declares **no** fragment (`translate/__init__.py:4-7`, `injected_caption.py:25-28`), because forking the whole chunk's dialect on an additive toggle re-keys the primary for a change that did not touch it.
+**R1 — `FORK` `RIDER` (mechanised).** *Any enabled stage whose configuration can change the bytes of a record it does not itself emit `MUST` contribute a non-empty `version_fragment`.* Mechanised as: **a sidecar declaring a non-empty `provides` must return a non-empty fragment when enabled** — a provided slot exists only to be consumed, i.e. to change someone else's bytes. One frozen exemption (`keyframes`, legacy reproduction only). Conversely, a sidecar that only *adds* records and feeds nothing declares *no* fragment (`translate/__init__.py:4-7`, `injected_caption.py:25-28`), because forking the whole chunk's dialect on an additive toggle re-keys the primary for a change that did not touch it.
 
-**R2 — `INDEPENDENCE` `RIDER`.** Two records may describe the same second only if a consumer can use either **without** the other. If B is meaningless or misleading without A, B is a mutation, an enrichment, or a field of A's text. Corollary: every sidecar record must be **self-anchored** — it carries its own context (app, region, time offsets) inside its own `content.text`. **Corollary 2 (added 2026-07-24, coupling ratification):** where record B's specific strings are *grounded in* record A's (the OCR record's strings are injected into the caption under D-09), the pair is **one witness rendered on two channels** — no consumer may treat their agreement as corroboration. This bounds the amplifier's 48×-per-block restatement of a jointly-sourced pair. (The broader "R2 is judged only at consumption, R1's fragment discharges the derivation" reading was considered and **rejected**: R1 forces only a `version_fragment`; it cannot discharge R2's "misleading without A" clause.)
+**R2 — `INDEPENDENCE` `RIDER`.** Two records may describe the same second only if a consumer can use either **without** the other. If B is meaningless or misleading without A, B is a mutation, an enrichment, or a field of A's text. Corollary: every sidecar record must be *self-anchored* — it carries its own context (app, region, time offsets) inside its own `content.text`. *Corollary 2 (added 2026-07-24, coupling ratification):* where record B's specific strings are *grounded in* record A's (the OCR record's strings are injected into the caption under D-09), the pair is *one witness rendered on two channels* — no consumer may treat their agreement as corroboration. This bounds the amplifier's 48×-per-block restatement of a jointly-sourced pair. (The broader "R2 is judged only at consumption, R1's fragment discharges the derivation" reading was considered and *rejected*: R1 forces only a `version_fragment`; it cannot discharge R2's "misleading without A" clause.)
 
-**R3 — the dialect-honesty `RIDER`.** `pipeline_version` states the **attempted** dialect, never what succeeded. It is resolved before any stage runs (`executor.py:228-237`), so it cannot vary with outcome — which is what preserves determinism. Therefore: (a) `best_effort` ⇒ additive-only, never a mutate (structural, `stage.py:221-225`), and never upstream of a required stage (`executor.py:202-219`); (b) **never `best_effort` + a non-empty fragment** — that stamps a dialect claiming a property the record set may not have; (c) **never use the `discriminator` as a back-door dialect carrier** — two records under one `pipeline_version` with different producers is exactly the lie the consistent-dialect promise forbids; (d) absence is diagnosed by **record presence + a metric**, never by the dialect string, and **never by fabricating a placeholder claim about the user's life**; (e) the cross-service invariant that follows: *continuum must never infer "no on-screen text" from an absent OCR record.*
+**R3 — the dialect-honesty `RIDER`.** `pipeline_version` states the **attempted** dialect, never what succeeded. It is resolved before any stage runs (`executor.py:228-237`), so it cannot vary with outcome — which is what preserves determinism. Therefore: (a) `best_effort` ⇒ additive-only, never a mutate (structural, `stage.py:221-225`), and never upstream of a required stage (`executor.py:202-219`); (b) *never `best_effort` + a non-empty fragment* — that stamps a dialect claiming a property the record set may not have; (c) *never use the `discriminator` as a back-door dialect carrier*, two records under one `pipeline_version` with different producers is exactly the lie the consistent-dialect promise forbids; (d) absence is diagnosed by *record presence + a metric*, never by the dialect string, and *never by fabricating a placeholder claim about the user's life*; (e) the cross-service invariant that follows: *continuum must never infer "no on-screen text" from an absent OCR record.*
 
-**R4 — the set-stability `RIDER`.** The record **set** — count, discriminators, spans — must be a pure function of `(chunk bytes, settings)` and must not depend on model output, decoder build, **stage outcome** (added 2026-07-24: this makes `best_effort`'s illegality for a fragment-bearing stage enforceable from R4 as well as R3(b)), or which siblings survived a filter. Prefer fixed discriminators and chunk-span records. Where the set must vary, discriminators are quantised from a grid that is itself a pure function of the **declared C1 span** — never a survivor ordinal, never a raw decoder frame index, never a hash of model output — and every unit gets a distinct `t_start`.
+**R4 — the set-stability `RIDER`.** The record **set**, count, discriminators, spans, must be a pure function of `(chunk bytes, settings)` and must not depend on model output, decoder build, *stage outcome* (added 2026-07-24: this makes `best_effort`'s illegality for a fragment-bearing stage enforceable from R4 as well as R3(b)), or which siblings survived a filter. Prefer fixed discriminators and chunk-span records. Where the set must vary, discriminators are quantised from a grid that is itself a pure function of the *declared C1 span* — never a survivor ordinal, never a raw decoder frame index, never a hash of model output, and every unit gets a distinct `t_start`.
 
 **R5 — `BUDGET` `RIDER`.** Every new record class must name (i) its consumer today, and (ii) its characters-per-second-of-life budget against the day-log block. A class that cannot answer both does not ship. Block characters are the training currency: acquisition was measured falling **3.2× for a 3.7× rise** in chars/block.
 
 ### 4.4 The worked table
 
-Verdicts: **`PRIMARY`** / **`RECORD`** / **`MUTATE`** / **`ENRICH`** / **`SLOT`** (stage-internal) / **NOT-C2**.
+Verdicts: `PRIMARY` / `RECORD` / `MUTATE` / `ENRICH` / `SLOT` (stage-internal) / **NOT-C2**.
 
 | # | Signal | First test that fires | Verdict | Fragment? |
 |---|---|---|---|---|
-| 1 | Clip-level dense description | T3 | **`PRIMARY`**, `discriminator=""`, C1 span verbatim | yes (base) |
+| 1 | Clip-level dense description | T3 | `PRIMARY`, `discriminator=""`, C1 span verbatim | yes (base) |
 | 2 | Per-keyframe caption | T5 fails (no distinct channel; measured SSIM 0.9998 on 3 of 4 transitions) | **RETIRED** — 4× records to render 4 near-identical fragments into one space-joined line | — |
-| 3 | OCR text | T5 (own frozen kind → own labelled line) | **`RECORD`**, `discriminator="ocr"`, one per chunk, aggregated with `+Ns` offsets | **yes** — it is an *input* to the primary (D-09), so its config is caption-affecting: the fork test says fork |
+| 3 | OCR text | T5 (own frozen kind → own labelled line) | `RECORD`, `discriminator="ocr"`, one per chunk, aggregated with `+Ns` offsets | **yes** — it is an *input* to the primary (D-09), so its config is caption-affecting: the fork test says fork |
 | 4 | OCR bbox geometry + per-region confidence | **T2 fails** (continuum reads `enrichments` nowhere) | **NOT `EMITTED`.** Used internally for reading order + region role, then discarded | n/a |
 | 5 | Region role (`compose`, `titlebar`, …) | T5 fails; T2 passes via `content.text` | **field of the OCR record's text** | inherited |
 | 6 | UI / frontmost-app identity | T5 fails | **field of the caption's text** (and the `app` key of the guided-JSON schema) | inherited |
 | 7 | Window title | T5 fails; it *is* on-screen text | **inside the OCR record**, role = `titlebar` | inherited |
 | 8 | Detected user intent | T3 — this is the primary's job | **caption content.** An "intent" record has no channel and is unreadable alone (R2) | inherited |
-| 9 | Scroll / typing activity | T2 as a record (no channel expresses it) | **`SLOT`** — drives the idle gate and OCR event selection; at most a clause in the caption | it *is* a fragment input |
+| 9 | Scroll / typing activity | T2 as a record (no channel expresses it) | `SLOT` — drives the idle gate and OCR event selection; at most a clause in the caption | it *is* a fragment input |
 | 10 | Idle / no-activity | T3 | **caption content** — an explicit short idle description. Emitting nothing is indistinguishable from a capture gap | inherited |
-| 11 | Speaker identity (a name for a diarized label) | T4 structure-fill | **`MUTATE`** on the audio primary, chained after `diarize` by `(order,name)` | **mandatory** |
+| 11 | Speaker identity (a name for a diarized label) | T4 structure-fill | `MUTATE` on the audio primary, chained after `diarize` by `(order,name)` | **mandatory** |
 | 12 | Face identity | T2 fails (`enrichments.faces` unread) | **`DEFER`.** If the name must be learned it belongs in the caption text, making the captioner its consumer | — |
 | 13 | Geolocation | T2 fails; it is *carried*, not derived | **NOT a mutate stage.** A mutate with an empty fragment can never run; forking the dialect to copy a C1 field is dishonest. The primary fills its own `enrichments.places` if a consumer ever lands | **no** |
-| 14 | Translation | T5 (same span, different language, parallel text) | **`RECORD`**, `discriminator="translation"` (shipped) | none — additive only |
-| 15 | Acoustic events | T5 (+ exists when the primary is empty) | **`RECORD`**, `discriminator="acoustic"` (shipped) | none today — **flagged**: by R1 this is a latent hole; retro-fit `+ac-<backend>-v1` when a real backend lands. Audio owner's call |
+| 14 | Translation | T5 (same span, different language, parallel text) | `RECORD`, `discriminator="translation"` (shipped) | none — additive only |
+| 15 | Acoustic events | T5 (+ exists when the primary is empty) | `RECORD`, `discriminator="acoustic"` (shipped) | none today — **flagged**: by R1 this is a latent hole; retro-fit `+ac-<backend>-v1` when a real backend lands. Audio owner's call |
 | 16 | OCR correction / verify pass | T4 string-change | **NOT a mutate and NOT a second record** — selective in-stage re-read of sub-threshold regions, drop on disagreement, so exactly one OCR string per event ever exists | — |
 | 17 | Per-record quality / confidence | **T2 fails** (`daylog.py:38`: *"C2 v0 has no quality field yet"*; `corpus_blocks(quality_min)` gates on nothing) | **NOT `EMITTED`.** Honest home is a root `quality{}` at the next freeze-additive | — |
 | 18 | Summary-of-summaries (5-min / hourly) | **T1 fails** | **NOT-C2 — continuum's job.** `source.chunk_id` + `blob_ref` cannot be honestly filled; the reprocess path re-pulls exactly one blob | — |
@@ -729,7 +724,7 @@ screen, return {"regions": []}.
 
 ### 5.3 Output contracts and the parse ladder
 
-`clip-json-v1` and `ocr-json-v1` are JSON Schemas sent via `response_format: {"type":"json_schema"}` when `VIDEO_VLM_STRUCTURED` resolves to available (probed once per process, cached). **Guided decoding is the primary discipline lever, not an optimisation** — the POC measured the *same* rule block scoring 4.10 on Pro and **3.00 on Flash** (*"discipline rules wreck the weak model"*), and a self-hosted 32B is Flash-class. For a weak model, move discipline from a rule it can ignore into a constraint the sampler cannot violate. **The schema is inside `PACK_DIGEST`**, so a schema edit forks like a text edit.
+`clip-json-v1` and `ocr-json-v1` are JSON Schemas sent via `response_format: {"type":"json_schema"}` when `VIDEO_VLM_STRUCTURED` resolves to available (probed once per process, cached). **Guided decoding is the primary discipline lever, not an optimisation** — the POC measured the *same* rule block scoring 4.10 on Pro and **3.00 on Flash** (*"discipline rules wreck the weak model"*), and a self-hosted 32B is Flash-class. For a weak model, move discipline from a rule it can ignore into a constraint the sampler cannot violate. *The schema is inside `PACK_DIGEST`*, so a schema edit forks like a text edit.
 
 The tolerant parser remains the contract of record, and is a pure function of the reply:
 
@@ -790,7 +785,7 @@ All four gates pass unmodified: DP schema (`ingest_core.py:167`), DP pydantic (`
 3. `product/services/storage/app/models.py:108-114` — `Enrichments` declares its four fields with **no defaults**
 4. `product/services/data-processing/app/models.py` — `C2Enrichments` uses `default_factory=list`
 
-Measured: **without the field declared, new records fail at *both* pydantic mirrors** (`extra_forbidden`) — DP's `default_factory` does nothing for an *undeclared* key. **Declared without a default, PRE-Existing records fail at the storage mirror** (missing). Both mirrors need `text_regions: list[Any] = Field(default_factory=list)`, and the deploy order is: mirrors first, then contract JSON, then DP emits. A mirror lag is an **uncaught `ValidationError` → HTTP 500** from `storage/app/main.py:159`, which DP classifies as **transient** → 3 retries → dead-letter → recording reads it as permanent data loss.
+Measured: **without the field declared, new records fail at *both* pydantic mirrors** (`extra_forbidden`) — DP's `default_factory` does nothing for an *undeclared* key. **Declared without a default, PRE-Existing records fail at the storage mirror** (missing). Both mirrors need `text_regions: list[Any] = Field(default_factory=list)`, and the deploy order is: mirrors first, then contract JSON, then DP emits. A mirror lag is an *uncaught `ValidationError` → HTTP 500* from `storage/app/main.py:159`, which DP classifies as *transient* → 3 retries → dead-letter → recording reads it as permanent data loss.
 
 **Trigger to spend it:** the first real geometry consumer. Pay it down in **one** freeze-additive commit together with root `quality{}` (CHARTER `:119`).
 
@@ -798,7 +793,7 @@ Measured: **without the field declared, new records fail at *both* pydantic mirr
 
 | tempting | why not |
 |---|---|
-| new `content.kind` (`ui_event`) | schema-additive, **operationally breaking**, and the danger is inverted: the two services that *validate* fail loudly and are one-`Literal` fixes (`dp/models.py:69`, `storage/models.py:19`), while **continuum validates nothing** and `daylog.py:119-120`'s `else` renders an unknown kind as a **caption** — silent, permanent mislabelling in the one service that trains on it. Buys nothing `kind='ocr'` does not |
+| new `content.kind` (`ui_event`) | schema-additive, **operationally breaking**, and the danger is inverted: the two services that *validate* fail loudly and are one-`Literal` fixes (`dp/models.py:69`, `storage/models.py:19`), while *continuum validates nothing* and `daylog.py:119-120`'s `else` renders an unknown kind as a *caption* — silent, permanent mislabelling in the one service that trains on it. Buys nothing `kind='ocr'` does not |
 | `content.segments[]` on an ocr record | legal by the letter; ruled against — `c2:42` forces a lying `speaker: null` on thousands of records/day (destroying the `c2:47` promise that the key's presence is meaningful), `c2:41` `additionalProperties:false` on the item **structurally forbids `bbox`** so it ships half the feature and burns the honest option, and `daylog.py:94` discards it for every kind but `transcript` |
 | `content.regions[]` | `c2:31` closes `content`, and `content` is the training target — coordinates rendered into a training target are noise. `c2:64` reserves `enrichments` for growth |
 | `enrichments.objects[]` squat | legal today (`c2:62` `items:{}` is the empty schema, verified at all four gates), and declined: it would accumulate an undocumented shape at scale in `/context` for a value nothing reads |
@@ -818,9 +813,9 @@ recording `--segment-seconds`; storage `DELETE /context/records`; continuum rend
 
 | assumption | verification |
 |---|---|
-| Qwen3-VL: patch 16, spatial merge 2 → factor **32**, `tokens = ⌈H/32⌉·⌈W/32⌉`. 768×480 = 24×15 = **360 tok/frame** | one curl with a known-size image; read `usage.prompt_tokens`. If the deployed `qwen-vl-utils` defaults `image_patch_size=14` (factor 28) every vision figure inflates **+31 %** |
+| Qwen3-VL: patch 16, spatial merge 2 → factor **32**, `tokens = ⌈H/32⌉·⌈W/32⌉`. 768×480 = 24×15 = *360 tok/frame* | one curl with a known-size image; read `usage.prompt_tokens`. If the deployed `qwen-vl-utils` defaults `image_patch_size=14` (factor 28) every vision figure inflates **+31 %** |
 | The server does **not** silently downscale. `--mm-processor-kwargs` is unset in `serve_vllm.sh` | same curl: `usage.prompt_tokens == 360` for one 768×480 frame. If materially lower, `max_pixels` is clamping and the flag is mandatory, not optional |
-| prefill **12,000 tok/s**, aggregate decode **2,000 tok/s**, single-stream decode **45 tok/s** (Qwen3-VL-32B, TP=8) | `vllm bench serve` at target concurrency, 30 min. **Ratios in the table are robust to this; absolute dollars are not** |
+| prefill **12,000 tok/s**, aggregate decode *2,000 tok/s*, single-stream decode *45 tok/s* (Qwen3-VL-32B, TP=8) | `vllm bench serve` at target concurrency, 30 min. **Ratios in the table are robust to this; absolute dollars are not** |
 | node price **$16/node-hour** (8×H100 @ $2/GPU-h) | procurement. Public list for an a3-mega shape is materially higher; a second column at **$60/node-hour** is shown |
 | PP-OCRv6 CPU **0.6 s per 1728×1080 frame**, 4 threads | run over 200 real extracted frames and `time` it (20 min) |
 | **40 % of screen chunks are idle** | run the delta gate offline over one real screen-hour and count (10 min). Everything below scales linearly; the design does not depend on it |
@@ -861,9 +856,9 @@ Output: budget `16 × 60 = 960` chars ≈ 260 tok + 30 JSON = 290 active; 90 idl
 
 `node-seconds = prefill/12,000 + output/2,000`. **@60 s: 210,720/12,000 = 17.6 + 12,600/2,000 = 6.3 = 23.9.**
 
-**Headline for the founder — capacity, not $/user-day.** One continuously-recording screen user consumes **0.66 % of one 8×H100 node** at the 60 s point, versus **3.84 %** today. At 20 pilot users that is 13 % of the node, leaving the interactive tenant intact. The $/user-day figure is only meaningful at saturation, which is a year-two number.
+**Headline for the founder — capacity, not $/user-day.** One continuously-recording screen user consumes **0.66 % of one 8×H100 node** at the 60 s point, versus *3.84 %* today. At 20 pilot users that is 13 % of the node, leaving the interactive tenant intact. The $/user-day figure is only meaningful at saturation, which is a year-two number.
 
-**The OCR cost comparison, stated once:** CPU OCR = **$0.0012–0.007 per screen-hour**. The same reads through the 32B VLM = **$0.30–0.40 per screen-hour**, i.e. **164×**, i.e. **3.1× the entire caption pipeline it augments**, to obtain the field the POC named the #1 hallucination class from the model family it measured at 0.143.
+**The OCR cost comparison, stated once:** CPU OCR = **$0.0012–0.007 per screen-hour**. The same reads through the 32B VLM = *$0.30–0.40 per screen-hour*, i.e. *164×*, i.e. *3.1× the entire caption pipeline it augments*, to obtain the field the POC named the #1 hallucination class from the model family it measured at 0.143.
 
 ### 7.4 Latency
 
@@ -949,11 +944,11 @@ Plus a **VLM circuit breaker**: N consecutive connect-refused → fast-fail *bef
 
 **Parent-side** (`ingest_core.py`, survives subprocess isolation, `metrics` already in scope and null-guarded): `dp_units_total{modality,kind}`, `dp_content_chars{modality,kind}` (histogram), `dp_empty_output_total{modality,kind}` (drop the `modality == "audio"` guard at `ingest_core.py:157`), `dp_partial_write_total{modality}`.
 **Stage-side** (blind under isolation — documented): `dp_video_parse_fallback_total{pack,step}`, `dp_video_truncated_total{pass}`, `dp_video_delta_peak` (histogram — validates the whole idle assumption from day one), `dp_video_ocr_events`, `dp_caption_ungrounded_quote_total`, `dp_ocr_redactions_total`, `dp_video_scenario_mismatch_total{expected,seen}`, `dp_ocr_frame_errors_total`.
-**Dialect**: `video_pipeline_version` in `/health`; gauge `dp_pipeline_dialect{modality,pipeline_version}=1` via the existing `add_gauge_source` (`main.py:106-124`); **alert on `count by (modality) (dp_pipeline_dialect) > 1`**.
+*Dialect*: `video_pipeline_version` in `/health`; gauge `dp_pipeline_dialect{modality,pipeline_version}=1` via the existing `add_gauge_source` (`main.py:106-124`); *alert on `count by (modality) (dp_pipeline_dialect) > 1`*.
 
 ### Accepted caveats
 
-**A-1 — Determinism has an honest limit, and it is smaller than today's but not zero.** DP guarantees a deterministic record **set** (count, ids, spans) as a pure function of `(chunk_id, settings)`. Record **text** is deterministic given `(bytes, settings, pinned ffmpeg build, pinned OCR model files)` for the OCR record, and additionally given the served model's batch composition for the caption — `temperature: 0` does **not** make a batched vLLM server bit-exact. Delete the overclaim at `vlm.py:16-19`. State the invariant in those words in the handoff.
+**A-1 — Determinism has an honest limit, and it is smaller than today's but not zero.** DP guarantees a deterministic record **set** (count, ids, spans) as a pure function of `(chunk_id, settings)`. Record *text* is deterministic given `(bytes, settings, pinned ffmpeg build, pinned OCR model files)` for the OCR record, and additionally given the served model's batch composition for the caption — `temperature: 0` does *not* make a batched vLLM server bit-exact. Delete the overclaim at `vlm.py:16-19`. State the invariant in those words in the handoff.
 
 **A-2 — ffmpeg is NOT in the fragment.** The judges' graft asked for `+ff:<major.minor>`. Declined, because D-05 changed the calculus: with a fixed record set, a decoder difference can only alter record *text*, never identity, so a fragment would fork the entire corpus on every base-image bump for a change that usually alters nothing. Instead: `VIDEO_FFMPEG_PIN` asserted at startup (fail loud on drift), reported in `/health`, and a deliberate upgrade that changes output is a manual `PACK_VERSION` bump. **Residual: two workers on different ffmpeg builds can write different OCR/caption text under the same `record_id`.** Bounded by the pin.
 
@@ -967,11 +962,11 @@ Plus a **VLM circuit breaker**: N consecutive connect-refused → fast-fail *bef
 
 **A-7 — A storage fault re-pays the GPU.** A `/context` blip on the second record retries the whole chunk, recomputing the VLM call. Upserts are idempotent so correctness is fine; GPU spend has a tail driven by storage availability. Keep `INGEST_MAX_RETRIES` at 3 and `DP_HTTP_TIMEOUT` generous — a short storage timeout is a GPU-cost amplifier here, not a safety feature.
 
-**A-8 — Dose is a bet on an unresolved experiment.** The Phase-3 decomposition fork (`phase-3-report.md:372-390`) has **not run**, and the report says *"Do not start the follow-on until that one lands."* Until it does we do not know whether the `Scene:`-concatenating renderer itself costs recall, or only the character dose. This design is the right bet under **both** branches — collapsing N near-duplicate captions into one description reduces the denominator *and* removes the concatenation — but 15.1× is a target, not a result.
+**A-8 — Dose is a bet on an unresolved experiment.** The Phase-3 decomposition fork (`phase-3-report.md:372-390`) has **not run**, and the report says *"Do not start the follow-on until that one lands."* Until it does we do not know whether the `Scene:`-concatenating renderer itself costs recall, or only the character dose. This design is the right bet under *both* branches — collapsing N near-duplicate captions into one description reduces the denominator *and* removes the concatenation, but 15.1× is a target, not a result.
 
-**A-9 — Latency roughly triples per chunk**, because one long generation replaces four short parallel ones, and because `screentext` serialises before `clipcap` by design (D-09). ~2.8 s @10 s / ~12.0 s @60 s. Fine for async ingest, where the ratified invariant is only `dp_acked=1 ⇔ C2 durably written` and says nothing about speed. The exposed edge is **C8 interactive** (`CHARTER.md:34,55,65`), where ~12 s is not an interactive answer. The charter already permits the mitigation (OQ2, *"a lighter captioning profile — same code, config-only difference"*): `VIDEO_PIPELINE=clip` + `VIDEO_CLIP_MAX_FRAMES=2` + `screen-clip-idle-v1` + `VIDEO_OCR_BACKEND=off` → ~2 s. It **forks `pipeline_version`** via `cfg_tag`, which is correct and version-forward, and must be stated when M6 lands rather than discovered. The charter's own mitigation — *"contract test diffs both paths on shared fixtures"* — stays satisfiable because both profiles run the **same stages, same assemble, same `build_c2`**; only config differs.
+**A-9 — Latency roughly triples per chunk**, because one long generation replaces four short parallel ones, and because `screentext` serialises before `clipcap` by design (D-09). ~2.8 s @10 s / ~12.0 s @60 s. Fine for async ingest, where the ratified invariant is only `dp_acked=1 ⇔ C2 durably written` and says nothing about speed. The exposed edge is **C8 interactive** (`CHARTER.md:34,55,65`), where ~12 s is not an interactive answer. The charter already permits the mitigation (OQ2, *"a lighter captioning profile — same code, config-only difference"*): `VIDEO_PIPELINE=clip` + `VIDEO_CLIP_MAX_FRAMES=2` + `screen-clip-idle-v1` + `VIDEO_OCR_BACKEND=off` → ~2 s. It *forks `pipeline_version`* via `cfg_tag`, which is correct and version-forward, and must be stated when M6 lands rather than discovered. The charter's own mitigation — *"contract test diffs both paths on shared fixtures"*, stays satisfiable because both profiles run the *same stages, same assemble, same `build_c2`*; only config differs.
 
-**A-10 — `screentext` is `required`, so an OCR-sidecar outage fails video chunks.** Deliberate: a skipped OCR silently changes the caption (it is an input), which is the "a lost mutation would be a silent lie" class that `stage.py:221-225` forbids by construction for mutates. Mitigations that make it affordable: the sidecar is loopback CPU with **no shared failure domain with the GPU**; per-frame errors are absorbed and counted, with only >50 % of frames failing raising; the circuit breaker fast-fails before the ffmpeg passes. **The honest escape is `VIDEO_OCR_BACKEND=off`** — which changes `cfg_tag` and therefore says so in the dialect — **not** a policy flip to `best_effort`, which would keep the claim and drop the data.
+**A-10 — `screentext` is `required`, so an OCR-sidecar outage fails video chunks.** Deliberate: a skipped OCR silently changes the caption (it is an input), which is the "a lost mutation would be a silent lie" class that `stage.py:221-225` forbids by construction for mutates. Mitigations that make it affordable: the sidecar is loopback CPU with **no shared failure domain with the GPU**; per-frame errors are absorbed and counted, with only >50 % of frames failing raising; the circuit breaker fast-fails before the ffmpeg passes. *The honest escape is `VIDEO_OCR_BACKEND=off`* — which changes `cfg_tag` and therefore says so in the dialect, *not* a policy flip to `best_effort`, which would keep the claim and drop the data.
 
 **A-11 — The `acoustic` sidecar has the same latent hole.** By §4.3 R1, flipping `ACOUSTIC_BACKEND` rewrites the same `record_id`. Not fixed here — audio's owner, retro-fit `+ac-<backend>-v1` when a real backend lands. Noted so it is not silently inherited.
 
@@ -990,26 +985,26 @@ Plus a **VLM circuit breaker**: N consecutive connect-refused → fast-fail *bef
 ## 9. Open questions
 
 **O-1 — Which change metric, at which threshold?** Two measured candidates: full-res binarize + 32×32 area-average (floor exactly 2, typing 11–19, scroll 61–122, switch 255) versus anchor-referenced 16×10 tile MAD at 256×160 (caret 1.24, typing 5.68→7.73, scroll 28, switch 239). §D-04 ships the former plus a Python anchor accumulator, which is a synthesis, not a measured configuration.
-**Recommendation:** ship as specified; run `scripts/calibrate_delta.py` over **one real captured hour** before the pilot and pin the thresholds from the observed histogram, not from the synthetic clips.
-**Evidence that settles it:** the `dp_video_delta_peak` histogram from a real desktop, hand-labelled into idle / typing / scroll / switch windows. A real desktop has notification badges, animated cursors, a ticking menu-bar clock — none of which are in the synthetic fixtures, and any of which could raise the idle floor above 8.
+**Recommendation:** ship as specified; run `scripts/calibrate_delta.py` over *one real captured hour* before the pilot and pin the thresholds from the observed histogram, not from the synthetic clips.
+*Evidence that settles it:* the `dp_video_delta_peak` histogram from a real desktop, hand-labelled into idle / typing / scroll / switch windows. A real desktop has notification badges, animated cursors, a ticking menu-bar clock — none of which are in the synthetic fixtures, and any of which could raise the idle floor above 8.
 
 **O-2 — Can PP-OCRv6 (or any current OCR model) read 13 pt macOS UI text at 1728 px through CRF 28?** Every candidate is trained on *documents*; a dark-theme code editor with sub-pixel antialiasing and x264 ringing is out of distribution. The vendor "Screen 82.5" benchmark is the vendor's own test set with chat models as the comparison row.
 **Recommendation:** gate the pilot on it. Ship `VIDEO_OCR_BACKEND=mock` until it passes.
-**Evidence:** 200 hand-labelled real macOS frames (IDE, Gmail, Slack, browser article, terminal, spreadsheet), scored on exact-string recall of ≥5-char strings **with lenient substring matching, not exact equality** — the POC measured 0.000 strict on a model that was reading correctly and wrapping the answer in prose. Run `{ppocr@1728, ppocr@1152, Qwen3-VL-32B@1536, Qwen2.5-VL-32B@1536}`. ~1 day, no new code. Gate: ≥0.85 key-string recall, ≤0.10 CER on the focused region.
+*Evidence:* 200 hand-labelled real macOS frames (IDE, Gmail, Slack, browser article, terminal, spreadsheet), scored on exact-string recall of ≥5-char strings *with lenient substring matching, not exact equality* — the POC measured 0.000 strict on a model that was reading correctly and wrapping the answer in prose. Run `{ppocr@1728, ppocr@1152, Qwen3-VL-32B@1536, Qwen2.5-VL-32B@1536}`. ~1 day, no new code. Gate: ≥0.85 key-string recall, ≤0.10 CER on the focused region.
 
 **O-3 — Should the scenario be per-chunk rather than per-deployment?** D-13 chose per-deployment because per-chunk needs three shared-core edits and breaks `_current_pv`'s durable dedup backstop.
 **Recommendation:** stay per-deployment. Revisit only when a single fleet must serve two capture surfaces from one DP instance.
-**Evidence:** a non-zero `dp_video_scenario_mismatch_total` in production. If it stays zero, the question is answered.
+*Evidence:* a non-zero `dp_video_scenario_mismatch_total` in production. If it stays zero, the question is answered.
 
-**O-4 — Does a 32B write a *better* clip description than four keyframe captions?** There is **no per-frame vs per-clip A/B on the same model anywhere in the repo** — the POC's frames-only runs were a different model (Claude) or confounded with audio removal. Everything else in this design is measured; this is the one premise that is argued.
-**Recommendation:** run it before the flip, and make the terse-vs-dense prompt an arm of the same run.
-**Evidence:** 30 real clips × {`per-frame-v0`, `screen-clip-v1`}, judged blind with the POC's frame-grounded rubric on (cross-frame reasoning present / invented detail / usable as a day-log line), plus the $70 Gemini oracle as an upper bound. Two files in the pack registry; the fork is automatic and the two arms cannot collide.
+**O-4 — Does a 32B write a *better* clip description than four keyframe captions?** There is **no per-frame vs per-clip A/B on the same model anywhere in the repo**, the POC's frames-only runs were a different model (Claude) or confounded with audio removal. Everything else in this design is measured; this is the one premise that is argued.
+*Recommendation:* run it before the flip, and make the terse-vs-dense prompt an arm of the same run. *Evidence:* 30 real clips × {`per-frame-v0`, `screen-clip-v1`}, judged blind with the POC's frame-grounded rubric on (cross-frame reasoning present / invented detail / usable as a day-log line), plus the $70 Gemini oracle as an upper bound.
+Two files in the pack registry; the fork is automatic and the two arms cannot collide.
 
 **O-5 — Is 15.1× the right dose, or is the renderer the problem?** A-8. **Recommendation:** ship `R=22` and `block_segments=2`; request `block_segments=1` (dose 30.2×) if continuum can afford 2× the amplification generations.
-**Evidence:** the Phase-3 decomposition fork, which is continuum's to run and which their own report says must land before any follow-on.
+*Evidence:* the Phase-3 decomposition fork, which is continuum's to run and which their own report says must land before any follow-on.
 
 **O-6 — What is the real node price and the real serving throughput?** Every dollar figure in §7 is an input-times-assumption. The **ratios** (5.8× cheaper at 60 s, 164× for CPU-vs-VLM OCR) are ratios of token counts and are robust; the absolutes are not.
-**Evidence:** `vllm bench serve` at target concurrency (30 min) plus a procurement answer on the a3-mega rate.
+*Evidence:* `vllm bench serve` at target concurrency (30 min) plus a procurement answer on the a3-mega rate.
 
 **O-7 — Does the sidecar's `/health` model pin belong in `cfg_tag` or only in the assertion?** Currently both (`ocr_model_sha_det/rec` are in `OUTPUT_AFFECTING`). This means a model-file upgrade forks the corpus — correct, but it also means the pin must be updated in DP's config, not just in the sidecar. **Recommendation:** keep it; the alternative is a silent output change. Revisit if model updates become frequent.
 
@@ -1019,27 +1014,23 @@ Plus a **VLM circuit breaker**: N consecutive connect-refused → fast-fail *bef
 
 Each is a crisp ask. **None blocks a build; two block the cutover.**
 
-**E-1 — recording: `--segment-seconds 10 → 60` for the mac capture.**
-*Ask:* change the default at `clients/mac/nucleus_capture.py:647`.
-*Why:* the single largest lever in the system — **5.8× on GPU cost**, 12× fewer records, and it is the only route to a window over which a description can reason. **Zero contract surface**: C1 places no constraint on chunk duration (`c1:19-20` are bare strings; only `sequence` density is constrained at `c1:15`).
-*Cost recording bears:* a lost or dead-lettered chunk now loses 60 s of a user's day, not 10 s; upload latency per unit rises ~6×; the retry blast radius rises 6×. **And it moves the audio stream too** — recording demuxes both legs from the same segment — which is probably *better* for ASR (6× fewer boundary-truncated words; the POC transcribed 20-minute windows) but is the audio owner's call, not ours.
-*If refused:* DP ships at 10 s. Everything works; the dose is identical by construction (D-11); the cost is 2.4× rather than 5.8× better than today; the caption cannot reason across a task-step.
-*Owners:* recording + data-processing (audio). A joint note in both HANDOFF canvases per `ORG.md:44-45`. **Not a founders' escalation** — it is config with no contract surface.
+**E-1 — recording: `--segment-seconds 10 → 60` for the mac capture.** *Ask:* change the default at `clients/mac/nucleus_capture.py:647`. *Why:* the single largest lever in the system — **5.8× on GPU cost**, 12× fewer records, and it is the only route to a window over which a description can reason. *Zero contract surface*: C1 places no constraint on chunk duration (`c1:19-20` are bare strings; only
+`sequence` density is constrained at `c1:15`). *Cost recording bears:* a lost or dead-lettered chunk now loses 60 s of a user's day, not 10 s; upload latency per unit rises ~6×; the retry blast radius rises 6×. *And it moves the audio stream too* — recording demuxes both legs from the same segment, which is probably *better* for ASR (6× fewer boundary-truncated words; the POC transcribed 20-minute
+windows) but is the audio owner's call, not ours. *If refused:* DP ships at 10 s. Everything works; the dose is identical by construction (D-11); the cost is 2.4× rather than 5.8× better than today; the caption cannot reason across a task-step. *Owners:* recording + data-processing (audio). A joint note in both HANDOFF canvases per `ORG.md:44-45`. *Not a founders' escalation* — it is config with no
+contract surface.
 
 **E-2 — storage: `DELETE /context/records?user_id=&from=&to=&pipeline_version=&kind=`.**
 *Ask:* a retraction primitive.
 *Why:* **this blocks the cutover, not the build.** `record_id` forks by design (`pipeline.py:12-14`), old records persist (`journal.py:296-298`), and `daylog.py` filters on neither `kind` nor `pipeline_version` (`db.py:344-351`) — so any day re-consolidated across the cutover renders both dialects and double-counts. It is also required for right-to-be-forgotten and for the version-forward reprocess story `c2:66` already promises.
-*Critical design note:* **the key must include `content.kind`.** Verified against `continuum/handoff/phase-3-report.md:132-135`: the Phase-3 replay emitted **13,020 records**, of which **12,221 captions + 621 transcripts** landed in-window (the difference is the out-of-window tail), **all** stamped the single dialect `asr-fw-v1+diar-pyannote-v1` — captions and transcripts sharing one `pipeline_version`, because `injected_caption` declares no fragment. A kind-blind retraction would delete transcripts to remove captions. Build it kind-aware or it ships unusable.
-*Until it exists:* cut over **forward-only, at a UTC day boundary, on a fresh `user_id`**, with `DP_DIALECT_FREEZE=1` during the flip window. Never backfill.
+*Critical design note:* *the key must include `content.kind`.* Verified against `continuum/handoff/phase-3-report.md:132-135`: the Phase-3 replay emitted *13,020 records*, of which *12,221 captions + 621 transcripts* landed in-window (the difference is the out-of-window tail), *all* stamped the single dialect `asr-fw-v1+diar-pyannote-v1` — captions and transcripts sharing one `pipeline_version`, because `injected_caption` declares no fragment. A kind-blind retraction would delete transcripts to remove captions. Build it kind-aware or it ships unusable.
+*Until it exists:* cut over *forward-only, at a UTC day boundary, on a fresh `user_id`*, with `DP_DIALECT_FREEZE=1` during the flip window. Never backfill.
 *Owner:* storage.
 
-**E-3 — inference/platform: serving flags and a dedicated captioner allocation.**
-*Ask (a), immediate:* launch the served model with `--limit-mm-per-prompt '{"image":16}'` **and** an explicit `--mm-processor-kwargs` `max_pixels` ≥ the frames we send. `serve_vllm.sh:52-55` states verbatim that these are *"intentionally omitted"*. Without (a) the multi-image call 400s on the first chunk — loud, and the fallback pack covers it. Without the second flag the server may **silently downscale**, discarding the pixels we are paying for, with no error and no metric.
-*Ask (b), before scale-up:* a captioner endpoint **distinct from `:8000`**. Verified: `VIDEO_VLM_URL` defaults to `127.0.0.1:8000` and inference's `VLLM_URL` defaults to `localhost:8000` — the same single Qwen3-VL-32B TP=8 instance on node-7 at `gpu_memory_utilization=0.90` that serves user-facing chat. DP's prefill bursts land in the same continuous batch as the assistant's decode steps, and the failure mode is TTFT on the assistant, which no GPU-percent figure shows. Worse: `product/HANDOFF.md:262-268` records the serve loop as routinely **down** during the learn loop, and `platform/CHARTER.md:73,83` lists the serving-vs-training allocation policy as an unresolved **proposal** (this is DP's `CHARTER.md:96` OQ3, unchanged). During a 4 h nightly window at 60 chunks/hour, DP would dead-letter **240 chunks** — 4 hours of a user's screen life — after paying the full ffmpeg prep on each. A 7B-class VL model on 1–2 GPUs handles this load with room to spare and isolates DP from both tenants.
-*Owner:* platform + inference; (b) is a founders' call because it closes CHARTER M0/OQ3.
+**E-3 — inference/platform: serving flags and a dedicated captioner allocation.** *Ask (a), immediate:* launch the served model with `--limit-mm-per-prompt '{"image":16}'` **and** an explicit `--mm-processor-kwargs` `max_pixels` ≥ the frames we send. `serve_vllm.sh:52-55` states verbatim that these are *"intentionally omitted"*. Without (a) the multi-image call 400s on the first chunk — loud, and the fallback pack covers it. Without the second flag the server may *silently downscale*, discarding the pixels we are paying for, with no error and no metric. *Ask (b), before scale-up:* a captioner endpoint *distinct from `:8000`*. Verified: `VIDEO_VLM_URL` defaults to `127.0.0.1:8000` and inference's `VLLM_URL` defaults to `localhost:8000` — the same single Qwen3-VL-32B TP=8 instance on node-7 at `gpu_memory_utilization=0.90` that serves user-facing chat. DP's prefill bursts land in the same continuous batch as the assistant's decode steps, and the failure mode is TTFT on the
+assistant, which no GPU-percent figure shows. Worse: `product/HANDOFF.md:262-268` records the serve loop as routinely *down* during the learn loop, and `platform/CHARTER.md:73,83` lists the serving-vs-training allocation policy as an unresolved *proposal* (this is DP's `CHARTER.md:96` OQ3, unchanged). During a 4 h nightly window at 60 chunks/hour, DP would dead-letter *240 chunks* — 4 hours of a user's screen life, after paying the full ffmpeg prep on each. A 7B-class VL model on 1–2 GPUs handles this load with room to spare and isolates DP from both tenants. *Owner:* platform + inference; (b) is a founders' call because it closes CHARTER M0/OQ3.
 
 **E-4 — continuum: three renderer changes and one recipe fork.**
-*Ask (a), the goal-3 completion, ~5 lines:* in `_render_block` (`daylog.py:144-172`), carry each fragment's own `t_start` (already stored for ASR at `:107/:116`, never rendered at `:153-154`) and prefix it in **`win.tz`**, the timezone continuum already holds at `:147`. Today the only clock a trainer ever sees is the block anchor at `%H:%M` from bucket boundaries, so *"at 13:04 the user was writing an email saying X"* is structurally unreachable no matter what DP emits. DP cannot do this itself — C1 carries no timezone.
+*Ask (a), the goal-3 completion, ~5 lines:* in `_render_block` (`daylog.py:144-172`), carry each fragment's own `t_start` (already stored for ASR at `:107/:116`, never rendered at `:153-154`) and prefix it in `win.tz`, the timezone continuum already holds at `:147`. Today the only clock a trainer ever sees is the block anchor at `%H:%M` from bucket boundaries, so *"at 13:04 the user was writing an email saying X"* is structurally unreachable no matter what DP emits. DP cannot do this itself — C1 carries no timezone.
 *Ask (b), ~2 lines:* drop an `ocr` string equal to the previous one in the block and suffix `(unchanged ×N)`. Removes A-5's residual and fixes today's path too.
 *Ask (c), ~2 lines, belt-and-braces:* emit `World text (OCR):` **before** `Scene:`, or interleave per segment. Truncation is ordinal, and OCR is currently last; D-11's budget keeps us clear, but a long `Heard:` line is the one thing that can still eat it.
 *Ask (d), the recipe:* fork `recipe_id` to `segment_seconds=60, block_segments=2` (dose 15.1×), or `block_segments=1` (dose 30.2×) at 2× the amplification generations — 23,040/day vs 11,520. Their trade, their GPU. Precedent: Phase 3 already forked the recipe to match a caption cadence (`consolidation-test-1min-v1.0.json`) rather than bending records to the recipe.
@@ -1064,10 +1055,10 @@ Discipline: **one workstream, disjoint files, zero shared-core edits.** Two work
 
 **Lead correction (2026-07-24):** the shapes below do **NOT** go in `app/vision/result.py` — that
 file already exists and the retained `VIDEO_PIPELINE=keyframe` legacy path (WS-G) imports
-`Keyframe`/`KeyframeCaption` from it. The clip shapes live in a **new** file
-**`app/vision/clip_types.py`**, and the single mode resolver in **`app/vision/mode.py`**. Both are
-**committed by the lead to the fan-out base commit** (`app/vision/clip_types.py`,
-`app/vision/mode.py`) — every workstream **imports** them; no branch re-creates them, so there is
+`Keyframe`/`KeyframeCaption` from it. The clip shapes live in a *new* file
+`app/vision/clip_types.py`, and the single mode resolver in `app/vision/mode.py`. Both are
+*committed by the lead to the fan-out base commit* (`app/vision/clip_types.py`,
+`app/vision/mode.py`) — every workstream *imports* them; no branch re-creates them, so there is
 no add/add merge to reconcile. The pinned shapes (authoritative copy is the committed file):
 
 ```python
@@ -1107,14 +1098,14 @@ touch one 173-test service.
    `enabled()` returns `resolve_pipeline() == "clip"`, and the default is `keyframe`, so the legacy
    graph runs and your stages stay dormant under the existing fixtures. Before you call anything
    done, run `ASR_BACKEND=mock ./.venv/bin/python -m pytest -q` from
-   `product/services/data-processing` — it must show **≥ 173 passed**. The full clip-mode E2E is an
+   `product/services/data-processing` — it must show *≥ 173 passed*. The full clip-mode E2E is an
    *integration* deliverable (the per-window consolidation tab), not yours — your unit tests drive
    your stage directly.
 3. **Foundation files are committed — import, never redefine.** `app/vision/clip_types.py`
    (the frozen dataclasses) and `app/vision/mode.py` (`resolve_pipeline`) are already in the tree.
    Import from them. Do not edit or re-create them.
 4. **Do not edit `HANDOFF.md` or `CHARTER.md`.** Append your notes under a new
-   `## Build log — WS-X` section at the **end** of this file (`handoff/ws-video-clip.md`) only. The
+   `## Build log — WS-X` section at the *end* of this file (`handoff/ws-video-clip.md`) only. The
    lead reconciles the service canvas and the CHARTER record-law extract at integration.
 5. **Headless + offline in tests.** No GPU, no network, mock backends. Fixtures are generated at
    test time (e.g. `ffmpeg lavfi`); commit no binaries.
@@ -1134,17 +1125,17 @@ attribution, no mention of AI / Claude / Anthropic.
 
 **Scope.** Verify every external assumption before a line of app code is written, and hand the results to WS-D and WS-C.
 **Files owned:** `scripts/vlm_probe.py`, `scripts/ocr_probe.py`, `handoff/ws-video-clip-probe.md`. No `app/` files.
-**Deliverable.** Four curls and a capability report: (1) N `image_url` parts in one user message → is `--limit-mm-per-prompt` raised? (2) `response_format: {"type":"json_schema"}` → is guided decoding available? (3) `usage.prompt_tokens` for one 768×480 frame → **is it 360 (factor 32), 470 (factor 28), or materially lower (server-side `max_pixels` clamping)?** (4) `video_url` data-URI → informational only, for O-4's future.
-**Depends on:** access to the served endpoint.
-**Exit criteria.** The report exists, is committed, and names the exact launch flags required. If (1) fails, WS-D's default pack becomes `screen-clip-single-v1` and that is recorded in the report, not discovered in production.
-**Escalation:** feeds E-3(a). **Not blocked by it** — the probe's job is to make the ask precise.
+*Deliverable.* Four curls and a capability report: (1) N `image_url` parts in one user message → is `--limit-mm-per-prompt` raised? (2) `response_format: {"type":"json_schema"}` → is guided decoding available? (3) `usage.prompt_tokens` for one 768×480 frame → *is it 360 (factor 32), 470 (factor 28), or materially lower (server-side `max_pixels` clamping)?* (4) `video_url` data-URI → informational only, for O-4's future.
+*Depends on:* access to the served endpoint.
+*Exit criteria.* The report exists, is committed, and names the exact launch flags required. If (1) fails, WS-D's default pack becomes `screen-clip-single-v1` and that is recorded in the report, not discovered in production.
+*Escalation:* feeds E-3(a). *Not blocked by it* — the probe's job is to make the ask precise.
 
 ### WS-B — Frame prep & the delta gate · **START IMMEDIATELY** · blocked on nothing
 
 **Scope.** D-03, D-04, D-07's selection half. The two ffmpeg passes, true-PTS parsing, the binarized 32×32 change map, the anchor accumulator, the OCR-frame selector, the deterministic frame grid, the `clipprep` stage.
 **Files owned:** `app/vision/clip.py` (new), `app/vision/delta.py` (new), `app/vision/result.py` (new dataclasses), `app/stages/video/clipprep.py` (new), `scripts/calibrate_delta.py` (new), `tests/conftest_video.py` (ffmpeg-lavfi fixture builders), `tests/test_clipprep.py`, `tests/test_delta.py`.
-**Depends on:** nothing. Fixtures are generated at test time by `ffmpeg lavfi` (six clips: flat black/white/gray, static+caret, typing at 40 wpm via 33 `drawtext` layers with `enable='between(t,a,b)'`, fast typing, scroll, dense scroll, app switch), built into `tmp_path` in ~4 s. **No binaries committed. No GPU. No network.**
-**Exit criteria.**
+*Depends on:* nothing. Fixtures are generated at test time by `ffmpeg lavfi` (six clips: flat black/white/gray, static+caret, typing at 40 wpm via 33 `drawtext` layers with `enable='between(t,a,b)'`, fast typing, scroll, dense scroll, app switch), built into `tmp_path` in ~4 s. *No binaries committed. No GPU. No network.*
+*Exit criteria.*
 - The measured floor is **exactly 2** on flat black, flat white and flat 50 % gray — asserted.
 - The six calibration vectors of §D-04 reproduce.
 - Two runs over the same fixture produce byte-identical `ClipFrames` and `Delta`.
@@ -1158,8 +1149,8 @@ attribution, no mention of AI / Claude / Anthropic.
 
 **Scope.** D-06, D-07's post-processing half, D-08's record. The new deployable, the backend seam, region-role assignment, dedup, redaction, budget, the `screentext` stage and its unit.
 **Files owned:** `sidecars/ocr/**` (new deployable: `app.py`, `requirements.txt`, `run.sh`, `README.md`, its own venv), `app/vision/ocr/**` (new package: `__init__.py` with `_TAGS`/`_resolve`/`select`/`version_tag`, `mock.py`, `ppocr.py`, `vlm.py`, `assemble.py`, `redact.py`), `app/stages/video/screentext.py`, `tests/test_ocr_assemble.py`, `tests/test_screentext.py`, `tests/fixtures/ocr_truth/**` (30 hand-labelled real frames + JSON ground truth).
-**Depends on:** WS-B's `Frame`/`ClipFrames` dataclasses (frozen above, so no wait) and `app/vision/budget.py` from WS-D (also frozen: `caption_cap(span, vs)`, `ocr_cap(span, vs)`, `truncate_sentence`, `truncate_word` — WS-C may stub it locally for a day if WS-D lags).
-**Exit criteria.**
+*Depends on:* WS-B's `Frame`/`ClipFrames` dataclasses (frozen above, so no wait) and `app/vision/budget.py` from WS-D (also frozen: `caption_cap(span, vs)`, `ocr_cap(span, vs)`, `truncate_sentence`, `truncate_word` — WS-C may stub it locally for a day if WS-D lags).
+*Exit criteria.*
 - `mock` backend needs no network, no GPU, no new DP dependency; the full DP suite is green with `VIDEO_OCR_BACKEND=mock`.
 - `/health` returns both model-file sha256s + ORT version + EP; DP asserts them against config **at graph resolution** and fails loud on mismatch.
 - Redaction: 6 synthetic cases (AWS key, `sk-`, `ghp_`, base64 blob, PEM header, Luhn card) → `[redacted:secret]`, counter incremented.
@@ -1174,8 +1165,8 @@ attribution, no mention of AI / Claude / Anthropic.
 
 **Scope.** D-02, D-09, D-10, D-11, D-12, D-13. The pack registry and digest, `cfg_tag` and the `OUTPUT_AFFECTING` classification, the budget module, the multi-image payload, the parse ladder, the deterministic renderer, the `clipcap` primary.
 **Files owned:** `app/vision/prompts/**` (registry, `routes.json`, `LOCK.json`, `archive/`, `show.py`, `relock.py`, and the `.prompt.md` files: `screen-clip-v1`, `screen-clip-idle-v1`, `screen-clip-single-v1`, `screen-ocr-v1`, `camera-clip-v1`, `per-frame-v0`), `app/vision/budget.py`, `app/vision/version.py` (`cfg_tag`, `OUTPUT_AFFECTING`, `OPERATIONAL_ONLY`), `app/vision/clipcap/**` (`__init__.py` seam, `mock.py`, `vlm.py`, `vertex.py` stub), `app/vision/parse.py`, `app/vision/emit.py`, `app/vision/config.py`, `app/stages/video/clipcap.py`, `tests/test_prompt_pack.py`, `tests/test_budget.py`, `tests/test_parse.py`, `tests/test_clipcap.py`.
-**Depends on:** WS-B's `ClipFrames`, WS-C's `ocr_text` slot (both frozen above). WS-A's report for the real-backend integration test only.
-**Exit criteria.**
+*Depends on:* WS-B's `ClipFrames`, WS-C's `ocr_text` slot (both frozen above). WS-A's report for the real-backend integration test only.
+*Exit criteria.*
 - `PACK_DIGEST` is stable across a whitespace-only edit and changes on any semantic edit — both asserted.
 - Unknown `VIDEO_CLIP_PROMPT` resolves to the pinned default in **both** resolvers.
 - `mock` backend's `prompt_tag` returns `""` — a prompt edit does **not** re-key the headless corpus.
@@ -1193,40 +1184,38 @@ attribution, no mention of AI / Claude / Anthropic.
 
 **Scope.** §4 as CI, not as prose.
 **Files owned:** `tests/test_emission_law.py`, `docs/` note for the CHARTER.md extract.
-**Content.** Over the live registry: every enabled `sidecar` with non-empty `provides` has a non-empty `version_fragment`, with a single named frozen exemption (`keyframes`); no `best_effort` stage carries a non-empty fragment; no `mutate` overrides `enabled()`; every stage's `writes ⊆ primary.mutable_slots`; the 18-row worked table's verdicts are encoded as assertions where mechanically checkable.
-**Depends on:** WS-B/C/D's stage declarations existing (it can be written first and turn green as they land).
-**Exit criteria.** Green, and it **fails** if a new stage violates R1.
-**Follow-on (WS-E2, sequenced last, not parallel):** promote the rule to a registration-time `StageRegistrationError` in `app/stagegraph/stage.py` — ~8 lines plus the frozen exemption set. **This is the one sanctioned shared-core edit and it deliberately lands after everything else, so it can never block a build.**
+*Content.* Over the live registry: every enabled `sidecar` with non-empty `provides` has a non-empty `version_fragment`, with a single named frozen exemption (`keyframes`); no `best_effort` stage carries a non-empty fragment; no `mutate` overrides `enabled()`; every stage's `writes ⊆ primary.mutable_slots`; the 18-row worked table's verdicts are encoded as assertions where mechanically checkable.
+*Depends on:* WS-B/C/D's stage declarations existing (it can be written first and turn green as they land).
+*Exit criteria.* Green, and it *fails* if a new stage violates R1.
+*Follow-on (WS-E2, sequenced last, not parallel):* promote the rule to a registration-time `StageRegistrationError` in `app/stagegraph/stage.py` — ~8 lines plus the frozen exemption set. *This is the one sanctioned shared-core edit and it deliberately lands after everything else, so it can never block a build.*
 
 ### WS-F — Observability, failure semantics, dialect visibility · **START IMMEDIATELY** · owns two shared-core files exclusively
 
 **Scope.** §8's metric list, the timeout/queue re-tune, the circuit breaker, `DP_DIALECT_FREEZE`, the sha256 move.
-**Files owned:** `app/main.py`, `app/ingest_core.py`, `app/vision/circuit.py` (new), `tests/test_metrics_video.py`. **No other workstream may edit `main.py` or `ingest_core.py`.**
-**Changes.** Declare the new families; add the parent-side `dp_units_total{modality,kind}` / `dp_content_chars` / `dp_empty_output_total` in the existing per-unit loop (`ingest_core.py:164-186`, where `metrics` is in scope and already null-guarded, so they survive `INGEST_ISOLATION=subprocess`); drop the `modality == "audio"` guard at `:157`; move `hashlib.sha256` off the event loop (`:105-107`); add `video_pipeline_version` to `/health` and the `dp_pipeline_dialect` gauge via the existing `add_gauge_source`; `DP_DIALECT_FREEZE=1` → `_current_pv` returns `None`.
-**Depends on:** nothing structurally; the metric *names* are frozen by §8 so WS-B/C/D can emit against them from day one.
-**Exit criteria.** All counters visible on `/metrics` at zero before any traffic; `/health` reports the dialect; a two-dialect fixture trips the alert expression; a graph run with `resources=None` (the isolation shape) does not raise.
-**Blocked on escalation:** no.
+**Files owned:** `app/main.py`, `app/ingest_core.py`, `app/vision/circuit.py` (new), `tests/test_metrics_video.py`. *No other workstream may edit `main.py` or `ingest_core.py`.*
+*Changes.* Declare the new families; add the parent-side `dp_units_total{modality,kind}` / `dp_content_chars` / `dp_empty_output_total` in the existing per-unit loop (`ingest_core.py:164-186`, where `metrics` is in scope and already null-guarded, so they survive `INGEST_ISOLATION=subprocess`); drop the `modality == "audio"` guard at `:157`; move `hashlib.sha256` off the event loop (`:105-107`); add `video_pipeline_version` to `/health` and the `dp_pipeline_dialect` gauge via the existing `add_gauge_source`; `DP_DIALECT_FREEZE=1` → `_current_pv` returns `None`.
+*Depends on:* nothing structurally; the metric *names* are frozen by §8 so WS-B/C/D can emit against them from day one.
+*Exit criteria.* All counters visible on `/metrics` at zero before any traffic; `/health` reports the dialect; a two-dialect fixture trips the alert expression; a graph run with `resources=None` (the isolation shape) does not raise.
+*Blocked on escalation:* no.
 
 ### WS-G — Legacy freeze, migration, runbook · **START IMMEDIATELY** · blocked on E-2 for the *cutover only*
 
 **Scope.** D-14. The 4-line `enabled()` gates, the frozen exemption, the migration and rollback runbook.
 **Files owned:** `app/stages/video/keyframes.py`, `app/stages/video/captions.py`, `app/processing/processors/video.py`, `HANDOFF.md` (one status row), `handoff/ws-video-clip.md` (this document, kept current), `tests/test_legacy_dialect.py`.
-**Changes.** Add `enabled(self, settings) -> resolve_pipeline(get_vision_settings()) == "keyframe"` to both stages. Nothing else. `_weave_ocr` and the `VIDEO_OCR_RECORDS` branch stay untouched in the legacy path and are simply not reached in clip mode.
-**Exit criteria.**
+*Changes.* Add `enabled(self, settings) -> resolve_pipeline(get_vision_settings()) == "keyframe"` to both stages. Nothing else. `_weave_ocr` and the `VIDEO_OCR_RECORDS` branch stay untouched in the legacy path and are simply not reached in clip mode.
+*Exit criteria.*
 - `pipeline_version` in legacy mode is the literal `"vidproc-vlm-v0"` / `"vidproc-mock-v0"` — **byte-for-byte, asserted**.
 - All 11 existing tests in `tests/test_video_pipeline.py` stay green **unmodified** under `VIDEO_PIPELINE=keyframe`.
 - An unknown `VIDEO_PIPELINE` value resolves to `keyframe` and the graph resolves — asserted.
 - The runbook states, in these words: *rollback restores behaviour, not the corpus*; *drain-and-replace, never rolling*; *forward-only cutover at a UTC day boundary on a fresh `user_id` until E-2 lands*.
-**Blocked on escalation:** the **cutover** is blocked on E-2 (storage retraction) for any `user_id` with existing video records. Verified by the lead session, and the picture is *nearly* as clean as it needs to be: the **Phase-3 replay** corpus carries **zero** `vidproc-*` records (all one audio dialect, per the report cited in E-2), but the **dev store** `storage/app/dev.db` does hold **86 `vidproc-mock-v0` caption records** (+39 `asr-fw-v1` transcripts, 125 total) left by earlier dev/E2E runs. Those are mock-dialect records under dev users, not pilot corpus — so the practical rule stands: **cut over on a fresh `user_id`, and there is no real video corpus to retract yet.** This is the last moment that is true; once the pilot runs, E-2 becomes a hard prerequisite for any re-cutover.
+**Blocked on escalation:** the **cutover** is blocked on E-2 (storage retraction) for any `user_id` with existing video records. Verified by the lead session, and the picture is *nearly* as clean as it needs to be: the *Phase-3 replay* corpus carries *zero* `vidproc-*` records (all one audio dialect, per the report cited in E-2), but the *dev store* `storage/app/dev.db` does hold *86 `vidproc-mock-v0` caption records* (+39 `asr-fw-v1` transcripts, 125 total) left by earlier dev/E2E runs. Those are mock-dialect records under dev users, not pilot corpus — so the practical rule stands: *cut over on a fresh `user_id`, and there is no real video corpus to retract yet.* This is the last moment that is true; once the pilot runs, E-2 becomes a hard prerequisite for any re-cutover.
 
 ### WS-H — Eval harness & the quality gates · **START IMMEDIATELY** · blocked on nothing
 
-**Scope.** The offline A/B, the ground-truth corpora, the Gemini oracle, the ungrounded-quote scorer.
-**Files owned:** `scripts/capture_chunkset.py`, `scripts/prompt_ab.py`, `scripts/oracle_gemini.py`, `tests/fixtures/chunksets/**`, `handoff/ws-video-clip-eval.md`.
-**Design.** `prompt_ab.py` imports `resolve()` + `run_graph()` + `pipeline.build_c2` directly — **never FastAPI, never `StorageClient`** — so it is structurally incapable of writing to `/context` (`ingest_core.py:178` is the only writer and it lives *above* the processor). Arms are selected by `git worktree`, because a pack is only reproducibly defined by a git state. `DP_OFFLINE_EVAL=1` unlocks pack overrides **and** `app/main.py` refuses to boot when it is set — the flag that enables experiments is the flag that prevents serving.
-**Scorers, all mechanical:** the two `pipeline_version` strings and resulting `record_id`s printed side by side (proof the fork is real); records/chunk; chars/record; **projected chars per day-log block against `EXCERPT_CHARS`, rendered through continuum's own `build_daylog`** (a pure function of records); parse-fallback and truncation rates; `app != "unknown"` rate; change-verb rate; **`ungrounded_quote_rate`** — the fraction of double-quoted spans in the caption absent from that chunk's OCR text; measured prompt/completion tokens from `usage`.
-**Exit criteria.** A 200-chunk run costs ≈$0.02 and ≈40 s wall, so it is cheap enough to be a pre-push hook — which is the actual requirement, since an eval expensive enough to skip will be skipped. O-4's blind judge run and the $70 Gemini oracle are deliverables of this workstream.
-**Blocked on escalation:** no. The oracle needs a Vertex key; if unavailable, the mechanical scorers stand alone.
+**Scope.** The offline A/B, the ground-truth corpora, the Gemini oracle, the ungrounded-quote scorer. **Files owned:** `scripts/capture_chunkset.py`, `scripts/prompt_ab.py`, `scripts/oracle_gemini.py`, `tests/fixtures/chunksets/**`, `handoff/ws-video-clip-eval.md`. *Design.* `prompt_ab.py` imports `resolve()` + `run_graph()` + `pipeline.build_c2` directly — *never FastAPI, never `StorageClient`*, so it is structurally incapable of writing to `/context` (`ingest_core.py:178` is the only writer and it lives *above* the processor). Arms are
+selected by `git worktree`, because a pack is only reproducibly defined by a git state. `DP_OFFLINE_EVAL=1` unlocks pack overrides *and* `app/main.py` refuses to boot when it is set — the flag that enables experiments is the flag that prevents serving. *Scorers, all mechanical:* the two `pipeline_version` strings and resulting `record_id`s printed side by side (proof the fork is real); records/chunk; chars/record; *projected chars per day-log block against `EXCERPT_CHARS`, rendered through continuum's own `build_daylog`* (a pure function
+of records); parse-fallback and truncation rates; `app != "unknown"` rate; change-verb rate; `ungrounded_quote_rate` — the fraction of double-quoted spans in the caption absent from that chunk's OCR text; measured prompt/completion tokens from `usage`. *Exit criteria.* A 200-chunk run costs ≈$0.02 and ≈40 s wall, so it is cheap enough to be a pre-push hook — which is the actual requirement, since an eval expensive enough to skip will be skipped. O-4's blind judge run and the $70 Gemini oracle are deliverables of this workstream. *Blocked
+on escalation:* no. The oracle needs a Vertex key; if unavailable, the mechanical scorers stand alone.
 
 ---
 
@@ -1272,7 +1261,7 @@ pinned ffmpeg. This is the same failure the video-pipeline lead already fixed on
 OpenCV fallback (`app/vision/frames.py:8-16`: *"a second decoder's scene metric differs from
 ffmpeg's, so a heterogeneous fleet would select different keyframes for identical bytes under the
 same pipeline_version — a silent non-idempotent /context upsert"*). **D-02 stands, and the
-determinism argument — not the API-surface argument — is the load-bearing one.**
+determinism argument — not the API-surface argument, is the load-bearing one.**
 
 Multi-image in one message is likewise supported and bounded by `--limit-mm-per-prompt`
 (`chat_utils.py:_validate_add` → `validate_num_items`), which is precisely what E-3(a) asks for
@@ -1291,9 +1280,9 @@ Ran `_uniform_times` / `_select_times` with the shipped defaults:
 §1.4's figure of 4 is confirmed for real screen content (where the scene pass contributes 0). The
 **8** column is the busy-screen upper bound and is what the per-hour range 1,440–2,880 comes from.
 One consequence worth stating plainly next to D-03: `VIDEO_MAX_KEYFRAMES=8` is **duration-blind**,
-so the legacy path *degrades* as spans grow — at 60 s it samples **0.13 fps**. Against the 5 fps
+so the legacy path *degrades* as spans grow — at 60 s it samples *0.13 fps*. Against the 5 fps
 floor / 10–15 fps balanced point in `readings/Choosing Frame Rate and Resolution…`, today's path
-runs **12–37× under-sampled**, and a naive "just send longer chunks to the old pipeline" would make
+runs *12–37× under-sampled*, and a naive "just send longer chunks to the old pipeline" would make
 that worse, not better. This is an independent argument for D-01 + D-03 being a *package*.
 
 ### 12.3 The OCR sidecar's dependency argument (D-06) is confirmed
@@ -1320,10 +1309,10 @@ thoughts.md` pipeline is therefore only implementable on the det+rec shape; the 
 
 ### 12.5 Corrections applied to this document
 - **E-2's Phase-3 figures** were restated to match the source exactly
-  (`continuum/handoff/phase-3-report.md:132-135`): 13,020 emitted, **12,221 captions + 621
-  transcripts** in-window. The earlier 12,391/629 split was not in the source.
+  (`continuum/handoff/phase-3-report.md:132-135`): 13,020 emitted, *12,221 captions + 621
+  transcripts* in-window. The earlier 12,391/629 split was not in the source.
 - **WS-G's "zero `vidproc-*` records"** was scoped correctly: true of the Phase-3 replay corpus,
-  but `storage/app/dev.db` holds **86 `vidproc-mock-v0` caption records** (125 total) from earlier
+  but `storage/app/dev.db` holds *86 `vidproc-mock-v0` caption records* (125 total) from earlier
   dev runs. Mock dialect, dev users — the fresh-`user_id` cutover rule is unaffected, but the
   sentence now says what is actually on disk.
 
@@ -1334,5 +1323,5 @@ thoughts.md` pipeline is therefore only implementable on the det+rec shape; the 
 ## Build logs
 
 The fifteen workstream build logs — WS-A through WS-H, their exit-criteria checklists, the
-adversarial rounds and the corrections — were rolled out of this file on 2026-07-28 and live in
+adversarial rounds and the corrections, were rolled out of this file on 2026-07-28 and live in
 [ws-video-clip-buildlog.md](ws-video-clip-buildlog.md). Nothing was edited in the move.

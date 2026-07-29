@@ -38,8 +38,8 @@
   `asr/faster_whisper.py` passes `vad_filter=settings.asr_vad` (new env `ASR_VAD`, default
   ON, `vad_parameters={"min_silence_duration_ms": 500}`). All-silence chunk → the model
   yields no segments → `AsrResult(text="", segments=[])` → a valid C2 with an empty
-  transcript (C2 allows `text:""`; the record still documents the span). **PIPELINE_VERSION
-  bumps `asr-fw-v0` → `asr-fw-v1`** (output dialect changed; version-forward reprocessing).
+  transcript (C2 allows `text:""`; the record still documents the span). *PIPELINE_VERSION
+  bumps `asr-fw-v0` → `asr-fw-v1`* (output dialect changed; version-forward reprocessing).
   Mock backend untouched — no record fork on the mock path, M0 tests stay green.
 - **Pipeline shape stubs** (`app/processing/processors/audio.py` restructure): the processor
   becomes an explicit staged pipeline `asr → diarize → translate → acoustic_events` over a

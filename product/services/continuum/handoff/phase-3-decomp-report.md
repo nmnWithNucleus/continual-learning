@@ -17,7 +17,7 @@
 
 ## What changed from Phase 3 (three config changes, no code)
 
-1. Replay index built from the **5-min** descriptions with **`--with-anchor`**, so a caption
+1. Replay index built from the **5-min** descriptions with `--with-anchor`, so a caption
    record carries the parity block text verbatim, tour anchor and all
    (`[Day 21 of 35 · Oklahoma City + Kansas City, OK + KS · 5min clip · ~10:19 AM CT]`).
    Phase 3 dropped that line; the probes are day-indexed and the recipe's rule is

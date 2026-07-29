@@ -56,8 +56,8 @@ A tour day is 18.8–26.0 h of stream; the consolidation window is 24 h.
 * With the real clock there is **no boundary that fits even the eight days under 24 h**:
   day 13 needs a boundary ≥ 08:59 local, day 28 needs ≤ 08:49 — disjoint. Day 17 is
   26.03 h and fits no 24 h window at all. (`rwt` is also non-monotonic and partly blank.)
-* So each day is laid **contiguously from its own window start** on a **whole-minute
-  grid**: chunk *i* starts at `window_start + Σ ceil(duration/60)·60` over the chunks
+* So each day is laid **contiguously from its own window start** on a *whole-minute
+  grid*: chunk *i* starts at `window_start + Σ ceil(duration/60)·60` over the chunks
   before it, while the chunk keeps its real duration as its C1 span.
 
 Quantising the stride (never the span) is what makes the rule-bend exact — verified on the
@@ -92,14 +92,14 @@ record's `t_start`. Keeping the eight fields identical to the 5-min parity path 
 leaves cadence as the single changed variable.
 
 The risk this created — `SpeedProfile.is_valid` requires the day number back in the
-generated prose, and with the anchor gone it can only come from the amplify prompt — was
+generated prose, and with the anchor gone it can only come from the amplify prompt, was
 **measured before committing GPU hours: ok-rate 1.000 (384/384)** on product-path blocks,
 against the recipe's 0.85 abort threshold. No anchor needed.
 
 ### 1.5 The sidecar joins on WALL CLOCK, because it must
 
 A replayed chunk's `chunk_id`/`stream_id` are fresh ULIDs — by design, since the whole
-point is that a replayed chunk is indistinguishable from a live one — so there is no id to
+point is that a replayed chunk is indistinguishable from a live one, so there is no id to
 join a description to, and inventing a contract field to carry one is exactly what the
 design forbade. Both services instead read the same spine: recording stamps each chunk from
 the replay plan, the sidecar bisects the caption index built from that same plan, and
@@ -130,7 +130,7 @@ the plan by SET equality. `all_ok=True`:
 | 28 | 1417 | 1417 | 0 | 0  | 72/72 | 416,456 | 0 | ✅ |
 
 **12,221 caption + 621 transcript C2 records** (13,020 emitted; the difference is the
-out-of-window tail), one dialect throughout — `asr-fw-v1+diar-pyannote-v1` — 4.04 M
+out-of-window tail), one dialect throughout — `asr-fw-v1+diar-pyannote-v1`, 4.04 M
 characters of real transcript, 23 GB of audio blobs in `/raw`, **zero segment collisions**
 (every caption alone in its 60 s bucket, which is the property the rule-bend depends on).
 
@@ -167,7 +167,7 @@ Sample caption (day 21, 09:00–09:01), the injected 1-min description as a C2 c
 
 **Measured throughput:** 65 s per 20-minute chunk end to end (blob PUT + sha verify + ASR +
 diarize + 21 C2 writes), 8 lanes, **8.0 chunks/min sustained**. Wall clock 1 h 44 m;
-**≈13.9 GPU-h** (8 cards held for the duration). The long pole was the lane carrying two
+*≈13.9 GPU-h* (8 cards held for the duration). The long pole was the lane carrying two
 days (124 chunks); a per-day work queue would cut ~35 min.
 
 ---
@@ -271,7 +271,7 @@ worked around in a way that hides it.
    days in different timezones give overlapping 04:00-local windows (day 12 Chicago / day
    13 New York overlap by an hour), so `(user, from, to)` legitimately returns a
    neighbour's records. Today the caller resolves it. If storage ever owns day-log
-   materialization (the lean-architecture plan), the *window* — not a time range — is the
+   materialization (the lean-architecture plan), the *window* — not a time range, is the
    unit it should be addressed by.
 3. **No by-reference blob registration (OQ8).** 23 GB of audio was re-PUT into `/raw` that
    already existed in GCS, purely to satisfy the mandatory `blob_ref` sha-check. The

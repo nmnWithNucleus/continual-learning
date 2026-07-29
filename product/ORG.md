@@ -46,7 +46,7 @@ stored data may be wiped and re-collected rather than migrated, and durability w
 purpose with the reason recorded.
 
 This changes what we build. **It never changes what we say about what we built.** The rules below —
-contracts before fan-out, the contract-edit order, documents as the org chart — hold unchanged, and
+contracts before fan-out, the contract-edit order, documents as the org chart, hold unchanged, and
 "prototype" is never a reason to leave a decision unrecorded or to call a thing `BUILT` when it is
 only `ratified`. Full posture: [ARCHITECTURE.md](ARCHITECTURE.md) §Stage.
 
@@ -55,7 +55,7 @@ only `ratified`. Full posture: [ARCHITECTURE.md](ARCHITECTURE.md) §Stage.
 Documents drifting from code is not a hygiene problem here; it is the **leading indicator of real
 defects**. Across the D18 slice every serious bug — a day-log stamping a recipe whose knobs it never
 used, a shipped default that silently trained on nothing, a `rollback()` that had quietly stopped
-working — presented first as a document disagreeing with the code or with another document. **None
+working, presented first as a document disagreeing with the code or with another document. **None
 was caught by a test.** Twice a *test harness* was green while asserting the defect as correct
 behaviour. So:
 
@@ -93,7 +93,7 @@ workstream) maintains:
 | File | Nature | POC ancestor |
 |---|---|---|
 | `CHARTER.md` (root: README/VISION/ARCHITECTURE/ORG) | **Stable.** Mission, scope, interfaces, milestones; changes deliberately | POC `README.md` |
-| `HANDOFF.md` | **Volatile board** — status tables, where we are, what's next, gotchas. **Rewritten in place** every session. | POC `HANDOFF.md` |
+| `HANDOFF.md` | **Volatile board** — status tables, where we are, what's next, gotchas. *Rewritten in place* every session. | POC `HANDOFF.md` |
 | `handoff/<ws>.md` | Per-workstream / per-aspect working file: the reasoning and a newest-first worklog | POC `phase-N-*.md` / `wsN-*.md` |
 | `DECISIONS.md` | **Append-at-top register** of ratified decisions, cited everywhere and restated nowhere. Root holds the D-numbers; a service opens one only when it has local decisions | — (new 2026-07-27) |
 
@@ -105,9 +105,9 @@ poisons every future session that cold-starts from it. If a machine-consumable i
 becomes necessary (e.g. a dashboard), we *generate* it from the markdown — never hand-author
 it twice. (Ratified 2026-07-09, D2; reversible if it fails us.)
 
-**A board is not a log — the two writing modes.** Added 2026-07-27, after `HANDOFF.md` grew to
-498 lines by quietly becoming a *second* worklog: its `§Current state` and `§Next` had accumulated
-~4,800 words of dated history that already lived in `handoff/engineering.md`, and — the tell — the
+**A board is not a log — the two writing modes.** Added 2026-07-27, after `HANDOFF.md` grew to 498
+lines by quietly becoming a *second* worklog: its `§Current state` and `§Next` had accumulated
+~4,800 words of dated history that already lived in `handoff/engineering.md`, and — the tell, the
 weaker copy went stale within a day. Nobody deletes from a section called "current state"; they
 append. So the mode is now named, per section:
 
@@ -136,14 +136,14 @@ pre-emptively — most services have neither and should not.
 inside a service's chartered autonomy is service-local and gets a service number. A decision that
 **re-cuts a charter, moves a contract, or binds a sibling service** is not the service's to settle:
 it is proposed in [HANDOFF.md](HANDOFF.md) §Escalations and ratified at the founders' board with a
-**D-number**. A service-local row may *cite* a D-number and record its own implementation of it —
+*D-number*. A service-local row may *cite* a D-number and record its own implementation of it —
 that is not a restatement, because the implementation is genuinely the service's.
 
 **Rules (inherited from the POCs, now law):**
 
 - **One fact, one home.** Shared truths (infra, contracts, conventions) live once — root
-  docs or the owning charter — everything else links. Never restate a sibling's internals.
-  **Ratified decisions live in [DECISIONS.md](DECISIONS.md) and are cited by D-number** — if a
+  docs or the owning charter, everything else links. Never restate a sibling's internals.
+  *Ratified decisions live in [DECISIONS.md](DECISIONS.md) and are cited by D-number* — if a
   decision is written out in full anywhere else, that copy is the bug.
 - **A table is not an essay.** [STYLE.md](STYLE.md) is binding on every document edit ([D21](DECISIONS.md)):
   the card template, the change format, the status vocabulary. Read it before you touch a file.
@@ -161,16 +161,16 @@ that is not a restatement, because the implementation is genuinely the service's
 - **Launching work** = opening a new session (Cursor/Claude Code tab) and pasting the
   matching prompt from [PROMPTS.md](PROMPTS.md). Prompts encode the read-order and the
   end-of-session duties, so any model/agent can be slotted in.
-- **Ask vs. decide (the founder-in-the-loop rule).** A service's **initial kickoff (Prompt A)
-  is consultative**: the lead produces a kickoff brief — M0 plan + the blocking open questions
-  with recommendations — and **stops for founder answers before designing or building.** Every
-  **resume (Prompt B) is autonomous**: proceed from the canvas's Next, make + document decisions,
+- **Ask vs. decide (the founder-in-the-loop rule).** A service's *initial kickoff (Prompt A) is
+  consultative*: the lead produces a kickoff brief — M0 plan + the blocking open questions with
+  recommendations, and *stops for founder answers before designing or building.* Every *resume
+  (Prompt B) is autonomous*: proceed from the canvas's Next, make + document decisions,
   escalate only true blockers. Cross-service / contract questions are *never* decided by one
-  service session — they route to a founders' session (or a joint interface-pin), regardless
-  of A vs B.
+  service session — they route to a founders' session (or a joint interface-pin), regardless of
+  A vs B.
 - **Lead plans and dispatches; workers advance ws files.** An A/B lead decomposes M0 into
-  `handoff/wsN-*.md` files and may either build inline or fan out workers. **Prompt C** is a
-  scoped worker that **presupposes its ws file already exists** — C is how you (or a human hire)
+  `handoff/wsN-*.md` files and may either build inline or fan out workers. *Prompt C* is a
+  scoped worker that *presupposes its ws file already exists* — C is how you (or a human hire)
   drive one workstream directly, especially interactive/stateful work a fire-and-forget sub-agent
   can't. No ws file yet ⇒ an A/B planning pass writes it first.
 - **Git is the message bus.** Sessions communicate by committing doc + code updates;
@@ -184,7 +184,7 @@ that is not a restatement, because the implementation is genuinely the service's
   WS6) is opened per fan-out, not standing.
 - **POCs are reference, not source** ([D7](DECISIONS.md)).
   The `poc/` projects were built to answer research questions fast, not to production standard.
-  Sessions mine them for **learnings, contracts, and de-risking** — never lift-and-shift their
+  Sessions mine them for *learnings, contracts, and de-risking* — never lift-and-shift their
   code. Every production path is written fresh, to fit this product's architecture. Cite a POC
   as *reference*; if you catch yourself copying a file, stop and re-derive it.
 

@@ -1,7 +1,7 @@
 # `app/vision/prompts/experimental/` — WS-H's offline-eval packs (NOT a production registry)
 
 These `.prompt.md` files are **arms of an offline experiment**, not shipped prompts. They
-exist for the ratified **O-8** gate (blind-vs-injected A/B) and for **O-4** (per-frame vs
+exist for the ratified **O-8** gate (blind-vs-injected A/B) and for *O-4* (per-frame vs
 per-clip):
 
 | file | arm | architecture |
@@ -23,7 +23,7 @@ production incident:
   (`app/vision/prompts/__init__.py`). `load_registry` globs `*.prompt.md` in the source dir,
   so two extra files in the flat dir change the aggregate digest, change
   `prompts.version_tag(vs)`, change the clip primary's `version_fragment`, and therefore
-  **fork `record_id` for every production caption** — for an experiment that never ran.
+  *fork `record_id` for every production caption* — for an experiment that never ran.
 * WS-D's `tests/test_prompt_pack.py` asserts `_ALL == set(all_packs())` over the six shipped
   ids, so the same drop-in reddens the suite (house rule 2: ≥ 465 green), in a file WS-H
   does not own (house rule 1).
@@ -39,7 +39,7 @@ which is what "a pack is only reproducibly defined by a git state" needs.
 packaged packs + `schemas.json` + this arm's experimental pack + a rewritten `routes.json`
 whose `family_defaults.clip` names that arm's pack. It then runs the arm in a **subprocess**
 with `VIDEO_PROMPT_DIR` pointed at that dir (packs load once per process at import — D-13's
-TOCTOU discipline — so one process cannot hold two arms) and `DP_OFFLINE_EVAL=1`.
+TOCTOU discipline, so one process cannot hold two arms) and `DP_OFFLINE_EVAL=1`.
 
 The fork is automatic and two-fold, so **arms cannot collide** even under the mock backend:
 

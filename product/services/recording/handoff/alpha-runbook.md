@@ -30,12 +30,12 @@
 
 **Launch:** open `$TUNNEL/client/` on the phone — and **hard-refresh the page first**
 (the wire moved to `/capture/*`; a page cached from before the rename will fail every
-upload with HTTP 404 in the status area — that symptom = stale page, refresh again).
+upload with HTTP 404 in the status area, that symptom = stale page, refresh again).
 
 | Step | Expect |
 |---|---|
 | Set user id `nmn`, tap record, film ~35 s | timer runs; captured/uploaded tick together every ~10 s; verdict badge `recording` |
-| Tap stop | brief `uploading`, then badge → **`clean`**; report lines show `audio: N chunks` + `video: N chunks`, received N/N |
+| Tap stop | brief `uploading`, then badge → `clean`; report lines show `audio: N chunks` + `video: N chunks`, received N/N |
 | Pause 10 s mid-recording, resume, stop | no new segments while paused; final verdict `clean`; total segments ≈ recorded time / 10 s |
 | Camera toggle OFF, record 15 s, stop | mic-only: report shows an `audio` stream only; verdict `clean` |
 | Airplane mode 20 s mid-recording, back on, stop | queued climbs while offline, drains after; "retrying in Ns" appears then clears; verdict `clean`, **no missing seqs** |
@@ -100,7 +100,7 @@ python3 nucleus_capture.py record --server $TUNNEL --user nmn \
 
 | Step | Expect |
 |---|---|
-| Let it run ~1 min, then **Ctrl-C once** | "stopping capture…", tail segment uploads, "waiting for the server's continuity report…", summary with `audio` + `video` chunk counts, **`verdict: clean`**, exit 0 |
+| Let it run ~1 min, then **Ctrl-C once** | "stopping capture…", tail segment uploads, "waiting for the server's continuity report…", summary with `audio` + `video` chunk counts, `verdict: clean`, exit 0 |
 | Stamps in the seg lines | `t_end` of seg N == `t_start` of seg N+1 (exact adjacency — the CLI's continuity signal) |
 | Drill: pull Wi-Fi ~20 s mid-run, restore, Ctrl-C | "retrying in Ns" lines, then uploads resume; final verdict `clean` |
 | Drill: Ctrl-C twice quickly | polite abandon message with the session id + spool path; the report (from another machine) shows `unterminated` — expected, honest |
@@ -129,23 +129,22 @@ while faster-whisper (CPU) catches up; empty transcripts for silent/toneless aud
 ## Worklog
 
 - 2026-07-19 — runbook written; data purged, fleet restarted fresh, `/ingest` alias
-  removed (single-tester decision — refresh beats route versioning). Alpha pass is the
+  removed (single-tester decision, refresh beats route versioning). Alpha pass is the
   tester's step.
 - 2026-07-19 — **Surface 3 (mac CLI): Passed** (CTO, real avfoundation runs over the
   tunnel). Results: smoke test clean; first real run surfaced the output-frame-rate
-  defect (zero segments finalized — fixed same hour, fps pin, ws-F worklog); retry
-  7/7 segments both streams, verdict `clean`, graceful Ctrl-C with tail segment.
-  Content checks: VLC on a kept segment shows the real screen (permission/black-frame
-  question closed); a spoken run produced audible audio in the spool AND real ASR
-  transcripts in `/context` for the window. Known items recorded: seg-0 warm-up span
-  (18.4 s, first segment only — ws-F); video quality soft at the default
-  `--max-width 1728` + pinned CRF — acceptable for alpha, raise `--max-width` for
-  crisper text; the real fidelity bar is charter OQ3 (codec/bitrate ladder, joint
-  with DP).
+  defect (zero segments finalized — fixed same hour, fps pin, ws-F worklog); retry 7/7
+  segments both streams, verdict `clean`, graceful Ctrl-C with tail segment. Content
+  checks: VLC on a kept segment shows the real screen (permission/black-frame question
+  closed); a spoken run produced audible audio in the spool AND real ASR transcripts in
+  `/context` for the window. Known items recorded: seg-0 warm-up span (18.4 s, first
+  segment only — ws-F); video quality soft at the default `--max-width 1728` + pinned
+  CRF, acceptable for alpha, raise `--max-width` for crisper text; the real fidelity bar
+  is charter OQ3 (codec/bitrate ladder, joint with DP).
 - 2026-07-19 — **Surface 2 (Chrome extension): Passed** (CTO, real run in **Comet** — the
   browser the picker path had failed in). After the D-E7 pivot to direct tab capture, the
   first real run landed clean end-to-end: session `01KXWCPB…` (device `ext-chrome-NTP5GZW2`,
-  user `nmn`), verdict **`clean`**, 7/7 segments, 0 failed/missing/dup; the muxed tab stream
+  user `nmn`), verdict `clean`, 7/7 segments, 0 failed/missing/dup; the muxed tab stream
   demuxed into an `audio` (7× audio/wav) + `video` (7× video/webm) C1 pair, both DP-checked.
   28 C2 records in `/context`: **7 real ASR transcripts of the captured tab's audio** (a Luis
   Fonsi interview → real faster-whisper text) + 21 mock video captions (video captioning is
@@ -153,7 +152,7 @@ while faster-whisper (CPU) catches up; empty transcripts for silent/toneless aud
   path took 3 failed real-browser attempts; direct tab capture worked on the first.
 - 2026-07-19 — **Surface 1 (phone web): Passed** (CTO, real iPhone through the tunnel, on the
   renamed `/capture/*` wire). Session `01KXWE2DQY…` (device `phone-web-44W7BV2R`, user `nmn`),
-  verdict **`clean`**, 4/4 segments. All 8 blobs in storage sha256-verified + ffprobe-decoded:
+  verdict `clean`, 4/4 segments. All 8 blobs in storage sha256-verified + ffprobe-decoded:
   4× video H.264 640×480 mp4 (~10 s) + 4× audio 16 kHz mono wav; 16 C2 records — 4 real ASR
   transcripts of the phone MIC (a room tour, first segment empty by VAD) + 12 mock captions.
   Confirms the phone client on the `/capture/*` wire (post-rename) end to end.

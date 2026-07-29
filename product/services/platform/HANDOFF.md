@@ -4,9 +4,9 @@
 > Read [CHARTER.md](CHARTER.md) first (mission/scope/interfaces), then this file — the
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
-**Status:** MVP bring-up shipped + **run E2E by integrator** (`run_all.sh` built the venv, installed all four services, brought the mock loop up `/health`-gated, and drove a real turn 2026-07-09) · **Last updated:** 2026-07-09
+**Status:** MVP bring-up shipped + **run E2E by integrator** (`run_all.sh` built the venv, installed all four services, brought the mock loop up `/health`-gated, and drove a real turn 2026-07-09) · *Last updated:* 2026-07-09
 
-**Last updated:** 2026-07-27 — see § Incoming below. This canvas was the oldest in the repo (review item **O-9**): it named neither the D9 observability backbone D15 assigned to platform, nor escalation **E-3(b)**, which names platform as an owner. Both are now recorded, so a cold start here no longer misses work already assigned to this service.
+**Last updated:** 2026-07-27 — see § Incoming below. This canvas was the oldest in the repo (review item **O-9**): it named neither the D9 observability backbone D15 assigned to platform, nor escalation *E-3(b)*, which names platform as an owner. Both are now recorded, so a cold start here no longer misses work already assigned to this service.
 
 ## Workstream index
 | WS | What | Status | Working file | Owner session |
@@ -27,15 +27,15 @@
   `MODEL_BACKEND=vllm` flip; scripted-but-unrun until the a3mega node.
 - 2026-07-09 — WS-E2: **learn-loop capture bring-up** shipped under [`deploy/`](deploy/), parallel
   to (and non-breaking of) the serve-loop one. `bash deploy/run_learn.sh` builds a separate shared
-  venv (`.venv-learn`), installs each sibling's requirements, and starts **storage(8083) →
-  data-processing(8085, ASR_BACKEND=mock) → recording(8084)** in order, `/health`-gated, then prints
+  venv (`.venv-learn`), installs each sibling's requirements, and starts *storage(8083) →
+  data-processing(8085, ASR_BACKEND=mock) → recording(8084)* in order, `/health`-gated, then prints
   a checklist. `--smoke` generates a synthetic sample WAV (`make_sample_wav.py`, stdlib only) and
   fires recording `/capture/run`, printing the returned record_ids (E2E assertion left to the
   integrator). `--stop`/`--status`/`--restart`/`--skip-install` supported; logs in
   `deploy/logs/learn-<svc>.log`. Config: `deploy/learn.env` (from `learn.env.example`); ports doc:
   `deploy/README-learn.md`. Control plane verified by `deploy/selftest/run_selftest_learn.sh`
-  against stdlib fake siblings (**12/12 pass**) — ordered start, health gating, --status, --smoke
-  (WAV gen + /capture/run + record_id parse), --stop. The **real 3-service loop is unrun here**
+  against stdlib fake siblings (*12/12 pass*) — ordered start, health gating, --status, --smoke
+  (WAV gen + /capture/run + record_id parse), --stop. The *real 3-service loop is unrun here*
   (recording + data-processing + storage `/raw`+`/context` are parallel builds, charter-only at
   time of writing); the integrator wires + drives one chunk end to end. Serve-loop self-test still
   10/10 (no regression).
@@ -48,7 +48,7 @@ protocol exists to prevent.
 
 | # | What | Source | State |
 |---|---|---|---|
-| **D9 backbone** | The **one shared Prometheus + Grafana** on node-7, scraping the `/metrics` every service now emits, provisioning each service's own dashboard JSON plus the standard node/dcgm/DB exporters. Both founders open one Grafana URL. | **D9** (2026-07-09) + **D15** (2026-07-19), which named it "the small parallel slice" | **not started.** The *emission* half shipped long ago (recording M6, DP M8), so this is the last hop before D9 closes end to end |
+| **D9 backbone** | The **one shared Prometheus + Grafana** on node-7, scraping the `/metrics` every service now emits, provisioning each service's own dashboard JSON plus the standard node/dcgm/DB exporters. Both founders open one Grafana URL. | **D9** (2026-07-09) + *D15* (2026-07-19), which named it "the small parallel slice" | **not started.** The *emission* half shipped long ago (recording M6, DP M8), so this is the last hop before D9 closes end to end |
 | **E-3(b)** | A **captioner VL endpoint distinct from the user-facing `:8000`**. DP's `VIDEO_VLM_URL` and inference's `VLLM_URL` default to the *same* Qwen3-VL-32B TP=8 instance, so DP's prefill bursts land in the same continuous batch as the assistant's decode steps. The failure mode is assistant TTFT, which no GPU-percent figure surfaces. | Escalation **E-3(b)**, [board](../../HANDOFF.md) §Escalations — owners *platform + inference* | **open founders' call.** It closes DP CHARTER OQ3 (GPU placement/contention), which this service's own [CHARTER.md](CHARTER.md) still lists as an unresolved *proposal* |
 
 **Also true of this service today, and not previously written down:** the learn fleet runs under

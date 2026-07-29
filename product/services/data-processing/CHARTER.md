@@ -28,11 +28,11 @@
 ## Mission
 
 Turn the raw, continuous capture of a pilot user's life — wearable body-cam A/V plus computer
-screen/mic/browser capture — into structured, timestamped, enriched records ready for storage
+screen/mic/browser capture, into structured, timestamped, enriched records ready for storage
 and training. Every token the per-user model is ever fine-tuned on, and every interactive
 request QueryBuilder assembles, passes through this service's pipelines: the quality ceiling of
-the whole product is set here. One code path normalizes both the life stream (batch, C1→C2)
-and interactive requests (synchronous, C8), so the model always sees data in one dialect.
+the whole product is set here. One code path normalizes both the life stream (batch, C1→C2) and
+interactive requests (synchronous, C8), so the model always sees data in one dialect.
 
 ---
 
@@ -41,7 +41,7 @@ and interactive requests (synchronous, C8), so the model always sees data in one
 ### In scope
 | Area | v0 treatment |
 |---|---|
-| Audio pipeline | denoise → **VAD (voice-activity gate)** → speaker diarization → ASR → translation → **acoustic-event captioning** (non-speech audio: ambient sound → tags/caption) |
+| Audio pipeline | denoise → **VAD (voice-activity gate)** → speaker diarization → ASR → translation → *acoustic-event captioning* (non-speech audio: ambient sound → tags/caption) |
 | Text pipeline | normalization (encoding, whitespace, structure) |
 | Image pipeline | ImgProc → **OCR-specialist pass** (legible text + where it sits in the frame) → dense captioning (OCR woven into the description) → world-data injection |
 | Video pipeline | VidProc (chunking/windows) → **OCR-specialist pass** (per keyframe: legible text + location) → dense captioning (OCR woven in) → world-data injection |
@@ -145,10 +145,10 @@ reprocess is an upsert and not a duplicate.
 **The invariant.** A C2 record is **one independently-placeable, independently-labelable,
 independently-losable claim about a span of the user's life** — placement is `t_start` alone, labeling
 is `content.kind` alone, identity is `record_id = sha256(chunk_id ␀ pipeline_version [␀ discriminator])`
-(a blind `/context` upsert), loss is per-stage. Therefore: **a signal deserves a record iff it needs
+(a blind `/context` upsert), loss is per-stage. Therefore: *a signal deserves a record iff it needs
 its own place, its own label, or its own failure. A signal that makes an existing record's declared
 _structure_ more precise is a mutation. A signal about _how_ a claim was obtained is an enrichment —
-or nothing.**
+or nothing.*
 
 **The decision procedure — five ordered tests, first match wins** (apply to any signal S from one C1 chunk):
 
@@ -156,21 +156,21 @@ or nothing.**
 |---|---|---|
 | **T1 `DERIVABLE`** | Pure function of *this* chunk's bytes + config? | **No → not a DP record** (cross-chunk work is continuum's). |
 | **T2 `REACHABLE`** | Reaches a consumer that exists **today**? (`enrichments` is read nowhere yet) | **No → do not emit.** Store nothing you cannot spend; re-apply when a consumer lands. |
-| **T3 `SPINE`** | The modality's answer to "what happened in these bytes"? | **`PRIMARY`** unit(s); its fragment is the base dialect. |
-| **T4 `EDITS`** | Changes bytes a record already claims? | **Structure-fill → `MUTATE`** (declares `writes`, mandatory fragment). **String-change → `FORBIDDEN`**: refine inside the stage before assembly, or fork `pipeline_version`. |
-| **T5 `CHANNEL/SPAN`** | Owns a pinned `kind`/day-log line or an independently addressable span? | **`NEW RECORD`** with its own discriminator. |
+| **T3 `SPINE`** | The modality's answer to "what happened in these bytes"? | `PRIMARY` unit(s); its fragment is the base dialect. |
+| **T4 `EDITS`** | Changes bytes a record already claims? | **Structure-fill → `MUTATE`** (declares `writes`, mandatory fragment). *String-change → `FORBIDDEN`*: refine inside the stage before assembly, or fork `pipeline_version`. |
+| **T5 `CHANNEL/SPAN`** | Owns a pinned `kind`/day-log line or an independently addressable span? | `NEW RECORD` with its own discriminator. |
 
 Fallthrough → **enrichment** (subject to T2) or **stage input**.
 
 **The five riders** (full text in the extract): **R1 fork** — a stage whose config can change bytes it
 doesn't emit must contribute a `version_fragment` (mechanised: a sidecar with non-empty `provides`
-must fork; a purely-additive sidecar must not). **R2 independence** — two records on the same second
+must fork; a purely-additive sidecar must not). *R2 independence* — two records on the same second
 must each be usable without the other; a *grounded* pair (OCR injected into the caption) is one
-witness on two channels, not corroboration. **R3 dialect-honesty** — `pipeline_version` states the
+witness on two channels, not corroboration. *R3 dialect-honesty* — `pipeline_version` states the
 *attempted* dialect; absence is diagnosed by record-presence + a metric, never by the dialect string
 or a fabricated placeholder (cross-service: continuum must never infer "no on-screen text" from an
-absent OCR record). **R4 set-stability** — the record *set* is a pure function of `(bytes, settings)`,
-never of model output or stage outcome. **R5 budget** — every record class names its consumer-today
+absent OCR record). *R4 set-stability* — the record *set* is a pure function of `(bytes, settings)`,
+never of model output or stage outcome. *R5 budget* — every record class names its consumer-today
 and its chars-per-second-of-life budget.
 
 **Enforced in three layers** (deliberately not one, because settings don't exist at import):
@@ -182,7 +182,7 @@ emptied and asserts it is the *only* violation, so no second stage can slide und
 **Worked precedents** (audio, shipped): ASR = primary; diarization = mutate (`+diar-*`); translation +
 acoustic + injected-caption = additive records (no fragment). **Video (WS-VC):** clip caption = primary;
 OCR = its own `kind='ocr'` record whose text is *also* injected into the caption (one witness, two
-channels, R2 Corollary 2); bbox geometry = **not emitted** (T2 — no reader; parked as E-5).
+channels, R2 Corollary 2); bbox geometry = *not emitted* (T2 — no reader; parked as E-5).
 
 ---
 
@@ -222,8 +222,8 @@ channels, R2 Corollary 2); bbox geometry = **not emitted** (T2 — no reader; pa
    - Skew stays *detectable* rather than *corrected*: `device_clock` flags an undisciplined stamp,
      `device_utc_offset_minutes` witnesses what the device believed, and storage's `ingest_time` is
      an independent clock.
-   - **Consequence for the record-emission law:** these fields are envelope **provenance we
-     forward**, not signals we produce, so T2's "does it reach a consumer today" test does not gate
+   - **Consequence for the record-emission law:** these fields are envelope *provenance we
+     forward*, not signals we produce, so T2's "does it reach a consumer today" test does not gate
      them — the same way `device_id` and `blob_ref` are not gated.
    - M4 skew *estimation* remains available if a real unsynced-fleet problem appears, and would
      land as an additive corrected field beside the raw stamp, never overwriting it.
@@ -254,7 +254,7 @@ channels, R2 Corollary 2); bbox geometry = **not emitted** (T2 — no reader; pa
      counter on `unsynced` chunks and |`ingest_time` − `t_end`| outliers would close it properly.
 10. Screen capture is OCR-heavy: dense captioning at ~205-px effective frames drops small text (POC
     token-budget math). **Resolved (CTO, [D8](../../DECISIONS.md)): decouple OCR from the base
-    model.** **Resolved for screen video (WS-VC, 2026-07-25)** in the specifics below.
+    model.** *Resolved for screen video (WS-VC, 2026-07-25)* in the specifics below.
 
     **Rules**
 
@@ -264,8 +264,8 @@ channels, R2 Corollary 2); bbox geometry = **not emitted** (T2 — no reader; pa
     - For screen video: a **dedicated CPU OCR sidecar** (`sidecars/ocr/`, PP-OCR-class det+rec, own
       venv, HTTP seam) reads text at native `VIDEO_OCR_FRAME_WIDTH=1728`.
     - The captioner reads layout at 768 px and never reads text.
-    - **OCR is both injected into the caption prompt** (grounding, D-09) **and emitted as its own
-      `kind='ocr'` record**, separable downstream — continuum renders a `World text (OCR):` line.
+    - **OCR is both injected into the caption prompt** (grounding, D-09) *and emitted as its own
+      `kind='ocr'` record*, separable downstream — continuum renders a `World text (OCR):` line.
     - Cadence is **event-driven**, a binarized-change delta gate rather than a fixed clock;
       static-text dedup is within-chunk.
 
@@ -285,8 +285,8 @@ channels, R2 Corollary 2); bbox geometry = **not emitted** (T2 — no reader; pa
       screen-hour, and dedup of static text across frames.
 11. Voice-to-person linking: diarization yields anonymous speaker labels; linking them to people-registry identities (known-vs-unknown speakers) rides the same registry, and the v0-vs-deferred call is ours ([ARCHITECTURE.md § Ownership splits](../../ARCHITECTURE.md#ownership-splits-pinned--cross-referenced-from-the-charters)). **Recorded: deferred — not in the M5 exit gate**; revisit if speaker embeddings already produced by the diarizer make matching cheap.
 12. Non-speech and silence audio. ASR transcribes **speech only**, and Whisper hallucinates on
-    non-speech or silence, so a chunk of pure ambient sound — a dishwasher, a car, a dog — yields
-    nothing or garbage from ASR. **Decided 2026-07-09.**
+    non-speech or silence, so a chunk of pure ambient sound — a dishwasher, a car, a dog, yields
+    nothing or garbage from ASR. *Decided 2026-07-09.*
 
     **Rules**
 
@@ -301,15 +301,15 @@ channels, R2 Corollary 2); bbox geometry = **not emitted** (T2 — no reader; pa
 
     - Ambient sound is life-context signal, not noise to drop.
     - A chunk with both speech and ambient sound may yield **two records**, via the `record_id`
-      within-chunk discriminator, or carry ambient tags in `enrichments`. Either way there is **no
-      C2 break**.
+      within-chunk discriminator, or carry ambient tags in `enrichments`. Either way there is *no
+      C2 break*.
 
     **Watch out for**
 
     - Residual: which VAD, which audio-tagging or captioning model, and cost per audio-hour.
 13. Ingest processing mode. M0 `/ingest` processes **inline** — pull → ASR → C2 → store inside the
-    request handler, returning `record_ids` — so recording's push blocks on ASR latency.
-    **Resolved (2026-07-19, M7-early):** built behind `INGEST_ASYNC`, default off, so inline stays
+    request handler, returning `record_ids`, so recording's push blocks on ASR latency. *Resolved
+    (2026-07-19, M7-early):* built behind `INGEST_ASYNC`, default off, so inline stays
     byte-identical. See [handoff/ws-async-observability.md](handoff/ws-async-observability.md).
 
     **Rules**
@@ -347,7 +347,7 @@ channels, R2 Corollary 2); bbox geometry = **not emitted** (T2 — no reader; pa
     - **Was** — N keyframe records from one chunk shared the chunk `t_start`/`t_end`, so they
       collided on storage's `(user_id, t_start)` index.
     - **Changed** — an internal seam hook: an optional per-`ProcessedUnit` `t_start`/`t_end`, since
-      C2 already carries per-record timestamps. No schema change, owned in the **video** build.
+      C2 already carries per-record timestamps. No schema change, owned in the *video* build.
     - **Now** — the hook is honored in `build_c2`, and the clip records carry the C1 span verbatim.
     - **Payoff** — no collision, and no schema change was needed.
 
@@ -357,14 +357,14 @@ channels, R2 Corollary 2); bbox geometry = **not emitted** (T2 — no reader; pa
       into the caption or as a `kind:'ocr'` record via the discriminator; only the bbox was lost.
       The planned fix was an additive optional field, `content.regions:[{text,bbox,confidence?}]`
       or `enrichments.text_regions`, schema-additive when a real OCR pass landed, owned in the
-      **image** build.
-    - **Changed** — a real OCR pass landed, and the decision was to **not** emit bbox to C2. The
-      OCR sidecar uses region geometry internally — reading order plus a coarse region *role* woven
-      into the text — then discards it.
+      *image* build.
+    - **Changed** — a real OCR pass landed, and the decision was to *not* emit bbox to C2. The OCR
+      sidecar uses region geometry internally — reading order plus a coarse region *role* woven
+      into the text, then discards it.
     - **Now** — the additive edit (`enrichments.text_regions[]` plus a root `quality{}`) is written
-      and parked as escalation **E-5**, to be taken in one additive commit when the first geometry
+      and parked as escalation *E-5*, to be taken in one additive commit when the first geometry
       or quality consumer exists.
-    - **Payoff** — `enrichments` has **zero readers** in continuum today, which is exactly what the
+    - **Payoff** — `enrichments` has *zero readers* in continuum today, which is exactly what the
       record-law's T2 test refuses to store for. The originally-planned fix, an additive optional
       field, is preserved rather than performed, and it stays schema-additive so old records still
       validate whenever it lands.

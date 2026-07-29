@@ -11,8 +11,8 @@
 Everything frozen stays frozen (C1/C2, the D16 reply wire, claim/dedup semantics, the
 Processor registry, chunk-atomic idempotency). Inline mode byte-identical for default
 configs; both modality ports byte-identical (only 2 vlm-client tests edited to a new
-factory seam). Suites: **DP 127 · recording 120 · storage 26** green. **Owner session:**
-async-observability lead (continued) · **Last updated:** 2026-07-20
+factory seam). Suites: **DP 127 · recording 120 · storage 26** green. *Owner session:*
+async-observability lead (continued) · *Last updated:* 2026-07-20
 
 ---
 
@@ -23,31 +23,31 @@ done-map, and continuity `processed`/`dead_lettered` sets were all in-memory. No
 journal (`$DP_VAR_DIR/dp.db`, WAL, connection-per-call, `BEGIN IMMEDIATE` — recording's
 ledger pattern; **lazy** so module import touches no disk):
 
-- **`pending`** — every async-accepted chunk's full C1, INSERTed inside the claim before
+- `pending` — every async-accepted chunk's full C1, INSERTed inside the claim before
   the 202. Startup re-drives every `state='accepted'` row → **kill -9 auto-recovers** with
   no external re-drive. A dead-lettered chunk stays as `state='dead_letter'` (durable, ops
   visible); a redelivery resets it to `accepted`.
-- **`processed`** — one row per chunk whose C2s are durably written (Both modes). Powers
-  (a) **continuity rehydration** at boot and (b) the **durable dedup backstop**
+- `processed` — one row per chunk whose C2s are durably written (Both modes). Powers
+  (a) **continuity rehydration** at boot and (b) the *durable dedup backstop*
   (`DedupStore(done_fallback=…)`): a redelivery after restart returns prior record_ids
-  (200), never reprocesses — **unless** the modality's `pipeline_version` changed since, in
+  (200), never reprocesses — *unless* the modality's `pipeline_version` changed since, in
   which case the honest answer is a version-forward reprocess (`processed_record_ids`
   staleness check).
 
 **Two safety mechanisms (from the design review), each with a unit drill:**
 - **Epochs.** `accept` bumps a per-row `epoch`; terminal writes (`mark_processed`'s
   pending-delete, `mark_dead_letter`) are epoch-guarded, so a stale worker finishing after
-  a redelivery re-accepted the chunk **no-ops** instead of clobbering the fresh row. (The
+  a redelivery re-accepted the chunk *no-ops* instead of clobbering the fresh row. (The
   processed insert is deliberately un-guarded: if the C2s were written the receipt is true.)
 - **Bounded re-drive.** `pending_for_redrive` durably increments `redrive_attempts` and
   flips over-cap rows (`DP_REDRIVE_MAX_ATTEMPTS`, default 5) to `dead_letter` in one
   transaction — a poison chunk that crash-loops the service breaks the loop visibly.
 
 **Continuity rehydration** (`ContinuityTracker.rehydrate`) merges three classes — processed
-(seen+written), dead (seen+failed), and **accepted (Seen-only — the keystone: a chunk merely
+(seen+written), dead (seen+failed), and **accepted (Seen-only, the keystone: a chunk merely
 waiting to be re-driven is delivered coverage, never fabricated into a gap)**. Live state
 wins, so a double lifespan (TestClient per `with`) never inflates counters. This closes the
-**deferred false-`gaps` caveat**: a DP restart no longer forgets what it durably wrote, so
+*deferred false-`gaps` caveat*: a DP restart no longer forgets what it durably wrote, so
 recording's gap report cannot mis-read intact history as loss.
 
 **Wiring:** `main.py` lifespan runs `pending_for_redrive` → `rehydrate` → start workers →
@@ -59,7 +59,7 @@ redelivery can only re-claim after the mark lands). New gauges: `dp_journal_pend
 `dp_journal_dead_letter`.
 
 **What this closes vs what stays:** kill/crash now **auto-recovers** (was: re-drivable only
-from recording); restart amnesia **closed**. Remaining M7-proper: dead-letter *backfill*
+from recording); restart amnesia *closed*. Remaining M7-proper: dead-letter *backfill*
 tooling + reprocess-by-version at scale + `processed` compaction/retention.
 
 ## Layer B — the stage graph (`app/stagegraph/` + `app/stages/`)
@@ -67,45 +67,45 @@ tooling + reprocess-by-version at scale + `processed` compaction/retention.
 Generalizes what audio half-invented (staged methods + a state blackboard + single-resolver
 version tags) into the core, so **every processing step is one drop-in file**:
 
-- **`Stage`** (one auto-discovered file, `@register_stage`): declares `kind`
+- `Stage` (one auto-discovered file, `@register_stage`): declares `kind`
   (`primary|mutate|sidecar`), `policy` (`required|best_effort`), `needs`/`provides` (the DAG
   + slots), `mutable_slots` (primary-only), `order`, `enabled`/`version_fragment`, and
   Exactly ONE of `run_sync` (always threadpooled — a CPU/GPU/subprocess stage can't freeze
   the loop by accident) or `run_async` (native IO: the VLM fan-out). Registration validates
   hard (mutate can't override `enabled`; primary/mutate can't be best_effort; unique
   name/order; needs closure).
-- **`resolve`** (per call, cheap): exactly one enabled primary; a required stage needing a
+- `resolve` (per call, cheap): exactly one enabled primary; a required stage needing a
   disabled one is an error; **no required/primary may sit downstream of a best_effort stage**
   (its promise would be hollow); a best_effort stage needing a disabled one auto-disables
   with a metric. `pipeline_version = base_fragment + ''.join(sorted(enabled fragments))` —
-  reduces exactly to the shipped dialects, and **a mutate stage's enabledness IS its
-  `version_fragment`** so it physically cannot mutate without forking the dialect (the
+  reduces exactly to the shipped dialects, and *a mutate stage's enabledness IS its
+  `version_fragment`* so it physically cannot mutate without forking the dialect (the
   silent-overwrite bug class dies by construction).
-- **`run_graph`** (readiness executor): one task per enabled stage in an `asyncio.TaskGroup`,
+- `run_graph` (readiness executor): one task per enabled stage in an `asyncio.TaskGroup`,
   each awaiting its needs' futures — independent stages run concurrently (acoustic ∥ asr;
   keyframe captions fan out). Required failure cancels + awaits siblings, then re-raises the
   **unwrapped leaf** (RuntimeError/ValueError/ProcessingError — the worker taxonomy + inline
   HTTP mapping + `raises()` tests all see the real exception). best_effort failure → skipped
-  future → cascade-skip dependents (counted). Slots commit **on success only**. Assembly is
+  future → cascade-skip dependents (counted). Slots commit *on success only*. Assembly is
   last + deterministic (primary's `assemble`, then sidecars by `(order, name)`). Two runtime
   guards: a mutable-slots fingerprint (a sidecar reaching into the primary's slots is caught)
   and discriminator-uniqueness (colliding record identities are terminal). Per-stage latency
   → `dp_graph_stage_seconds{modality,stage}`; failures/skips → `dp_graph_stage_failures_total`.
-- **`GraphProcessor`**: registered via the existing `@register` seam; `process_async` awaited
+- `GraphProcessor`: registered via the existing `@register` seam; `process_async` awaited
   on the loop by `ingest_core` (with the same `dp_stage_seconds{stage=process}` observation);
   sync `process` = `asyncio.run(process_async)` for loop-free callers.
 
 **Ports (byte-identical, proven by the untouched suites):**
 - **audio** → `asr` (primary), `diarize` (mutate, single-resolver), `translate` (sidecar,
-  reads the immutable ASR result), `acoustic` (sidecar, `needs=()` → **now parallel to asr**).
-  Unit order `[primary, translation, acoustic]` preserved. **Validated on node-7 through the
-  graph with real backends:** `pipeline_version=asr-fw-v1+diar-pyannote-v1`, primary
+  reads the immutable ASR result), `acoustic` (sidecar, `needs=()` → *now parallel to asr*).
+  Unit order `[primary, translation, acoustic]` preserved. *Validated on node-7 through the
+  graph with real backends:* `pipeline_version=asr-fw-v1+diar-pyannote-v1`, primary
   transcript diarized (spk_0), acoustic caption sidecar, translation correctly skipped
   (English source) — identical to the monolith.
 - **video** → `keyframes` (prep sidecar; late-bound `video_proc.extract_keyframes` so the
-  monkeypatch seam survives) + `captions` (primary; **now captions keyframes concurrently**
+  monkeypatch seam survives) + `captions` (primary; *now captions keyframes concurrently*
   under vlm — one shared thread-safe httpx client fanned across the threadpool, order
-  preserved — instead of a sequential per-chunk loop; assembles every unit exactly as before:
+  preserved, instead of a sequential per-chunk loop; assembles every unit exactly as before:
   weave, sub-spans, interleaved `:ocr`). VLM client behind a `vlm.make_client` factory (the 2
   wire tests patch it).
 
@@ -134,21 +134,21 @@ best_effort — enforced at registration); per-modality fairness semaphores.
 Durable dead-letter backfill tooling; `processed` retention/compaction; a shared/pooled
 async VLM client (the threadpool fan-out is the v1 concurrency win; a pooled client is a
 throughput refinement); C8 `interactive` profile (mechanism ready — a stage subset per
-request — consumed when input builds C8); per-stage `resource` classes + timeouts (cut as
+request, consumed when input builds C8); per-stage `resource` classes + timeouts (cut as
 speculative at v0 scale per the design review).
 
 ## Review follow-ups — ALL THREE CLOSED (2026-07-21, WS-H — [ws-dp-hardening.md](ws-dp-hardening.md))
 - ~~**`INGEST_MODALITY_LIMITS` HOL-blocks (finding #3) — Hard prerequisite before enabling.**~~
-  **Closed:** the queue now takes the modality permit atomically at dispatch and scans past
-  capped jobs (permit-before-dequeue, one shared bound preserved) — no worker ever holds a
-  job it can't start. The startup experimental warning is gone; the knob is production-safe.
+  *Closed:* the queue now takes the modality permit atomically at dispatch and scans past
+  capped jobs (permit-before-dequeue, one shared bound preserved), no worker ever holds a job
+  it can't start. The startup experimental warning is gone; the knob is production-safe.
 - ~~**Mutable-slots fingerprint guard is order-dependent (finding #6, LOW).**~~
-  **Closed:** the fingerprint guard is deleted, replaced by the SlotView capability proxy —
+  *Closed:* the fingerprint guard is deleted, replaced by the SlotView capability proxy —
   a sidecar is refused even a read of the primary's `mutable_slots` (no reference ⇒ illegal
   mutation impossible by construction), violations raise `SlotAccessError` at the offending
   line, order-independently.
 - ~~**Two concurrent mutate stages on an overlapping slot could race (finding #7, LOW, latent).**~~
-  **Closed:** mutates declare `writes` (⊆ primary `mutable_slots`, registration+resolution
+  *Closed:* mutates declare `writes` (⊆ primary `mutable_slots`, registration+resolution
   enforced); intersecting writers are chained by `(order, name)` via implicit deps (never
   concurrent), and `pipeline_version` composes mutate fragments in that chain order — the
   dialect encodes the sequence. Shipped dialects byte-identical.
@@ -163,18 +163,18 @@ speculative at v0 scale per the design review).
   validated through the graph on node-7 (`asr-fw-v1+diar-pyannote-v1`, diarized primary +
   acoustic sidecar).
 - 2026-07-20 — **Adversarial review round** over the full v1 diff (6 finders → per-finding
-  skeptic verify → synthesis; 18 agents, 9 confirmed / 0 uncertain). **2 fix-before-merge,
-  both fixed + regression-tested:** (1) **[high]** the async accept path released the dedup
+  skeptic verify → synthesis; 18 agents, 9 confirmed / 0 uncertain). *2 fix-before-merge,
+  both fixed + regression-tested:* (1) *[high]* the async accept path released the dedup
   claim only on the QueueFull / no-queue paths — a failed durable `journal.accept`/`unaccept`
   write (disk-full / lock-contention) orphaned the claim → every retry ACKed 202-duplicate
   forever (silent loss + lying ACK); now a `finally` frees the claim on any non-enqueue exit
-  (`test_failed_journal_accept_releases_claim`). (2) **[med]** `pending_for_redrive` blanket
+  (`test_failed_journal_accept_releases_claim`). (2) *[med]* `pending_for_redrive` blanket
   -incremented the re-drive counter on ALL co-pending rows per restart, so one crash-loop
   poison chunk dead-lettered an innocent never-dequeued backlog; the count is now attributed
-  **per actual processing attempt** (worker-side `note_redrive_attempt` for re-driven jobs)
+  *per actual processing attempt* (worker-side `note_redrive_attempt` for re-driven jobs)
   and startup dead-letters only rows with real attempt evidence
   (`test_redrive_cap_is_per_processing_attempt_not_per_restart`). Plus 2 cheap follow-ups
   fixed inline: a missing processor on re-drive now dead-letters (was: perpetual 'recording');
   the vlm caption fan-out `gather(return_exceptions=True)` so the shared client isn't closed
   under an in-flight sibling. 3 LOW findings tracked as follow-ups (§ above). Suites after
-  fixes: **DP 128 / recording 120 / storage 26** green (stable across repeat runs).
+  fixes: *DP 128 / recording 120 / storage 26* green (stable across repeat runs).

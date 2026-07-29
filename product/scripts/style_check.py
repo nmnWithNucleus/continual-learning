@@ -51,6 +51,7 @@ def findings(path):
     in_worklog_entry = False
     bullet = None       # [line_no, joined_text, section, worklog?]
     bullets = []
+    para = []           # (line_no, text) for lines carrying an em-dash
 
     for i, line in enumerate(lines, 1):
         if re.match(r"^\s*(```|````)", line):
@@ -97,9 +98,11 @@ def findings(path):
                     out.append((i, "rule1-cell", f"{len(cell.split())} words"))
                 if cell.count("**") // 2 > 1:
                     out.append((i, "rule5-cell-bold", cell.strip()[:40]))
-        # Rule 6: one em-dash per sentence
-        elif line.count("—") > 1:
-            out.append((i, "rule6-em-dash", stripped[:44]))
+        # Rule 6: one em-dash per sentence. Counted per sentence, not per
+        # line — a wrapped line holding two sentences is not a violation.
+        elif not stripped.startswith("#"):
+            # Headings are not sentences, and they are stable anchors.
+            para.append((i, line))
 
         # Rule 5: no ALL-CAPS, outside headings and inline code
         if not line.startswith("#"):
@@ -109,6 +112,30 @@ def findings(path):
 
     if bullet:
         bullets.append(bullet)
+
+    # Rule 6, em-dashes: rejoin wrapped lines into runs, split into sentences,
+    # and flag a sentence carrying more than one.
+    def flush(run):
+        if not run:
+            return
+        joined = " ".join(x[1].strip() for x in run)
+        # An em-dash inside inline code is an arrow in a diagram, not punctuation.
+        joined = re.sub(r"`[^`]*`", "`_`", joined)
+        for sent in re.split(r"(?<=[.!?:])\s+", joined):
+            if sent.count("—") > 1:
+                out.append((run[0][0], "rule6-em-dash", sent.strip()[:44]))
+
+    run = []
+    for ln, text in para:
+        starts_unit = (re.match(r"^\s*([-*+]|\d+[.)])\s", text)
+                       or not text.strip()
+                       or text.lstrip().startswith(("|", "#")))
+        if starts_unit or (run and ln != run[-1][0] + 1):
+            flush(run)
+            run = []
+        if text.strip():
+            run.append((ln, text))
+    flush(run)
 
     for ln, text, sect, worklog in bullets:
         cap = 60 if (sect in REASONING or worklog) else 42
@@ -122,6 +149,10 @@ def findings(path):
     for para in re.split(r"\n\s*\n", body):
         head = para.strip()
         if not head or head.startswith(("-", "*", "|", ">", "#")):
+            continue
+        # A numbered item is a bullet and is already checked as one above;
+        # counting it again as a paragraph applies two caps to one unit.
+        if re.match(r"^\d+[.)]\s", head):
             continue
         if para.count("**") // 2 > 2:
             out.append((0, "rule5-para-bold", head[:40]))

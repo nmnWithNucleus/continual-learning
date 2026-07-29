@@ -120,7 +120,7 @@ the aspect file + HANDOFF.md status board if it moved, commit.
 ### D+ — when the session is decision-dense, extend the template
 
 The block above is the standing shape. For a session whose job is to *ratify* rather than explore —
-several coupled decisions, each with real blast radius — the D17 → D18 pair converged much faster
+several coupled decisions, each with real blast radius, the D17 → D18 pair converged much faster
 with five additions. Written down because the prep file that proved them has been retired into the
 docs it produced:
 

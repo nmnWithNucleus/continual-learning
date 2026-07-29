@@ -9,9 +9,9 @@
 > [../DECISIONS.md](../DECISIONS.md), whose rows point back at the `### <date>` worklog anchors below.
 
 **Status:** active · **Last updated:** 2026-07-28 (style pass over `handoff/*`, D21. Earlier:
-**D18/D19/D20 shipped** — the storage expansion is
+*D18/D19/D20 shipped* — the storage expansion is
 built, continuum is cut over to storage's HTTP surface, the fleet runs on it, and the review backlog
-is empty. Same week: **D17** timezone ownership decided *and* built)
+is empty. Same week: *D17* timezone ownership decided *and* built)
 
 **How this file is organised** — live work first, history second, finished work last:
 
@@ -516,7 +516,7 @@ than quietly applied.
 **Watch out for**
 
 - The tree was split into two commits — `6bb8f4a` (the O-2/O-3/O-4 doc slice) and `b96a1b0`
-  (D18) — but perfect hunk attribution was not achievable.
+  (D18), but perfect hunk attribution was not achievable.
 - The two overlapping sessions' edits had merged into shared hunks in four docs, so the split is
   at file granularity, and `b96a1b0`'s message says so rather than implying a cleanliness it does
   not have.
@@ -598,7 +598,7 @@ timezone.
 
 **Payoff** — a premise of the prompt was wrong, and correcting it made the session easier rather
 than harder. The stated hard constraint — "`render_block` must stay byte-parity with the research
-line @ `b3c58e1`; moving the renderer must not break it" — conflates two functions of the same
+line @ `b3c58e1`; moving the renderer must not break it", conflates two functions of the same
 name.
 
 | | Locked by | Consumes | Verdict |
@@ -607,7 +607,7 @@ name.
 | `daylog.py:183 _render_block` | nothing; no golden has ever existed | C2 records | **moves to storage** |
 
 The research line never materialized the 10 s-segment / 2 min-block schema — continuum's own
-canvas says "zero producing code; a research 'block' = one 5-min description" — so the product
+canvas says "zero producing code; a research 'block' = one 5-min description", so the product
 renderer could not have had a golden. `morpheus/blocks.py:5-7` had already drawn the boundary:
 *"keeping that boundary narrow is what lets the day-log move behind a storage client without any
 kernel noticing."*
@@ -895,7 +895,7 @@ on its own). ARCHITECTURE §Decisions keeps "all layers" as the intent — still
   the thing a reader most needs to know exists.
 - **`gate_failed` is not only documentation — it constrains the storage build at freeze time.**
   Storage's `model_directory` today is the trivial C6 row (`user_id, model_id, adapter,
-  adapter_path` — `storage/app/db.py:59-63`): no entries log, no status column. So "the
+  adapter_path`, `storage/app/db.py:59-63`): no entries log, no status column. So "the
   storage-hosted swap-in is a transport change, not a redesign" is true of *continuum*, not of
   storage.
 - Storage has to build the log, and the short field list is exactly what an implementer would
@@ -1237,7 +1237,7 @@ rather than by patch, and the founders re-verified it rather than accepting the 
 
 - **The sync/inline path stays.** Retiring it "now that async is fast" was considered and
   refused: it is the C8/M6 skeleton — the single shared `process_chunk` core plus ~40 lines of
-  HTTP mapping — and it is the byte-identical verification baseline.
+  HTTP mapping, and it is the byte-identical verification baseline.
 - Flipping the async *production default* stays a founders' call after the D16 re-drive drill;
   retiring the inline *handler* waits until C8 lands its own surface, never the shared core.
 - **M7 is substantially done** — backpressure, dead-letter, durable journal, kill-recovery,
@@ -1448,7 +1448,7 @@ against reality.
 **Payoff** — **D12 recorded**: service branches merge to `main` when solid, and a standing `dev`
 branch is the beta playground. First beta is Gnandeep driving both loops against his fine-tunable
 model, with storage's range read `GET /context/records?user_id=&from=&to=` — half-open `[from,to)`,
-deliberately C10's read shape — as his training-window feed until C10 lands.
+deliberately C10's read shape, as his training-window feed until C10 lands.
 
 **Watch out for**
 
@@ -1623,18 +1623,18 @@ and receives a streamed base-model answer; the turn is persisted in `/sessions` 
 
 **Recommended first launch:** the **interface-freeze session** (Prompt A framing, but joint across
 input+inference+output leads) — nothing safely parallelizes until C3/C9/C4 v0 are locked.
-**Status: freeze done (2026-07-09)** — shapes locked in [../ARCHITECTURE.md](../ARCHITECTURE.md)
+*Status: freeze done (2026-07-09)* — shapes locked in [../ARCHITECTURE.md](../ARCHITECTURE.md)
 §Contracts + machine-readable in [../contracts/](../contracts/). Fan-out is unblocked.
 
 #### MVP build conventions (v0.0) — so the 5 workstreams interoperate
 
 Pinned so WS A–E produce compatible pieces; the integrator may finalize process topology.
 
-- **Stack:** Python 3.11, **FastAPI + uvicorn** per backend service; `httpx` for inter-service
-  calls; **pydantic** models mirroring the JSON Schemas in [../contracts/](../contracts/);
-  `pytest`. Surface = static HTML/CSS/JS, **no build step**, served by input.
-- **Model backend switch (critical):** env `MODEL_BACKEND=mock|vllm`. **`mock` is the default**
-  — a canned, streamed answer, **no GPU needed**, so the whole loop runs on any box. `vllm` =
+- **Stack:** Python 3.11, *FastAPI + uvicorn* per backend service; `httpx` for inter-service
+  calls; *pydantic* models mirroring the JSON Schemas in [../contracts/](../contracts/);
+  `pytest`. Surface = static HTML/CSS/JS, *no build step*, served by input.
+- **Model backend switch (critical):** env `MODEL_BACKEND=mock|vllm`. *`mock` is the default*
+  — a canned, streamed answer, *no GPU needed*, so the whole loop runs on any box. `vllm` =
   OpenAI-compatible client to a vLLM server (real Qwen3-VL-32B, needs the a3mega node). Ship
   Both; only `mock` is expected to run tonight.
 - **Ports (localhost dev):** input `8081`, inference `8010`, output `8082`, storage `8083`
@@ -1647,8 +1647,8 @@ Pinned so WS A–E produce compatible pieces; the integrator may finalize proces
   keep the worklog in `handoff/wsN-*.md`, status in the service `HANDOFF.md`.
 - **Recommended flow (integrator finalizes):** browser → input `:8081 /api/turn` (JSON `{text}`)
   → QueryBuilder builds C3 → inference `:8010 /infer` (streams C9; resolves C6 + writes C4 to
-  storage `:8083`) → input relays the C9 stream to the browser; **output** owns the browser-side
-  C9 reader + markdown render (served with the surface) **and** a standalone relay service for
+  storage `:8083`) → input relays the C9 stream to the browser; *output* owns the browser-side
+  C9 reader + markdown render (served with the surface) *and* a standalone relay service for
   future non-web surfaces.
 - **No agent commits.** Workstreams write files; the founders' session commits after integration.
 - **Honesty rule:** the `mock` loop must actually run end-to-end; the `vllm` path is
@@ -1666,18 +1666,18 @@ Pinned so WS A–E produce compatible pieces; the integrator may finalize proces
   (PyPI reachable), and started **storage:8083 → inference:8010 (MODEL_BACKEND=mock) →
   output:8082 → input:8081**, `/health`-gated, all four healthy.
 - **A real turn, streamed:** `POST http://localhost:8081/api/turn {"text":"What is 2+2?"}`
-  → the answer streamed back as the **C9 wire format** (mock answer text, **exactly one**
+  → the answer streamed back as the *C9 wire format* (mock answer text, *exactly one*
   `U+001E` (0x1e) separator byte, then one JSON end frame
   `{contract:"C9",version:"0",turn_id,model_id:"Qwen/Qwen3-VL-32B-Instruct",adapter:"base",
   usage:{prompt_tokens:25,output_tokens:20},finished:true}`). `X-Session-Id`/`X-Turn-Id` ride
   in response headers.
 - **Persistence proven:** the C4 turn was re-read via `GET /sessions/turns/{turn_id}` (full
   nested C3 `user_prompt`, `response_text`, `model_id`, `adapter:"base"`, empty trace arrays)
-  **and** listed via `GET /sessions/{session_id}/turns`. A second turn on the same
+  *and* listed via `GET /sessions/{session_id}/turns`. A second turn on the same
   `session_id` grew the session list to 2. C6 `GET /model-directory/resolve?user_id=dev-user`
   → base model.
 - **Both output roles exercised:** the browser reader (`c9_reader.js`, now wired into the
-  input surface) **and** the standalone `POST /deliver` relay (pulled a live C9 stream from
+  input surface) *and* the standalone `POST /deliver` relay (pulled a live C9 stream from
   inference, echoed `X-Delivery-*` ack headers, relayed the body byte-for-byte).
 - Browser surface serves: `GET /` (200 text/html), `/static/app.js` + `/static/c9_reader.js`
   (200) — `index.html` loads `app.js` as `type="module"`; `app.js` imports the reader.
@@ -1692,8 +1692,8 @@ Pinned so WS A–E produce compatible pieces; the integrator may finalize proces
 | **total** | **81 passed, 0 failed** |
 
 #### Integration deltas (seam fixes applied)
-1. **Render seam wired (primary).** Input's surface rendered answers as **plain text** with a
-   TODO to adopt output's renderer. Fixed: **vendored** `output/app/static/c9_reader.js` →
+1. **Render seam wired (primary).** Input's surface rendered answers as *plain text* with a
+   TODO to adopt output's renderer. Fixed: *vendored* `output/app/static/c9_reader.js` →
    `input/app/static/c9_reader.js` (same-origin so the browser ES-module import needs no CORS
    to `:8082`), rewrote `input/app/static/app.js` to `import { renderC9Stream }` and hand it the
    `fetch()` response (streams + safe-markdown-renders into `#answer`, surfaces usage via
@@ -1760,7 +1760,7 @@ verified capture clients, kept for history after the work landed.
 **What was delivered.** M0 skeleton → capture M1 (enforced gap-detection via the continuity ledger
 plus a DP break/dup detector; faster-whisper standing with a VAD gate; VAD-cut variable chunking,
 OQ4 → D-M1-2) → three real capture clients on the `/capture/*` wire — phone web, Chrome-MV3
-extension via `tabCapture` (D-E7), mac CLI — **all verified `clean` on real hardware**. Client
+extension via `tabCapture` (D-E7), mac CLI, **all verified `clean` on real hardware**. Client
 transport pinned to segmented HTTP ([D14](../DECISIONS.md)); streaming ingest is a deferred
 additive leg. Full state lives in the recording and data-processing canvases; this thread links
 rather than restates.
@@ -1789,7 +1789,7 @@ verified. Six items were queued for capture M1, the audio stream:
 gain: user-facing, and it gives the beta tester a touch-and-feel surface.
 
 - Items (1) gap-detection and (5) the ASR pipeline are the priority pair.
-- Capture surfaces to build behind the `ChunkSource` seam are **bodycam (device)** and **computer**
+- Capture surfaces to build behind the `ChunkSource` seam are **bodycam (device)** and *computer*
   — mic, screen recording, and browser-extension screen capture.
 - **Capture-modeling note.** Screen *video* and any system or tab *audio* are separate C1 streams,
   each with its own `stream_id`, like the wearable's A/V demux. Browsers expose tab and system
@@ -1818,20 +1818,20 @@ gain: user-facing, and it gives the beta tester a touch-and-feel surface.
 ### Learn-loop MVP slice — the capture skeleton (2026-07-09)
 
 **Goal.** One audio chunk, end to end: the **computer microphone** captures a chunk → recording
-lands the bytes in `/raw` and emits a **C1** envelope → data-processing runs **ASR** and writes a
-**C2** processed record to storage `/context`. This proves the learn-loop spine (recording →
+lands the bytes in `/raw` and emits a *C1* envelope → data-processing runs *ASR* and writes a
+*C2* processed record to storage `/context`. This proves the learn-loop spine (recording →
 data-processing → storage `/context`) with the *minimum* of every service — it starts the data
-compounding the whole thesis rests on. Deliberately **audio-only, no enrichment**: ASR transcript
+compounding the whole thesis rests on. Deliberately *audio-only, no enrichment*: ASR transcript
 + segment timestamps, no diarization, no world-data, no vision.
 
 **Capture model (hold this — it's the user→recording reality).** The user→recording feed is a
-**continuous, always-on** life stream (body-cam / always-on computer mic + screen), **not** a
-press-to-record clip. Recording **carves** that live stream into dense, sequential,
+**continuous, always-on** life stream (body-cam / always-on computer mic + screen), *not* a
+press-to-record clip. Recording *carves* that live stream into dense, sequential,
 wall-clock-stamped chunks (C1's `(stream_id, sequence)` + `t_start/t_end`). So downstream — to
-data-processing — data arrives as **bounded chunks with start/end times**, but those boundaries are
-**recording's artifact, not semantic units**: an utterance or word can straddle a chunk edge. For
-the M0 skeleton, ASR each chunk independently; cross-chunk **boundary stitching** is a later
-refinement, **not** an M0 gate — but build data-processing *knowing* the stream is continuous
+data-processing, data arrives as *bounded chunks with start/end times*, but those boundaries are
+*recording's artifact, not semantic units*: an utterance or word can straddle a chunk edge. For
+the M0 skeleton, ASR each chunk independently; cross-chunk *boundary stitching* is a later
+refinement, *not* an M0 gate — but build data-processing *knowing* the stream is continuous
 underneath. This is also exactly why consent + delete-last-N (recording's M2) are load-bearing:
 capture is always-on, so there is no natural "stop" the user leans on.
 
@@ -1845,8 +1845,8 @@ A/V are later slices.
 | WS | Service | M0 deliverable | Contracts it must honor |
 |---|---|---|---|
 | A | **recording** | Computer-mic capture → chunker → `PUT` bytes to storage `/raw` for a `blob_ref` → emit a **C1** envelope to data-processing. Mint globally-unique `stream_id`/`chunk_id`; dense zero-based `sequence`; device auth deferred. | produces C1 (both legs); push/at-least-once, dedup on `chunk_id` |
-| B | **data-processing** | Consume C1; **pull bytes by `blob_ref`**; run **ASR** (transcript + segment times); stamp `pipeline_version`; write a **C2** record to `/context`; idempotent on `record_id`. | consumes C1, produces C2; C8 not in this slice |
-| C | **storage** | Extend the running `:8083` service: **`/raw`** blob write (`PUT`, mints opaque `blob_ref`, idempotent on `chunk_id`) + read-by-ref; **`/context`** C2 write (idempotent on `record_id`), time-indexed on `(user_id, t_start)`. | serves the C1 blob leg + C2 write |
+| B | **data-processing** | Consume C1; **pull bytes by `blob_ref`**; run *ASR* (transcript + segment times); stamp `pipeline_version`; write a *C2* record to `/context`; idempotent on `record_id`. | consumes C1, produces C2; C8 not in this slice |
+| C | **storage** | Extend the running `:8083` service: `/raw` blob write (`PUT`, mints opaque `blob_ref`, idempotent on `chunk_id`) + read-by-ref; `/context` C2 write (idempotent on `record_id`), time-indexed on `(user_id, t_start)`. | serves the C1 blob leg + C2 write |
 | E | **platform** | One box hosting the three services + an ASR runtime (GPU optional at M0 — faster-whisper runs on CPU for the skeleton); a shared dev env. Thin — just enough to run the loop. | none (enables A–C) |
 
 **Out of this slice (later slices):** diarization + translation + full audio pipeline; text +
@@ -1874,9 +1874,9 @@ frozen forks:
 on `:8083`. So:
 1. **storage M0 lands first/ahead** — add `/raw` (blob write+read) and `/context` (C2 write) to the
    existing service. It is the shared dependency both A and B write to.
-2. **recording M0** (mic → `/raw` PUT → C1 emit) and **data-processing M0** (C1 → ASR → C2 →
-   `/context`) **fan out in parallel** against the frozen C1/C2, both targeting storage's dev
-   endpoints. Shared **C1/C2 conformance fixtures** (recording ⇄ data-processing) from day one, as
+2. **recording M0** (mic → `/raw` PUT → C1 emit) and *data-processing M0* (C1 → ASR → C2 →
+   `/context`) *fan out in parallel* against the frozen C1/C2, both targeting storage's dev
+   endpoints. Shared *C1/C2 conformance fixtures* (recording ⇄ data-processing) from day one, as
    the recording charter's C1-churn mitigation requires.
 3. **platform** provides the box + ASR runtime alongside.
 4. An **integrator** session wires them and drives one chunk end to end.
@@ -1889,7 +1889,7 @@ spine, proven.
 
 #### Learn-loop build conventions (v0) — so recording / data-processing / storage interoperate
 - **Stack:** same as serve loop — Python 3.11, FastAPI + uvicorn per service, `httpx` inter-service,
-  **pydantic** models mirroring `../contracts/*.json`, `pytest`. ASR = **faster-whisper** (POC
+  *pydantic* models mirroring `../contracts/*.json`, `pytest`. ASR = *faster-whisper* (POC
   Phase-1 stack), CPU-capable for the skeleton so it runs on any box; GPU is an optimization.
 - **Storage endpoints (new, integrator finalizes exact paths):** `PUT /raw/blobs` (bytes +
   `chunk_id`/`user_id`/codec/sha256 → `{blob_ref, bytes, sha256}`, idempotent on `chunk_id`);
@@ -1915,12 +1915,12 @@ real-ASR transcript byte-for-byte). Honest result below.
 
 #### What runs (executed, not claimed — independently re-verified)
 - **The mock capture loop runs end to end on real uvicorn ports** (`run_learn.sh` health-gates
-  storage:8083 → data-processing:8085 → recording:8084 — **first try, zero seam fixes**). One
-  `/capture/run` carved a 12 s sample WAV into **3 dense, zero-based, wall-clock-stamped chunks**
-  (`sequence=[0,1,2]`, one `stream_id`), each going **blob-first**: `PUT /raw/blobs` (storage mints
-  the opaque `blob_ref`) → **push C1** to data-processing `/ingest` → C1 schema-validated → **pull
-  bytes by `blob_ref`** → mock ASR → **C2** → `POST /context/records`.
-- **Persistence + reads proven:** every C2 re-read by `record_id` **and** by `(user_id, time)`
+  storage:8083 → data-processing:8085 → recording:8084 — *first try, zero seam fixes*). One
+  `/capture/run` carved a 12 s sample WAV into *3 dense, zero-based, wall-clock-stamped chunks*
+  (`sequence=[0,1,2]`, one `stream_id`), each going *blob-first*: `PUT /raw/blobs` (storage mints
+  the opaque `blob_ref`) → *push C1* to data-processing `/ingest` → C1 schema-validated → *pull
+  bytes by `blob_ref`* → mock ASR → *C2* → `POST /context/records`.
+- **Persistence + reads proven:** every C2 re-read by `record_id` *and* by `(user_id, time)`
   range (half-open `[from,to)`, matching C10), each provably sourced from a re-pullable `/raw` blob
   whose sha256 matches; per-user isolation holds (another user sees zero).
 - **Idempotency proven on both legs:** re-delivering the same `chunk_id` returned the identical
@@ -1931,7 +1931,7 @@ real-ASR transcript byte-for-byte). Honest result below.
 - **Bonus — real ASR genuinely ran:** the optional `faster_whisper` leg (base/int8/CPU) was
   installed + run live, producing a real transcript persisted as a schema-valid C2
   (`pipeline_version=asr-fw-v0`); the verifier reproduced it byte-for-byte. Standing backend
-  restored to **mock**.
+  restored to *mock*.
 
 #### Tests (re-run independently by the verifier, real counts)
 | Service | Result |
@@ -1943,13 +1943,13 @@ real-ASR transcript byte-for-byte). Honest result below.
 
 #### Residual risks / explicitly NOT in M0 (feed the next slices)
 - **Gap-detection is emit-side only, not enforced.** `(stream_id, sequence)` is emitted densely +
-  schema-min-validated, but **no consumer detects a gap / lost chunk / duplicate sequence** at
+  schema-min-validated, but *no consumer detects a gap / lost chunk / duplicate sequence* at
   runtime. "Zero silent loss" is currently an affordance, not a check — closing it (a gap-detector
-  on data-processing ingest feeding recording's continuity report) is the **top M1 item**: it is
+  on data-processing ingest feeding recording's continuity report) is the *top M1 item*: it is
   recording's headline mission guarantee.
 - **Consent / authz: none.** Anyone can drive `/capture/run` + `/ingest`; delete-last-N /
-  right-to-be-forgotten unimplemented. Recording's M2 (consent enforcement) must land **before any
-  real always-on capture** — load-bearing precisely because capture is continuous.
+  right-to-be-forgotten unimplemented. Recording's M2 (consent enforcement) must land *before any
+  real always-on capture* — load-bearing precisely because capture is continuous.
 - **Mock + file-source + single-stream:** mock ASR is the standing backend; capture reads a sample
   WAV (no real mic on this box); single device, single modality (audio), single process. Real mic
   (recording M1), diarization/enrichment, multi-device time-spine, vision/text pipelines,
@@ -1970,45 +1970,45 @@ real-ASR transcript byte-for-byte). Honest result below.
 
 **Why.** The audio path was built; the C2 contract is modality-agnostic. So we refactored DP to a
 **modality-agnostic core + a `Processor` plugin seam** so future sessions can each own one modality
-(video / image / text) as a **disjoint, self-registering plugin** — zero shared-core edits. Two
+(video / image / text) as a *disjoint, self-registering plugin* — zero shared-core edits. Two
 parallel skeleton agents (DP seam + recording `ChunkSource` seam) + an adversarial verifier.
 
 **What's built + proven (verified live + adversarially, 84 tests: storage 26 · DP 24 · recording 34).**
 - **DP core** (`app/main.py` `/ingest` + `app/pipeline.py` + `app/dedup.py`): validate C1 → dedup on
   `chunk_id` (now caches `chunk_id → [record_id,…]`) → pull blob → dispatch by `modality` to a
-  registered `Processor` → **for each returned unit** assemble+validate a C2 and POST `/context` →
-  return `{ok, record_ids:[…]}`. Audio moved behind the seam **unchanged** (its `record_id` is
+  registered `Processor` → *for each returned unit* assemble+validate a C2 and POST `/context` →
+  return `{ok, record_ids:[…]}`. Audio moved behind the seam *unchanged* (its `record_id` is
   byte-identical to the pre-seam value — backward compatible).
 - **`Processor` seam** (`app/processing/`): a plugin sets `modality`+`content_kind` and implements
-  `process(c1, blob, …) -> list[ProcessedUnit]` (a **list**, so *one chunk → many records* is native).
-  Self-registering via `@register` + package auto-import — **adding a modality is one new file + a
-  fixture, no core edit.** `record_id = sha256(chunk_id ∥ pipeline_version [∥ discriminator])`.
-- **Stubs (mock transforms):** image→1 `caption` (OCR woven in per D8), **video→3 keyframe
-  `caption`s (one-chunk-many-records, discriminator=index)**, text→1 `text`. All four `content.kind`s
+  `process(c1, blob, …) -> list[ProcessedUnit]` (a *list*, so *one chunk → many records* is native).
+  Self-registering via `@register` + package auto-import — *adding a modality is one new file + a
+  fixture, no core edit.* `record_id = sha256(chunk_id ∥ pipeline_version [∥ discriminator])`.
+- **Stubs (mock transforms):** image→1 `caption` (OCR woven in per D8), *video→3 keyframe
+  `caption`s (one-chunk-many-records, discriminator=index)*, text→1 `text`. All four `content.kind`s
   proven E2E to `/context` on live services against real storage-minted `blob_ref`s; every C2
   schema-valid; `record_id`s deterministic (recomputed + idempotent on re-POST).
 - **Recording `ChunkSource` seam** (`app/sources/`): the carver generalized so future capturers plug
-  in; the WAV source is one impl; C1 emit path unchanged; **no new real capturers**. C1 absorbed a
-  non-audio (`image`) modality with **no additive field**.
+  in; the WAV source is one impl; C1 emit path unchanged; *no new real capturers*. C1 absorbed a
+  non-audio (`image`) modality with *no additive field*.
 
 **Regression caught + fixed (the verifier's honesty audit earned its keep).** DP's `/ingest` reshape
 (`record_id` → `record_ids:[…]`) **broke recording's `/capture/run` live (HTTP 500** — `capturer.py`
-still read the singular field, feeding `None`s into a `list[str]` model); green unit tests **masked**
-it because recording's fake still returned the old shape. Fixed: capturer reads + **flattens**
+still read the singular field, feeding `None`s into a `list[str]` model); green unit tests *masked*
+it because recording's fake still returned the old shape. Fixed: capturer reads + *flattens*
 `record_ids` across chunks; the fake returns the new shape (with a `fanout` knob); added a
-**fan-out regression test** (3 chunks × 3 records → 9 flattened); **re-verified `/capture/run` → 200
-live** with populated `record_ids`, C2 re-readable. Data was never lost (C2s always landed) — only
+*fan-out regression test* (3 chunks × 3 records → 9 flattened); *re-verified `/capture/run` → 200
+live* with populated `record_ids`, C2 re-readable. Data was never lost (C2s always landed) — only
 the API envelope was broken.
 
 **Two C2-additive gaps surfaced by the pressure-test — both deferred, both NON-blocking, neither
 needs a version bump now** (recorded as DP charter OQs; the frozen C2 was not touched):
 - **Video per-keyframe timing:** N keyframe records share the chunk's `t_start/t_end` → they collide
-  on storage's `(user_id, t_start)` index. Fix is an **internal seam hook** (optional per-`ProcessedUnit`
-  `t_start/t_end`; C2 already has per-record timestamps) — **no schema change.** Defer to the video session.
+  on storage's `(user_id, t_start)` index. Fix is an *internal seam hook* (optional per-`ProcessedUnit`
+  `t_start/t_end`; C2 already has per-record timestamps) — *no schema change.* Defer to the video session.
 - **Image / keyframe OCR frame-location (bbox):** C2 `content` has no home for structured region
-  geometry (OCR *text* survives, woven into the caption; only the bbox is lost). Fix = an **additive
-  optional** field (`content.regions` / `enrichments.text_regions`) — touches the schema additively
-  (old records still validate). Freeze-additive **when a real OCR pass lands.** Defer to the image session.
+  geometry (OCR *text* survives, woven into the caption; only the bbox is lost). Fix = an *additive
+  optional* field (`content.regions` / `enrichments.text_regions`) — touches the schema additively
+  (old records still validate). Freeze-additive *when a real OCR pass lands.* Defer to the image session.
 
 **Launch a modality session (the seam handoff).** To bolster video / image / text end-to-end:
 1. DP: drop `app/processing/processors/<modality>.py` (a `Processor` subclass, `@register`) + a
@@ -2028,24 +2028,24 @@ needs a version bump now** (recorded as DP charter OQs; the frozen C2 was not to
 `~/nmn/cl-dp-async`), launched in parallel with this founders' session. Its charge is work the
 canvases already pin, bundled because it shares one service pair (DP + recording) and one node:
 
-1. **Async `/ingest`** — DP charter **M7 territory arriving early** (the charter allows M4–M7
+1. **Async `/ingest`** — DP charter *M7 territory arriving early* (the charter allows M4–M7
    to interleave after M3; video/M3 landed 2026-07-19). ACK `202` fast + process on a worker so
    capture cadence decouples from pipeline latency; retry safety rides the existing `chunk_id`
    dedup + deterministic `record_id`. Motivated by the verification-round finding that a fully
    loaded chunk (real ASR + diarization + VLM captions) can lawfully outlive recording's
    delivery timeout (fleet-mitigated today via `RECORDING_HTTP_TIMEOUT=120`). Resolves DP OQ13.
-   **Scope discipline: this is the ACK+queue half of M7** — backpressure policy, dead-letter +
+   *Scope discipline: this is the ACK+queue half of M7* — backpressure policy, dead-letter +
    backfill stay M7-proper; the queue lands observable by construction (queue depth is a
    chartered M8 metric in the same slice).
-2. **D9 metrics emission** (DP **M8** + recording **M6**): `/metrics` Prometheus text + each
-   service's Grafana dashboard JSON. **Emission half only** — Platform's shared
+2. **D9 metrics emission** (DP *M8* + recording *M6*): `/metrics` Prometheus text + each
+   service's Grafana dashboard JSON. *Emission half only* — Platform's shared
    Prometheus/Grafana backbone is the follow-on small slice (D15 below), so recording M6's
    "scraped by the shared Prometheus" exit criterion closes only when that backbone lands.
 3. **node-7 smokes of the real audio backends** (pyannote diarization / whisper translation /
    AST acoustic events — built 2026-07-19 as correct-by-inspection seams, explicitly unrun):
    run each genuinely (GPU + HF-gated pyannote) before anyone trusts a switch-flip.
-4. **The OQs the work naturally answers** — headline **recording OQ3, the codec/bitrate ladder
-   (joint recording × DP)**: real pipelines + smokes say what fidelity each modality actually
+4. **The OQs the work naturally answers** — headline *recording OQ3, the codec/bitrate ladder
+   (joint recording × DP)*: real pipelines + smokes say what fidelity each modality actually
    needs (alpha datapoint: CRF-28 mac screen video is readable but soft on fine text). Also
    informed: DP OQ3 (GPU placement for pipeline models vs continuum's future nightly window).
 
@@ -2057,17 +2057,17 @@ session proposes; this standing founders' session ratifies. The bar the proposal
 - **At-least-once safety intact end-to-end.** Re-pushing a queued/in-flight `chunk_id` must be
   a cheap idempotent ACK, not a second enqueue. And the new loss window is named honestly:
   today, inline processing means a mid-processing DP crash fails recording's push → un-acked →
-  recording retries → covered. **A `202` ACK closes that coverage** — once acked, recording
+  recording retries → covered. *A `202` ACK closes that coverage* — once acked, recording
   never re-pushes, and DP's continuity detector notes "seen" at accept time, so a crash between
-  ACK and processing would today be **silent** record-level loss. The proposal must either make
+  ACK and processing would today be *silent* record-level loss. The proposal must either make
   the queue survive restart (durable spool, DP re-drains — the recording-side spool precedent)
   or make the loss *detected* (an accepted-vs-processed split visible to the gap report) with a
   re-drive path. "Accepted-risk + named mitigation" is not enough here — this is the zero-
   silent-loss guarantee itself.
 - **Recording's consumer side moves in the same slice.** The capturer reads `/ingest` replies
   (`record_ids` today) and the gap report cross-checks DP `/continuity`; "accepted" and
-  "processed" split under async, and the report must not read async lag as loss **nor claim
-  `clean` while chunks are still pending** — verdict semantics need an explicit pending/drain
+  "processed" split under async, and the report must not read async lag as loss *nor claim
+  `clean` while chunks are still pending* — verdict semantics need an explicit pending/drain
   signal, as `segment_states` already provides on the client leg.
 - **Terminal outcomes stay discoverable.** `record_ids` reachable for whatever needs them
   (status poll, `/continuity`, or equivalent); worker failures land somewhere visible, not in a
@@ -2080,20 +2080,20 @@ spot-checked here against `ledger.py:405` / `capturer.py:172` / `capture_web.py:
 the bar and strengthens it**: it located the exact mechanism of the silent-loss clause —
 recording's `_dp_missing_unacked` reconciliation trusts `dp_acked=1` to mean "C2 exists"; a
 202-at-accept would redefine that to "merely accepted," so any accepted-then-lost chunk reads
-`clean` — and made the fix **non-negotiable: preserve the invariant `dp_acked` == "C2 durably
-written"**, dropping the original "zero recording change" claim as unsound (recording moves
+`clean`, and made the fix *non-negotiable: preserve the invariant `dp_acked` == "C2 durably
+written"*, dropping the original "zero recording change" claim as unsound (recording moves
 in-slice, as the bar required). Ratified wire, pinned as prose in the DP canvas at merge:
 - `INGEST_ASYNC=0` default, inline path byte-unchanged. Async: **202**
   `{ok, accepted, chunk_id}` on accept (+`duplicate:true` on a queued/in-flight dedup hit);
-  **200 + record_ids** on a done-dedup-hit; deterministic rejections (400/422/501) resolve
-  **synchronously pre-claim**, never deferred into a dead-letter; **503** = honest
+  *200 + record_ids* on a done-dedup-hit; deterministic rejections (400/422/501) resolve
+  *synchronously pre-claim*, never deferred into a dead-letter; *503* = honest
   backpressure on a bounded queue (finite `INGEST_QUEUE_MAX` default — unbounded+volatile
   would OOM-lose-all and read `clean`).
 - `/continuity/{stream_id}` gains **additive** `processed` (C2-durably-written runs) +
   `dead_lettered`; "covered ≠ processed". C1/C2 schemas untouched.
 - Recording in-slice: `finalize_chunk(accepted=)` + additive `dp_state='accepted'` column;
-  report reconciliation — accepted-unconfirmed → verdict **`recording`** (never `clean`),
-  dead-lettered → **`gaps`**; `clean` now means "DP confirmed C2 for every chunk."
+  report reconciliation — accepted-unconfirmed → verdict `recording` (never `clean`),
+  dead-lettered → `gaps`; `clean` now means "DP confirmed C2 for every chunk."
 - **Honest loss boundary accepted:** this slice guarantees *never falsely `clean`* — all loss
   visible, none auto-recovered; auto-recovery (a durable DP pending journal) is explicitly
   M7-proper, and an in-memory DLQ-with-recovery illusion is explicitly rejected.
@@ -2102,43 +2102,43 @@ in-slice, as the bar required). Ratified wire, pinned as prose in the DP canvas 
 named + drilled once in-slice** — emitter re-push keyed on `dp_state='accepted'` (on restart
 or periodic), or a documented manual re-POST; either satisfies (DP idempotency makes re-push
 safe: done-claim short-circuits to 200+record_ids). Without it, a `recording` verdict after
-queue loss is visible but has no documented way back to confirmed until M7. **Accepted
-caveat, noted:** `record_ids=[]` ledger provenance for 202-confirmed chunks (ids stay
+queue loss is visible but has no documented way back to confirmed until M7. *Accepted
+caveat, noted:* `record_ids=[]` ledger provenance for 202-confirmed chunks (ids stay
 derivable — deterministic on `(chunk_id, pipeline_version[, discriminator])`; inline/mock
 fleet unaffected).
 
 **Slice result — same day, merged (`0ce4941`; `dev` fast-forwarded with it).** The deep
 session landed the full charge: the **D16 wire verbatim including the re-drive condition**
 (`POST /capture/sessions/{id}/redrive` + `emitter.redrive_accepted_chunks` + 2 drill tests;
-a re-drive that hits a done-claim also **backfills `record_ids`**, softening the accepted
+a re-drive that hits a done-claim also *backfills `record_ids`*, softening the accepted
 caveat), D9 emission on both services (zero new deps, pure-ASGI middleware,
 cardinality-bounded; both dashboard JSONs shipped), node-7 smokes of all three real audio
-backends green (+2 real pyannote torch-2.x fixes found by the smoke), **DP OQ13 resolved +
-recording OQ3 answered per-modality** (no ladder: 16 kHz mono audio is model-native — the
+backends green (+2 real pyannote torch-2.x fixes found by the smoke), *DP OQ13 resolved +
+recording OQ3 answered per-modality* (no ladder: 16 kHz mono audio is model-native — the
 existing demux target was already exactly right; video is resolution-bound not bitrate-bound
 → container-copy, ~2560 px only for OCR-heavy screens, cost dial = keyframe cadence). Their
-18-agent adversarial round confirmed 9 findings — 5 fixed pre-merge, 1 deferred **fails
-Safe** (a DP-restart false-`gaps` over-report window; never hides loss, so
-never-falsely-`clean` holds; the M7 durable journal closes it — land before async is trusted
-for final archived verdicts). **Founders' merge review executed here:** all three suites
-re-run independently — **DP 98 · recording 120 · storage 26, green** — and the condition +
-OQ records verified in the diff. Detail:
+18-agent adversarial round confirmed 9 findings — 5 fixed pre-merge, 1 deferred *fails Safe*
+(a DP-restart false-`gaps` over-report window; never hides loss, so never-falsely-`clean`
+holds; the M7 durable journal closes it, land before async is trusted for final archived
+verdicts). *Founders' merge review executed here:* all three suites re-run independently —
+*DP 98 · recording 120 · storage 26, green*, and the condition + OQ records verified in the
+diff. Detail:
 [ws-async-observability](../services/data-processing/handoff/ws-async-observability.md).
 
 **D15 — closed (2026-07-25): the learn loop is proven end-to-end.** The continuum kickoff ran to
 completion. The consolidation core (**Morpheus**, reimplemented from the research line `b3c58e1`,
-parity-proven) trains a real 32B life adapter → gate v1.1 → C5 → **served in vLLM** (M0), behind a
-lean 5-verb loop over storage client seams. The **Phase-3 DP dogfood** then routed real Speed data
-through the **actual recording→DP→storage→continuum services** and — once block content matched
-parity (the 1-min rule-bend's collapse was **dose**, not the pipeline) — **reproduced the baseline
-separation (pipeline sound)**. The captured-days-are-inert-until-continuum-runs gap (below) is now
-mechanically closed. **Remaining founder acts, both scheduled not blocking:** the **C10 freeze
-becomes a C10 *evolution*** (raw range-read → **day-log fetch, random-access by `(user, window_id)`**)
-folded into a **storage/C10 board session** that also ratifies the storage charter expansion
-(day-log materialization + recipe registry + reservoir); and a **recipe/dose finding for Gnandeep**
-(dose must scale with block-text at our native cadence). The cluster-split + DP-OQ5 items below rode
-along: continuum's nightly window ran on node-7 via SLURM without disturbing Gnandeep's occupancy.
-Detail: [../services/continuum/HANDOFF.md](../services/continuum/HANDOFF.md).
+parity-proven) trains a real 32B life adapter → gate v1.1 → C5 → *served in vLLM* (M0), behind a
+lean 5-verb loop over storage client seams. The *Phase-3 DP dogfood* then routed real Speed data
+through the *actual recording→DP→storage→continuum services* and — once block content matched parity
+(the 1-min rule-bend's collapse was *dose*, not the pipeline), *reproduced the baseline separation
+(pipeline sound)*. The captured-days-are-inert-until-continuum-runs gap (below) is now mechanically
+closed. *Remaining founder acts, both scheduled not blocking:* the *C10 freeze becomes a C10
+evolution* (raw range-read → *day-log fetch, random-access by `(user, window_id)`*) folded into a
+*storage/C10 board session* that also ratifies the storage charter expansion (day-log
+materialization + recipe registry + reservoir); and a *recipe/dose finding for Gnandeep* (dose must
+scale with block-text at our native cadence). The cluster-split + DP-OQ5 items below rode along:
+continuum's nightly window ran on node-7 via SLURM without disturbing Gnandeep's occupancy. Detail:
+[../services/continuum/HANDOFF.md](../services/continuum/HANDOFF.md).
 
 *Original D15 plan (for the record):*
 
@@ -2146,14 +2146,14 @@ Detail: [../services/continuum/HANDOFF.md](../services/continuum/HANDOFF.md).
    the thesis itself: every upstream leg now stands (serve loop proven on real Qwen3-VL-32B;
    capture alpha-complete on three real surfaces; DP real for both live modalities; `/context`
    filling with pipeline-versioned records) — captured days are inert exactly until continuum
-   runs. **Gate: a C10 v0 interface freeze first** (storage × continuum jointly propose,
-   founders ratify — the pattern that made C1/C2 interoperate first try), frozen against the
-   beta-proven range read (`GET /context/records?user_id=&from=&to=`, half-open `[from,to)` —
-   deliberately C10's shape since D12). Kickoff is also the deliberate forcing function for two
-   parked conversations: the **cluster split** (agenda item 2 — nightly training window vs
-   Gnandeep's wider-cluster occupancy vs serving) and **DP OQ5 reprocess policy** (mixed
-   `pipeline_version` dialects inside a training window). The long-parked **D6 OCR spot-check**
-   rides the vLLM relaunch that continuum-era eval needs anyway.
+   runs. *Gate: a C10 v0 interface freeze first* (storage × continuum jointly propose, founders
+   ratify — the pattern that made C1/C2 interoperate first try), frozen against the beta-proven
+   range read (`GET /context/records?user_id=&from=&to=`, half-open `[from,to)`, deliberately
+   C10's shape since D12). Kickoff is also the deliberate forcing function for two parked
+   conversations: the *cluster split* (agenda item 2 — nightly training window vs Gnandeep's
+   wider-cluster occupancy vs serving) and *DP OQ5 reprocess policy* (mixed `pipeline_version`
+   dialects inside a training window). The long-parked *D6 OCR spot-check* rides the vLLM
+   relaunch that continuum-era eval needs anyway.
 2. **Platform D9 backbone as the small parallel slice:** the one shared Prometheus + Grafana on
    node-7, scraping what the deep session emits, provisioning both dashboard JSONs + the
    standard node/dcgm exporters. No file/service contention with kickoff; closes D9 end-to-end
@@ -2161,7 +2161,7 @@ Detail: [../services/continuum/HANDOFF.md](../services/continuum/HANDOFF.md).
 3. **DP image/text pipelines (charter M2) explicitly deferred until a producing surface
    exists.** Nothing on the fleet emits an `image` or `text` C1 stream today (phone camera →
    video; extension/mac → video+audio), and the image pipeline's chartered payload — on-screen
-   text — already flows through the video keyframe OCR weave (D8). The OQ14b bbox additive C2
+   text, already flows through the video keyframe OCR weave (D8). The OQ14b bbox additive C2
    field waits with it, by design. Revisit trigger: a screenshot-still / document / clipboard
    capture surface, or continuum finding keyframe-caption density insufficient for training.
 

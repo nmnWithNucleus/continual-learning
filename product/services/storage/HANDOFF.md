@@ -11,8 +11,8 @@
 > | *How did we get here?* | [handoff/worklog.md](handoff/worklog.md) — newest first |
 > | *What did the founders decide?* | [../../DECISIONS.md](../../DECISIONS.md) — the `D-n` register |
 
-**Stage: PROTOTYPE** ([D19](../../DECISIONS.md)) · **Status:** serve loop + capture + the **D18
-expansion built and live** · **Last updated:** 2026-07-27
+**Stage: PROTOTYPE** ([D19](../../DECISIONS.md)) · **Status:** serve loop + capture + the *D18
+expansion built and live* · *Last updated:* 2026-07-27
 
 ---
 
@@ -26,40 +26,40 @@ incl. the nested-C3 `$ref`, idempotent on `turn_id`) · `GET /sessions/turns/{tu
 base entry — see §Next) · `GET /health`.
 
 **Capture** — `PUT /raw/blobs?…` (verifies the body's SHA-256 → 422 on mismatch, mints an **opaque**
-`blob_ref`, idempotent on `chunk_id`) · `GET /raw/blobs?ref=` (**query** param, because a `blob_ref`
-may contain `/`; 404 also when the blob was since-deleted, which consumers must tolerate) ·
-`POST /context/records` (C2-validated, idempotent upsert on `record_id`, assigns storage's own
-`ingest_time` — an audit axis, **not** in C2, preserved across reprocess) ·
-`GET /context/records/{record_id}` · `GET /context/records?user_id=&from=&to=` (half-open
-`[from, to)`, per-user isolation enforced by the mandatory `user_id`).
+`blob_ref`, idempotent on `chunk_id`) · `GET /raw/blobs?ref=` (*query* param, because a `blob_ref`
+may contain `/`; 404 also when the blob was since-deleted, which consumers must tolerate) · `POST
+/context/records` (C2-validated, idempotent upsert on `record_id`, assigns storage's own
+`ingest_time`, an audit axis, *not* in C2, preserved across reprocess) · `GET
+/context/records/{record_id}` · `GET /context/records?user_id=&from=&to=` (half-open `[from, to)`,
+per-user isolation enforced by the mandatory `user_id`).
 
 **The D18 expansion — built 2026-07-27, this is what changed most recently:**
 
-- **C12 profile** — `GET/PUT /users/{user_id}/profile`. **404 on absence, no server-side default**,
+- **C12 profile** — `GET/PUT /users/{user_id}/profile`. *404 on absence, no server-side default*,
   so a user without `home_tz` is *not schedulable*: an operational alert, never a silent skip.
-  **Declared, never inferred** ([D19](../../DECISIONS.md)) — storage never writes it unprompted, so
+  *Declared, never inferred* ([D19](../../DECISIONS.md)) — storage never writes it unprompted, so
   it does not chase a travelling user's device.
 - **Training-window ledger + the sole `window_id` minter** — `POST /training/windows` (get-or-create
-  the user's **open** window), `GET /training/windows` (enumerate — continuum's source for prior
-  windows), `POST /training/windows/{window_id}/close`. `window_id` is
-  **`w<YYYYMMDD>T<HHMMSS>Z`** (`window_id.py`: mint format `w%Y%m%dT%H%M%SZ`, validator
-  `^w\d{8}T\d{6}Z$`), minted **once from the window's end instant** and **parsed by nobody**.
-  Storage is the only minter and the only validator.
+  the user's *open* window), `GET /training/windows` (enumerate, continuum's source for prior
+  windows), `POST /training/windows/{window_id}/close`. `window_id` is `w<YYYYMMDD>T<HHMMSS>Z`
+  (`window_id.py`: mint format `w%Y%m%dT%H%M%SZ`, validator `^w\d{8}T\d{6}Z$`), minted *once from
+  the window's end instant* and *parsed by nobody*. Storage is the only minter and the only
+  validator.
 - **Day-log materialization (C10 evolved)** — `GET /training/daylog?user_id=&window_id=`,
-  materialized **on demand at fetch** ([D19](../../DECISIONS.md)) rather than by a scheduler.
-  Reprocessed records resolve **latest `ingest_time` wins per `(chunk_id, content.kind,
-  discriminator)`** — on `ingest_time` because `pipeline_version` is a composed string and not
+  materialized *on demand at fetch* ([D19](../../DECISIONS.md)) rather than by a scheduler.
+  Reprocessed records resolve *latest `ingest_time` wins per `(chunk_id, content.kind,
+  discriminator)`* — on `ingest_time` because `pipeline_version` is a composed string and not
   orderable, on `kind` because captions and transcripts can share one `pipeline_version`. Every body
-  is stamped with its `recipe_id` **and** `daylog_format_version`, and continuum **refuses** a body
+  is stamped with its `recipe_id` *and* `daylog_format_version`, and continuum *refuses* a body
   whose stamps are not the ones it trains under.
 - **C13 recipe registry** (`GET /recipes/{recipe_id}`, `GET /policies/{policy_id}`) and
-  **C14 reservoir** (`GET/POST /reservoir/{user_id}`, `/reservoir/{user_id}/{window_id}`). C14 serves
-  a **ledger, not corpora** — by design.
+  *C14 reservoir* (`GET/POST /reservoir/{user_id}`, `/reservoir/{user_id}/{window_id}`). C14 serves
+  a *ledger, not corpora* — by design.
 - **Tables:** `turns`, `model_directory`, `raw_blobs`, `context_records`, `user_profiles`,
   `training_windows`, `day_logs`.
-- **M9 parity passes** — 31 binding checks over **two** window origins including a **misaligned** one
+- **M9 parity passes** — 31 binding checks over *two* window origins including a *misaligned* one
   (the first run passed only on a grid-aligned origin, which no real window has; the bar was narrowed
-  and the proof redone — [D20](../../DECISIONS.md)).
+  and the proof redone, [D20](../../DECISIONS.md)).
 
 ## Workstream index
 | WS | What | Status | Working file |
@@ -70,9 +70,9 @@ may contain `/`; 404 also when the blob was since-deleted, which consumers must 
 
 ## Scope boundary
 
-- **C11** (recency / semantic index) is still **deliberately absent** — a later slice.
+- **C11** (recency / semantic index) is still *deliberately absent* — a later slice.
 - **The model directory is still the trivial C6 row** (`user_id, model_id, adapter, adapter_path`):
-  no entries log, no status column. Hosting C5 is therefore a **build, not a transport swap**.
+  no entries log, no status column. Hosting C5 is therefore a *build, not a transport swap*.
 - **Storage owns the day-log's *representation* outright; its *content* is a contract neither service
   may move alone** ([D20](../../DECISIONS.md)) — *if the trainer can see it, it is contract; if only
   storage can see it, it is ours.*
@@ -81,10 +81,10 @@ may contain `/`; 404 also when the blob was since-deleted, which consumers must 
 
 | # | Item | Why it's open |
 |---|---|---|
-| 1 | **E-2 — the kind-aware retraction primitive** (`DELETE /context/records?…&kind=`), **cascading to the day-log and the reservoir**. | Each of those is a *second copy of user content*, so a retraction that clears `/context` and leaves a day-log standing has deleted nothing. Today a **re-wipe is the only way to retract rows** — the cutover hit this directly. CHARTER M5 |
-| 2 | **C5 registration → the model-directory build** (M3). Three constraints, and they are not documentation: a **three**-value status enum (or `record_gate_failure()` has nowhere to land); **nullable** `adapter_dir` + `base_model_hash` (gate-failed rows carry NULLs); C6 eligibility as a **log replay**, not "latest row wins". | The last would otherwise serve a gate-failed candidate — the exact ungated swap the gate exists to prevent. Waits on the C5 shape pin (deferred by [D19](../../DECISIONS.md)) |
+| 1 | **E-2 — the kind-aware retraction primitive** (`DELETE /context/records?…&kind=`), *cascading to the day-log and the reservoir*. | Each of those is a *second copy of user content*, so a retraction that clears `/context` and leaves a day-log standing has deleted nothing. Today a **re-wipe is the only way to retract rows** — the cutover hit this directly. CHARTER M5 |
+| 2 | **C5 registration → the model-directory build** (M3). Three constraints, and they are not documentation: a *three*-value status enum (or `record_gate_failure()` has nowhere to land); *nullable* `adapter_dir` + `base_model_hash` (gate-failed rows carry NULLs); C6 eligibility as a *log replay*, not "latest row wins". | The last would otherwise serve a gate-failed candidate — the exact ungated swap the gate exists to prevent. Waits on the C5 shape pin (deferred by [D19](../../DECISIONS.md)) |
 | 3 | **D9 observability** — `/metrics` (request rate/latency/errors + query latency, rows read/written, DB size) + our Grafana dashboard JSON. | Platform's shared backbone is the blocker; emission is ours. CHARTER M7 |
-| 4 | **Retention mechanism** ([D19](../../DECISIONS.md)) — a versioned per-store retention document, every store `keep_forever`, read and surfaced on `/metrics`, **no sweeper**. Rules mark *eligibility*; a separate explicit sweep acts and writes a manifest. | So a bad config edit can produce a wrong report, never silent data loss |
+| 4 | **Retention mechanism** ([D19](../../DECISIONS.md)) — a versioned per-store retention document, every store `keep_forever`, read and surfaced on `/metrics`, *no sweeper*. Rules mark *eligibility*; a separate explicit sweep acts and writes a manifest. | So a bad config edit can produce a wrong report, never silent data loss |
 | 5 | **Encryption at rest + per-user isolation tests** (M4). | Not started |
 | 6 | **Postgres + GCS migration** — metadata in Postgres, day-logs/corpora in GCS ([D19](../../DECISIONS.md) option (c)). | Kept cheap by a rule, not foresight: every new store goes behind a **narrow interface** from day one, so the swap is a backend change |
 

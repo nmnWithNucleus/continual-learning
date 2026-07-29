@@ -9,31 +9,31 @@
 
 **Status:** built + unit-tested + **real-avfoundation verified** (2026-07-19, CTO's mac:
 screen+mic, 7/7 segments, verdict `clean`, pixels confirmed real in VLC + spoken-run
-transcripts in `/context`; the fps-pin fix that made it work is in the worklog) · **Owner
-session:** recording computer-capture lead
+transcripts in `/context`; the fps-pin fix that made it work is in the worklog) · *Owner
+session:* recording computer-capture lead
 
 ---
 
 ## Decisions
 
 - **D-F1 — one Python file, stdlib only.** `clients/mac/nucleus_capture.py` (python3 ≥3.9,
-  no pip deps — macOS's CLT python or any brew python runs it; ffmpeg via
-  `brew install ffmpeg`). Two subcommands: `record` and `list-devices`. Architecture:
-  ffmpeg is the capture+segmenter (`-f segment`, ~10 s self-contained mp4s into a spool
-  dir); a Python uploader thread watches the spool and speaks the wire. Muxed A/V per
-  segment **exactly like the phone client** — the server demuxes into two C1 streams (own
-  `stream_id` each, same `device_id`). Why not Swift/ScreenCaptureKit now: that is the
-  later GUI surface; this CLI proves the capture capability and the wire with zero new
-  server or build machinery.
+  no pip deps, macOS's CLT python or any brew python runs it; ffmpeg via `brew install
+  ffmpeg`). Two subcommands: `record` and `list-devices`. Architecture: ffmpeg is the
+  capture+segmenter (`-f segment`, ~10 s self-contained mp4s into a spool dir); a Python
+  uploader thread watches the spool and speaks the wire. Muxed A/V per segment *exactly
+  like the phone client* — the server demuxes into two C1 streams (own `stream_id` each,
+  same `device_id`). Why not Swift/ScreenCaptureKit now: that is the later GUI surface;
+  this CLI proves the capture capability and the wire with zero new server or build
+  machinery.
 - **D-F2 — wall-clock stamps are duration-chained.** Anchor = the wall-clock when capture
-  actually starts (`st_birthtime` of segment 0 where the OS provides it — macOS does —
-  else the ffmpeg spawn time). Then `t_start[0] = anchor`,
-  `t_end[n] = t_start[n] + duration[n]` (ffprobe per segment), `t_start[n+1] = t_end[n]`.
-  Segment cuts land on forced keyframes so durations are ~exactly SEGMENT_SECONDS but can
-  vary slightly; chaining keeps the time axis continuous and honest — capture IS
-  continuous, unlike the phone's restart-gap segments. Known v0 approximation, stated:
-  the anchor can sit up to ~1–2 s late/early of true first-frame time (device-open and
-  birthtime granularity); second-level alignment is the beta bar.
+  actually starts (`st_birthtime` of segment 0 where the OS provides it, macOS does, else
+  the ffmpeg spawn time). Then `t_start[0] = anchor`, `t_end[n] = t_start[n] +
+  duration[n]` (ffprobe per segment), `t_start[n+1] = t_end[n]`. Segment cuts land on
+  forced keyframes so durations are ~exactly SEGMENT_SECONDS but can vary slightly;
+  chaining keeps the time axis continuous and honest — capture IS continuous, unlike the
+  phone's restart-gap segments. Known v0 approximation, stated: the anchor can sit up to
+  ~1–2 s late/early of true first-frame time (device-open and birthtime granularity);
+  second-level alignment is the beta bar.
 - **D-F3 — `--source test` is a first-class mode.** lavfi `testsrc2` + `sine` through the
   Same encode/segment/upload path (only the ffmpeg input differs). It is (a) how this
   headless Linux box verifies everything but avfoundation E2E against the live fleet,
@@ -69,8 +69,8 @@ session:** recording computer-capture lead
   "expr:gte(t,n_forced*10)" -segment_format mp4 -segment_format_options
   movflags=+faststart` → `spool/seg-%06d.mp4`. Device indices via `list-devices`
   (wraps `ffmpeg -f avfoundation -list_devices true -i ""`); defaults
-  `--screen-index 1 --audio-index 0`, the common laptop layout — **verify with
-  list-devices first**, indices shift with cameras/mics attached.
+  `--screen-index 1 --audio-index 0`, the common laptop layout — *verify with
+  list-devices first*, indices shift with cameras/mics attached.
 - **test:** `-f lavfi -i testsrc2=size=640x360:rate=15 -f lavfi -i
   sine=frequency=440:sample_rate=44100` + optional `-t <duration>`, then the same encode
   (mpeg4 fallback when libx264 is absent, e.g. conda ffmpeg) + segment flags.
@@ -79,9 +79,9 @@ session:** recording computer-capture lead
 
 1. `brew install ffmpeg`.
 2. **Screen Recording permission** goes to the app that *launches* ffmpeg — the terminal:
-   System Settings → Privacy & Security → **Screen Recording** → enable your terminal
+   System Settings → Privacy & Security → *Screen Recording* → enable your terminal
    (Terminal.app / iTerm2 / VS Code). macOS prompts on the first capture attempt; after
-   granting you must **quit and reopen the terminal** for it to stick. Without it,
+   granting you must *quit and reopen the terminal* for it to stick. Without it,
    avfoundation returns a black screen or `Operation not permitted`.
 3. **Microphone permission** prompts inline on first run (same panel → Microphone if it
    was ever denied).
@@ -122,19 +122,19 @@ Wire conformance against the real ingest app lives in `tests/test_wire_conforman
   The screen device refused `-framerate 15` ("Configuration of video device failed,
   falling back to default"), ffmpeg derived a garbage output rate from avfoundation's
   microsecond timebase, duplicated frames endlessly ("More than 10000 frames
-  duplicated"), and the segment muxer — which cuts on media time — never reached 10
-  media-seconds, so nothing uploaded (server: unknown session; the watcher correctly
-  held the unfinished file). **Fix:** the avfoundation `-vf` chain now ends with
+  duplicated"), and the segment muxer — which cuts on media time, never reached 10
+  media-seconds, so nothing uploaded (server: unknown session; the watcher correctly held
+  the unfinished file). *Fix:* the avfoundation `-vf` chain now ends with
   `fps=<framerate>`, pinning the output rate regardless of what the device negotiates.
   Verified by suite (argv test asserts the pin) + a local simulation (1000 fps lavfi
-  input through the exact filter/segment recipe → clean 10 s segments). The mac retry
-  is the CTO's step. Bluetooth-headset audio note: capturing a BT mic drops it to
+  input through the exact filter/segment recipe → clean 10 s segments). The mac retry is
+  the CTO's step. Bluetooth-headset audio note: capturing a BT mic drops it to
   call-quality rates (the harmless `aac … clamping` warning); built-in mic = disconnect
   the headset and re-run list-devices.
 - 2026-07-19 — **fps-pin fix confirmed ON real hardware** (CTO retry, `--framerate 30
   --keep-segments`): 7/7 segments, both streams emitted, DP-checked, verdict `clean`,
-  graceful stop with a 1.3 s tail; no MB-rate warning, no frame duplication. **Known v0
-  approximation observed:** seg 0 spanned 18.4 s (all others exactly 10.0 s) — device
+  graceful stop with a 1.3 s tail; no MB-rate warning, no frame duplication. *Known v0
+  approximation observed:* seg 0 spanned 18.4 s (all others exactly 10.0 s) — device
   warm-up: audio flows from device-open while the screen's first frames arrive seconds
   later, so segment 0 holds more audio than video and its A/V alignment is fuzzy by the
   warm-up delay. First-segment-only; the time axis stays continuous. Possible later
@@ -152,8 +152,8 @@ Wire conformance against the real ingest app lives in `tests/test_wire_conforman
   adjacency, end marker, exit codes). Notable build decisions: ffmpeg spawned
   `start_new_session=True` so Ctrl-C routes through the CLI; 4xx-dropped files kept in the
   spool as evidence; ffmpeg-dies-with-zero-segments short-circuits with a permission hint.
-- 2026-07-18 — **adversarial review round** (5-lens find → 2-skeptic verify) fixed here:
-  (1) *stamp corruption on Ctrl-C* (High): an interrupt landing inside an in-flight upload
+- 2026-07-18 — **adversarial review round** (5-lens find → 2-skeptic verify) fixed here: (1)
+  *stamp corruption on Ctrl-C* (High): an interrupt landing inside an in-flight upload
   re-processed that seq on the graceful pass and appended its duration twice, silently
   shifting every later wire timestamp — durations are now idempotently slotted
   (`slot_duration`, regression-tested); (2) *stale spool*: a reused `--spool` dir holding a
@@ -161,17 +161,17 @@ Wire conformance against the real ingest app lives in `tests/test_wire_conforman
   non-empty spool; (3) *mid-response server death*: `http.client.HTTPException`
   (BadStatusLine/IncompleteRead is NOT OSError) escaped the retry pump and crashed the run —
   now retried; (4) zero-segments-with-clean-ffmpeg-exit no longer posts a doomed end marker
-  and burns the 120 s report timeout — fast exit 1; (5) the spool regex follows ffmpeg's
+  and burns the 120 s report timeout, fast exit 1; (5) the spool regex follows ffmpeg's
   `%06d` widening past seg-999999.
 - 2026-07-18 — **wire rename adopted** (founders): `/capture/*` URLs; report-poll +
-  messages updated. **Live E2E on the run_learn fleet (faster_whisper)**: `record --source
+  messages updated. *Live E2E on the run_learn fleet (faster_whisper)*: `record --source
   test --duration 25` → 3 segments, exact `t_end[n]==t_start[n+1]` adjacency on the wire,
   demux → audio (3 wav chunks) + video (3 mp4 chunks), DP continuity `checked:true` /
-  `missing_unacked:[]` both streams, verdict **clean**, exit 0; 12 C2 records in `/context`
+  `missing_unacked:[]` both streams, verdict *clean*, exit 0; 12 C2 records in `/context`
   with matching spans (sine audio → honest empty transcripts via the VAD gate). The
   deprecated `/ingest` alias was also drilled live (old-prefix upload+end, new-prefix
-  report → clean). **avfoundation leg untested here (headless Linux) — §Runbook is the
-  human mac leg.**
+  report → clean). *avfoundation leg untested here (headless Linux) — §Runbook is the
+  human mac leg.*
 - 2026-07-19 — fresh-eyes verification round (recording M1 lead, during the CTO's alpha
   pass) confirmed 2 doc defects in §Runbook, both fixed: a broken shell line-continuation
   (a mid-command trailing comment ate the `\`, so `--user/--screen-index/--audio-index`

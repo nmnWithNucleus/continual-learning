@@ -14,7 +14,7 @@ retired picker path and are kept for history, marked superseded.
 
 **Status:** built + unit/conformance-tested + adversarially reviewed + **real-browser
 Verified** (2026-07-19, CTO on Comet: session `01KXWCPB…` → verdict `clean`, muxed tab →
-audio+video C1, 7 real ASR transcripts of the tab's audio in `/context`) · **Owner session:**
+audio+video C1, 7 real ASR transcripts of the tab's audio in `/context`) · *Owner session:*
 recording computer-capture lead
 
 ---
@@ -22,21 +22,21 @@ recording computer-capture lead
 ## Decisions
 
 - **D-E7 — Direct TAB capture (the current model, 2026-07-19).** The extension records the
-  **active tab**: video + audio in ONE muxed stream via
+  *active tab*: video + audio in ONE muxed stream via
   `chrome.tabCapture.getMediaStreamId({targetTabId})` (targetTabId pinned by the popup at
   Record) → offscreen `getUserMedia({audio:{mandatory:{chromeMediaSource:"tab",
   chromeMediaSourceId}}, video:{…same id…}})` (video toggle off ⇒ `video:false`, audio-only).
   ONE tab = ONE capture = ONE ingest session; a single `MediaRecorder` writes ~10 s
-  self-contained **muxed webm** (vp8+opus) segments, and the **server demuxes each into audio +
-  video C1 streams** — the exact muxed-A/V path the phone (mp4) and mac (mp4) clients already
-  use, zero server changes. **Why this replaced the picker path:** the desktopCapture picker
+  self-contained *muxed webm* (vp8+opus) segments, and the *server demuxes each into audio +
+  video C1 streams* — the exact muxed-A/V path the phone (mp4) and mac (mp4) clients already
+  use, zero server changes. *Why this replaced the picker path:* the desktopCapture picker
   (D-E2) failed on the tester's real browser (Comet) — "Entire Screen" errored with "Error
   starting tab capture", the picker's Window list enumerated only the extension's own picker
   window, and the cross-context stream-id handoff is inherently fragile; it can't be verified
   here (headless Linux, and Comet ≠ vanilla Chromium). tabCapture is the most stable Chromium
   capture primitive, needs no picker/handoff, and can't hit the same-tab collision (it IS one
-  capture of the tab). **Trade-off, accepted:** the extension captures a browser *tab*, not the
-  whole desktop or other apps — full-screen capture is the **mac CLI's** job (ws-f, verified).
+  capture of the tab). *Trade-off, accepted:* the extension captures a browser *tab*, not the
+  whole desktop or other apps — full-screen capture is the *mac CLI's* job (ws-f, verified).
   This collapses the client to: mint id → one getUserMedia → one segmenter → one uploader → one
   report. It removed picker.html/picker.js, `chooseDesktopMedia`, the `desktopCapture`
   permission, the persisted picker continuation, D-E6's abort logic, and the two-session
@@ -44,13 +44,13 @@ recording computer-capture lead
   through an `AudioContext` to stay audible.
 - **D-E1 — passive-permission posture** (amended by D-E7). Manifest permissions are now
   exactly `tabCapture`, `offscreen`, `storage` — `desktopCapture` removed with the picker
-  path. **No content scripts, no static `host_permissions`, no `activeTab`, no `tabs`** (the
+  path. *No content scripts, no static `host_permissions`, no `activeTab`, no `tabs`* (the
   popup reads the active tab's id, which is not gated by `tabs`). The server origin is
   user-configured, so cross-origin `fetch` uses `optional_host_permissions: ["http://*/*",
-  "https://*/*"]` with a **runtime grant for exactly the configured origin**
-  (`chrome.permissions.request` from the popup — a user gesture — when the server URL is
-  saved; **persisted before the prompt**, alpha fix). Extension contexts with a granted host
-  permission bypass CORS, so the recording server needs **no CORS middleware**.
+  "https://*/*"]` with a *runtime grant for exactly the configured origin*
+  (`chrome.permissions.request` from the popup — a user gesture, when the server URL is
+  saved; *persisted before the prompt*, alpha fix). Extension contexts with a granted host
+  permission bypass CORS, so the recording server needs *no CORS middleware*.
 - **D-E2 — [superseded by D-E7] stream acquisition = stream-ID handoff, not getDisplayMedia.** MV3 reality: the
   popup dies on focus loss, the service worker has no DOM, and `getDisplayMedia` inside an
   offscreen document has transient-activation problems. The pattern:
@@ -58,13 +58,13 @@ recording computer-capture lead
     `chooseDesktopMedia` from a service worker with no `targetTab` ("A target tab is
     required when called from a service worker context"), and passing a `targetTab` binds
     the stream to that tab's origin — unusable by our offscreen document. So the worker
-    opens **`picker.html` in a tiny popup window**; that extension page runs
+    opens *`picker.html` in a tiny popup window*; that extension page runs
     `chrome.desktopCapture.chooseDesktopMedia(["screen","window","tab"], cb)` (no
     `targetTab` ⇒ extension-consumable id), posts the result back, and closes itself.
     Closing the picker window without choosing = cancelled. The offscreen document then
     opens the id with `getUserMedia({video: {mandatory: {chromeMediaSource: "desktop",
-    chromeMediaSourceId}}, audio: false})`. Video only — **no system audio in this
-    slice** (recorded; a later surface).
+    chromeMediaSourceId}}, audio: false})`. Video only — *no system audio in this
+    slice* (recorded; a later surface).
   - **Tab audio:** service worker calls `chrome.tabCapture.getMediaStreamId({targetTabId})`
     for the tab the popup was opened on (opening the popup = the required extension
     invocation on that tab) → offscreen document `getUserMedia({audio: {mandatory:
@@ -77,10 +77,10 @@ recording computer-capture lead
 - **D-E3 — [superseded by D-E7: the extension is now ONE muxed session, not two] one
   recording = up to TWO ingest sessions, one per source.** The wire's `seq`
   is dense per session; two independent segment loops can't share one counter. So screen
-  video and tab audio each mint their **own `session_id`** (own dense `seq`, own end marker,
-  own gap report), both carrying the **same `device_id`** (`ext-chrome-<suffix>`, suffix
-  persisted in `chrome.storage.local`). Server demux then yields **separate C1 streams (own
-  `stream_id` each, same `device_id`)** — exactly the slice requirement, with zero server
+  video and tab audio each mint their *own `session_id`* (own dense `seq`, own end marker,
+  own gap report), both carrying the *same `device_id`* (`ext-chrome-<suffix>`, suffix
+  persisted in `chrome.storage.local`). Server demux then yields *separate C1 streams (own
+  `stream_id` each, same `device_id`)* — exactly the slice requirement, with zero server
   changes (single-modality segments are already handled: the ffprobe track probe decides).
 - **D-E4 — segmented recorder, D-M1-1 reused verbatim** (D-E7 update: ONE recorder for the
   muxed tab stream, not one-per-source). The `MediaRecorder` restarts every ~10 s (no
@@ -104,7 +104,7 @@ recording computer-capture lead
   to abort.) The former "one capture per tab" collision is also gone: tabCapture is one capture
   of the tab, so it cannot collide with itself.
 - **Source-ended semantics:** closing/navigating the captured tab (or a stop-sharing
-  affordance) fires `track.onended` → the session **stops cleanly** (final segment, drain, end
+  affordance) fires `track.onended` → the session *stops cleanly* (final segment, drain, end
   marker). One session now, so this ends the recording.
 - **Clarification — one tab gives both modalities.** The Chromium limit is "one *capturer*
   per tab", NOT "one modality per tab": a single `tabCapture` stream carries the tab's video
@@ -162,16 +162,16 @@ video C1 streams.
 
 ## Human test steps (Chrome leg — this box cannot run a browser)
 
-1. `chrome://extensions` → enable **Developer mode** → **Load unpacked** →
+1. `chrome://extensions` → enable **Developer mode** → *Load unpacked* →
    `product/services/recording/clients/extension/` (after a code change, hit the extension's
-   **reload** icon).
+   *reload* icon).
 2. Click the Nucleus Capture action icon. In **Settings**: server URL = the tunnel URL from
    `var/tunnel_url.txt` (or `http://localhost:8084` against a local `run_learn.sh` fleet),
-   user id, then **Save** → accept the host-permission prompt. **Reopen the popup and confirm
-   the fields kept your values** (Save-persistence regression check).
+   user id, then *Save* → accept the host-permission prompt. *Reopen the popup and confirm
+   the fields kept your values* (Save-persistence regression check).
 3. Open the popup **on an ordinary web-page tab** (a chrome:// or extension page is not
    capturable — you'll get an honest error). Leave "video" ✓ (or uncheck it for audio-only),
-   **Record** → **no picker** — capture starts immediately on that tab (it stays audible via
+   *Record* → *no picker* — capture starts immediately on that tab (it stays audible via
    the passthrough).
 4. Watch the popup counters climb (~1 segment / 10 s); **Stop** → queue drains. The popup
    resets to idle within seconds of the drain (the capture document auto-closes) — NOT a
@@ -186,7 +186,7 @@ video C1 streams.
 ## Worklog
 
 - 2026-07-19 — **Capture model pivoted to direct tab capture (D-E7).** Second/third real-chrome
-  alpha runs (CTO, on Comet — a Chromium fork) showed the desktop-picker path failing beyond the
+  alpha runs (CTO, on Comet, a Chromium fork) showed the desktop-picker path failing beyond the
   same-tab case: "Entire Screen" errored with "Error starting tab capture", and the picker's
   Window list enumerated only the extension's own picker window — the separate-picker-window +
   cross-context stream-id handoff is fundamentally fragile, and I can't reproduce/fix Comet here
@@ -205,8 +205,8 @@ video C1 streams.
   leak on a chrome:// tab), the drained-close re-checks `startsInFlight` after its status probe,
   the host-permission match pattern drops the port (Chrome patterns ignore ports —
   `localhost:8084/*` was invalid), and the AudioContext is resumed so the passthrough is
-  audible. **The Comet/Chrome retest is the CTO's step.** Everything below this line predates
-  the pivot.
+  audible. *The Comet/Chrome retest is the CTO's step.* Everything below this line predates the
+  pivot.
 - 2026-07-18 — spec written (decisions D-E1…D-E5); handed to the build fan-out.
 - 2026-07-18 — built as specced (11 files): manifest (passive posture pinned by
   `tests/test_extension_assets.py`), background SW (guarded offscreen lifecycle, stream-ID
@@ -234,47 +234,45 @@ video C1 streams.
 - 2026-07-18 — **wire rename adopted** (founders): all client URLs moved to `/capture/*`;
   ws-b §Wire carries the rename note. No extension behaviour change.
 - 2026-07-19 — **first real-chrome run (CTO alpha) found 3 defects, all fixed same hour:**
-  (1) *Save lost the settings* — `chrome.permissions.request` can close the popup, killing
+  (1) *Save lost the settings*, `chrome.permissions.request` can close the popup, killing
   everything after its await; the `chrome.storage.local.set` ran after it, so the grant
-  went through while the URL/user reverted to defaults. Persist-before-prompt now.
-  (2) *No screen picker* — the D-E2 amendment above: real Chrome refuses worker-context
+  went through while the URL/user reverted to defaults. Persist-before-prompt now. (2) *No
+  screen picker* — the D-E2 amendment above: real Chrome refuses worker-context
   `chooseDesktopMedia`; screen acquisition moved to `picker.html`/`picker.js` (the popup's
-  error row surfaced the exact failure string — the review-round surfacing fix earning
-  its keep). (3) *Draining soft-deadlock* — with an unreachable server URL the uploader
+  error row surfaced the exact failure string — the review-round surfacing fix earning its
+  keep). (3) *Draining soft-deadlock* — with an unreachable server URL the uploader
   retries forever (by design), the drain never finishes, and settings are locked while
-  draining: no way out. New **Discard unsent** button (draining state only) → background
+  draining: no way out. New *Discard unsent* button (draining state only) → background
   closes the capture document; unsent segments drop (stated on the button), the ledger
-  keeps what arrived, settings unlock. Verified here: deno check + 17 deno tests +
-  asset tests + 3-skeptic adversarial pass over the patch; the Chrome retry is the
-  CTO's step.
+  keeps what arrived, settings unlock. Verified here: deno check + 17 deno tests + asset
+  tests + 3-skeptic adversarial pass over the patch; the Chrome retry is the CTO's step.
 - 2026-07-19 — **two skeptic rounds over the picker fix reshaped it into a persisted
   continuation** (all found-before-the-tester): round 1 — (a) the tab-audio id, minted
   right after the picker resolved, targeted the picker window as "active tab"; (b) MV3
   kills an idle worker in ~30 s, so worker-memory pending state silently dropped any
   pick the user deliberated over; (c) acquisition-stage errors died with the popup.
-  Rework: the popup pins the target `tabId` at Record (tab ids need no permission);
-  the pending start persists in `chrome.storage.session`; `picker-result` — which
-  Wakes a fresh worker — resumes it (`finishStart`), minting the tab id with explicit
-  `targetTabId` and carrying `acquireErrors` into the offscreen status surface (even
-  for a zero-source start). Round 2 over the rework — (d) the supersede path removed
-  the stale picker window before clearing pending, letting its onRemoved take run a
-  phantom cancel-continuation under stale config; (e) the drained-close guard didn't
-  cover the continuation; (f) a superseded picker's late result could consume the new
-  pending; (g) a zero-source start leaked the document forever. Fixes: every
-  pending-state transition serialized through one promise-chain lock; supersede clears
-  pending before removing the window; drained-close is now authoritative (skips if a
-  pending exists, then asks the offscreen doc's status and only closes when no source
-  is active or draining); picker results carry their window id and mismatches are
-  dropped; zero-source starts linger 60 s (generation-guarded) then self-request
-  close; the dead round-1 `acquireTabStreamId` duplicate deleted. **Stated residual:**
-  a worker death in the sub-second continuation window itself (post-take, pre-handoff)
-  still loses that start silently — rare, recoverable by pressing Record again;
-  accepted for v0.
+  Rework: the popup pins the target `tabId` at Record (tab ids need no permission); the
+  pending start persists in `chrome.storage.session`; `picker-result` — which Wakes a
+  fresh worker, resumes it (`finishStart`), minting the tab id with explicit
+  `targetTabId` and carrying `acquireErrors` into the offscreen status surface (even for
+  a zero-source start). Round 2 over the rework — (d) the supersede path removed the
+  stale picker window before clearing pending, letting its onRemoved take run a phantom
+  cancel-continuation under stale config; (e) the drained-close guard didn't cover the
+  continuation; (f) a superseded picker's late result could consume the new pending; (g)
+  a zero-source start leaked the document forever. Fixes: every pending-state transition
+  serialized through one promise-chain lock; supersede clears pending before removing
+  the window; drained-close is now authoritative (skips if a pending exists, then asks
+  the offscreen doc's status and only closes when no source is active or draining);
+  picker results carry their window id and mismatches are dropped; zero-source starts
+  linger 60 s (generation-guarded) then self-request close; the dead round-1
+  `acquireTabStreamId` duplicate deleted. *Stated residual:* a worker death in the
+  sub-second continuation window itself (post-take, pre-handoff) still loses that start
+  silently — rare, recoverable by pressing Record again; accepted for v0.
 - 2026-07-19 — **second real-chrome run (CTO): Save now sticks ✓, picker window opens ✓,
   tab audio records ✓.** Two findings: (1) picking the same tab for screen-video that we
   capture audio from → video fails "Error starting tab capture" (Chromium one-capture-per-tab
   — see Known limitation). (2) the user (rightly) found audio-recording-anyway-when-screen-
-  cancelled counterintuitive. Fix = **D-E6, enforced at both layers** — a bounded skeptic
+  cancelled counterintuitive. Fix = *D-E6, enforced at both layers* — a bounded skeptic
   pass caught the first draft placing the abort only at acquisition (`finishStart`), but the
   same-tab failure surfaces later, at the offscreen `getUserMedia` stage (the picker returns
   a stream id fine; the desktop-tab video only fails when opened). So the abort lives in both

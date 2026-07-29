@@ -58,7 +58,7 @@
 **What shipped**
 
 - Gap-detection, VAD-cut chunking, and three capture clients — phone web, Chrome MV3 extension,
-  mac CLI — all verified `clean` on real hardware.
+  mac CLI, all verified `clean` on real hardware.
 - The async ingest seam ([D16](DECISIONS.md)) and [D9](DECISIONS.md) `/metrics` emission.
 - M6 emission merged 2026-07-19.
 
@@ -226,7 +226,7 @@ rather than a cutover gate.
 
 - D18 changed this row's premise. The WS-VC double-count is fixed by the **day-log materialization
   rule** — one dialect per record, latest `ingest_time` wins per `(chunk_id, content.kind,
-  discriminator)` — not by a delete.
+  discriminator)`, not by a delete.
 - It also **grows**: once storage materializes day-logs and hosts the reservoir, every deletion must
   cascade to both, because each is a second copy of user content.
 - Shape and the widened M5 are recorded in the [storage charter](services/storage/CHARTER.md).
@@ -286,6 +286,6 @@ Open items only. Anything finished moves to [handoff/engineering.md](handoff/eng
 | 2 | **D9 observability backbone** — the shared Prometheus + Grafana | platform | Emission shipped; the backbone never got built, so no founder has a Grafana URL |
 | 3 | **E-3(b)** — a captioner VL endpoint distinct from `:8000` | platform + inference | Founders' allocation call; closes DP CHARTER OQ3 [↓](#e-3b--a-captioner-vl-endpoint) |
 | 4 | **C5 shape pin** — a three-value status enum, nullable `adapter_dir` + `base_model_hash`, C6 eligibility as a log replay | storage + continuum + inference | `model_directory` is still the trivial C6 row, so hosting C5 is a build, not a transport swap |
-| 5 | **`min_block_chars`** — D19's min-data floor, `designed` and not built | continuum | It appears nowhere in the repo. The design stands; the build does not exist |
+| 5 | `min_block_chars` — D19's min-data floor, `designed` and not built | continuum | It appears nowhere in the repo. The design stands; the build does not exist |
 | 6 | **Beta hand-off ([D12](DECISIONS.md))** — standing `dev` branch, three capture clients | founders | Standing, not blocked. Tunnel URL rotates → `services/recording/var/tunnel_url.txt` |
 | 7 | **CTO to read the Platform charter internals** ([D1](DECISIONS.md)) | CTO | Accepted as-is at ratification; the read was deferred |

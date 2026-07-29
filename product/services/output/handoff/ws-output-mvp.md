@@ -6,7 +6,7 @@ House style: Goal / Done / In flight / Next / Gotchas. Newest notes at the botto
 Build the **delivery layer** for the text-only serve-loop MVP:
 1. A browser-side **C9 reader** (`app/static/c9_reader.js`) — the actual delivery to the computer
    surface: stream-read a `fetch()` Response in C9 wire format, split answer text from the JSON
-   end frame on the first `U+001E`, render the answer as **safe markdown** (escape HTML first, no
+   end frame on the first `U+001E`, render the answer as *safe markdown* (escape HTML first, no
    XSS), expose end-frame usage; a clean export the input surface imports.
 2. A thin standalone **relay service** (:8082, FastAPI): `POST /deliver` proxies a C9 stream from
    an upstream URL to the caller unchanged with a delivery ack; `GET /health`. Proves the delivery
@@ -17,7 +17,7 @@ v0.0). Stack: Python 3.11 (dev box ran 3.12), FastAPI + uvicorn, httpx, pydantic
 jsonschema. Port 8082.
 
 ## Done
-- **`app/static/c9_reader.js`** — dependency-free ES module. Exports:
+- `app/static/c9_reader.js` — dependency-free ES module. Exports:
   - `renderC9Stream(response, targetEl, {onText, onEndFrame})` → `{answer, endFrame, usage}` — the
     primary function the input surface imports; streams + renders markdown into a DOM element live
     (rAF-coalesced), then surfaces the end frame + usage.
@@ -26,18 +26,18 @@ jsonschema. Port 8082.
     `response.text()` where streaming isn't available.
   - `renderMarkdown`/`markdownToHtml`, `escapeHtml`, `RECORD_SEPARATOR`.
   - Markdown subset: headings, **bold**, *italic*, `inline code`, fenced code blocks, paragraphs,
-    ordered/unordered lists. **HTML is escaped before any markup is added** — the security
+    ordered/unordered lists. *HTML is escaped before any markup is added* — the security
     foundation. Inline-code spans are stashed before emphasis so markers inside code stay literal;
     `_`/`__` require non-word boundaries so `snake_case` is not mangled.
-- **`app/static/selftest.html`** — feeds a synthetic C9 stream (built in-page from a mock
+- `app/static/selftest.html` — feeds a synthetic C9 stream (built in-page from a mock
   streaming `Response`) through the reader and renders it; buttons for a markdown answer, an XSS
   attempt (must be inert), an error end frame, and a **"Run assertions"** in-page test.
-- **`app/main.py`** — FastAPI relay. `POST /deliver` (body `{upstream_url, payload?, method?,
+- `app/main.py` — FastAPI relay. `POST /deliver` (body `{upstream_url, payload?, method?,
   turn_id?}`) opens a streaming httpx request upstream and relays bytes verbatim via a
   `StreamingResponse`; delivery ack in headers (`X-Delivery-Id/-Turn-Id/-Upstream/-Ack`). `GET
   /health`, `GET /` index. Mounts the browser client at `/static/*`. `create_app(client=…)` lets
   tests inject an httpx client.
-- **`app/relay.py`** — relay core (`relay_c9`, `build_ack`, error-frame synth), client injectable
+- `app/relay.py` — relay core (`relay_c9`, `build_ack`, error-frame synth), client injectable
   for tests. On upstream connect error or HTTP ≥ 400 it appends a schema-valid C9 **error end
   frame** so the caller always gets a valid terminus.
 - **Python mirrors for pytest** (WS row permits "a Python mirror is fine"): `app/c9_parse.py`
@@ -75,7 +75,7 @@ jsonschema. Port 8082.
   `'\ue000'`, `'\ue001'`) — raw control chars in source files are fragile through tooling. The
   constants resolve to the right code points (verified).
 - **C9 body is opaque bytes** to the relay — never re-encode or reformat it, or the byte-exact
-  guarantee (and the separator) breaks. The delivery ack therefore rides in **headers**, not the
+  guarantee (and the separator) breaks. The delivery ack therefore rides in *headers*, not the
   body.
 - **`.split` on the first separator only** — the answer may legitimately contain `{...}` JSON-like
   text or extra ``-adjacent content; only the first separator terminates the answer.

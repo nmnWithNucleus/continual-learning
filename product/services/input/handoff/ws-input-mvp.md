@@ -5,8 +5,8 @@ House style: Goal / Done / In flight / Next / Gotchas.
 ## Goal
 Build the **input** service (:8081) for the text-only serve-loop skeleton: a computer chat
 surface + the QueryBuilder (C3 producer). A user types → we mint session/turn ids → build a
-schema-valid **C3 UserPrompt** → call inference `/infer` streaming → **relay the C9 stream
-straight back to the browser unchanged**. No personalization, no capture, no extra
+schema-valid **C3 UserPrompt** → call inference `/infer` streaming → *relay the C9 stream
+straight back to the browser unchanged*. No personalization, no capture, no extra
 modalities/surfaces.
 
 ## Done
@@ -29,7 +29,7 @@ modalities/surfaces.
     answer + `U+001E` + end frame) so the browser always gets a parseable stream, not a 500.
 - **Surface** (`app/static/index.html` + `app/static/app.js`): textbox, Send, answer area.
   JS reads the fetch stream, splits on `U+001E`, renders the answer, shows end-frame usage.
-  **Markdown seam left explicit**: `renderAnswer` uses `textContent` (plain text) with a
+  *Markdown seam left explicit*: `renderAnswer` uses `textContent` (plain text) with a
   clear comment that the integrator wires in output's `services/output/app/static/c9_reader.js`
   for C9 parsing + markdown — no markdown lib duplicated here.
 - **Tests (19, all green)**: `test_query_builder.py` (C3 validates against the JSON Schema,
@@ -51,7 +51,7 @@ modalities/surfaces.
   injection into the C3; clarification-answer C3 variant (mentor relay return leg).
 
 ## Gotchas / decisions
-- **Scope pinned:** computer **text** surface only. Other surfaces + non-text modalities are
+- **Scope pinned:** computer *text* surface only. Other surfaces + non-text modalities are
   explicitly deferred (charter M3 / later slices).
 - **user_id:** C3 requires it but `/api/turn` has no auth in v0. Accept optional `user_id` in
   the body; default to `DEV_USER_ID` env (`dev-user`). Real identity is platform's later.
