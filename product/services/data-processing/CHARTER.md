@@ -3,6 +3,10 @@
 > The normalization layer of Nucleus v0: raw captured streams in, structured / timestamped /
 > enriched records out. Stable doc — working state lives in [HANDOFF.md](HANDOFF.md);
 > system-wide architecture + contracts in [../../ARCHITECTURE.md](../../ARCHITECTURE.md).
+>
+> **New to the service?** Start with the interactive onboarding field guide —
+> [onboarding/field-guide.html](onboarding/field-guide.html), hosted at
+> <https://claude.ai/code/artifact/760e18ff-2eb1-47e9-9b0d-c305fde223d4> — then come back here.
 
 > ### ⚠️ STAGE: PROTOTYPE (pre-dev, pre-production) — D19, 2026-07-27
 > This charter is written in a production voice. **It is aspirational, not a commitment.** We are
@@ -16,7 +20,7 @@
 > Full posture + what changes at dev/prod: [ARCHITECTURE.md](../../ARCHITECTURE.md) §Stage.
 
 
-**Status:** chartered · **Last updated:** 2026-07-27 ·
+**Status:** chartered · **Last updated:** 2026-07-29 (onboarding field-guide link added) ·
 [D18](../../DECISIONS.md) / [D19](../../DECISIONS.md) / [D20](../../DECISIONS.md)
 
 - **2026-07-27** — C2 gains an additive-optional `discriminator`, surfaced so storage's day-log
