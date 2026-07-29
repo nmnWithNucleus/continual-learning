@@ -12,7 +12,7 @@
 
 ## Build log — WS-D (primary)
 
-Tab **D2** (the CLIPCAP primary, multi-image payload, parse ladder, emit). Branch `svc/vc-ws-d`,
+Tab **D2** (the `CLIPCAP` primary, multi-image payload, parse ladder, emit). Branch `svc/vc-ws-d`,
 shared worktree with tab D1 (Foundation: `config.py` clip fields, `version.py`, `budget.py`,
 `prompts/`). D1's foundation landed on disk first; this tab imported it. **Suite: 294 passed**
 (173 legacy baseline unchanged + D1's tests + **67 D2 tests**: 39 `test_parse.py`, 28
@@ -20,7 +20,7 @@ shared worktree with tab D1 (Foundation: `config.py` clip fields, `version.py`, 
 fixtures stay green.
 
 **Landed (D2-owned, all under `app/vision/` — no shared-core edits):**
-- `app/vision/parse.py` — the tolerant parse ladder (§5.3), a PURE function of the reply. Rungs
+- `app/vision/parse.py` — the tolerant parse ladder (§5.3), a pure function of the reply. Rungs
   `clean|stripped|repair|keys|partial|line|whole`; only `clean` is not a fallback; empty `RAISES`
   `EmptyReplyError` (a `ValueError`, matches `vlm.py:119-121`). Counting is the caller's job (the
   ladder returns `ParseOutcome.step`), so it stays pure. Handles fenced / prose / truncated-mid-JSON
@@ -29,7 +29,7 @@ fixtures stay green.
 - `app/vision/clipcap/{__init__,mock,vlm,vertex}.py` — the backend seam (`select` on `VIDEO_BACKEND`,
   unknown→mock). `mock` (`vidclip-mock-v1`, `prompt_tag=""`, text from `(n_frames,span,chunk_id)`
   only — never pixels/OCR/prompt). `vlm` (`vidclip-vlm-v1`): the D-02 ONE multi-image call — K
-  `image_url` parts with `Frame k (+t.s):` labels interleaved, task+JSON contract LAST, D-09 OCR
+  `image_url` parts with `Frame k (+t.s):` labels interleaved, task+JSON contract last, D-09 OCR
   injected as `[[ocr_block]]`, `temperature 0`, async loop-native `httpx.AsyncClient` (0 threadpool
   tokens, §7.4), pack-variant selection (single/idle/scenario), parse-ladder integration with
   `dp_video_parse_fallback_total{pack,step}` + `dp_video_truncated_total{pass}` (null-guarded).
@@ -51,8 +51,8 @@ frame labels + task last ✓; version composition (`PIPELINE_VERSION+prompt_tag+
 
 ## Build log — WS-D (pack)
 
-Tab **D1** (the PROMPT PACK, config, and version plumbing — the modules D2 imports). Branch
-`svc/vc-ws-d`, shared worktree with tab D2. Landed the module files + public signatures FIRST so D2
+Tab **D1** (the prompt pack, config, and version plumbing — the modules D2 imports). Branch
+`svc/vc-ws-d`, shared worktree with tab D2. Landed the module files + public signatures first so D2
 could build against them; D2's section above confirms the seam end to end (its verified dialects
 `vidclip-vlm-v1@screen-clip-v1.p1.<digest8>#<cfg8>` and mock `vidclip-mock-v1#<cfg8>` are exactly this
 tab's `prompts.version_tag(vs)` + `version.cfg_tag(vs)`). **Suite: 300 passed** (173 legacy baseline
@@ -72,8 +72,8 @@ stages dormant by default (`VIDEO_PIPELINE=keyframe`), so legacy fixtures stay g
   OPERATIONAL_ONLY (an endpoint move / a frozen-`""`-dialect legacy knob cannot change a clip
   record's bytes; folding them would be a self-inflicted double-count).
 - `app/vision/prompts/**` — the git-tree pack registry (D-13). `PACK_DIGEST` = sha8 over the
-  NORMALISED specs (id+role+decode params+**schema**+system+user, line-endings/trailing-ws
-  canonicalised) + `routes.json`, loaded ONCE at import. `select`/`version_tag` both go through one
+  Normalised specs (id+role+decode params+**schema**+system+user, line-endings/trailing-ws
+  canonicalised) + `routes.json`, loaded once at import. `select`/`version_tag` both go through one
   `_resolve_pack_id` (unknown / non-clip `VIDEO_CLIP_PROMPT` → pinned clip default; never fork, never
   collide, never render the wrong family). Six `.prompt.md` packs authored per §5
   (`screen-clip-v1`, `screen-clip-idle-v1`, `screen-clip-single-v1`, `screen-ocr-v1`, `camera-clip-v1`,
@@ -85,14 +85,14 @@ stages dormant by default (`VIDEO_PIPELINE=keyframe`), so legacy fixtures stay g
 
 **Exit criteria met headless (§11 WS-D, pack half):** PACK_DIGEST stable across whitespace/CRLF/
 trailing-newline, forks on text/decode-param/**schema**/route edits ✓; unknown `VIDEO_CLIP_PROMPT` →
-pinned default in BOTH `select()` and `version_tag()` ✓; mock corpus not re-keyed by a prompt edit
+pinned default in both `select()` and `version_tag()` ✓; mock corpus not re-keyed by a prompt edit
 (`cfg_tag` never folds `PACK_DIGEST`; `prompt_dir_fingerprint==""` packaged) ✓;
 `OUTPUT_AFFECTING|OPERATIONAL_ONLY==fields`, and the check fails on an unclassified field ✓; one byte
 of a `.prompt.md` → `pipeline_version` → `record_id` end to end ✓; `show` prints exact wire text,
 `relock` bumps+archives ✓; packs load once per process, never re-stat'd ✓.
 
 **Adversarial verification (17-agent fan-out review, 5 lenses × refute-by-default):** 1 confirmed
-defect FIXED — `family_default()` could return the hardcoded default even when a `VIDEO_PROMPT_DIR`
+defect fixed — `family_default()` could return the hardcoded default even when a `VIDEO_PROMPT_DIR`
 override omitted it, so `version_tag()` (`ACCEPT`) and `select()` (RUN) could diverge and crash a
 worker; now `load_registry` **validates that `routes.json` references only loaded packs and fails
 loud at import** (honouring the module's own "a bad drop-in fails loud" promise) and `family_default`
@@ -102,7 +102,7 @@ provably returns a loaded `role=='clip'` pack. Hardening from refuted-but-valid 
 
 **Flag for D3 / lead (design tension, NOT reclassified):** `structured_mode` (guided-decoding
 toggle) sits in OPERATIONAL_ONLY per the ratified allowlist (D-13 line 450), yet §5.3 calls guided
-decoding "the primary discipline lever" that can move a WEAK model's output at the tail — an
+decoding "the primary discipline lever" that can move a weak model's output at the tail — an
 O-7-class question. The parse ladder is designed to make guided/unguided converge to the same
 `ClipDesc`, and the schema itself already forks via `PACK_DIGEST`, so it is kept per spec; surfaced
 here rather than reclassified unilaterally.
@@ -122,12 +122,12 @@ WS-C `screentext` being *registered*, because stagegraph `_discover` (`stage.py:
 declared `need` names an unregistered stage — landing it early turns the whole suite red. Draft is
 ready (scratchpad `clipcap_stage_DRAFT.py`); a watcher lands it when both deps register. The stage is
 a thin wrapper (seam call + `emit.caption_unit`); every record-contract exit criterion is already
-proven via `emit.caption_unit`+`build_c2` without it. `CONFIRMED` WIRING as specified: primary/required,
+proven via `emit.caption_unit`+`build_c2` without it. `CONFIRMED` wiring as specified: primary/required,
 order 20, `needs=("clipprep","screentext")`, `provides=("clip",)`, `mutable_slots=("enrichments",)`,
 `enabled()==resolve_pipeline()=="clip"`.
 
 **Integration risk for the consolidation tab (NOT WS-D's to fix):** the design's `clipprep` order 0
-and `screentext` order 10 COLLIDE with legacy `keyframes`(0)/`captions`(10) under the per-modality
+and `screentext` order 10 collide with legacy `keyframes`(0)/`captions`(10) under the per-modality
 order-uniqueness check (`stage.py:260-266`) — landing them at 0/10 while legacy holds 0/10 breaks
 discovery for everyone. WS-G's gate or an order re-plan must resolve it; `clipcap`(20) is unique and
 unaffected. Also: WS-G's `enabled()` gate on `keyframes`/`captions` is not yet on disk, so in `clip`
@@ -159,8 +159,8 @@ D3 touched only WS-D-owned files (`app/vision/config.py`, `app/vision/version.py
 | 8 | `content.text` has no `\n` and respects `caption_cap(span, vs)` | **`PASS`** | same consolidation test (asserts `"\n" not in text`, `len(text) <= caption_cap`) + `test_clipcap.py::test_render_is_single_line_and_within_budget` |
 | 9 | Parse ladder over malformed replies (fenced / prose-prefixed / truncated mid-JSON / wrong-keys / refusal / prompt-echo / empty); every fallback counted; empty `RAISES` | **`PASS`** | `test_parse.py` (39 tests, all seven categories present) + `test_clipcap.py` fallback-counting + `test_vlm_empty_reply_raises` |
 | 10 | `python -m app.vision.prompts show` prints exact wire text; `relock` bumps + archives | **`PASS`** | Ran firsthand: `show --pack screen-clip-v1` printed system+user + tag `@screen-clip-v1.p1.565066a0`; `relock <tmpcopy>` bumped `p1→p2`, wrote `archive/p2.json` + `LOCK.json` (committed tree untouched) |
-| 11 | Request carries K `image_url` parts with `Frame k (+t s):` labels interleaved, task text LAST | **`PASS`** | `test_clipcap.py::test_vlm_payload_interleaves_frames_and_puts_task_last` (+ the `rfind` split-steal regression test) |
-| — | Real-backend (vLLM) integration test | **DEFERRED (not `FAIL`)** | Gated on **E-3(a) / WS-A's `vlm_probe.py`** per §11; every criterion above runs headless. The production wire (D-02 multi-image payload, `response_format`, parse ladder) is covered against an `httpx.MockTransport` fake VL server, so only the live-endpoint assertion waits on the probe |
+| 11 | Request carries K `image_url` parts with `Frame k (+t s):` labels interleaved, task text last | **`PASS`** | `test_clipcap.py::test_vlm_payload_interleaves_frames_and_puts_task_last` (+ the `rfind` split-steal regression test) |
+| — | Real-backend (vLLM) integration test | **Deferred (not `FAIL`)** | Gated on **E-3(a) / WS-A's `vlm_probe.py`** per §11; every criterion above runs headless. The production wire (D-02 multi-image payload, `response_format`, parse ladder) is covered against an `httpx.MockTransport` fake VL server, so only the live-endpoint assertion waits on the probe |
 
 **All 11 headless exit criteria `PASS`.** The single deferred item is the E-3(a)-gated live-VLM test,
 which is explicitly out of WS-D's headless scope.
@@ -231,7 +231,7 @@ E-3(b) stands up the captioner endpoint. Each claim in the report carries instal
 
 **Findings (all four probes `PASS` on source evidence; zero *mandatory* launch-flag changes):**
 
-1. **`--limit-mm-per-prompt` — DESIGN ASSUMPTION CORRECTED.** The premise "default is commonly
+1. **`--limit-mm-per-prompt` — Design assumption corrected.** The premise "default is commonly
    `image=1`, so the multi-image call 400s unless raised" is **false for vLLM 0.24.0**: the image cap
    **defaults to 999** (`config/multimodal.py:80,84,320-322`) and Qwen3-VL's model-side supported
    limit is `None`/unlimited (`qwen2_vl.py:868-869`, inherited by `qwen3_vl.py`). **K≤12 images in one
@@ -246,7 +246,7 @@ E-3(b) stands up the captioner endpoint. Each claim in the report carries instal
    default is documented as changing across releases).
 3. **768×480 → exactly 360 tokens (factor 32), no clamp.** patch 16 × merge 2 = 32
    (`config.json`; smart_resize `factor=32` overrides the legacy 28, `image_processing_qwen2_vl.py:174`
-   / `qwen3_vl.py:929`). `preprocessor_config` `size={65536,16777216}` are AREA min/max_pixels; a
+   / `qwen3_vl.py:929`). `preprocessor_config` `size={65536,16777216}` are area min/max_pixels; a
    768×480 frame (368,640 px) sits ~45× under the cap ⇒ not downscaled. The factor-28 (≈470) and
    "materially lower/clamping" branches do **not** fire. *(Adversarial verdict: `UPHELD`, high
    confidence — survives even the video-path cap.)* `1280×800` = **1000 tok** (2.78× of 768 — A-16's
@@ -512,7 +512,7 @@ circuit-breaker module. **Files touched — WS-F's four owned files, plus one fo
   HALF_OPEN forever — a permanent fast-fail *worse* than the outage — so an admitted probe older than
   one cooldown is re-admitted. Bounds the worst-case wedge to one cooldown regardless of consumer bugs.
 
-**One judgement call this build.** The EXIT line reads *"all new counters visible on `/metrics` at
+**One judgement call this build.** The exit line reads *"all new counters visible on `/metrics` at
 zero before any traffic"*. A declared-but-never-incremented counter renders **nothing** in this
 registry (`metrics.py:180`; `test_metrics.test_empty_histogram_and_counter_emit_nothing`), so
 "visible at zero" = "seeded". I seed all four parent-side series per registered modality **and** the
@@ -550,7 +550,7 @@ consumer never records its probe — was worth hardening against regardless: hen
 self-heal above (`test_circuit_half_open_stale_probe_self_heals`). The `dp_video_ocr_events` type note
 above is the other.
 
-**EXIT criteria — each proven in `tests/test_metrics_video.py`:**
+**Exit criteria — each proven in `tests/test_metrics_video.py`:**
 - all new counters visible at zero before traffic → `test_new_counters_visible_at_zero_before_any_traffic`
   (parent-side + the three unlabelled stage-side; labelled/histograms asserted absent-until-emit);
 - `/health` reports the dialect → `test_health_reports_video_dialect_and_freeze_off_by_default`,
@@ -579,7 +579,7 @@ change events, rank-free cap, chunk-local), the deterministic caption frame coun
 `app/stages/video/clipprep.py`, `scripts/calibrate_delta.py`, `tests/conftest_video.py`,
 `tests/test_clipprep.py`, `tests/test_delta.py`. Imports `Frame`/`DeltaCell`/`Delta`/
 `ClipFrames` from `clip_types.py` and `resolve_pipeline` from `mode.py`; never touched
-`result.py`, `config.py`, or any shared core (per the LEAD CORRECTION — the clip shapes live
+`result.py`, `config.py`, or any shared core (per the lead correction — the clip shapes live
 in the committed `clip_types.py`, not a WS-B-owned `result.py`).
 
 **Exit criteria — status (all met):**
@@ -589,24 +589,24 @@ in the committed `clip_types.py`, not a WS-B-owned `result.py`).
   fixtures pinned to **1440×900**, solidly mid-band. The floor assertion's failure message
   names the ffmpeg-build cause (the design pins ffmpeg, §8 A-2) since clipprep never
   post-processes the value.
-- The six §D-04 calibration vectors reproduce as content CLASSES (idle / typing / layout /
+- The six §D-04 calibration vectors reproduce as content classes (idle / typing / layout /
   switch) with the two exact anchors — floor 2 and app-switch 255/1024. Exact real-footage
   magnitudes (typing 11–19 etc.) are O-1 measurements on real capture, not reproducible from
   synthetic lavfi; each fixture's own measured signature is recorded beside its builder, and a
-  dedicated test proves the D-04 mechanism claim (a whole-frame MEAN is blind to typing —
+  dedicated test proves the D-04 mechanism claim (a whole-frame mean is blind to typing —
   measured 0 — while binarize-then-max recovers it at 18–32).
 - Two runs over one fixture → byte-identical `ClipFrames` + `Delta` — asserted (hashes both
   JPEG renditions + the full `Delta`; holds even across a fresh libx264 rebuild).
 - Requesting a frame the stream lacks **`RAISES`** (`FrameCountError`) — asserted at the Pass-B
   guard AND at the stage level (never masked by the synthetic fallback).
-- `ffprobe` and `scene` appear NOWHERE in the clip source — grep-asserted (production files +
+- `ffprobe` and `scene` appear nowhere in the clip source — grep-asserted (production files +
   the fixture builders).
 - ffmpeg-absent under a non-mock backend raises; under mock → synthetic fallback — asserted.
 - `calibrate_delta.py` prints the peak/spread histograms + events/chunk per candidate
   `VIDEO_OCR_IDLE_PEAK` — asserted by a smoke test.
 - Fixtures generated at test time via `ffmpeg lavfi`; NO binaries committed.
 
-**Frame selection is by EXACT PRESENTATION TIMESTAMP, not a rate-derived index.** An initial
+**Frame selection is by exact presentation timestamp, not a rate-derived index.** An initial
 `eq(n, round(t·fps))` model (fps from `duration_time`) was replaced after an adversarial review
 (below) confirmed it is a **CFR poison-pill**: on variable-frame-rate capture (macOS
 ScreenCaptureKit emits frames only on change) mp4 pins a constant timebase, so `duration_time`
@@ -620,11 +620,11 @@ regression fixture pins this. The caption still takes a span-driven count `K =
 clamp(ceil(span/2.5),2,12)` — now K frames evenly spaced across the frames the delta pass
 decoded, rather than at exact grid times.
 
-**DEVIATION — `clipprep` order (for lead/WS-G at integration):** §2.1 assigns `order 0`, but
+**Deviation — `clipprep` order (for lead/WS-G at integration):** §2.1 assigns `order 0`, but
 legacy `keyframes` still holds `order 0` and `register_stage` enforces per-modality order
-uniqueness UNCONDITIONALLY (`stage.py:260-266`), so `order 0` fails discovery and reddens the
-suite on this pre-integration branch. `order` is behaviourally INERT for a unit-less sidecar
-(execution is needs-driven; order only sequences EMITTED-unit assembly), so it is registered at
+uniqueness unconditionally (`stage.py:260-266`), so `order 0` fails discovery and reddens the
+suite on this pre-integration branch. `order` is behaviourally inert for a unit-less sidecar
+(execution is needs-driven; order only sequences emitted-unit assembly), so it is registered at
 **order 5** (any value ∉ {0,10}). WS-C's `screentext` (design order 10) hits the identical
 collision with `captions` (10) on its own branch — integration should renumber the legacy pair
 (freeing 0/10/20 for the clip cohort), OR relax the order check to per-enabled-cohort (WS-E2's
@@ -641,7 +641,7 @@ graph is byte-unchanged (`vidproc-mock-v0`).
 knob is read via a local `os.getenv` helper in `clip.py`, each marked
 `# TEMP -> VisionSettings (WS-D owns config.py)`. The `vision_settings` slot is a
 `ClipVisionSettings` bundling the shipped base `VisionSettings` (read, not edited) with the clip
-knobs; attribute reads resolve base fields then clip knobs, so both read at the TOP LEVEL
+knobs; attribute reads resolve base fields then clip knobs, so both read at the TOP level
 (`vs.backend`, `vs.seconds_per_frame`) — exactly the shape WS-D's folded `VisionSettings` will
 expose. Selector defaults pinned to §D-07/§8: `IDLE_PEAK=8`, `LAYOUT_PEAK=40`, `MAX_EVENTS=3`,
 `FLOOR_S=120`; binarize threshold 24, spread cell threshold 13.
@@ -732,17 +732,17 @@ section. **Zero shared-core edits** (`main.py`/`ingest_core.py`/`pipeline.py`/`p
 | 2 | DP asserts sidecar `/health` shas vs config, fails loud on mismatch | `ocr.assert_health` → `ppocr.assert_health` (per-process cached), called at the top of `screentext.run_sync` before any read/record; `test_ppocr_assert_health_*`, `test_ppocr_health_mismatch_fails_the_stage` |
 | 3 | 6 redaction cases → `[redacted:secret]` + counter | `redact.py`; `test_redaction_each_secret_case` (AWS/`sk-`/`ghp_`/base64/PEM/Luhn); `dp_ocr_redactions_total` via `test_redaction_counter_incremented` |
 | 4 | rendered text contains no `\n` | `assemble._normalize_text` collapses all whitespace; asserted in `test_render_is_single_line_*` + every `_assert_single_ocr_unit` |
-| 5 | exactly one `kind='ocr'` unit ALWAYS, `discriminator="ocr"`, `t_start=None`, empty when nothing legible | `screentext.run_sync` emits one unit unconditionally; `test_*` for mock/off/no-frames/unknown (off & no-frames → `""`) |
+| 5 | exactly one `kind='ocr'` unit always, `discriminator="ocr"`, `t_start=None`, empty when nothing legible | `screentext.run_sync` emits one unit unconditionally; `test_*` for mock/off/no-frames/unknown (off & no-frames → `""`) |
 | 6 | per-frame error absorbed + counted, `>50%` raises | `test_minority_frame_errors_absorbed_and_counted` (`dp_ocr_frame_errors_total`), `test_majority_frame_errors_raises` |
-| 7 | unknown backend → `off` in BOTH `select()` and `version_tag()` | `test_unknown_backend_is_off_in_both_resolvers` |
+| 7 | unknown backend → `off` in both `select()` and `version_tag()` | `test_unknown_backend_is_off_in_both_resolvers` |
 | 8 | stage disabled-by-default (clip mode) | `enabled() = resolve_pipeline()=="clip"`, default `keyframe`; `test_enabled_only_in_clip_mode`; video discovery stays `[keyframes, captions]` |
 
 ### Decisions worth flagging
 
-- **`off` carries a NON-EMPTY fragment (`+ocr-off-v1`).** Deliberate divergence from the `diarize`
-  precedent (a mutate, `off`→`""`). `screentext` is a *fragment-bearing sidecar that FEEDS the caption*
+- **`off` carries a NON-Empty fragment (`+ocr-off-v1`).** Deliberate divergence from the `diarize`
+  precedent (a mutate, `off`→`""`). `screentext` is a *fragment-bearing sidecar that feeds the caption*
   (`provides=("ocr_text",)`, always enabled in clip mode), so §4.3 **R1** requires a non-empty fragment in
-  EVERY enabled config — `off`/unknown included. `off` is an honest dialect ("OCR configured off for this
+  Every enabled config — `off`/unknown included. `off` is an honest dialect ("OCR configured off for this
   chunk", A-10), not stage-disablement. **WS-E's law-as-test must accept this as correct, not flag it.**
 - **Registration is sibling-gated.** The frozen `needs=("clipprep",)` would fail the stage-discovery
   existence check on a WS-C-only branch (clipprep is WS-B's, absent here) and take the whole suite red.
@@ -752,7 +752,7 @@ section. **Zero shared-core edits** (`main.py`/`ingest_core.py`/`pipeline.py`/`p
   Edits only `screentext.py` — no sibling file, no merge surface.
 - **Health assertion timing.** `executor.resolve()` is WS-E2's shared-core file (not editable here), so
   the `/health` sha assertion runs at the *start* of `screentext.run_sync` — before any read and before
-  assembly. A mismatch fails the chunk loud with NOTHING written, the corpus-safety guarantee D-06 asks for.
+  assembly. A mismatch fails the chunk loud with nothing written, the corpus-safety guarantee D-06 asks for.
 - **Config shim.** `app/vision/ocr/config.py` holds the `VIDEO_OCR_*` knobs (each marked
   `# TEMP -> VisionSettings (WS-D)`); `ocr_cap`/`truncate_word` are stubbed locally in `assemble.py`
   (D-11's 6 chars/s OCR share). `select()`/`version_tag()` key off `cfg.ocr_backend`, name-compatible with
@@ -799,7 +799,7 @@ fixing — see reconciliation below; the source is left exactly as the two build
   this branch (clip-mode default is `keyframe`; `screentext` auto-registers only once WS-B `clipprep`
   lands), so the legacy graph is unaffected.
 - **Sidecar tests** (`sidecars/ocr/`, C1's separate venv): **17 passed, 1 skipped** — the skip is the
-  `ppocr`-ENGINE test (no ONNX model venv in this headless box; O-2 ran the real engine elsewhere and
+  `ppocr`-Engine test (no ONNX model venv in this headless box; O-2 ran the real engine elsewhere and
   committed `bakeoff/REPORT.md`). The mock + wire + scorer tests all pass on a bare `python3`.
 
 ### §11 WS-C exit criteria — PASS / FAIL (the full list)
@@ -807,10 +807,10 @@ fixing — see reconciliation below; the source is left exactly as the two build
 | # | criterion | verdict | evidence |
 |---|---|---|---|
 | 1 | `mock` needs no network / no GPU / no new DP dep; full DP suite green with `VIDEO_OCR_BACKEND=mock` | **`PASS`** | default backend `mock` (`ocr/config.py:85`); `ocr/mock.py` `make_client`→`None` (reaches no socket) and keys off `(chunk_id, frame.index)` only; `requirements.txt` unchanged (httpx already a base dep); suite → **225 passed** |
-| 2 | `/health` returns both model shas + ORT version + EP; DP asserts them vs config **at graph resolution**, fails loud on mismatch | **`PASS` in substance — ⚠ placement flagged (L‑1)** | sidecar `/health` → `{ok, model_sha_det, model_sha_rec, ort_version, ep, engine}` (real 64‑hex shas + `ort 1.27.0` + `CPUExecutionProvider` in ppocr; sentinel `"mock"` / `null` in mock) — verified over the REAL wire (`test_sidecar_health_shape_over_the_wire`) and by C1 `test_app.py`. DP `ocr.assert_health → ppocr.assert_health` **`RAISES` on mismatch** (cached per‑process); proven over the real socket by `test_pinned_sha_mismatch_fails_loud_over_the_real_wire`, and via MockTransport by `test_ppocr_health_mismatch_fails_the_stage` / `test_ppocr_assert_health_raises_on_sha_mismatch`. **The assertion runs at `screentext.run_sync`'s FIRST line — before any read / assemble / emit — not literally inside `executor.resolve()`; see flag L‑1.** |
+| 2 | `/health` returns both model shas + ORT version + EP; DP asserts them vs config **at graph resolution**, fails loud on mismatch | **`PASS` in substance — ⚠ placement flagged (L‑1)** | sidecar `/health` → `{ok, model_sha_det, model_sha_rec, ort_version, ep, engine}` (real 64‑hex shas + `ort 1.27.0` + `CPUExecutionProvider` in ppocr; sentinel `"mock"` / `null` in mock) — verified over the real wire (`test_sidecar_health_shape_over_the_wire`) and by C1 `test_app.py`. DP `ocr.assert_health → ppocr.assert_health` **`RAISES` on mismatch** (cached per‑process); proven over the real socket by `test_pinned_sha_mismatch_fails_loud_over_the_real_wire`, and via MockTransport by `test_ppocr_health_mismatch_fails_the_stage` / `test_ppocr_assert_health_raises_on_sha_mismatch`. **The assertion runs at `screentext.run_sync`'s first line — before any read / assemble / emit — not literally inside `executor.resolve()`; see flag L‑1.** |
 | 3 | Redaction: 6 cases (AWS key, `sk-`, `ghp_`, base64 blob, PEM header, Luhn card) → `[redacted:secret]`, counter incremented | **`PASS`** | `ocr/redact.py`; `test_redaction_each_secret_case` (all 6, exactly-once) + `test_render_redacts_and_counts_through_the_pipeline`; through-stage counter `dp_ocr_redactions_total` via `test_redaction_counter_incremented` |
 | 4 | Rendered text contains **no `\n`** — asserted | **`PASS`** | `assemble._normalize_text` collapses all whitespace incl. `\n`/`\r`, re-applied belt-and-braces in `render`; `test_render_is_single_line_even_with_embedded_newlines` + every `_assert_single_ocr_unit` (C2) / `_assert_frozen_ocr_shape` (C3) |
-| 5 | Exactly one `kind='ocr'` unit ALWAYS — `discriminator="ocr"`, `t_start=None`; `content.text==""` when nothing legible | **`PASS`** | `screentext.run_sync` emits one unit unconditionally; C2: `test_mock_backend_emits_one_ocr_unit_with_text`, `test_off_backend_still_emits_one_empty_ocr_unit`, `test_no_ocr_frames_still_emits_one_empty_unit`, `test_unknown_backend_behaves_like_off`; C3 over the real wire: `test_ppocr_over_real_sidecar_emits_one_ocr_record`, `…_through_the_executor` |
+| 5 | Exactly one `kind='ocr'` unit always — `discriminator="ocr"`, `t_start=None`; `content.text==""` when nothing legible | **`PASS`** | `screentext.run_sync` emits one unit unconditionally; C2: `test_mock_backend_emits_one_ocr_unit_with_text`, `test_off_backend_still_emits_one_empty_ocr_unit`, `test_no_ocr_frames_still_emits_one_empty_unit`, `test_unknown_backend_behaves_like_off`; C3 over the real wire: `test_ppocr_over_real_sidecar_emits_one_ocr_record`, `…_through_the_executor` |
 | 6 | Per-frame OCR error absorbed + counted; **>50% erroring `RAISES`** | **`PASS`** | `test_minority_frame_errors_absorbed_and_counted` (`dp_ocr_frame_errors_total`), `test_majority_frame_errors_raises` |
 | 7 | `VIDEO_OCR_BACKEND` unknown → `off` in **both** `select()` and `version_tag()` — asserted | **`PASS`** | single `_resolve` drives both; `test_unknown_backend_is_off_in_both_resolvers` (select→`None`, version_tag→`+ocr-off-v1`, non-empty per R1), `test_version_fragment_tracks_backend` |
 | 8 | **O-2 bake-off report committed** (WS-C is the workstream that produces it) | **`PASS`** | `sidecars/ocr/bakeoff/REPORT.md` + harness (`run_bakeoff.py`, `score.py`, `gen_corpus.py`, `ablate_crf.py`, `ground_truth.json`, `results.json`) + `bakeoff/test_score.py` (scorer green). Verdict recorded below |
@@ -869,7 +869,7 @@ Per `sidecars/ocr/bakeoff/REPORT.md`: the PP‑OCR det+rec ONNX the sidecar serv
 204‑frame synthetic macOS-UI proxy through a real x264 CRF‑28 encode** — key-string recall **0.988**
 (micro, lenient substring — the gate metric), CER **0.070** at 1728 px (`@1152` is weaker: 0.869 /
 0.074, and two of six archetypes — browser, slack — breach the CER half per-archetype even at 1728).
-**But the O‑2 gate is defined over ~200 hand-labelled REAL macOS frames**, which a headless build cannot
+**But the O‑2 gate is defined over ~200 hand-labelled real macOS frames**, which a headless build cannot
 capture, and the proxy is likely optimistic (Liberation fonts ≠ SF Pro/CoreText, no real screen noise).
 **The gate is therefore NOT satisfied.**
 
@@ -957,7 +957,7 @@ Tab **D3** again, after the lead put WS-A/B/C/F/G on `svc/video-clip`. Merged th
 `svc/vc-ws-d`, reconciled the config seam, landed the `HELD` `clipcap` primary, and lit clip mode
 up end to end. **Suite: 465 passed** (was 304 WS-D-only; +155 from WS-A/B/C/F/G, +6 new clip-E2E).
 Clean code merge — WS-D touches none of clipprep/screentext/captions/keyframes/main; only
-`handoff/ws-video-clip.md` conflicted and was resolved by KEEPING ALL build-log blocks (WS-A…G).
+`handoff/ws-video-clip.md` conflicted and was resolved by keeping ALL build-log blocks (WS-A…G).
 
 **1 — Merge.** `git merge svc/video-clip`. D1's `config.py`/`mode.py`/`clip_types.py` survive
 unchanged (that branch never touched them), so the real `VisionSettings` wins and WS-B/WS-C's local
@@ -970,7 +970,7 @@ classified `VisionSettings` fields — including `ocr_model` (OUTPUT_AFFECTING) 
 real hole found and closed:** WS-C's OCR assembler budgeted on its OWN `VIDEO_OCR_CHARS_PER_SECOND`
 (on `OcrConfig`, invisible to `cfg_tag`) — an output-affecting knob that could rewrite the `ocr`
 record's bytes under an unchanged `record_id` (the silent `/context` overwrite D-13 exists to close).
-Per D-11 the OCR rate is DERIVED (`total − caption_share`), not an independent dial, so `get_ocr_config`
+Per D-11 the OCR rate is derived (`total − caption_share`), not an independent dial, so `get_ocr_config`
 now reads the canonical `VIDEO_CHARS_PER_SECOND` / `VIDEO_CAPTION_CHARS_SHARE` (both OUTPUT_AFFECTING,
 so `cfg_tag` forks on them); defaults `22−16=6` preserve behaviour and match `budget._ocr_rate`. The
 `OUTPUT_AFFECTING | OPERATIONAL_ONLY == fields` completeness test still passes (49 fields). *Follow-up
@@ -988,7 +988,7 @@ which in clip mode holds WS-B's `ClipVisionSettings` bundle, not D1's flat `Visi
 captioner/emit/cfg_tag path speaks the flat one). Both are pure functions of the same per-chunk env,
 so the accept-time dialect and the run-time read agree.
 
-**4 — Full clip resolution verified** (`tests/test_clip_pipeline_e2e.py`, 6 tests, REAL discovery +
+**4 — Full clip resolution verified** (`tests/test_clip_pipeline_e2e.py`, 6 tests, real discovery +
 executor, not a hand-built stage list):
 - `stages_for("video")` lists all five at the locked band — `keyframes 0`, `clipprep 5`, `captions 10`,
   `screentext 15`, `clipcap 20` — **no duplicate order**.
@@ -1009,9 +1009,9 @@ executor, not a hand-built stage list):
   became a resolves-to-`clipcap` assertion.
 
 **5 — D3 exit checklist re-run against the integrated base: all `PASS`.** Every item from the earlier
-`## Build log — WS-D (consolidation · D3)` table holds unchanged (same green tests), now PLUS the live
+`## Build log — WS-D (consolidation · D3)` table holds unchanged (same green tests), now plus the live
 clip graph: the mock `clipcap` seam's one-frozen-caption criterion is proven a second way — through the
-REAL executor beside the real `screentext` OCR record — and criterion 6 (a `.prompt.md` byte forks
+Real executor beside the real `screentext` OCR record — and criterion 6 (a `.prompt.md` byte forks
 `record_id`) now forks the *composed* clip dialect, whose `@<pack>.p<N>.<digest>` half is asserted in
 the E2E. Default keyframe suite green; clip-mode E2E green.
 
@@ -1180,12 +1180,12 @@ pack text (`injected` vs `injected-corrupt`) fork anyway. Measured: 4 distinct `
   nothing to measure. `dp_caption_ungrounded_quote_total` (declared by WS-F, unwired, with a note
   deferring the definition to WS-H) should be fed by
   `prompt_ab.grounding(caption, ocr_text)["named_ungrounded"]`; the wiring is a WS-D/WS-F edit.
-* **O-8 is built, pre-registered, and UNRUN against a real model.** The rule (`ship A iff
+* **O-8 is built, pre-registered, and unrun against a real model.** The rule (`ship A iff
   recall_lift > 0.25 AND propagation_rate < 0.10, else ship D`) is asserted at all four corners of its
   decision table, is strict at the boundary, and returns **`UNDECIDED`** — never a verdict — under a mock
   captioner or an unlabelled corpus. Validated end to end against a local stub endpoint whose reply is
   a function of its rendered prompt: both halves of the rule bit, in opposite directions, on one run
-  (`recall injected 0.236 / blind 0.000`, `propagation 0.600` → SHIP D). **Those numbers are a harness
+  (`recall injected 0.236 / blind 0.000`, `propagation 0.600` → ship D). **Those numbers are a harness
   validation and say nothing about Qwen3-VL.** Running it for real needs one served captioner (E-3(a))
   plus `capture_chunkset.py synth --count 200` (~10 min, no capture, no binaries).
 * **O-4**: the mechanical half runs today via `--arms keyframe,injected` — the legacy per-frame graph

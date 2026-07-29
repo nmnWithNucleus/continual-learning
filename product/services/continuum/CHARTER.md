@@ -99,7 +99,7 @@ the product renderer over C2 records left for storage.
 
 **Why it's this way**
 
-- `app/morpheus/blocks.py:5-7` drew this boundary before the move was proposed — *"the ONLY
+- `app/morpheus/blocks.py:5-7` drew this boundary before the move was proposed — *"the only
   interface between ingest and consolidation… keeping that boundary narrow is what lets the day-log
   move behind a storage client without any kernel noticing."*
 

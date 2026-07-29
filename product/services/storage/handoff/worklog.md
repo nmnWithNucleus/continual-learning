@@ -14,7 +14,7 @@
 *The canvas was rewritten to describe today. Its prior text is kept here verbatim so no wire
 detail is lost; where it disagrees with the board, **the board is right** — this is history.*
 
-**Status:** serve-loop MVP (v0.0) built + tested + **integrated E2E** (integrator ran the live loop 2026-07-09: C4 written by inference, re-read by `turn_id` + `session_id`; C6 resolved base). **Learn-loop capture M0: `/raw` blob leg (C1) + `/context` store (C2) built + tested (26 pass) + integrated E2E + independently verified 2026-07-09** (blob-first + push loop live; idempotency proven on both legs); unchanged through the 2026-07-10 DP modality-seam pass; **32 tests** post-D17 · **Last updated:** 2026-07-26 (**D18** — scope expansion + C10 evolution RATIFIED, all **decided, not built**; see § RATIFIED below)
+**Status:** serve-loop MVP (v0.0) built + tested + **integrated E2E** (integrator ran the live loop 2026-07-09: C4 written by inference, re-read by `turn_id` + `session_id`; C6 resolved base). **Learn-loop capture M0: `/raw` blob leg (C1) + `/context` store (C2) built + tested (26 pass) + integrated E2E + independently verified 2026-07-09** (blob-first + push loop live; idempotency proven on both legs); unchanged through the 2026-07-10 DP modality-seam pass; **32 tests** post-D17 · **Last updated:** 2026-07-26 (**D18** — scope expansion + C10 evolution ratified, all **decided, not built**; see § ratified below)
 ### Current state
 - **Built (v0.0 serve-loop):** FastAPI + SQLite storage service on `:8083`. Endpoints:
   - `POST /sessions/turns` — validates a **C4** turn record against
@@ -63,11 +63,11 @@ detail is lost; where it disagrees with the board, **the board is right** — th
   directory is trivial (everyone → base, no adapter) until continuum ships C5 registration.
 
 ### Next
-- **✅ DONE (this session): capture slice (learn-loop MVP) storage M0.** C1 + C2 were **frozen**
+- **✅ done (this session): capture slice (learn-loop MVP) storage M0.** C1 + C2 were **frozen**
   (2026-07-09, D10/D11 — `../../contracts/c1_raw_stream_envelope.v0.json`,
   `c2_processed_record.v0.json`); storage M0 built the shared write targets (see Current state for
   the exact wire). One deviation from the earlier sketch below, pinned by the integrator's frozen
-  wire spec: **`GET /raw/blobs?ref=<blob_ref>` takes the ref as a QUERY param, not a path segment**
+  wire spec: **`GET /raw/blobs?ref=<blob_ref>` takes the ref as a query param, not a path segment**
   (`GET /raw/blobs/{blob_ref}`) — because a `blob_ref` may contain `/`. recording + data-processing
   must call the query-param form. Remaining fan-out: recording M0 (mic → `/raw` PUT → C1 emit) +
   data-processing M0 (C1 → ASR → C2 → `/context`) target these endpoints; integrator wires + runs
@@ -81,7 +81,7 @@ detail is lost; where it disagrees with the board, **the board is right** — th
 ### 2026-07-26 — the D18 build plan, as ratified
 
 *Relocated 2026-07-27 from the service canvas. **All of it is now built** (`a5a48fb`, 2026-07-27),
-so the section's own banner — "DECIDED, NOT BUILT. Nothing in this section exists in code" — had
+so the section's own banner — "ratified, NOT BUILT. Nothing in this section exists in code" — had
 become false where it sat. Kept verbatim for the build order and the reasoning behind it.*
 
 
@@ -113,7 +113,7 @@ become false where it sat. Kept verbatim for the build order and the reasoning b
    local path is not deleted until it is green.**
 5. **C13 registry + C14 reservoir**, then continuum's cutover.
 
-**Cutover act — WIPE, DO NOT MIGRATE (D19).** Everything captured so far is experiment output, not
+**Cutover act — Wipe, DO NOT migrate (D19).** Everything captured so far is experiment output, not
 user data, so the D18 `window_id` reformat costs nothing: there is no mixed-format ordering to
 defend, no seed discontinuity to reconcile, and the two `w-day5` C5 rows disappear rather than
 needing a rule. **Scope corrected 2026-07-27 after measuring it — the original wording would have destroyed
@@ -148,7 +148,7 @@ details in [CHARTER.md](../CHARTER.md) § Scope note + [../continuum/handoff/ws-
 - **Recipe registry** — versioned recipe/config hosting; fetch API for continuum + inference.
 - **Reservoir custody** — amplified-corpus store (continuum writes via API); replay re-reads prior
   day-logs, so this is audit/provenance, not the replay hot path.
-- ~~**C10 watermark semantics** (charter OQ, still open)~~ **DECIDED (D18):** the window watermarks
+- ~~**C10 watermark semantics** (charter OQ, still open)~~ **ratified (D18):** the window watermarks
   on **`ingest_time`**, not event time — which dissolves late data rather than handling it;
   `last_trained_t` advances **iff** `published`/`skipped_no_data`, making the failed-day merge
   structural; reprocessed records resolve **latest `ingest_time` wins** per
@@ -168,13 +168,13 @@ details in [CHARTER.md](../CHARTER.md) § Scope note + [../continuum/handoff/ws-
 
 ### 2026-07-09 — capture slice (learn-loop MVP) storage M0
 
-*Relocated 2026-07-27 from the canvas `§Next`, where it had sat as a struck-through DONE item.*
+*Relocated 2026-07-27 from the canvas `§Next`, where it had sat as a struck-through done item.*
 
-- **✅ DONE (this session): capture slice (learn-loop MVP) storage M0.** C1 + C2 were **frozen**
+- **✅ done (this session): capture slice (learn-loop MVP) storage M0.** C1 + C2 were **frozen**
   (2026-07-09, D10/D11 — `../../contracts/c1_raw_stream_envelope.v0.json`,
   `c2_processed_record.v0.json`); storage M0 built the shared write targets (see Current state for
   the exact wire). One deviation from the earlier sketch below, pinned by the integrator's frozen
-  wire spec: **`GET /raw/blobs?ref=<blob_ref>` takes the ref as a QUERY param, not a path segment**
+  wire spec: **`GET /raw/blobs?ref=<blob_ref>` takes the ref as a query param, not a path segment**
   (`GET /raw/blobs/{blob_ref}`) — because a `blob_ref` may contain `/`. recording + data-processing
   must call the query-param form. Remaining fan-out: recording M0 (mic → `/raw` PUT → C1 emit) +
   data-processing M0 (C1 → ASR → C2 → `/context`) target these endpoints; integrator wires + runs

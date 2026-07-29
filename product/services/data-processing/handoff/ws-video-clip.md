@@ -424,7 +424,7 @@ Post-read, chunk-local only (cross-chunk state is forbidden — a per-process bu
 
 ### D-09 — OCR-as-input: the captioner is told the text and forbidden to invent it.
 
-**Decision.** The rendered OCR strings are injected into the clip prompt under a labelled `## On-screen text (read by a specialist pass — input, not target)` block, governed by the POC's audio rule transposed (`generators.py:58-60`): **use it to NAME and ground what is visible; never copy it out; never state a name, number or string that does not appear above.**
+**Decision.** The rendered OCR strings are injected into the clip prompt under a labelled `## On-screen text (read by a specialist pass — input, not target)` block, governed by the POC's audio rule transposed (`generators.py:58-60`): **use it to name and ground what is visible; never copy it out; never state a name, number or string that does not appear above.**
 
 This converts the #1 hallucination class into a **mechanically checkable property**: every double-quoted span in the caption must appear (case-folded, whitespace-collapsed) in the injected OCR block. Shipped as an eval scorer *and* as a production counter `dp_caption_ungrounded_quote_total`. The POC had to buy a second frontier-model verification pass over 39,547 windows to approximate this; here it is free and exact.
 
@@ -436,7 +436,7 @@ It also resolves the low-res/high-res contradiction: the captioner reads layout 
 
 **Decision.** The caption is **one paragraph, one line, ≤ budget**. No per-interval lines.
 
-**Rejected — the POC's timeline shape** (10 lines × 83 words at the 1-min tier). It re-creates the 48-fragment problem inside the new record: 12 chunks × 4 mandated interval lines = 48 fragments per 2-min block, each still scoped to a 2.5 s window. And a mandated line count *punishes honesty*: on a static screen — measured SSIM 0.9998 — the model must pad ~440 chars per chunk to satisfy "EXACTLY N lines", which is precisely the redundancy this design exists to remove. The POC's own anti-padding rule does not transfer: a static screen has no "ambient context", only more UI chrome.
+**Rejected — the POC's timeline shape** (10 lines × 83 words at the 1-min tier). It re-creates the 48-fragment problem inside the new record: 12 chunks × 4 mandated interval lines = 48 fragments per 2-min block, each still scoped to a 2.5 s window. And a mandated line count *punishes honesty*: on a static screen — measured SSIM 0.9998 — the model must pad ~440 chars per chunk to satisfy "exactly N lines", which is precisely the redundancy this design exists to remove. The POC's own anti-padding rule does not transfer: a static screen has no "ambient context", only more UI chrome.
 
 Cross-frame reasoning is delivered by the paragraph ("types a two-point reply, sends it, then switches to Slack"), which is the actual goal-2 ask.
 
@@ -559,7 +559,7 @@ Apply to any signal **S** derived from one C1 chunk.
   *Mechanical test:* could two workers on different config both honestly claim to be right? If yes → fork, not edit.
 
 **T5 — `CHANNEL` / `SPAN`.** Does S own a frozen `kind` that routes to a different day-log line, **or** a span that is independently addressable at continuum's `segment_seconds`?
-→ **NEW `RECORD`** with its own discriminator. Otherwise it is a field of an existing record's text, or a stage-internal slot.
+→ **`NEW RECORD`** with its own discriminator. Otherwise it is a field of an existing record's text, or a stage-internal slot.
 
 **Fallthrough → `ENRICH`ment** (subject to T2) or **stage input**.
 
@@ -790,7 +790,7 @@ All four gates pass unmodified: DP schema (`ingest_core.py:167`), DP pydantic (`
 3. `product/services/storage/app/models.py:108-114` — `Enrichments` declares its four fields with **no defaults**
 4. `product/services/data-processing/app/models.py` — `C2Enrichments` uses `default_factory=list`
 
-Measured: **without the field declared, new records fail at *both* pydantic mirrors** (`extra_forbidden`) — DP's `default_factory` does nothing for an *undeclared* key. **Declared without a default, PRE-EXISTING records fail at the storage mirror** (missing). Both mirrors need `text_regions: list[Any] = Field(default_factory=list)`, and the deploy order is: mirrors first, then contract JSON, then DP emits. A mirror lag is an **uncaught `ValidationError` → HTTP 500** from `storage/app/main.py:159`, which DP classifies as **transient** → 3 retries → dead-letter → recording reads it as permanent data loss.
+Measured: **without the field declared, new records fail at *both* pydantic mirrors** (`extra_forbidden`) — DP's `default_factory` does nothing for an *undeclared* key. **Declared without a default, PRE-Existing records fail at the storage mirror** (missing). Both mirrors need `text_regions: list[Any] = Field(default_factory=list)`, and the deploy order is: mirrors first, then contract JSON, then DP emits. A mirror lag is an **uncaught `ValidationError` → HTTP 500** from `storage/app/main.py:159`, which DP classifies as **transient** → 3 retries → dead-letter → recording reads it as permanent data loss.
 
 **Trigger to spend it:** the first real geometry consumer. Pay it down in **one** freeze-additive commit together with root `quality{}` (CHARTER `:119`).
 

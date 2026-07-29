@@ -20,7 +20,7 @@
 
 ## Mission
 
-Own user-INITIATED interaction end-to-end up to the model boundary: the chat surfaces
+Own user-initiated interaction end-to-end up to the model boundary: the chat surfaces
 (computer app, browser extension, wearable push-to-talk voice), one request payload
 envelope across all four modalities (text, speech, image, video), and the QueryBuilder —
 which normalizes the raw payload through data-processing's synchronous pipeline (C8) and
@@ -110,7 +110,7 @@ contracts are defined once in [../../ARCHITECTURE.md](../../ARCHITECTURE.md) § 
 
 | Contract | Direction | Our role |
 |---|---|---|
-| **C8** | QueryBuilder ↔ data-processing (sync API) | QueryBuilder submits the raw request payload and gets the normalized result back — the SAME code path that processes the life-stream, exposed synchronously |
+| **C8** | QueryBuilder ↔ data-processing (sync API) | QueryBuilder submits the raw request payload and gets the normalized result back — the same code path that processes the life-stream, exposed synchronously |
 | **C3** | input → inference | We produce the UserPrompt, plus the clarification-answer variant ([↓](#the-clarification-answer-leg)) |
 | **C11** | storage → input (QueryBuilder) | We consume the recent-context read for same-day grounding; the index lives in storage, QueryBuilder decides what enters the UserPrompt |
 | C4 | inference → storage (reference only) | Turn records are keyed by the session/turn ids we mint at request creation; we define id semantics, storage owns persistence |

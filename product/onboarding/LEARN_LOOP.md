@@ -543,7 +543,7 @@ its own durable user data (ownership split, ARCHITECTURE §Ownership). One FastA
 
 **What storage does NOT have yet (all pending the storage/C10 board ratification):** the day-log
 materialization, the recipe registry, the reservoir (all currently continuum-local behind client
-seams), and — the sharpest gap — **any `/context` DELETE**. The **E-2 escalation** asks for a
+seams), and — the sharpest gap — **any `/context` delete**. The **E-2 escalation** asks for a
 kind-aware retraction primitive
 (`DELETE /context/records?user_id=&from=&to=&pipeline_version=&kind=`): `record_id` forks by
 design on a dialect bump, old records persist, and the day-log join filters on neither `kind` nor
@@ -857,7 +857,7 @@ sequenceDiagram
 | **O-8** — blind-vs-injected A/B | the OCR→caption *injection* architecture (A) vs the minimal-hint fallback (D) | pre-registered rule: ship A iff entity-recall gain > 0.25 AND corrupted-OCR propagation < 0.10; needs a real VLM endpoint → E-3 |
 | ~~**E-2**~~ **demoted (D18)** — the day-log's one-dialect rule (latest `ingest_time` wins per `(chunk_id, kind, discriminator)`) fixes the double-render at *render* time, so the cutover no longer waits on a delete. E-2 is still wanted as the retraction/privacy/space primitive, and it **grew**: deletion must now cascade to the day-log and reservoir too. The 2026-07-27 fleet cutover hit its absence directly — clearing verification rows needed a full re-wipe | *(was)* **the clip cutover itself** | without `DELETE /context/records?…&kind=`, any day re-consolidated across the dialect flip double-counts both dialects. Until then: forward-only cutover at a UTC day boundary on a fresh `user_id`, `DP_DIALECT_FREEZE=1`, never backfill |
 | ~~**C10 evolution + storage charter expansion**~~ **BUILT + live 2026-07-27 (D18/D19/D20)** — no longer a gate | *(was)* storage-owned day-log, recipe registry, reservoir; the HTTP client seams | the pending storage/C10 founders' board session ratifies; contract IDs for registry/reservoir minted then |
-| **C5 shape pin** — **deferred on purpose (D19)**, since its only consumer is inference via C6 and inference is not being built. Free to defer *because* C5 is unpinned: D18 changed `training_window`'s format at no cost. One standing rule for whoever pins it — **pin `training_window` as an OPAQUE token, never as a date**, or the parsing D18 deleted grows back | the wired C5 → storage model directory → C6 → vLLM per-user hot-swap tail | a founders' ratification "with inference at the table"; publish.py is deliberately transport-swappable |
+| **C5 shape pin** — **deferred on purpose (D19)**, since its only consumer is inference via C6 and inference is not being built. Free to defer *because* C5 is unpinned: D18 changed `training_window`'s format at no cost. One standing rule for whoever pins it — **pin `training_window` as an opaque token, never as a date**, or the parsing D18 deleted grows back | the wired C5 → storage model directory → C6 → vLLM per-user hot-swap tail | a founders' ratification "with inference at the table"; publish.py is deliberately transport-swappable |
 | D16 async default | `INGEST_ASYNC=1` as production default | founders' call after the re-drive drill posture holds (drill landed in-slice) |
 
 ### Designed / open (no code, or explicitly deferred)

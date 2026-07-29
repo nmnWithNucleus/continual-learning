@@ -77,7 +77,7 @@ jsonschema. Port 8082.
 - **C9 body is opaque bytes** to the relay — never re-encode or reformat it, or the byte-exact
   guarantee (and the separator) breaks. The delivery ack therefore rides in **headers**, not the
   body.
-- **`.split` on the FIRST separator only** — the answer may legitimately contain `{...}` JSON-like
+- **`.split` on the first separator only** — the answer may legitimately contain `{...}` JSON-like
   text or extra ``-adjacent content; only the first separator terminates the answer.
 - **Port 8010** is inference's; it may already be live from a sibling workstream. The relay treats
   any upstream failure as a schema-valid C9 error frame, so it degrades cleanly.

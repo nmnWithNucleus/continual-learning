@@ -1,6 +1,6 @@
 # Gate thresholds — measured distributions and a proposal
 
-**Status:** PROPOSAL. Nothing here is applied. `recipes/consolidation-v1.0.json` is unchanged
+**Status:** Proposal. Nothing here is applied. `recipes/consolidation-v1.0.json` is unchanged
 and the gate in `cycle.py` still blocks on the current thresholds. Cofounders ratify before any
 of this becomes the gate; changing a recipe knob also forks `recipe_id`.
 

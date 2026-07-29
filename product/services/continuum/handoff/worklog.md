@@ -37,19 +37,19 @@ carrying `training_window:"w-day5"` keep it — under D19 that state is wiped, n
 *The canvas was rewritten to describe today. Its prior text is kept here verbatim so no wire
 detail is lost; where it disagrees with the board, **the board is right** — this is history.*
 
-**Status:** ✅ **LEARN-LOOP INTEGRATION COMPLETE.** Phase 2 (Morpheus port: kernels byte-identical;
+**Status:** ✅ **learn-loop integration complete.** Phase 2 (Morpheus port: kernels byte-identical;
 ensemble indistinguishable p=0.82; **M0** — a 32B adapter our pipeline trained → gate v1.1 → C5 →
-**vLLM**; gate **v1.1 RATIFIED**) · Phase 2c (lean 5-verb loop over storage client seams) · **Phase 3
-(DP dogfood): PIPELINE SOUND** — parity content through the **real** recording→DP→storage→continuum
+**vLLM**; gate **v1.1 ratified**) · Phase 2c (lean 5-verb loop over storage client seams) · **Phase 3
+(DP dogfood): Pipeline sound** — parity content through the **real** recording→DP→storage→continuum
 services reproduces the baseline separation (0.137 vs 0.179, p=0.148 same distribution). Our real
 services carry the learn loop without losing learnability.
 **Open (NOT integration defects):** (1) recipe/dose — amplification must scale with block-text at our
 native cadence → **Gnandeep's knob** (cofounder to raise); (2) ~~storage-expansion + C10-evolution →
-founders' board~~ **RATIFIED 2026-07-26 → D18; continuum side BUILT 2026-07-27** (see below); (3) storage
+founders' board~~ **ratified 2026-07-26 → D18; continuum side BUILT 2026-07-27** (see below); (3) storage
 server-side (day-log materialization / recipe registry / reservoir) → storage workstream, now with
 contracts C10-evolved/C12/C13/C14; (4) serve-time memory harness → inference, a separate future
 phase. ·
-**Last updated:** 2026-07-27 (**D18 BUILT** — continuum cut over to storage's HTTP surface; two HIGH
+**Last updated:** 2026-07-27 (**D18 BUILT** — continuum cut over to storage's HTTP surface; two high
 review defects fixed — the crash-close that minted a second window, and the wrong-time-axis default)
 
 ### Current state
@@ -62,7 +62,7 @@ review defects fixed — the crash-close that minted a second window, and the wr
   judge · eval · pinned-env exec), the `morpheus` backend behind the three-verb seam, and
   `tests/parity/` as the contract. `./scripts/run_parity.sh` runs both tiers;
   `scripts/morpheus_chain.py` runs a full chain and judges it. Env lockfiles in `env/`.
-  Recipe knobs are now CONFIRMED against the goldens (frac 0.30 / source amp / neg_boost 0);
+  Recipe knobs are now confirmed against the goldens (frac 0.30 / source amp / neg_boost 0);
   the source flip to rawlog is a validated tie that forks `recipe_id` and lands with 2c.
 - **Maturity read of the research repo is complete** (line-by-line: LOG, DESIGN_PROD, all
   of engram/code, speed-lora, continuum thread) — the kickoff brief's Q1–Q4 are resolved in
@@ -84,7 +84,7 @@ review defects fixed — the crash-close that minted a second window, and the wr
    (memory harness → inference; DP data ownership + caption spec; C5 bundle shape when the
    memory artifacts ship; reservoir custody in storage; retention/deletion policy — the
    research design's raw-A/V ≤72 h + day-logs-forever + 14-night hard-delete stance is a
-   PRODUCT decision to take explicitly).
+   Product decision to take explicitly).
 4. Then M1: real C10 reader against storage, SLURM submission, node-7 off-peak window.
 
 ### Cross-service flags (no unilateral pinning — informational until ratified)
@@ -119,7 +119,7 @@ then 232 + 7 at the cutover; +5 for the two review fixes below);
   and fails on any window-id parsing that reappears.
 - **`nightly.py --tz` and `--date` are gone.** `home_tz` comes from C12; a 404 exits **2** with an
   operator message and runs nothing. The window is opened by storage and **closed with the cycle's
-  outcome** — *and a CRASH is not one of those outcomes* (corrected 2026-07-27; see F1 below).
+  outcome** — *and a crash is not one of those outcomes* (corrected 2026-07-27; see F1 below).
 - **Verified against the real storage service** (started read-only on a spare port with a throwaway
   DB, no storage file touched): 20/20 wire checks, then a full `python -m app.nightly` in HTTP mode
   → `published`, and a two-night `rawlog` run where night 2's rehearsal is night 1's day-log
@@ -138,44 +138,44 @@ then 232 + 7 at the cutover; +5 for the two review fixes below);
 
 #### F3 + F5: the version stamps nobody read, and a demo whose own instructions crashed (2026-07-27)
 
-Suite: **251 passed + 7 skipped** (was 240 + 7). Live seam check: **PASS — 10 steps, 151 checks**
+Suite: **251 passed + 7 skipped** (was 240 + 7). Live seam check: **`PASS` — 10 steps, 151 checks**
 (was 148; the three new ones are the F3 proof, below). No contract moved and no schema changed.
 
-- **F3 (MEDIUM) — `daylog_format_version` and `recipe_id` reached no consumer.** Storage stamped
+- **F3 (Medium) — `daylog_format_version` and `recipe_id` reached no consumer.** Storage stamped
   both onto every C10 body and continuum read neither, which made them decoration: the whole point
   of a recipe-versioned day-log (ARCHITECTURE §"C10 evolved", D20) is that a format change is
-  ANNOUNCED, and an announcement nobody reads is a silent change. **Fix: `HttpDayLogClient` REFUSES**
+  Announced, and an announcement nobody reads is a silent change. **Fix: `HttpDayLogClient` refuses**
   a body whose `daylog_format_version` is not in `SUPPORTED_DAYLOG_FORMAT_VERSIONS` or whose
   `recipe_id` is not the one this night trains under (`DayLogDialectMismatch`); `nightly.py` turns it
-  into a one-line `MISCONFIGURED` operator message, **leaves the window OPEN** (the F1 rule) and
+  into a one-line `MISCONFIGURED` operator message, **leaves the window open** (the F1 rule) and
   exits 2, so the retry after the pin is fixed resumes the same window.
   - **Refuse, not warn**, and the argument is the asymmetry: the mismatch is silent by construction
-    (the body parses, the night trains, publish records CONTINUUM's `recipe_id` in C5 — so the
-    artifact is MIS-LABELLED, and the label is the only evidence that would have survived), a
+    (the body parses, the night trains, publish records continuum's `recipe_id` in C5 — so the
+    artifact is MIS-Labelled, and the label is the only evidence that would have survived), a
     warning on an unattended nightly is read after the adapter is already published, and refusing
     costs one attempt because the window stays open and the watermark does not move.
   - **The two pins are independent** — `STORAGE_DAYLOG_RECIPE_ID` and `CONTINUUM_RECIPE_ID` — so a
     half-finished re-pin is an ordinary deployment slip. It is the exact step `seam_check.py`
-    STEP 7c performs, and it now asserts the refusal live, between the two re-pins.
-  - **Which dialects are readable is CODE, not config**: `SUPPORTED_DAYLOG_FORMAT_VERSIONS` is a
+    Step 7c performs, and it now asserts the refusal live, between the two re-pins.
+  - **Which dialects are readable is code, not config**: `SUPPORTED_DAYLOG_FORMAT_VERSIONS` is a
     literal tuple with no env override, because an operator who could wave a new dialect through
     with an env var would be shipping a corpus change as a config change.
   - Measured live against the real service: storage re-pinned to `consolidation-v1.1` with continuum
     still on `v1.0` → `MISCONFIGURED — REFUSING TO TRAIN`, exit 2, ledger row still
     `state=open, outcome=null`; retry with the pin fixed → **same** `window_id`, `published`.
-    *(Honest scope note: v1.0 and v1.1 have identical `corpus` knobs, so for THAT pair the damage is
+    *(Honest scope note: v1.0 and v1.1 have identical `corpus` knobs, so for that pair the damage is
     purely the lineage label. For a pair like `consolidation-test-1min-v1.0` — `segment_seconds=60`,
-    `block_segments=5` — the day-log's SHAPE differs too.)*
+    `block_segments=5` — the day-log's shape differs too.)*
 - **F5 (LOW) — `run.sh`'s printed demo instructions ended in an unhandled traceback, and the flag
   they recommended trained on nothing.** Reproduced verbatim: profile + `--synthetic` →
   `httpx.HTTPStatusError: Client error '409 Conflict' for url .../training/windows`, because a
   window starts at the user's earliest `ingest_time` and a user with no `/context` records has none.
-  `--synthetic` does not substitute — it replaces the DAY-LOG, not the WINDOW. Three fixes:
+  `--synthetic` does not substitute — it replaces the DAY-LOG, not the window. Three fixes:
   - **`window_client.open()` raises `WindowNotOpenable`** carrying storage's own reason, and
     `nightly.py` prints `NO WINDOW TO CONSOLIDATE: <reason>` and exits 2. Both 409s it covers are
     ordinary (`no ingest history`; everything ingested inside storage's `delta`, which fixes itself).
   - **`run.sh` now establishes all three preconditions** (profile, ingest history, elapsed `delta`)
-    and runs the REAL path instead of `--synthetic`, so the demo exercises the C10 fetch the cutover
+    and runs the real path instead of `--synthetic`, so the demo exercises the C10 fetch the cutover
     is about. The no-storage branch prints instructions that were executed verbatim and work.
   - **`app/synth.py`'s placement was stale.** It hard-coded a 4 h lead-in — right for the 24 h
     `window_for(date, tz)` D18 deleted, wrong for an ingest-time window that is routinely minutes
@@ -194,13 +194,13 @@ with a regression test that was proved to fail without its fix. Suite: **237 pas
 (was 232 + 7). No contract moved and no schema changed — in both cases the written design was
 already right and the code disagreed with it.
 
-- **F1 — a retry after a crash minted a SECOND `window_id`.** `nightly.py`'s `except` handler called
+- **F1 — a retry after a crash minted a second `window_id`.** `nightly.py`'s `except` handler called
   `ledger.close(win, "crashed")` and re-raised. `close()` is **terminal**, and storage's
   `POST /training/windows` is a get-or-create of the user's **open** window — so the retry found none
   open and minted a fresh id, hence a fresh `journal/{user}/{window_id}.json`, a fresh `cycles/` dir,
   a fresh seed, a full re-train, a second C5 entry and a second reservoir admission. That is exactly
   what ARCHITECTURE's C10 row says the idempotent open exists to prevent, reached by a different
-  route. **Fix: a crash LEAVES THE WINDOW OPEN**, prints an operator line on stderr, and re-raises;
+  route. **Fix: a crash leaves THE window open**, prints an operator line on stderr, and re-raises;
   the retry re-opens the same window and the journal resumes. Measured on the real service, before →
   after: window closed `crashed` and the immediate retry **409**ed on the id-collision guard (a
   second later it would have minted a second id) → same `window_id`, `stages_skipped =
@@ -209,7 +209,7 @@ already right and the code disagreed with it.
   with a human behind it, not something an `except` clause makes on the way past. The watermark was
   never at risk either way (only `published` advances it), so what this cost was journal/lineage/
   compute churn, not data.
-- **F2 — the DEFAULT nightly path queried the WRONG TIME AXIS and trained on an empty day-log.**
+- **F2 — the default nightly path queried the wrong time axis and trained on an empty day-log.**
   `Window.start_utc/end_utc` are **ingest**-time bounds; the local day-log client's default record
   provider passed them to `GET /context/records`, which filters `t_start` — **event** time. With
   `storage_clients` defaulting to `local`, that was the shipped nightly. Measured on the real
@@ -217,7 +217,7 @@ already right and the code disagreed with it.
   returned **`skipped_no_data`** with no corpus written. Fixed in both halves:
   **(a) the default is now `http`** — the seam is what D18 built and what `scripts/seam_check.py`
   proves end to end; a default that bypasses it ships a configuration nobody exercises.
-  **(b) the local path REFUSES** (`IngestWindowNotReadable`) when asked to source a training
+  **(b) the local path refuses** (`IngestWindowNotReadable`) when asked to source a training
   window's records, instead of silently returning none. It was not fixed by adding an `axis=ingest`
   filter to the range read, and that was a deliberate call: storage's own `list_context_by_ingest`
   docstring argues against an axis flag on that endpoint ("overloading one endpoint with an axis
@@ -237,11 +237,11 @@ already right and the code disagreed with it.
 
 The board ratification, for the record:
 
-- **`app/daylog.py` and `app/window.py`'s local-date arithmetic LEAVE** for storage. `window_for()`
+- **`app/daylog.py` and `app/window.py`'s local-date arithmetic leave** for storage. `window_for()`
   and `closed_window_before()` are **deleted**; `window.py` shrinks to the `Window` value object
   storage returns. `LocalDayLogClient` + the `RecordProvider` seam disappear exactly as
   `clients/daylog_client.py:14-19` predicted, replaced by `HttpDayLogClient`.
-- **`Profile.render_block` STAYS.** The board corrected a premise here: the parity-locked renderer
+- **`Profile.render_block` stays.** The board corrected a premise here: the parity-locked renderer
   (`morpheus/profiles/speed.py:89`, 1427/1427 vs research goldens, over 5-min description dicts) is
   **recipe-coupled** and is *not* what moves. What moves is `daylog.py:183 _render_block`, the
   product renderer over C2 records, which never had a research golden. `morpheus/blocks.py:5-7` had
@@ -296,14 +296,14 @@ C2 records).
 
 ### Execution steps
 
-0. **DONE:** re-pin source `9711f4a → b3c58e1`; flag serve-tier drift in inference (4-lane
+0. **Done:** re-pin source `9711f4a → b3c58e1`; flag serve-tier drift in inference (4-lane
    stack + page-weight cache).
-1. **Phase 0 — DONE:** Speed data confirmed on the cluster (`descriptions/{1,5,10,20}min/`,
+1. **Phase 0 — Done:** Speed data confirmed on the cluster (`descriptions/{1,5,10,20}min/`,
    `holdout_manifest.csv`); prebuilt corpora/adapters/results all present on the node.
-2. **Phase 1 — DONE ✅ REPRODUCED:** ran his replay_f30 chain on our infra — seen-mean 0.286
+2. **Phase 1 — Done ✅ reproduced:** ran his replay_f30 chain on our infra — seen-mean 0.286
    (== his seed-0), separation **+0.253** (in his +0.178…+0.269 spread), day-5 retention 1.00,
    corpus rebuild ratio 1.004. GO for Phase 2.
-3. **Phase 2 — Morpheus port (WS2):** **2a DONE** — kernels reimplemented under
+3. **Phase 2 — Morpheus port (WS2):** **2a done** — kernels reimplemented under
    `app/morpheus/` behind `TRAINER_BACKEND=morpheus`, parity harness green against the Phase-1
    goldens (`render_block` byte-identical on 1427/1427 blocks; replay+chunking fingerprint 18/18
    integers exact; LoRA target set 252/252 modules; judge summary exact on 35 suites × 4 runs),
@@ -315,7 +315,7 @@ C2 records).
    **2a signed off by the cofounders 2026-07-24** — the overnight run closed the last unverified
    kernel surface (rehearsal sampler **byte-identical, 5 nights × 14 seeds**) and cleared the
    single-night trainer (reference's 0.45 = the **70th percentile of our own 8 draws**).
-   - **Gate policy RATIFIED:** traps ≥0.15 interim / ≥0.25 at ~150 probes; heldout over all 222
+   - **Gate policy ratified:** traps ≥0.15 interim / ≥0.25 at ~150 probes; heldout over all 222
      probes via a one-sided exact test against each run's own base control (α=0.01), 0.15 backstop;
      `min_probes` 150→**148**. All three prior values blocked ~everything *including the validated
      recipe's own output* — the traps floor alone blocked 71% of reference nights, and its
@@ -349,4 +349,4 @@ C2 records).
   the chain args (no default on faith). Confirm all three at the actual invocation.
 - **Envs/judge:** `speedlora`+`vllm23` exports coming to `research/engram/envs/`; judge =
   Gemini-2.5-flash via litellm/Vertex; **our own GCP creds via IAM** (his project is his billing).
-- **Still open (real-user nights only):** de-Speed the prompt/anchor scheme.
+- **Still open (real-user nights only):** de-speed the prompt/anchor scheme.

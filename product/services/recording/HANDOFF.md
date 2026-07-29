@@ -136,7 +136,7 @@ processed it, without ever reporting a lost chunk as `clean`.
   against the real app.
 - **Adversarial review + real-browser alpha reshaped the extension** (detail in ws-E/ws-F
   worklogs): the pre-alpha review round (5-lens → 2-skeptic, 19 → 10 confirmed) hardened the
-  then-current screen-picker path; then two real-Chrome runs on Comet exposed the
+  then-current screen-picker path; then two real-chrome runs on Comet exposed the
   desktopCapture picker as fundamentally fragile (worker-context refusal, same-tab capture
   collision), so **D-E7 pivoted to direct tab capture** — deleting the picker, the
   `desktopCapture` permission, and the two-session bookkeeping. mac CLI review headliners

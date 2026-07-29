@@ -7,5 +7,5 @@ is one synthetic screen layout: normalized `[x0,y0,x1,y1]` bboxes (0..1), the re
 build `OcrRead`s from these and assert region-role assignment, the confidence / min-chars /
 dedup gates, and the single-line render.
 
-The 200 hand-labelled *real* macOS frames + the O-2 bake-off are the SIDECAR tab's (C1)
+The 200 hand-labelled *real* macOS frames + the O-2 bake-off are the sidecar tab's (C1)
 deliverable, not this seam's; they live with the sidecar, not here.

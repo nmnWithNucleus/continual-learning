@@ -14,12 +14,12 @@
 
 ## 1. Continuity detector (`/ingest` break/dup) — priority pair item
 
-- `app/continuity.py` (new) — `ContinuityTracker`, updated on EVERY schema-valid `/ingest`
+- `app/continuity.py` (new) — `ContinuityTracker`, updated on every schema-valid `/ingest`
   (fresh, dedup-hit, and in-flight-dup paths alike; after C1 validation, before any return).
   Per `stream_id`: `first_seen`/`last_seen` (RFC3339), `max_sequence`, received count, seen
   sequences as merged intervals `[[lo,hi],…]` (memory-bounded for dense streams),
   `duplicate_deliveries` (same `(sequence, chunk_id)` re-seen), and `sequence_conflicts`
-  (same `sequence`, DIFFERENT `chunk_id` — an anomaly worth flagging loudly).
+  (same `sequence`, different `chunk_id` — an anomaly worth flagging loudly).
   `missing` = the gaps below `max_sequence` (+ the leading gap when first-seen > 0, per C1:
   a non-zero first-seen value is lost chunks).
 - Endpoints in `app/main.py`: `GET /continuity` → `{streams:[{stream_id, modality, user_id,
@@ -32,7 +32,7 @@
 ## 2. Audio pipeline — real ASR standing + VAD gate + shape stubs
 
 - **faster-whisper becomes a standing backend**: added to `requirements.txt` (no torch —
-  ctranslate2/onnxruntime/av/tokenizers). `ASR_BACKEND` default STAYS `mock` (GPU-less dev,
+  ctranslate2/onnxruntime/av/tokenizers). `ASR_BACKEND` default stays `mock` (GPU-less dev,
   tests unchanged); `faster_whisper` is the flip for real runs.
 - **VAD gate** (kills Whisper silence-hallucination; ambient-only chunks come out honest):
   `asr/faster_whisper.py` passes `vad_filter=settings.asr_vad` (new env `ASR_VAD`, default
@@ -78,9 +78,9 @@ covered by the existing mock-output tests (byte-identical assertion).
 - 2026-07-18 — **verified live** (lead session E2E on real ports): recording's gap report
   cross-checks `/continuity` per stream (clean + gap + dup drills all consistent); real
   faster-whisper (base/int8/CPU, VAD on) transcribed phone-path segments correctly
-  (`asr-fw-v1` C2s in `/context`), and an all-silence segment produced an honest EMPTY
+  (`asr-fw-v1` C2s in `/context`), and an all-silence segment produced an honest empty
   transcript (VAD gate kills the Whisper silence-hallucination).
-- 2026-07-18 — **first REAL phone data** (CTO's iPhone sessions) surfaced a quality bug:
+- 2026-07-18 — **first real phone data** (CTO's iPhone sessions) surfaced a quality bug:
   with auto language detection, faint room audio that slipped past VAD was hallucinated as
   Hindi/Korean-script text. Added `asr_language` (`ASR_LANGUAGE`, default `''` = auto;
   runtime knob, NOT a pipeline-version fork) passed to `model.transcribe(language=…)`; the

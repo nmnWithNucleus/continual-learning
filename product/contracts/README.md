@@ -52,7 +52,7 @@ act** — per the rule above and per [../ORG.md](../ORG.md) §"Contracts before 
 must exist before that slice's workstreams fan out, and not before there is a slice. **`c10_daylog.v1.json`
 landed 2026-07-27 with day-log materialization**, transcribed from the body already pinned in
 ARCHITECTURE's *C10 card*; it is `version:"1"` because C10 evolved in place, and the raw
-range read it evolved FROM (`GET /context/records?user_id=&from=&to=`, event-time) is not retired
+range read it evolved from (`GET /context/records?user_id=&from=&to=`, event-time) is not retired
 and carries no schema of its own. **`c13_recipe.v0.json`, `c13_gate_policy.v0.json` and
 `c14_reservoir_ledger.v0.json` landed 2026-07-27** with the registry + reservoir slice, and storage
 validates against all three on the read path. **`c10_training_window.v1.json` landed 2026-07-27**,

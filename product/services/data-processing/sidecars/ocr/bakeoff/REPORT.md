@@ -94,8 +94,8 @@ on English UI strings.
 
 | arm | recall micro-sub **(gate)** | recall macro-sub | recall fuzzy (micro) | CER (focus) | verdict |
 |---|---|---|---|---|---|
-| **ppocr @ 1728** | **0.988** | 0.983 | 0.999 | **0.070** | **PASS** |
-| ppocr @ 1152 | 0.869 | 0.912 | 0.890 | 0.074 | PASS (weaker) |
+| **ppocr @ 1728** | **0.988** | 0.983 | 0.999 | **0.070** | **`PASS`** |
+| ppocr @ 1152 | 0.869 | 0.912 | 0.890 | 0.074 | `PASS` (weaker) |
 | Qwen3-VL-32B @ 1536 | — | — | — | — | **not run** (§6) |
 | Qwen2.5-VL-32B @ 1536 | — | — | — | — | **not run** (§6) |
 

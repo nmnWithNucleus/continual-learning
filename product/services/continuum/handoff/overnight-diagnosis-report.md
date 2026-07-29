@@ -65,7 +65,7 @@ an ordinary result from our distribution, not a level we fail to reach. Seed 0's
 **below everything a single night produces**: day 21 at 0.15 against our minimum of 0.2167,
 day 5 at 0.05 against our minimum of 0.0833.
 
-**Seed 0's deficit is therefore ACCUMULATED across the six nights, not made in any one of them.**
+**Seed 0's deficit is therefore accumulated across the six nights, not made in any one of them.**
 Together with §1 (the rehearsal text is byte-identical) this rules out the sampler and the
 single-night trainer, and localises the remaining question to what compounds over a chain —
 which is exactly what P1/P3 would have measured, and what capacity did not allow.
@@ -92,7 +92,7 @@ server that will serve it. It is now answered — in two halves, because a hard 
 split.
 
 **32B cannot train on a single H100, at any batch size.** Measured, not assumed: bsz 2 OOM'd at
-79.15/79.18 GiB, bsz 1 at 79.16/79.18. The failure is at the FIRST forward pass, so no step count
+79.15/79.18 GiB, bsz 1 at 79.16/79.18. The failure is at the first forward pass, so no step count
 or corpus size changes it. The reference chain's `--shard 2` was not optional. `LifeAdapter`
 already supports sharding but hardcoded 76 GiB per card; that is now
 `MORPHEUS_SHARD_MAX_MEMORY`, because on a shared node we do not own the whole card.
@@ -162,7 +162,7 @@ unattended run.
 
 | defect | consequence | fix |
 |---|---|---|
-| `echo "EXIT $? $job"` — `$(date)` expanded first, resetting `$?` | **every job logged EXIT 0, including one that failed with 127** | capture `rc=$?` before any substitution |
+| `echo "EXIT $? $job"` — `$(date)` expanded first, resetting `$?` | **every job logged exit 0, including one that failed with 127** | capture `rc=$?` before any substitution |
 | `rm -f jobs/draw11*.sh` matched a script written seconds earlier | `draw110` silently never ran | explicit missing-script check, logged |
 | free-memory probe cannot see a sibling lane's job during startup | two lanes put jobs on one GPU, twice | per-GPU `flock` held for the whole job, plus an in-job idle-wait |
 | `flock` only binds lanes started after it | a pre-`flock` lane collided with a locked one; that 32B result was discarded | re-ran on a verified-idle card |

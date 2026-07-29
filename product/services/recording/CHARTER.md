@@ -147,7 +147,7 @@ teammates). The M2 red-team exit bar is unchanged whenever it lands. Milestone n
 their names (M-numbers are identifiers, not a fixed order — sequencing is owned by the
 founders' board + this note).
 
-**Milestone progress — capture M1 + computer surfaces (ALPHA COMPLETE 2026-07-19):** the
+**Milestone progress — capture M1 + computer surfaces (Alpha complete 2026-07-19):** the
 recording service was wrapped to the alpha bar (detail: [HANDOFF.md](HANDOFF.md)). Delivered:
 the M0 ingest spine hardened into a **checked "zero silent loss" guarantee** (continuity
 ledger + DP break/dup detector + two-leg gap report), the **fuller ASR pipeline** (faster-whisper
@@ -261,7 +261,7 @@ deferred additive leg — recorded on the founders' board as D14).
    - Uploads run **async and concurrent**: a new chunk starts uploading immediately, and the C1
      push fires on that chunk's **upload-complete callback**, so capture is never blocked on an
      upload.
-   **STATUS (2026-07-19):** the **demux half is BUILT + proven** (`app/demux.py`, ffmpeg;
+   **Status (2026-07-19):** the **demux half is BUILT + proven** (`app/demux.py`, ffmpeg;
    exercised by all three alpha clients — muxed mp4/webm → separate audio + video C1 streams).
    The **transport is decided (D-M1-5 / founders' D14): segmented HTTP upload** for all v0
    surfaces (each client posts self-contained ~10 s segments to `/capture/segments`; the server

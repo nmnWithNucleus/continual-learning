@@ -15,16 +15,16 @@
 - **D-M1-3 — ledger = SQLite** (`var/ledger.db`, WAL). This is *operational continuity
   metadata* (sessions, segment receipt, minted chunk ids, ack state), not durable user-content
   custody — content custody stays with storage `/raw` (blobs transit the spool and are deleted
-  after emit by default). Crash-safe: `chunk_id`s are minted + persisted BEFORE the first emit
-  attempt, so a restart retries with the SAME ids (idempotent downstream).
+  after emit by default). Crash-safe: `chunk_id`s are minted + persisted before the first emit
+  attempt, so a restart retries with the same ids (idempotent downstream).
 - **D-M1-4 — upload wire** as pinned in WS-B (internal to recording, not a C-contract).
   **Route rename 2026-07-18 (founders):** client-facing prefix `/ingest/*` → `/capture/*`
   (file `app/ingest_web.py` → `app/capture_web.py`) so `/ingest` is uniquely
   data-processing's C1 receiver. Shapes and semantics unchanged. A transitional hidden
   `/ingest/*` alias lived exactly one day — **removed 2026-07-19** (CTO: single tester,
-  refresh beats versioned routes); a test now asserts recording serves NOTHING under
+  refresh beats versioned routes); a test now asserts recording serves nothing under
   `/ingest`.
-- **Demux is recording's job** (charter OQ8 pattern: the muxed device link is split HERE,
+- **Demux is recording's job** (charter OQ8 pattern: the muxed device link is split here,
   before emission): phone segments arrive A/V-muxed; ffmpeg demuxes per segment into
   audio → `audio/wav` 16 kHz mono s16le (ASR-native) and video → container copy
   (`video/mp4` / `video/webm`, no re-encode). 1 segment → 1 audio chunk + 1 video chunk
@@ -32,7 +32,7 @@
 - **Two C1 streams per session** (audio, video): own `stream_id` (ULID) each, same
   `device_id`, wall-clock aligned. C1 `sequence` = per-stream emit counter — dense by
   construction. The client→server leg has its own continuity domain (`seq`); the ledger joins
-  the two legs. A client-side loss (dropped segment) appears in the CLIENT leg of the report,
+  the two legs. A client-side loss (dropped segment) appears in the client leg of the report,
   never as a fabricated C1 gap.
 - **Consent-gate compatibility (D13, not built):** the spool+ledger is the natural holdback
   point — a future consent gate delays the emit step per session; the upload path is unchanged.
@@ -46,7 +46,7 @@
   - `streams(stream_id PK, session_id, modality, codec, next_sequence)`
   - `chunks(stream_id, sequence, session_id, seq, modality, chunk_id, codec, bytes, sha256, blob_ref, dp_acked INT, record_ids TEXT, emitted_at, PRIMARY KEY(stream_id, sequence))`
 - `app/demux.py` — ffprobe track probe + ffmpeg demux of one spooled segment into per-modality
-  chunk files (subprocess; binaries from `FFMPEG_BIN`/`FFPROBE_BIN`, default PATH).
+  chunk files (subprocess; binaries from `FFMPEG_BIN`/`FFPROBE_BIN`, default path).
 - `app/emitter.py` — per-session in-order worker: for each received segment, demux → per
   modality: get-or-create stream → mint+persist `chunk_id` → PUT `/raw/blobs` → validated C1
   push → record `blob_ref`/`record_ids`/acks in the ledger → mark segment `emitted`, delete
@@ -116,7 +116,7 @@ ack-then-poll; report merges a fake DP `/continuity` response.
   diff) confirmed 5 server defects, all fixed + regression-tested (+6 tests → 72):
   (1) *ack-before-spool*: the ledger row committed before the spool write, so a crash
   between them made the client's retry ack bytes that existed nowhere — now the spool is
-  written FIRST (content-addressed `seq.sha[:12].ext` names so a conflicting sha can
+  written first (content-addressed `seq.sha[:12].ext` names so a conflicting sha can
   never clobber the original), and a duplicate whose segment is still `received`
   re-enqueues (self-heals the lost-spool/lost-enqueue windows);
   (2) *unbounded gap walk*: one huge `seq` made the report materialize every missing seq —
@@ -130,7 +130,7 @@ ack-then-poll; report merges a fake DP `/continuity` response.
   (`dp.missing_unacked` drives the verdict; raw `missing` kept for transparency);
   (5) *stale end marker*: the client beacons `end` on every page-hide, so a resumed
   session could read `clean` against a stale expected count — `mark_ended` is now
-  monotonic on `expected_segments` and a segment arriving past the marker REOPENS the
+  monotonic on `expected_segments` and a segment arriving past the marker reopens the
   session; plus *sequence-order-vs-retry*: all of a segment's chunks are allocated
   before any emits, so a mid-emit failure + `/retry` slots back in capture order
   (a fully-demux-failed segment retried after later ones still emits late sequences —

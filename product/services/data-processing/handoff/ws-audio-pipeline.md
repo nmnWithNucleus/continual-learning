@@ -7,7 +7,7 @@
 > §Scope (audio pipeline) + OQ11/OQ12 and [HANDOFF.md](../HANDOFF.md) (Processor seam +
 > Current state) first; this is the volatile record for the beyond-ASR audio work.
 
-**Status:** built + tested headless; **all three real backends now SMOKE-TESTED GREEN on
+**Status:** built + tested headless; **all three real backends now smoke-tested green on
 node-7 (2026-07-19)** — pyannote diarization + whisper-translate + AST acoustic each ran
 end-to-end on a real webm/opus speech chunk; the smoke found + fixed **two real pyannote
 torch-2.x compat bugs** (see the 2026-07-19 async-observability entry below) ·
@@ -41,15 +41,15 @@ app/audio/
 
 ## Design decisions (the load-bearing ones)
 
-1. **Every capability DEFAULTS OFF — a deliberate deviation from the "mock is DEFAULT"
-   wording, forced by the MUST constraints.** With a backend `off`, its stage is a pure
+1. **Every capability defaults OFF — a deliberate deviation from the "mock is default"
+   wording, forced by the must constraints.** With a backend `off`, its stage is a pure
    no-op, so the default audio output is **byte-identical** to the pre-fill processor: the
    mock ASR dialect (`asr-mock-v0`) is untouched, the 38-test baseline stays green, and
    `run_learn.sh` (ASR_BACKEND=mock) runs the loop headless with no new deps. A literal
    "mock diarization on by default" would flip `segments[].speaker`/`enrichments.speakers`
    and fork `pipeline_version` on the default path — breaking `test_ingest_mock` /
    `test_processor_seam` and the "keep the mock dialect untouched" rule. So diarization is
-   **feature-flagged off**; `mock` is the DEFAULT **no-GPU backend chosen when you turn a
+   **feature-flagged off**; `mock` is the default **no-GPU backend chosen when you turn a
    capability ON** (headless, deterministic, exercises the full dialect in tests/run_learn),
    and `pyannote`/`whisper`/`ast` are the real, lazy, GPU/HF paths. Verified against the C2
    schema + the 38 tests before choosing this.
@@ -59,7 +59,7 @@ app/audio/
    diarize.version_tag(cfg)`; the `_diarize` stage's active/no-op decision and the tag both
    come from `_resolve`, and **any unrecognized `DIARIZE_BACKEND` value resolves to `off`
    in both**. If they could diverge (stage fills speakers but the tag stayed `''`), a
-   diarized record would be written under `asr-mock-v0` and mint the SAME `record_id` as
+   diarized record would be written under `asr-mock-v0` and mint the same `record_id` as
    the pristine primary → a silent overwrite via the idempotent `/context` upsert. (Caught
    in design review; guarded + tested in `test_unknown_backend_resolves_off_everywhere`.)
 
@@ -78,10 +78,10 @@ app/audio/
    Every emitted unit is validated by the existing `main.py` gate (`validate_c2` +
    `C2Record`).
 
-5. **Real backends are correct-by-inspection SEAMS, not verified runs.** pyannote (GPU +
+5. **Real backends are correct-by-inspection seams, not verified runs.** pyannote (GPU +
    two HF-gated repos), whisper `task=translate` (model download), and AST (transformers +
-   ~350 MB model) can't run in this environment. Each carries a prominent "⚠️ UNVERIFIED ON
-   REAL AUDIO" banner and is lazy-imported only when selected. **No real run is claimed.**
+   ~350 MB model) can't run in this environment. Each carries a prominent "⚠️ unverified ON
+   Real audio" banner and is lazy-imported only when selected. **No real run is claimed.**
    Smoke-test each on node-7 before trusting it (a real captured chunk + the backend flag).
 
 ## New env vars (all read via `os.getenv` in `app/audio/config.py` — `config.py` untouched)
@@ -111,14 +111,14 @@ when platform next touches it.
 - **Diarization on a silent chunk** yields no speakers (no ASR segments to assign) but still
   stamps the `+diar-*` dialect — consistent.
 - **Verifying diarization end-to-end live:** `main.py`'s dedup fast-path is keyed on
-  `chunk_id` and short-circuits BEFORE `pipeline_version` is computed, so re-POSTing an
+  `chunk_id` and short-circuits before `pipeline_version` is computed, so re-POSTing an
   already-processed `chunk_id` after flipping `DIARIZE_BACKEND` returns the cached old ids
   and does NOT reprocess/fork (pre-existing, same as the ASR mock→fw switch). Use a NEW
   `chunk_id` or restart the service when smoke-testing a backend change.
 - **AST decode routes through ffmpeg:** the AST backend hands the transformers pipeline the
   RAW chunk bytes, whose `ffmpeg_read` path demuxes webm/opus + m4a/aac + wav uniformly
   (an earlier soundfile-based draft would have crashed on the real webm/mp4 capture codecs —
-  caught in review, fixed). ffmpeg on PATH is the one system dep.
+  caught in review, fixed). ffmpeg on path is the one system dep.
 - Sibling-collapse of near-duplicate acoustic tags ("cutlery" + "dishes" → "dishes
   clinking") is a documented future refinement, intentionally omitted for a lean v0.
 
@@ -147,35 +147,35 @@ are unrun by design (documented seams).
   on import; a headless all-stages-on E2E through `create_app()`/`/ingest` emitted 3 schema-valid
   C2s (diarized primary + translation + acoustic).
 - 2026-07-19 — **independent verification round** (recording/DP integrator session): the
-  headline claims HELD under adversarial checking — default-off path proven byte-identical
+  headline claims held under adversarial checking — default-off path proven byte-identical
   by sha256 against a 0bb66e6 worktree; single-resolver invariant confirmed (no second
   decision site; unknown backend → off in both tag and stage); assign_speakers boundary
   probes clean; real-backend API shapes check out by inspection (pyannote 3.1.1 pin,
   faster-whisper kwargs, AST ffmpeg decode path — real runs remain the node-7 smoke test,
   as this file already states). Two documented caveats, accepted not fixed: sidecar
   (translation/acoustic) record_ids do not encode backend/target config — reprocessing
-  under a CHANGED config upserts over the prior sidecar (same posture as ASR_LANGUAGE:
+  under a changed config upserts over the prior sidecar (same posture as ASR_LANGUAGE:
   config knobs are fleet-stable, not per-record dialects); and with the beta
   `ASR_LANGUAGE=en` pin, whisper translation's detected==target skip makes it a no-op on
   English-pinned fleets (translation presumes language auto-detect — enable them together).
-- 2026-07-19 — **NODE-7 SMOKE TEST of the three real backends (async-observability session).**
+- 2026-07-19 — **Node-7 smoke test of the three real backends (async-observability session).**
   Env: node-7 (8× H100, all idle), conda `moe` (torch **2.8.0+cu128**, torchaudio 2.8.0,
   faster-whisper 1.1.0, transformers 4.57.6, **pyannote.audio 3.3.2** — newer than the
   `==3.1.1` pin in requirements-audio.txt; the `speaker-diarization-3.1` pipeline still loads),
-  ffmpeg on PATH, `HF_TOKEN` set (gated repos accepted). Input: real **JFK speech** chunk
+  ffmpeg on path, `HF_TOKEN` set (gated repos accepted). Input: real **JFK speech** chunk
   (`sample_jfk.webm`, 11 s, **opus/webm** — the extension's capture codec, so the real ffmpeg
-  demux path is exercised). Harness: `scripts/smoke_audio_backends.py` drives the ACTUAL
-  `app/audio` backend code (not a reimplementation). **Results — ALL FOUR GREEN in one run:**
-  - **ASR** (faster_whisper): PASS 10.8 s — correct transcript, lang=en, 2 segments.
-  - **Diarization** (pyannote/speaker-diarization-3.1): PASS 24.0 s — 5 turns, 1 speaker
+  demux path is exercised). Harness: `scripts/smoke_audio_backends.py` drives the actual
+  `app/audio` backend code (not a reimplementation). **Results — ALL four green in one run:**
+  - **ASR** (faster_whisper): `PASS` 10.8 s — correct transcript, lang=en, 2 segments.
+  - **Diarization** (pyannote/speaker-diarization-3.1): `PASS` 24.0 s — 5 turns, 1 speaker
     (`spk_0`, correct for a single-speaker clip); `assign_speakers` filled `enrichments.speakers`.
-  - **Translation** (whisper `task=translate`): PASS 1.0 s — English output (JFK is already
-    English, so X→En translate is ~identity; this proves the SEAM runs: decode → model →
-    segment lift, not translation quality on a non-English source).
-  - **Acoustic** (MIT/ast-finetuned-audioset): PASS 2.9 s — caption `"Ambient background
+  - **Translation** (whisper `task=translate`): `PASS` 1.0 s — English output (JFK is already
+    English, so X→En translate is ~identity; this proves the seam runs: decode → model →
+    segment lift, not translation quality on a non-english source).
+  - **Acoustic** (MIT/ast-finetuned-audioset): `PASS` 2.9 s — caption `"Ambient background
     noise."` (AST filters the speech-class tags → fallback caption; the pipeline decodes real
     webm/opus via `ffmpeg_read` and produces a caption end-to-end).
-  - **Two real pyannote bugs found + FIXED** (`app/audio/diarize/pyannote.py`), each of a class
+  - **Two real pyannote bugs found + fixed** (`app/audio/diarize/pyannote.py`), each of a class
     inspection could not catch (a torch-version default change; a torchaudio backend gap):
     (1) **`weights_only` UnpicklingError** — torch ≥ 2.6 flipped `torch.load`'s default to
     `weights_only=True`, which rejects pyannote's Lightning-checkpoint globals
@@ -187,8 +187,8 @@ are unrun by design (documented seams).
     Fixed by pre-decoding to 16 kHz mono WAV via ffmpeg (the exact decoder the ASR/AST paths
     use) before handing it to pyannote. Both fixes only touch the real `pyannote` path (the
     mock/off default never imports it), so the headless suite is unaffected.
-  - **Caveats / still-open:** (a) whisper-translate on a genuine **non-English** source is
-    still unproven (no non-English clip on the box — the English-identity run only proves the
+  - **Caveats / still-open:** (a) whisper-translate on a genuine **non-english** source is
+    still unproven (no non-english clip on the box — the English-identity run only proves the
     plumbing); pair it with an X-language chunk when one exists. (b) The env runs pyannote
     **3.3.2**, not the pinned **3.1.1** — both fixes are torch-version issues (not pyannote
     version), so they apply to 3.1.1 too, but pin-exact verification is a follow-up. (c) The

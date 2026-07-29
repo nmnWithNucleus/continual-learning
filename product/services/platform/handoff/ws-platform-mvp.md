@@ -29,7 +29,7 @@ output(8082) → input(8081)** in order (each `/health`-gated), print `http://lo
   out of git.
 
 ## Verified (this box, 2026-07-09)
-- `bash selftest/run_selftest.sh` → **10/10 PASS** from a clean state (fresh venv build path
+- `bash selftest/run_selftest.sh` → **10/10 `PASS`** from a clean state (fresh venv build path
   included). Confirms: up exits 0; all four `/health` up; storage healthy-before-input
   ordering; `--status` reports ≥4 up; the streamed turn parses as a valid C9 body; `--stop`
   brings all ports down.

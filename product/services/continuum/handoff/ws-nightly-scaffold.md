@@ -9,7 +9,7 @@ after an adversarial review round (31-agent find→verify workflow): 26 confirme
 all fixed same-session — headline fixes: the gate/publish tail is now terminal-guarded
 (re-runs replay the recorded outcome with zero side effects — no double strikes, no
 duplicate C5 rows, no alias regression), strike/freeze accounting is window-monotonic,
-replay-mix stage keys hash reservoir CONTENT, rollback is re-entrant stack-replay down to
+replay-mix stage keys hash reservoir content, rollback is re-entrant stack-replay down to
 base, prune is recency-ordered and can't delete rollback targets, `user_id`/`window_id`
 are validated before any path use, all durable writes are atomic+fsync with torn-tolerant
 readers (`app/fsio.py`), block anchors render in the wearer's local clock, and blocks
@@ -20,10 +20,10 @@ break on camera-off gaps. Regression suite: `tests/test_review_regressions.py`.
 | Module | Owns |
 |---|---|
 | `app/config.py` | env-per-call settings (DP posture); `TRAINER_BACKEND` mock/engram switch, loud fallback |
-| `app/recipe.py` + `recipes/consolidation-v1.0.json` | the recipe as CONFIG — engram consolidation v1.0 knobs pinned (48×/neg .15/replay .30/r128 α256/lr 1e-4/3ep/1024-tok + gate thresholds); every change forks `recipe_id` |
+| `app/recipe.py` + `recipes/consolidation-v1.0.json` | the recipe as config — engram consolidation v1.0 knobs pinned (48×/neg .15/replay .30/r128 α256/lr 1e-4/3ep/1024-tok + gate thresholds); every change forks `recipe_id` |
 | `app/window.py` | consolidation windows: 04:00→04:00 user-local, half-open, `window_id` keyed on local start date; `closed_window_before()` for the nightly trigger |
 | `app/context_reader.py` | C10 client on the beta range-read shape (`GET /context/records?user_id=&from=&to=`); fails loudly, never trains on a truncated window |
-| `app/daylog.py` | C2 records → ~10 s segment rows (TIME-WINDOW join — audio chunks are 5–30 s VAD-carved, video captions per-keyframe; diarized sub-spans land in their own buckets) → ~2 min blocks; engram field names (`seg_id/caption/asr/ocr/quality`, `block_id/seg_ids/text/anchors`) so the ported code's I/O is already the shape |
+| `app/daylog.py` | C2 records → ~10 s segment rows (Time-Window join — audio chunks are 5–30 s VAD-carved, video captions per-keyframe; diarized sub-spans land in their own buckets) → ~2 min blocks; engram field names (`seg_id/caption/asr/ocr/quality`, `block_id/seg_ids/text/anchors`) so the ported code's I/O is already the shape |
 | `app/renderer.py` | materializes `segments.jsonl`/`blocks.jsonl`/`day.txt` at the trainer seam (canonical rows live upstream; files are a boundary artifact) |
 | `app/backends/` | the seam: `amplify/train/evaluate` protocol; `mock` (deterministic, recipe-shaped output incl. deny-then-correct negatives + ok-rate stat); `engram` fails loudly with a pointer until ws-morpheus-port lands |
 | `app/reservoir.py` | permanent per-user store of amplified corpora; uniform pooled-paragraph replay sampler with `before_window` guard; negatives tagged at admission (for the neg-boost knob later) |

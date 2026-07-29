@@ -630,7 +630,7 @@ Day-log body:
   would add a *too-little-data* outcome that also leaves the watermark. It is **not built** —
   `cycle.py:53` defines four outcomes and `min_block_chars` appears nowhere in the repo. Tracked as
   [HANDOFF.md](HANDOFF.md) §Next item 5; do not read the rule above as covering it.
-- **The `/sessions` leg of this contract (C4 mentor traces) is unchanged and remains UNBUILT.** v0's
+- **The `/sessions` leg of this contract (C4 mentor traces) is unchanged and remains unbuilt.** v0's
   day-log derives from `/context` only.
 
 **How it got here**
@@ -750,7 +750,7 @@ GET /users/{user_id}/profile
   same reason auto-*update* is forbidden.
 - **Travel is the case that decides it.** A week in Tokyo changes every record's `device_tz` and
   changes nothing here — so the consolidation boundary stays put instead of jumping 9 h and
-  producing a 15 h night followed by a 33 h one. That is the FACT/POLICY split doing its job.
+  producing a 15 h night followed by a 33 h one. That is the fact/policy split doing its job.
 - **It is a profile, not a settings blob.** It holds values the system reads to decide its own
   behaviour: scheduling, fallbacks, policy. User-facing identity and presentation belong to input.
 
@@ -1043,10 +1043,10 @@ different owners — and conflating them was the original bug.
 
 **The split**
 
-- **The FACT — where the user actually was at a moment** — is owned by the **capturing device**.
+- **The fact — where the user actually was at a moment** — is owned by the **capturing device**.
   Reported per chunk as `device_tz` + `device_utc_offset_minutes` on C1, carried verbatim by
   data-processing into C2 `source{}`, and persisted by storage beside the UTC instant.
-- **The POLICY — when is this user's night** — is owned by **storage**, as the per-user profile value
+- **The policy — when is this user's night** — is owned by **storage**, as the per-user profile value
   `home_tz` ([C12](#c12--the-user-profile-read)).
 
 **Rules**

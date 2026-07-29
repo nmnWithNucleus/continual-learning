@@ -21,8 +21,8 @@
 data-processing). *Was `D-M1-6`.* **Status: built + tested.** Recording's implementation and its
 consequences:
 
-**D-M1-6 — async `/ingest` reply shape (inter-service wire, decided JOINTLY with
-data-processing 2026-07-19; OQ4 precedent — decide once, record in BOTH canvases).** DP can
+**D-M1-6 — async `/ingest` reply shape (inter-service wire, decided jointly with
+data-processing 2026-07-19; OQ4 precedent — decide once, record in both canvases).** DP can
 now ACK `202 {ok, accepted:true, chunk_id}` with **NO record_ids** (it processes on a worker
 pool; `INGEST_ASYNC`, off by default). Recording's implications, all built + tested:
 **(1) provenance is optional-at-accept** — the emitter already coerced `ack.get("record_ids")
@@ -35,7 +35,7 @@ un-confirm it), a dead-lettered chunk → verdict `gaps`, an accepted-but-unconf
 verdict `recording`; **`leg["dp"]` keeps its pinned 5-key shape** (dead-letter/accepted are
 sibling leg fields). Net: the "zero silent loss" verdict never reads `clean` for a chunk DP
 hasn't confirmed. When the fleet sets `INGEST_ASYNC=1`, **`RECORDING_HTTP_TIMEOUT` reverts to
-30** (the 120 s mitigation is retired). **Founders RATIFIED this wire 2026-07-19 (D16)** — the
+30** (the 120 s mitigation is retired). **Founders ratified this wire 2026-07-19 (D16)** — the
 one ratification condition (a named + drilled re-drive path for accepted-unconfirmed chunks)
 is satisfied in-slice: **`POST /capture/sessions/{id}/redrive`** (+ `emitter.redrive_accepted_chunks`,
 callable on restart / periodically) re-pushes each `dp_state='accepted'` chunk's original C1;
@@ -62,9 +62,9 @@ upload for ALL v0 surfaces** (phone / extension / mac CLI). Rationale: our captu
 is the *archive/training* job, not live viewing — loss-intolerant, offline-resilient,
 latency-tolerant — which maps onto segmented upload (the Axon-bodycam/dashcam pattern),
 not persistent-socket streaming (the Ring/Nest *live-view* pattern; note those products
-run BOTH paths separately). **Continuous streaming ingest is a deferred ADDITIVE leg**:
+run both paths separately). **Continuous streaming ingest is a deferred additive leg**:
 a socket receiver (WebSocket/RTSP/SRT per device) → per-stream continuity buffer →
-server-side segmenter, terminating in the EXISTING spool→demux→carve→emit machinery —
+server-side segmenter, terminating in the existing spool→demux→carve→emit machinery —
 C1/C2 unchanged by design (C1 deliberately begins *after* transport: "chunks exist").
 Build it only when a surface needs sub-segment latency (live-view is out of v0 scope) or
 the bodycam firmware demands it; cheaper latency lever first: shrink `SEGMENT_SECONDS`.

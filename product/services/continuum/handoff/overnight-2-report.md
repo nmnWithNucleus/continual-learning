@@ -9,7 +9,7 @@ sign-off.**
 ## 1. Rehearsal composition — the seed-0 hypothesis is FALSIFIED
 
 §10 hypothesised that seed 0's draws under-sampled day-5 paragraphs. They cannot have: **the
-rehearsal draw is seed-INDEPENDENT.** `set_seed(chain_seed)` fixes LoRA init; the rehearsal
+rehearsal draw is seed-independent.** `set_seed(chain_seed)` fixes LoRA init; the rehearsal
 sampler draws from a *separate* `random.Random(7)` (ours) / hardcoded `random.Random(7)`
 (reference, `phase_d_driver.py:313`) that the global seed cannot reach. Verified: our composition
 == reference composition, and all three original chains used `rehearsal_seed=7`, so seeds 0/1/2
@@ -42,11 +42,11 @@ Re-scoring every run (`scripts/gate_rescore.py`, offline):
 
 | | recall | traps | heldout | verdict |
 |---|---|---|---|---|
-| reference (4 runs) | 0.211–0.286 | 0.286–0.393 | ≤2/60 | **4/4 PASS** |
-| ours s0 | 0.117 | 0.179 | 0/60 | BLOCK (recall) |
-| ours s1 | 0.250 | 0.107 | 1/60 | BLOCK (traps) |
-| ours s2 | 0.283 | 0.429 | 5/60 | PASS |
-| **CONTROL h12_calib** | **0.021** | **0.393** | 1/60 | **BLOCK** |
+| reference (4 runs) | 0.211–0.286 | 0.286–0.393 | ≤2/60 | **4/4 `PASS`** |
+| ours s0 | 0.117 | 0.179 | 0/60 | Block (recall) |
+| ours s1 | 0.250 | 0.107 | 1/60 | Block (traps) |
+| ours s2 | 0.283 | 0.429 | 5/60 | `PASS` |
+| **Control h12_calib** | **0.021** | **0.393** | 1/60 | **Block** |
 
 The control is load-bearing and instructive: the 40%-neg-boost lobotomy **passes the traps check
 at 0.393** — it denies its way to a clean calibration score — and is caught only by the recall
@@ -76,8 +76,8 @@ now complete rather than a single spot-check.
 
 ## 5. Seq-arm control — the harness reproduces a FAILURE
 
-Every parity result so far shows agreement with GOOD runs. The seq arm (rehearsal OFF, its own
-`recipe_id` `consolidation-seq-v1.0`) reproduces the reference's catastrophic-forgetting FAILURE:
+Every parity result so far shows agreement with good runs. The seq arm (rehearsal OFF, its own
+`recipe_id` `consolidation-seq-v1.0`) reproduces the reference's catastrophic-forgetting failure:
 
 ```
 seq_s0:  day5 0.00  day9 0.017  day12 0.00  day13 0.00  day17 0.05   day21 0.50   (mean 0.094)
@@ -122,6 +122,6 @@ Both are single exclusive-node allocations using all 8 GPUs — the partition is
 ## 8. Decisions for the cofounders
 
 1. **Apply gate-policy-v1.1 to the live gate?** Re-scored and controlled (§2). Not applied.
-2. ~~Our ensemble variance is ~2× the reference's~~ — **RESOLVED (§6).** At matched sampling
+2. ~~Our ensemble variance is ~2× the reference's~~ — **Resolved (§6).** At matched sampling
    depth the reference's spread is slightly wider than ours (its low tail was unmeasured at n=4);
    the ensembles are indistinguishable (p=0.82). Seed 0 was ordinary chain variance. No action.

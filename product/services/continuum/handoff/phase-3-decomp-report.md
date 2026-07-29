@@ -1,6 +1,6 @@
 # Phase 3 — decomposition: can the REAL pipeline carry PARITY content to PARITY numbers?
 
-**Status:** RUN + ANSWERED · **Branch:** `svc/continuum-phase3-decomp` (off main; Phase-3 result merged)
+**Status:** RUN + answered · **Branch:** `svc/continuum-phase3-decomp` (off main; Phase-3 result merged)
 · Follows [phase-3-report.md](phase-3-report.md). Cofounder review before merge.
 
 > **The question:** Phase 3 showed the 1-min product path did NOT preserve separation
@@ -62,7 +62,7 @@ every expected caption present, one per 300 s segment, zero collisions.
 
 Exact permutation tests on run-level separation:
 * **vs the 5-min baseline: p = 0.148** — NOT significant → same distribution (the
-  pre-registered PIPELINE-SOUND condition).
+  pre-registered pipeline-sound condition).
 * **vs the rehearsal-off control: p = 0.018** — significant → clearly above "no
   consolidation".
 * **vs the Phase-3 1-min run: p = 0.016** — significant → the change recovered the signal.
@@ -96,7 +96,7 @@ statistically-parity separation.
 
 ## Verdict (pre-registered, unmoved)
 
-**PIPELINE SOUND — learn-loop integration proven end-to-end.** Real recording → DP → storage
+**Pipeline sound — learn-loop integration proven end-to-end.** Real recording → DP → storage
 → continuum, fed parity block content, reproduces baseline separation (p = 0.148, not
 significant) and is decisively separated from both the no-consolidation control and the
 1-min path that failed. The Phase-3 collapse is therefore confirmed as a **recipe/dose**

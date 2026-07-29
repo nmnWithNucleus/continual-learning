@@ -17,7 +17,7 @@
 > Full posture + what changes at dev/prod: [ARCHITECTURE.md](../../ARCHITECTURE.md) §Stage.
 
 
-**Status:** chartered · **RATIFIED as a service 2026-07-09 (D1)** · **Last updated:** 2026-07-09
+**Status:** chartered · **ratified as a service 2026-07-09 (D1)** · **Last updated:** 2026-07-09
 
 ## Why this service exists (ratified 2026-07-09, D1)
 

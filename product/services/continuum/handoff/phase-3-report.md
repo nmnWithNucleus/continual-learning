@@ -18,10 +18,10 @@
 
 | file | what it is |
 |---|---|
-| `recording/app/sources/replay_source.py` (+1 registry line) | replays a recorded day through the UNCHANGED blob-first + C1-push emit path |
+| `recording/app/sources/replay_source.py` (+1 registry line) | replays a recorded day through the unchanged blob-first + C1-push emit path |
 | `data-processing/app/stages/audio/injected_caption.py` | sidecar: one `kind="caption"` C2 per 1-min description window in the chunk's span |
 | `continuum/recipes/consolidation-test-1min-v1.0.json` | the rule-bend: `segment_seconds=60`, `block_segments=5`. Every training knob byte-identical to v1.0 |
-| `continuum/scripts/phase3_build_replay.py` | derives the wall-clock spine ONCE into a replay plan + caption index |
+| `continuum/scripts/phase3_build_replay.py` | derives the wall-clock spine once into a replay plan + caption index |
 | `continuum/scripts/phase3_verify.py` | the 3a exit check against `/context` |
 | `continuum/scripts/phase3_daylog.py` | day-log through the real 2c client, caption-only + train-split provider |
 | `continuum/scripts/phase3_amplify.py` | 48× amplification with the day/city anchors the product day-log cannot carry |
@@ -37,7 +37,7 @@ line.** Tests: recording 132 green (12 new), data-processing 173 green (10 new).
 
 ### 1.1 The registry key — a replay source without touching the frozen C1 enum
 
-`SOURCE_BUILDERS` is keyed by a SOURCE key, not by the C1 modality: `build_source()` uses
+`SOURCE_BUILDERS` is keyed by a source key, not by the C1 modality: `build_source()` uses
 it for lookup only, and the C1 envelope's `modality` comes from `source_obj.modality`
 (`capturer.py:158`). So `"replay" → ReplayPlanSource(modality="audio")` emits an envelope
 byte-shape-identical to a live audio capture, with `wav_source` untouched.
@@ -53,14 +53,14 @@ model to reach a test-only source would have weakened the production surface for
 
 A tour day is 18.8–26.0 h of stream; the consolidation window is 24 h.
 
-* With the REAL clock there is **no boundary that fits even the eight days under 24 h**:
+* With the real clock there is **no boundary that fits even the eight days under 24 h**:
   day 13 needs a boundary ≥ 08:59 local, day 28 needs ≤ 08:49 — disjoint. Day 17 is
   26.03 h and fits no 24 h window at all. (`rwt` is also non-monotonic and partly blank.)
 * So each day is laid **contiguously from its own window start** on a **whole-minute
   grid**: chunk *i* starts at `window_start + Σ ceil(duration/60)·60` over the chunks
-  before it, while the chunk keeps its REAL duration as its C1 span.
+  before it, while the chunk keeps its real duration as its C1 span.
 
-Quantising the STRIDE (never the span) is what makes the rule-bend exact — verified on the
+Quantising the stride (never the span) is what makes the rule-bend exact — verified on the
 built fixture: **all 12,391 captions land on a whole-minute offset, each inside exactly one
 chunk span, with zero intra-day and zero cross-day span overlaps.** The cost is 170
 captions (1.37%) whose minute falls past the 24 h window: day 17 loses 146 (≈2.4 h, the
@@ -75,11 +75,11 @@ eight of nine days; day 17 spans two and takes the later). Timezone is the day's
 Checked, not assumed: `~/engram/data/corpus/day{D}.blocks.jsonl` contains blocks from
 exactly the day's `split=train` chunks and no heldout ones (day 5: 240 blocks / 61 distinct
 parents / 61 train chunks / 0 heldout). Including the within-day heldout chunks would have
-changed the CONTENT SCOPE as well as the cadence, and the comparison would no longer
+changed the content scope as well as the cadence, and the comparison would no longer
 isolate one variable.
 
 So: **everything lands in `/context`** (that is what a faithful capture does), and the
-scope is reproduced at the READ, in the same provider wrapper that keeps the day-log
+scope is reproduced at the read, in the same provider wrapper that keeps the day-log
 caption-only. With that filter the rule-bent day-log reproduces the parity block count on
 five of six train days.
 
@@ -88,7 +88,7 @@ five of six train days.
 The injected caption carries `SpeedProfile.render_block`'s output **minus its first line**
 — the tour anchor (`[Day 5 of 35 · Washington, DC · 5min clip · ~9:17 AM ET]`) is dataset
 metadata no captioner could know, and the day-log writes its own time anchor from the
-record's `t_start`. Keeping the eight FIELDS identical to the 5-min parity path is what
+record's `t_start`. Keeping the eight fields identical to the 5-min parity path is what
 leaves cadence as the single changed variable.
 
 The risk this created — `SpeedProfile.is_valid` requires the day number back in the
@@ -105,7 +105,7 @@ design forbade. Both services instead read the same spine: recording stamps each
 the replay plan, the sidecar bisects the caption index built from that same plan, and
 membership is half-open on `t_start`, the same attribution rule the day-log uses.
 
-Like the acoustic sidecar it declares **no `version_fragment`**: it only ADDS records, and
+Like the acoustic sidecar it declares **no `version_fragment`**: it only adds records, and
 forking the whole chunk's dialect (which would re-key the ASR primary too) on a sidecar
 toggle is what that precedent declines to do.
 
@@ -190,7 +190,7 @@ caption-only + train-split:
 | 21 | 1184 | 1126 |  980 |  980 | **196** | 196 | 5924 | 99 |
 | | | | | | **1401** | 1427 | | 565 |
 
-**The rule-bent day-log reproduces the 5-min baseline's block count EXACTLY on five of six
+**The rule-bent day-log reproduces the 5-min baseline's block count exactly on five of six
 train days.** Day 17 is the one day that differs (246 vs 272) — its 26.0 h of stream does
 not fit a 24 h window, so ~2 h falls outside it. Day 5 is 238 blocks of exactly five 60 s
 segments plus two short ones; the rule-bend does what it says.
@@ -247,10 +247,10 @@ would be uninterpretable — so it was checked first, per day, over all 900 day-
 | 21 | 150 | 0.949 | **0.968** | +0.018 | 287,627 → 1,161,245 |
 | | | **0.944** | **0.968** | +0.024 | **4.1× the text** |
 
-**The product path's day-log contains MORE of what the probes ask about, not less.** So a
+**The product path's day-log contains more of what the probes ask about, not less.** So a
 weaker number cannot be read as "the facts fell out of the pipeline" — they are more
 present than in the corpus the baseline was measured on. What changed is how they are
-PRESENTED: the same 48 retellings per block now have to cover 4.1× as much material, and
+Presented: the same 48 retellings per block now have to cover 4.1× as much material, and
 40% of blocks lose their tail to the 6000-char excerpt cap. That is the mechanism to reach
 for first if the number moves, and it is a *cadence* mechanism, which is exactly the
 variable Phase 3 set out to change.
@@ -362,7 +362,7 @@ function of that dose is the research line's central result; this is that result
 up in the product path.
 
 Three things this is NOT, each checked rather than assumed:
-* **Not lost facts.** The 1-min day text carries MORE of the probes' gold answers than the
+* **Not lost facts.** The 1-min day text carries more of the probes' gold answers than the
   5-min text (0.968 vs 0.944, §3.3).
 * **Not the excerpt cap.** Only 3.2% of block characters (259,761 of 8.1 M) fall past
   `EXCERPT_CHARS`, spread over 40% of blocks.

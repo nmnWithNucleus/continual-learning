@@ -4,7 +4,7 @@
 the 5-verb loop against them, parity byte-identical · **Cofounder review before merge.**
 
 A self-contained continuum refactor: no other service, no GPU, no new experiments. Continuum now
-consumes storage across three CLIENT interfaces, each with a local backend today and an
+consumes storage across three client interfaces, each with a local backend today and an
 HTTP-to-storage backend later — the eventual integration is a transport swap, not a redesign.
 
 ---
@@ -69,7 +69,7 @@ through the CLI over the seams.
 
 ## Contract questions for the founders' storage session (NOT pinned)
 
-1. **Day-log fetch must be addressable by `(user, window_id)` for arbitrary PRIOR windows**, not
+1. **Day-log fetch must be addressable by `(user, window_id)` for arbitrary prior windows**, not
    just "the current window." Raw-source replay re-reads prior day-logs, so C10-evolved must serve
    any past window's day-log on demand. The local impl reconstructs prior windows from the
    reservoir ledger + the recipe boundary; storage's C10 needs the same addressability. *(This is

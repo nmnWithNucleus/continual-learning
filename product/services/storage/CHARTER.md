@@ -521,7 +521,7 @@ that ships even though the *policy* does not.
 **What changes at dev/prod** (tracked, not forgotten): choose real per-store values; build the
 sweeper and its manifest; decide whether retention tiers by consent state; and reconcile with the
 research design-of-record's stance (raw A/V ≤72 h · day-logs forever · 14-night hard-delete
-replay), which continuum's canvas has flagged since 2026-07-22 as *"a PRODUCT decision to take
+replay), which continuum's canvas has flagged since 2026-07-22 as *"a product decision to take
 explicitly"* and which D19 explicitly defers rather than silently adopts.
 
 ## Open questions

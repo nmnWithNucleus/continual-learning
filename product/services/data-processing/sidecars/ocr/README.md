@@ -16,7 +16,7 @@ pair and `/health` re-hashes it.
 
 ## THE WIRE CONTRACT (pinned)
 
-**DP (tab C2) codes against THIS section, never against `app.py`.** The two are
+**DP (tab C2) codes against this section, never against `app.py`.** The two are
 kept in lockstep. Requests and responses are JSON over HTTP/1.1 on loopback.
 
 ### `POST /ocr`
@@ -184,4 +184,4 @@ CRF 28? This is the WS-C deliverable that **gates the production `ppocr` default
 ship `VIDEO_OCR_BACKEND=mock` until a model clears **≥ 0.85 key-string recall**
 (≥5-char strings, **lenient substring** matching — not exact equality) and
 **≤ 0.10 CER** on the focused region. The report, its scorer, and the corpus
-provenance are in [`bakeoff/REPORT.md`](bakeoff/REPORT.md).
+provenance are in [`bakeoff/REPORT.md`](bakeoff/report.md).

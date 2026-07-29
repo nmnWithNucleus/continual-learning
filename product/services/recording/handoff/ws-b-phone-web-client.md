@@ -5,7 +5,7 @@
 > step**, served by the recording server and talking to it same-origin. Reference (not lift,
 > D7): `poc/live_video_chat` — iOS capture/MediaRecorder/tunnel lessons.
 
-**Status:** built + **REAL-PHONE VERIFIED** (M1 2026-07-18; **re-verified 2026-07-19 on the
+**Status:** built + **real-phone verified** (M1 2026-07-18; **re-verified 2026-07-19 on the
 renamed `/capture/*` wire** — CTO's iPhone Safari, 4/4 `clean`, blobs sha256+ffprobe-checked)
 · **Owner session:** recording M1 lead
 
@@ -37,7 +37,7 @@ same-origin fetch, no dependencies, phone-first layout (large record button).
   `video/webm` (audio-only: `audio/mp4` → `audio/webm`). iOS Safari lands on MP4/H.264+AAC.
 - **Segment loop:** start recorder (no timeslice); after `SEGMENT_SECONDS` stop it; on
   `dataavailable`+`stop` enqueue `{seq, blob, t_start, t_end, mime}` (wall-clock ms stamped at
-  recorder start/stop) and immediately start the next segment from the SAME MediaStream (no
+  recorder start/stop) and immediately start the next segment from the same MediaStream (no
   re-prompt). **Pause** = stop current segment, don't start the next; **Resume** = start next.
   **Stop** = stop current, then after the queue drains POST the end marker.
 - **Session identity:** on each record-press mint `session_id` (ULID-ish from
@@ -86,7 +86,7 @@ must be hard-refreshed or every upload 404s.**
   race (Stop tap between `rec.stop()` and its async `onstop`) is guarded with an
   awaiting-stop flag + finishing latch. Poll-stop now also requires
   `segment_states.received == 0` (a `gaps` verdict can appear while segments still drain).
-- 2026-07-18 — review round fixed two client defects: a Pause→quick-Resume race could run
+- 2026-07-18 — review round fixed two client defects: a Pause→quick-resume race could run
   TWO MediaRecorders concurrently (resume now defers to the pending `onstop`, which
   starts the next segment itself), and the DP-missing status line counted `[lo,hi]` runs
   as 1 each (now sums chunks, preferring the ack-reconciled `missing_unacked`).
@@ -94,7 +94,7 @@ must be hard-refreshed or every upload 404s.**
   `/client/` locally AND over the cloudflared HTTPS tunnel; the full upload wire exercised
   E2E by a synthetic driver mimicking this client byte-for-byte (segments → demux → C1 →
   real ASR transcripts in `/context`; clean/gap/dup drills all behaved).
-- 2026-07-18 — **REAL-PHONE VERIFIED** (CTO, iPhone Safari via the tunnel): two sessions,
+- 2026-07-18 — **Real-Phone verified** (CTO, iPhone Safari via the tunnel): two sessions,
   7/7 and 9/9 segments received+emitted, 0 failed, verdict `clean`, camera preview /
   pause / stop / report poll all behaved; transcripts + video-caption records landed in
   `/context` with correct spans. Three UI leaks found and fixed from the screenshots:
@@ -102,14 +102,14 @@ must be hard-refreshed or every upload 404s.**
   `display:flex` overrode the UA's `[hidden]` rule; fixed with a global
   `[hidden]{display:none !important}`; (2) session id was ellipsized — now shown in full
   (it's the "new session started" signal); (3) `dropped` wording de-jargonned. Also
-  surfaced by the real data: Whisper AUTO language detection hallucinated
+  surfaced by the real data: Whisper auto language detection hallucinated
   Hindi/Korean-script text on faint room audio → DP gained `ASR_LANGUAGE` (beta fleet
   pins `en`; see DP ws file).
 - 2026-07-18 (computer-capture lead) — **wire rename adopted** (founders): `app.js` now
   calls `/capture/*`; a one-day transitional `/ingest/*` alias covered loaded pages.
 - 2026-07-19 — **alias removed** (CTO: single tester, refresh beats route versioning).
   Loaded phone pages must hard-refresh once; a stale page shows 404 upload errors.
-- 2026-07-19 — **RE-VERIFIED on the `/capture/*` wire** (CTO, real iPhone via tunnel, post
+- 2026-07-19 — **RE-Verified on the `/capture/*` wire** (CTO, real iPhone via tunnel, post
   hard-refresh): session `01KXWE2DQY…` (device `phone-web-44W7BV2R`, user `nmn`), verdict
   `clean`, 4/4 segments; all 8 blobs sha256-verified + ffprobe-decoded in storage (video
   H.264 640×480 mp4 + audio 16 kHz mono wav, ~10 s each), real ASR transcripts of the mic in

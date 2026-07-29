@@ -7,7 +7,7 @@
 > **Zero server changes.** A menu-bar/GUI app (ScreenCaptureKit, visible capture
 > indicator, autostart) is an explicitly **LATER surface** — capability today, UX later.
 
-**Status:** built + unit-tested + **REAL-AVFOUNDATION VERIFIED** (2026-07-19, CTO's mac:
+**Status:** built + unit-tested + **real-avfoundation verified** (2026-07-19, CTO's mac:
 screen+mic, 7/7 segments, verdict `clean`, pixels confirmed real in VLC + spoken-run
 transcripts in `/context`; the fps-pin fix that made it work is in the worklog) · **Owner
 session:** recording computer-capture lead
@@ -35,7 +35,7 @@ session:** recording computer-capture lead
   the anchor can sit up to ~1–2 s late/early of true first-frame time (device-open and
   birthtime granularity); second-level alignment is the beta bar.
 - **D-F3 — `--source test` is a first-class mode.** lavfi `testsrc2` + `sine` through the
-  SAME encode/segment/upload path (only the ffmpeg input differs). It is (a) how this
+  Same encode/segment/upload path (only the ffmpeg input differs). It is (a) how this
   headless Linux box verifies everything but avfoundation E2E against the live fleet,
   (b) the conformance-test driver, and (c) a mac user's no-permissions smoke test.
   On non-darwin, `record` without `--source test` refuses with a clear message —
@@ -118,20 +118,20 @@ Wire conformance against the real ingest app lives in `tests/test_wire_conforman
 
 ## Worklog
 
-- 2026-07-19 — **ALPHA FINDING (first real mac run, CTO): zero segments ever finalized.**
+- 2026-07-19 — **Alpha finding (first real mac run, CTO): zero segments ever finalized.**
   The screen device refused `-framerate 15` ("Configuration of video device failed,
   falling back to default"), ffmpeg derived a garbage output rate from avfoundation's
   microsecond timebase, duplicated frames endlessly ("More than 10000 frames
-  duplicated"), and the segment muxer — which cuts on MEDIA time — never reached 10
+  duplicated"), and the segment muxer — which cuts on media time — never reached 10
   media-seconds, so nothing uploaded (server: unknown session; the watcher correctly
   held the unfinished file). **Fix:** the avfoundation `-vf` chain now ends with
-  `fps=<framerate>`, pinning the OUTPUT rate regardless of what the device negotiates.
+  `fps=<framerate>`, pinning the output rate regardless of what the device negotiates.
   Verified by suite (argv test asserts the pin) + a local simulation (1000 fps lavfi
   input through the exact filter/segment recipe → clean 10 s segments). The mac retry
   is the CTO's step. Bluetooth-headset audio note: capturing a BT mic drops it to
   call-quality rates (the harmless `aac … clamping` warning); built-in mic = disconnect
   the headset and re-run list-devices.
-- 2026-07-19 — **fps-pin fix CONFIRMED ON REAL HARDWARE** (CTO retry, `--framerate 30
+- 2026-07-19 — **fps-pin fix confirmed ON real hardware** (CTO retry, `--framerate 30
   --keep-segments`): 7/7 segments, both streams emitted, DP-checked, verdict `clean`,
   graceful stop with a 1.3 s tail; no MB-rate warning, no frame duplication. **Known v0
   approximation observed:** seg 0 spanned 18.4 s (all others exactly 10.0 s) — device
@@ -139,7 +139,7 @@ Wire conformance against the real ingest app lives in `tests/test_wire_conforman
   later, so segment 0 holds more audio than video and its A/V alignment is fuzzy by the
   warm-up delay. First-segment-only; the time axis stays continuous. Possible later
   refinement: anchor the timeline at first-video-frame instead of file birthtime.
-- 2026-07-19 — **CLI ALPHA PASSED** (runbook worklog has the full record): pixels
+- 2026-07-19 — **CLI alpha passed** (runbook worklog has the full record): pixels
   verified real in VLC; spoken-run transcripts landed in `/context`. Quality datapoint
   for charter OQ3 (codec/bitrate ladder, joint with DP): screen video at the default
   `--max-width 1728` / CRF 28 is readable but soft — `--max-width 2560+` is the current
@@ -153,8 +153,8 @@ Wire conformance against the real ingest app lives in `tests/test_wire_conforman
   `start_new_session=True` so Ctrl-C routes through the CLI; 4xx-dropped files kept in the
   spool as evidence; ffmpeg-dies-with-zero-segments short-circuits with a permission hint.
 - 2026-07-18 — **adversarial review round** (5-lens find → 2-skeptic verify) fixed here:
-  (1) *stamp corruption on Ctrl-C* (HIGH): an interrupt landing inside an in-flight upload
-  re-processed that seq on the graceful pass and APPENDED its duration twice, silently
+  (1) *stamp corruption on Ctrl-C* (High): an interrupt landing inside an in-flight upload
+  re-processed that seq on the graceful pass and appended its duration twice, silently
   shifting every later wire timestamp — durations are now idempotently slotted
   (`slot_duration`, regression-tested); (2) *stale spool*: a reused `--spool` dir holding a
   prior run's `seg-*.mp4` would upload them into the NEW session — `record` now refuses a

@@ -59,7 +59,7 @@ script; conform exactly to `product/contracts/*.json`.
   reader + markdown render.
 
 ## Gotchas
-- **C9 is a wire format, not one JSON doc** — split on the FIRST `\x1e`; `app/wire.py::split_stream`.
+- **C9 is a wire format, not one JSON doc** — split on the first `\x1e`; `app/wire.py::split_stream`.
 - The **C4 write runs inside the streaming generator after the end frame** — fully reading the
   `/infer` response guarantees the C4 POST completed (makes tests deterministic). A storage-write
   failure is logged, not surfaced (the answer is already delivered).

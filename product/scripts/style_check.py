@@ -30,7 +30,8 @@ CAPS_OK = {
     # Names and acronyms, not emphasis.
     "GDPR", "CCPA", "PEFT", "SISA", "FIFO", "TTFT", "CTRL", "SIGKILL",
     "ULID", "TOCTOU", "SSIM", "RTSP", "VLLM", "SQLITE",
-    "ONNX", "JPEG", "CRLF", "TEMP",
+    "ONNX", "JPEG", "CRLF", "TEMP", "SIGINT", "IIFE", "YYYYMMDD",
+    "HHMMSS", "MJPEG", "WEBM",
 }
 # Rule 6: reasoning sections get 60 words, everything else 40 (42 with slack).
 REASONING = {"Why it's this way", "Watch out for", "How it got here"}
@@ -132,11 +133,19 @@ def findings(path):
 SKIP_DIRS = {".review", ".venv", "venv", "node_modules", "site-packages",
              ".git", "__pycache__", ".pytest_cache", "dist-info"}
 
+# *.prompt.md is the versioned prompt pack: model-facing bytes whose sha256 IS
+# `pipeline_version` (D-13). Restyling one forks the dialect and re-keys every
+# record it produced, so it is a code change, not a documentation edit. The
+# pack has its own discipline in `app/vision/prompts/` and its own tests.
+SKIP_SUFFIXES = (".prompt.md",)
+
 
 def collect():
     all_found = {}
     for path in sorted(ROOT.rglob("*.md")):
         if any(p in SKIP_DIRS or p.endswith(".dist-info") for p in path.parts):
+            continue
+        if path.name.endswith(SKIP_SUFFIXES):
             continue
         rel = str(path.relative_to(ROOT.parent))
         found = findings(path)

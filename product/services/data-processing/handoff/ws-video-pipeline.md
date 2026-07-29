@@ -27,7 +27,7 @@ adversarial review surfaced 3 real idempotency/robustness issues, all fixed + re
   - `frames.py` — **backend-independent** keyframe extraction via the **single canonical decoder,
     ffmpeg** — scene-change detection (`select='gt(scene,thr)',metadata=print`) unioned with a
     duration-driven **uniform base grid**, then JPEG extraction + downscale. ffmpeg absent / bytes
-    don't decode → returns `[]` → synthetic fallback (the SAME result on every worker). Selection is
+    don't decode → returns `[]` → synthetic fallback (the same result on every worker). Selection is
     **deterministic** given bytes+settings, and record identity is the keyframe's selected-times
     index — both required by the C2 idempotency contract (see the review note below). No in-process
     OpenCV fallback: a second decoder's scene metric differs from ffmpeg's, so a heterogeneous fleet
@@ -36,7 +36,7 @@ adversarial review surfaced 3 real idempotency/robustness issues, all fixed + re
   - `result.py` — neutral `Keyframe` (JPEG + chunk-relative `[t_offset, t_end_offset)` sub-span;
     `image_jpeg=None` marks a *synthetic* timing-less keyframe) and `KeyframeCaption`
     (caption + OCR text kept separate).
-  - `__init__.py` `select(vs)` — the `mock|vlm` captioner switch. `mock` DEFAULT (no import cost);
+  - `__init__.py` `select(vs)` — the `mock|vlm` captioner switch. `mock` default (no import cost);
     `vlm` **late-bound** (imported only when selected).
   - `mock.py` — canned captions, `PIPELINE_VERSION="vidproc-mock-v0"` (== the pre-existing stub's
     dialect, so the mock record_ids never fork). No GPU / no network / ignores pixels.
@@ -74,13 +74,13 @@ adversarial review surfaced 3 real idempotency/robustness issues, all fixed + re
   image build (CHARTER OQ14b).
 
 ## Contract discipline
-- **C1/C2 FROZEN — additive only.** The timing hook needed no C2 change. Every produced C2 (mock,
+- **C1/C2 frozen — additive only.** The timing hook needed no C2 change. Every produced C2 (mock,
   vlm, ocr-record) validates against the frozen `c2_processed_record.v0.json`.
 - **File ownership:** touched only `processors/video.py`, the new `app/vision/*`, additive
   `base.py` + `pipeline.py`, `requirements-video.txt`, and NEW `tests/test_video_pipeline.py` +
   `tests/fixtures/video_scenes.*`. Did **not** touch config.py, requirements.txt, main.py,
   registry.py, models.py, schemas.py, asr/, audio/, or the audio/image/text processors — no merge
-  surface with the concurrent AUDIO session.
+  surface with the concurrent audio session.
 
 ## Tests (tests/test_video_pipeline.py — 11 new, suite now 49)
 - New fixture is valid C1; sha256/bytes self-consistent.
@@ -106,16 +106,16 @@ adversarial review surfaced 3 real idempotency/robustness issues, all fixed + re
   fake-storage; PUT the real `video_scenes.mp4` blob, POST its C1 → 4 keyframe C2 records in
   `/context` with distinct contiguous sub-spans (`00:00→02.667→05.333→06.0→08`, boundaries
   verbatim), OCR woven, idempotent re-ingest. No GPU/torch.
-- **REAL VLM run (genuine, on this box):** served the cached **Qwen/Qwen3-VL-8B-Instruct** with
+- **Real VLM run (genuine, on this box):** served the cached **Qwen/Qwen3-VL-8B-Instruct** with
   **vLLM 0.24.0** (conda `vllm-cu13`, TP=1, one H100, `HF_HUB_OFFLINE=1`) on an OpenAI-compatible
   `:8100`; pointed `VIDEO_BACKEND=vlm VIDEO_VLM_URL=http://127.0.0.1:8100
   VIDEO_VLM_MODEL=Qwen/Qwen3-VL-8B-Instruct` and drove `video_scenes.mp4` through `/ingest`.
   Qwen3-VL-8B captioned all **4 real keyframes in ~3.2s**, reading each scene's on-screen text
   **verbatim** and weaving it in, e.g.:
   - kf0 `[00:00→02.667]` — "A solid blue background with centered white text describing a desk
-    setup. On-screen text: 'DESK laptop and coffee'."
-  - kf2 `[05.333→06.0]` — "A terminal window displays a command prompt with the text 'TERMINAL
-    make deploy' in green on a solid red background. On-screen text: 'TERMINAL make deploy'."
+    setup. On-screen text: 'desk laptop and coffee'."
+  - kf2 `[05.333→06.0]` — "A terminal window displays a command prompt with the text 'terminal
+    make deploy' in green on a solid red background. On-screen text: 'terminal make deploy'."
   Records written to `/context` as `vidproc-vlm-v0`; server torn down afterwards (GPU freed).
   The node-7 Qwen3-VL-32B is the production endpoint — identical wire, just a different
   `VIDEO_VLM_URL`.
@@ -150,13 +150,13 @@ adversarial review surfaced 3 real idempotency/robustness issues, all fixed + re
   response lacking `choices` raised an opaque KeyError; fixed to a clear `ValueError` (chunk
   retried, no degraded caption persisted). Suite → **49 passed**.
 - 2026-07-19 — **independent verification round** (recording/DP integrator session: 3-lens
-  claims audit + 2-skeptic confirmation, 27 agents). Claims that HELD empirically:
+  claims audit + 2-skeptic confirmation, 27 agents). Claims that held empirically:
   record_id stability under frame drops, sub-span contiguity/clamping, webm(vp8)+mp4+
   pipe-written-webm all decode to identical grids, additive hook byte-identity. 4 confirmed
   defects, all fixed + regression-tested (+4 tests → DP 72): (1) zero-decodable-keyframes
   under `vlm` emitted '[no decodable frame]' placeholders as processed truth under the real
   dialect (transient ffmpeg timeouts conflated with corrupt bytes, never retried) — the vlm
-  path now RAISES so at-least-once redelivery retries, mock keeps the synthetic dev
+  path now `RAISES` so at-least-once redelivery retries, mock keeps the synthetic dev
   fallback; (2)+(3) partition-invariant holes — decoded-media-shorter-than-span left a tail
   gap and a dropped head frame orphaned the chunk's opening slice — first/last records are
   now pinned to the C1 span edges verbatim; (4) vision config numerics parsed strictly (a
