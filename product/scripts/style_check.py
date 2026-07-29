@@ -96,7 +96,7 @@ def findings(path):
             for cell in stripped.split("|")[1:-1]:
                 if len(cell.split()) > 20:
                     out.append((i, "rule1-cell", f"{len(cell.split())} words"))
-                if cell.count("**") // 2 > 1:
+                if re.sub(r"`[^`]*`", "`_`", cell).count("**") // 2 > 1:
                     out.append((i, "rule5-cell-bold", cell.strip()[:40]))
         # Rule 6: one em-dash per sentence. Counted per sentence, not per
         # line — a wrapped line holding two sentences is not a violation.
@@ -141,7 +141,7 @@ def findings(path):
         cap = 60 if (sect in REASONING or worklog) else 42
         if len(text.split()) > cap:
             out.append((ln, "rule6-bullet", f"{len(text.split())}w > {cap}"))
-        if text.count("**") // 2 > 1:
+        if re.sub(r"`[^`]*`", "`_`", text).count("**") // 2 > 1:
             out.append((ln, "rule5-bullet-bold", text[:40]))
 
     # Rule 5: at most two bold spans per paragraph
@@ -159,6 +159,8 @@ def findings(path):
         # spends the paragraph's budget.
         prose = "\n".join(l for l in para.split("\n")
                           if not re.match(r"^\s*([-*+]|\d+[.)])\s", l))
+        # Asterisks inside inline code are literal text, not emphasis.
+        prose = re.sub(r"`[^`]*`", "`_`", prose)
         if prose.count("**") // 2 > 2:
             out.append((0, "rule5-para-bold", head[:40]))
 
