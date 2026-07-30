@@ -3,9 +3,11 @@
 > [ORG.md](ORG.md) decides **which file** a fact belongs in; this file decides **what it reads
 > like**. Binds every node: root, service, workstream.
 
-**Last updated:** 2026-07-28 · ratified — [D21](DECISIONS.md). The file is ratified, not this
+**Last updated:** 2026-07-29 · ratified — [D21](DECISIONS.md). The file is ratified, not this
 revision; editing it is a founders' act. §Was / Changed / Now / Payoff trimmed 2026-07-28: the
 example is the teaching, so the glosses restating it and the duplicate worklog-entry block went.
+Rule 6's general cap raised 25 → 40 on 2026-07-29: 40 is where one idea plus its citation lands,
+and past it a bullet is usually carrying a second clause.
 
 ## Before you edit
 
