@@ -179,7 +179,7 @@ session — it does not stay here struck through.
   point; nothing here forecloses it.
 - **`INGEST_ASYNC=1` on the fleet** — still the open [D16](../../DECISIONS.md) re-drive-drill decision. DP's durable journal has since made the guarantee durable on both legs; flipping the production default stays a founders' call.
 - **E-1 — `--segment-seconds 10 → 60`** ([../../HANDOFF.md](../../HANDOFF.md) §Escalations): the single largest cost lever (5.8×). It moves the audio leg too, so it is a joint call with DP-audio.
-- **E-6 — auto-retry of downstream-declined segments** — refined 2026-07-30 into a two-phase design ([↓](#e-6--the-rejected-path-two-phase-design)).
+- **E-6 — auto-retry of downstream-declined segments**, refined 2026-07-30 into a two-phase design ([↓](#e-6--the-rejected-path-two-phase-design)).
 
 ### E-6 — the rejected path, two-phase design
 > refined 2026-07-30 (CTO × recording session) · supersedes the one-line ask · escalation row:
