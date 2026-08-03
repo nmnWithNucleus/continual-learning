@@ -8,7 +8,7 @@ stream stays single-modality. Per segment:
     upload mime (no re-encode; mp4 gets ``+faststart`` so the moov atom leads)
 
 A segment may carry either track alone — a ``video/*`` mime can still be audio-only
-(camera toggled off mid-session) — so ffprobe's stream listing, not the mime, decides
+(camera toggled off mid-capture) — so ffprobe's stream listing, not the mime, decides
 what exists. A segment with NO streams at all raises ``DemuxError`` (permanent: the
 caller marks the segment failed).
 
@@ -25,7 +25,7 @@ class DemuxError(RuntimeError):
     """A segment ffprobe/ffmpeg could not read or split (permanent, not transient)."""
 
 
-# A stuck ffmpeg/ffprobe (pathological upload) must not wedge a session's worker
+# A stuck ffmpeg/ffprobe (pathological upload) must not wedge a capture's worker
 # forever: generous vs. ~10 s segments (this is a hang detector, not a pace cap).
 _SUBPROCESS_TIMEOUT_S = 120
 

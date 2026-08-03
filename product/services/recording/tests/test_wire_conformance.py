@@ -18,13 +18,13 @@ Per shape it checks the whole promise, not just the ack: demux picks exactly the
 modalities the container carries (probe decides, never the mime), C1 streams are dense
 with the segment's wall-clock span carried through, audio lands as 16 kHz mono s16le
 WAV and video is container-copied (magic-checked bytes in storage), and the two-leg
-gap report reaches `clean`. Plus two wire invariants: N independent sessions under one
+gap report reaches `clean`. Plus two wire invariants: N independent captures under one
 device_id stay isolated (distinct C1 streams, independent ledgers), and the ledger's
 gap discipline applies to a brand-new client shape exactly as it did to the phone.
 
 Wiring/helpers are imported from tests.test_capture_web (same fakes, same span math)
 so the two suites can never drift apart on the wire they describe. Media fixtures are
-session-scoped ~2 s clips; encoder availability is probed (skip, never fail, on a
+capture-scoped ~2 s clips; encoder availability is probed (skip, never fail, on a
 box whose ffmpeg lacks libvpx/libopus/libx264).
 """
 from __future__ import annotations
@@ -132,7 +132,7 @@ def wire(monkeypatch, tmp_path) -> IngestWiring:
 # name -> (media fixture, upload mime, device_id, expected emit_leg as
 # (modality, codec) pairs in the server's stable audio-first order).
 SHAPES: dict[str, dict] = {
-    "extension-tab": dict(  # D-E7 default: muxed tab video + audio, one session
+    "extension-tab": dict(  # D-E7 default: muxed tab video + audio, one capture
         media="tab_muxed_webm_bytes", mime="video/webm", device_id="ext-chrome-test",
         legs=[("audio", "audio/wav"), ("video", "video/webm")],
     ),
@@ -171,26 +171,26 @@ def _assert_chunk_bytes(codec: str, blob: bytes) -> None:
 
 @needs_ffmpeg
 @pytest.mark.parametrize("shape_name", sorted(SHAPES))
-def test_shape_session_clean_end_to_end(wire, request, shape_name):
+def test_shape_capture_clean_end_to_end(wire, request, shape_name):
     """3 segments + end -> clean report, exact modalities, dense spans, honest bytes."""
     shape = SHAPES[shape_name]
     data = request.getfixturevalue(shape["media"])
     sid = new_ulid()
 
-    for seq in range(3):
+    for segment_num in range(3):
         resp = wire.post_segment(
-            sid, seq, data, mime=shape["mime"], device_id=shape["device_id"]
+            sid, segment_num, data, mime=shape["mime"], device_id=shape["device_id"]
         )
         assert resp.status_code == 200, resp.text
         assert resp.json()["status"] == "received"
-    assert wire.end(sid, last_seq=2).json() == {"ok": True}
+    assert wire.end(sid, last_segment_num=2).json() == {"ok": True}
 
     report = wire.report(sid)
     assert report["verdict"] == "clean"
     assert report["device_id"] == shape["device_id"]
     assert report["received_segments"] == 3
     assert report["segment_states"] == {"received": 0, "emitted": 3, "failed": 0}
-    assert report["client_leg"]["missing_seqs"] == []
+    assert report["client_leg"]["missing_segment_nums"] == []
     # EXACTLY the modalities the container carries — probe decides, never the mime.
     assert [(leg["modality"], leg["codec"]) for leg in report["emit_leg"]] == shape["legs"]
     for leg in report["emit_leg"]:
@@ -216,36 +216,36 @@ def test_shape_session_clean_end_to_end(wire, request, shape_name):
             _assert_chunk_bytes(env["codec"], wire.storage.contents[env["chunk_id"]])
 
 
-# ---------------------------------------- wire property: N sessions, one device
+# ---------------------------------------- wire property: N captures, one device
 
 @needs_ffmpeg
-def test_two_sessions_same_device_stay_isolated(wire, screen_webm_bytes, tab_audio_webm_bytes):
-    """The ledger keeps independent sessions under one device_id fully isolated:
-    distinct seq domains/ledgers, distinct C1 streams, zero cross-talk — ending one
+def test_two_captures_same_device_stay_isolated(wire, screen_webm_bytes, tab_audio_webm_bytes):
+    """The ledger keeps independent captures under one device_id fully isolated:
+    distinct segment_num domains/ledgers, distinct C1 streams, zero cross-talk — ending one
     must not touch the other's verdict. (A general wire guarantee; two single-modality
-    shapes stand in for any two concurrent sessions from the same device.)"""
+    shapes stand in for any two concurrent captures from the same device.)"""
     device = "ext-chrome-test"
     screen_sid, tab_sid = new_ulid(), new_ulid()
-    for seq in range(2):  # interleaved
+    for segment_num in range(2):  # interleaved
         assert wire.post_segment(
-            screen_sid, seq, screen_webm_bytes, mime="video/webm", device_id=device
+            screen_sid, segment_num, screen_webm_bytes, mime="video/webm", device_id=device
         ).status_code == 200
         assert wire.post_segment(
-            tab_sid, seq, tab_audio_webm_bytes, mime="audio/webm", device_id=device
+            tab_sid, segment_num, tab_audio_webm_bytes, mime="audio/webm", device_id=device
         ).status_code == 200
 
-    # One session ends; the other keeps recording. Each client leg independent.
-    wire.end(screen_sid, last_seq=1)
+    # One capture ends; the other keeps recording. Each client leg independent.
+    wire.end(screen_sid, last_segment_num=1)
     screen_report = wire.report(screen_sid)
     tab_report = wire.report(tab_sid)
     assert screen_report["verdict"] == "clean"
     assert tab_report["verdict"] == "recording"
     assert tab_report["client_leg"]["unterminated"] is True
-    assert tab_report["client_leg"]["missing_seqs"] == []      # no borrowed gaps
+    assert tab_report["client_leg"]["missing_segment_nums"] == []      # no borrowed gaps
     assert tab_report["received_segments"] == 2
     assert tab_report["segment_states"]["emitted"] == 2        # emits kept flowing
 
-    wire.end(tab_sid, last_seq=1)
+    wire.end(tab_sid, last_segment_num=1)
     tab_report = wire.report(tab_sid)
     assert tab_report["verdict"] == "clean"
 
@@ -264,19 +264,19 @@ def test_two_sessions_same_device_stay_isolated(wire, screen_webm_bytes, tab_aud
 
 @needs_ffmpeg
 def test_gap_detection_is_client_agnostic(wire, screen_webm_bytes):
-    """A video-only webm session that loses seq 1 client-side gets the same verdict
-    machinery the phone shape got: `gaps` + the exact missing seq, while the C1
+    """A video-only webm capture that loses segment_num 1 client-side gets the same verdict
+    machinery the phone shape got: `gaps` + the exact missing segment_num, while the C1
     stream stays dense (a client-leg loss is NEVER fabricated as a DP gap)."""
     sid = new_ulid()
-    for seq in (0, 2):  # seq 1 never arrives
+    for segment_num in (0, 2):  # segment_num 1 never arrives
         assert wire.post_segment(
-            sid, seq, screen_webm_bytes, mime="video/webm", device_id="ext-chrome-test"
+            sid, segment_num, screen_webm_bytes, mime="video/webm", device_id="ext-chrome-test"
         ).status_code == 200
-    wire.end(sid, last_seq=2)
+    wire.end(sid, last_segment_num=2)
 
     report = wire.report(sid)
     assert report["verdict"] == "gaps"
-    assert report["client_leg"]["missing_seqs"] == [1]
+    assert report["client_leg"]["missing_segment_nums"] == [1]
     assert report["client_leg"]["missing_count"] == 1
     (leg,) = report["emit_leg"]
     assert leg["modality"] == "video"

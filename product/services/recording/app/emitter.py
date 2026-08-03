@@ -1,18 +1,18 @@
-"""Per-session, in-order emit worker: spooled segment -> demux -> C1 chunks downstream.
+"""Per-capture, in-order emit worker: spooled segment -> demux -> C1 chunks downstream.
 
-For each received segment (in received order per session): demux into per-modality
-chunk files, then per chunk — get-or-create the session's stream for that modality,
+For each received segment (in received order per capture): demux into per-modality
+chunk files, then per chunk — get-or-create the capture's stream for that modality,
 mint+persist ``chunk_id``/``sequence`` in the ledger (BEFORE the first attempt, so a
 retry or restart re-emits the SAME identity), PUT the bytes to storage /raw, push the
 validated C1 envelope to data-processing, record the acks, and finally mark the
 segment ``emitted`` + delete its spool file (kept under RECORDING_KEEP_SPOOL=1 — the
 future consent-gate holdback point, D13).
 
-Ordering: one asyncio worker task per session drains a per-session FIFO queue, so a
-session's segments are processed strictly in received order while sessions proceed
+Ordering: one asyncio worker task per capture drains a per-capture FIFO queue, so a
+capture's segments are processed strictly in received order while captures proceed
 concurrently. A terminal per-segment failure marks it ``failed`` (visible in the gap
-report; re-enqueued only by /capture/sessions/{id}/retry) and does NOT stall the
-session's later segments. Chunks allocated before the failure keep their sequence, so
+report; re-enqueued only by /capture/captures/{id}/retry) and does NOT stall the
+capture's later segments. Chunks allocated before the failure keep their sequence, so
 a retry slots back into the stream exactly where it was minted.
 
 At-least-once delivery lives in clients.StorageClient/DataProcessingClient (their
@@ -42,13 +42,13 @@ logger = logging.getLogger("recording.emitter")
 
 
 class Emitter:
-    """Per-session FIFO segment processing on one event loop."""
+    """Per-capture FIFO segment processing on one event loop."""
 
     def __init__(self) -> None:
         self.loop = asyncio.get_running_loop()
         self._workers: dict[str, tuple[asyncio.Queue, asyncio.Task]] = {}
 
-    def enqueue(self, session_id: str, seq: int) -> asyncio.Future:
+    def enqueue(self, capture_id: str, segment_num: int) -> asyncio.Future:
         """Queue one segment; the future resolves when its processing finishes.
 
         Sync-mode callers await the future; async-mode callers drop it (a done-
@@ -57,29 +57,29 @@ class Emitter:
         """
         fut: asyncio.Future = self.loop.create_future()
         fut.add_done_callback(lambda f: f.cancelled() or f.exception())
-        entry = self._workers.get(session_id)
+        entry = self._workers.get(capture_id)
         if entry is None:
             queue: asyncio.Queue = asyncio.Queue()
-            task = self.loop.create_task(self._worker(session_id, queue))
-            self._workers[session_id] = (queue, task)
+            task = self.loop.create_task(self._worker(capture_id, queue))
+            self._workers[capture_id] = (queue, task)
         else:
             queue = entry[0]
-        queue.put_nowait((seq, fut))
+        queue.put_nowait((segment_num, fut))
         return fut
 
-    async def _worker(self, session_id: str, queue: asyncio.Queue) -> None:
+    async def _worker(self, capture_id: str, queue: asyncio.Queue) -> None:
         while True:
             try:
-                seq, fut = queue.get_nowait()
+                segment_num, fut = queue.get_nowait()
             except asyncio.QueueEmpty:
                 # Drained: retire. No await sits between this check and the pop from
                 # _workers, so enqueue() can never race a dying worker on this loop.
-                self._workers.pop(session_id, None)
+                self._workers.pop(capture_id, None)
                 return
             try:
-                await process_segment(session_id, seq)
+                await process_segment(capture_id, segment_num)
             except Exception as exc:
-                logger.warning("segment (%s, %d) processing failed: %s", session_id, seq, exc)
+                logger.warning("segment (%s, %d) processing failed: %s", capture_id, segment_num, exc)
                 if not fut.done():
                     fut.set_exception(exc)
             else:
@@ -116,13 +116,13 @@ def reenqueue_pending(app: FastAPI) -> int:
     """Re-enqueue every acked-but-unemitted segment (startup, via main.lifespan).
 
     Only state='received' comes back — an ack-then-crash must not silently lose
-    segments. 'failed' stays failed until an explicit /capture/sessions/{id}/retry.
+    segments. 'failed' stays failed until an explicit /capture/captures/{id}/retry.
     """
     led = ledger.for_settings(get_settings())
     emitter = get_emitter(app)
     pending = led.pending_segments()
-    for session_id, seq in pending:
-        emitter.enqueue(session_id, seq)
+    for capture_id, segment_num in pending:
+        emitter.enqueue(capture_id, segment_num)
     if pending:
         logger.info("re-enqueued %d acked-but-unemitted segment(s)", len(pending))
     return len(pending)
@@ -134,7 +134,7 @@ async def shutdown(app: FastAPI) -> None:
         await emitter.aclose()
 
 
-async def redrive_accepted_chunks(settings: Settings, session_id: str | None = None) -> dict:
+async def redrive_accepted_chunks(settings: Settings, capture_id: str | None = None) -> dict:
     """The D16 re-drive path for accepted-unconfirmed chunks.
 
     A chunk DP ACCEPTED (202) but hasn't confirmed processed reads 'recording' in the gap
@@ -146,9 +146,9 @@ async def redrive_accepted_chunks(settings: Settings, session_id: str | None = N
     bytes are already durable in /raw, so no re-upload is needed — just the envelope.
 
     Call it on recording restart, periodically, or manually (POST
-    /capture/sessions/{id}/redrive). Returns {redriven, confirmed, still_accepted}."""
+    /capture/captures/{id}/redrive). Returns {redriven, confirmed, still_accepted}."""
     led = ledger.for_settings(settings)
-    rows = led.accepted_unconfirmed_chunks(session_id)
+    rows = led.accepted_unconfirmed_chunks(capture_id)
     if not rows:
         return {"redriven": 0, "confirmed": 0, "still_accepted": 0}
 
@@ -184,19 +184,19 @@ async def redrive_accepted_chunks(settings: Settings, session_id: str | None = N
             "still_accepted": len(rows) - confirmed}
 
 
-async def process_segment(session_id: str, seq: int) -> None:
+async def process_segment(capture_id: str, segment_num: int) -> None:
     """Demux + emit one spooled segment. Raises after marking the segment 'failed'."""
     settings = get_settings()
     led = ledger.for_settings(settings)
-    segment = led.segment(session_id, seq)
+    segment = led.segment(capture_id, segment_num)
     if segment is None:
-        raise RuntimeError(f"segment ({session_id}, {seq}) not in the ledger")
+        raise RuntimeError(f"segment ({capture_id}, {segment_num}) not in the ledger")
     if segment["state"] == "emitted":
         return  # duplicate enqueue (e.g. restart race) — nothing to do
-    session = led.get_session(session_id)
-    assert session is not None  # segments can't exist without their session row
+    capture = led.get_capture(capture_id)
+    assert capture is not None  # segments can't exist without their capture row
 
-    scratch = Path(settings.var_dir) / "chunks" / session_id / str(seq)
+    scratch = Path(settings.var_dir) / "chunks" / capture_id / str(segment_num)
     try:
         spool = Path(segment["spool_path"])
         if not spool.is_file():
@@ -209,8 +209,8 @@ async def process_segment(session_id: str, seq: int) -> None:
             ffmpeg_bin=settings.ffmpeg_bin,
             ffprobe_bin=settings.ffprobe_bin,
         )
-        await _emit_tracks(settings, led, session, segment, tracks)
-        led.set_segment_state(session_id, seq, "emitted")
+        await _emit_tracks(settings, led, capture, segment, tracks)
+        led.set_segment_state(capture_id, segment_num, "emitted")
         # Received -> fully-emitted latency (demux + every chunk pushed downstream), D9.
         try:
             received = parse_wallclock(segment["received_at"])
@@ -224,7 +224,7 @@ async def process_segment(session_id: str, seq: int) -> None:
     except Exception as exc:
         # Terminal for this pass: visible in the report; /retry re-enqueues. The
         # spool file is deliberately kept so the retry has bytes to work from.
-        led.set_segment_state(session_id, seq, "failed", error=f"{type(exc).__name__}: {exc}")
+        led.set_segment_state(capture_id, segment_num, "failed", error=f"{type(exc).__name__}: {exc}")
         raise
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
@@ -233,7 +233,7 @@ async def process_segment(session_id: str, seq: int) -> None:
 async def _emit_tracks(
     settings: Settings,
     led: ledger.Ledger,
-    session: dict,
+    capture: dict,
     segment: dict,
     tracks: list[demux.DemuxedTrack],
 ) -> None:
@@ -265,12 +265,12 @@ async def _emit_tracks(
                 lambda d=data: hashlib.sha256(d).hexdigest()
             )
             stream = led.get_or_create_stream(
-                segment["session_id"], track.modality, track.codec
+                segment["capture_id"], track.modality, track.codec
             )
             sequence, chunk_id = led.allocate_chunk(
                 stream_id=stream["stream_id"],
-                session_id=segment["session_id"],
-                seq=segment["seq"],
+                capture_id=segment["capture_id"],
+                segment_num=segment["segment_num"],
                 modality=track.modality,
                 codec=track.codec,
                 nbytes=len(data),
@@ -282,8 +282,8 @@ async def _emit_tracks(
             # Blob leg first, then the C1 envelope — same order and same envelope
             # builder (schema + pydantic gates) as the M0 capture path.
             blob = await storage.put_blob(
-                user_id=session["user_id"],
-                device_id=session["device_id"],
+                user_id=capture["user_id"],
+                device_id=capture["device_id"],
                 chunk_id=chunk_id,
                 codec=track.codec,
                 sha256=sha256,
@@ -291,8 +291,8 @@ async def _emit_tracks(
                 data=data,
             )
             envelope = capturer._build_envelope(
-                user_id=session["user_id"],
-                device_id=session["device_id"],
+                user_id=capture["user_id"],
+                device_id=capture["device_id"],
                 stream_id=stream["stream_id"],
                 sequence=sequence,
                 chunk_id=chunk_id,

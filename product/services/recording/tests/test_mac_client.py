@@ -81,12 +81,12 @@ def test_chain_stamps_empty():
 
 def test_slot_duration_is_idempotent_on_reprocess():
     """A Ctrl-C aborting an in-flight upload re-enters process_ready for the
-    same seq; slotting (not appending) must leave every stamp unchanged."""
+    same segment_num; slotting (not appending) must leave every stamp unchanged."""
     durations = []
     cap.slot_duration(durations, 0, 10.01, 10)
     cap.slot_duration(durations, 1, 9.99, 10)
     first = cap.chain_stamps(ANCHOR_MS, durations)
-    cap.slot_duration(durations, 1, 9.99, 10)  # seq 1 re-processed after interrupt
+    cap.slot_duration(durations, 1, 9.99, 10)  # segment_num 1 re-processed after interrupt
     assert cap.chain_stamps(ANCHOR_MS, durations) == first
     assert len(durations) == 2
     cap.slot_duration(durations, 2, 10.02, 10)  # later segments unaffected
@@ -196,25 +196,25 @@ class StubState:
     def __init__(self):
         self.lock = threading.Lock()
         self.segments = []       # {"params", "body", "content_type"} per POST
-        self.ends = []           # {"session_id", "payload", "content_type"}
+        self.ends = []           # {"capture_id", "payload", "content_type"}
         self.fail_statuses = []  # popped per segment POST -> injected status
         self.report_override = None
 
 
-def _clean_report_locked(state: StubState, session_id: str) -> dict:
+def _clean_report_locked(state: StubState, capture_id: str) -> dict:
     """A canned clean report shaped like app/capture_web.py's (drained state)."""
     n = len([s for s in state.segments
-             if s["params"].get("session_id") == session_id])
+             if s["params"].get("capture_id") == capture_id])
     def leg(modality, stream_id, codec):
         return {"modality": modality, "stream_id": stream_id, "codec": codec,
                 "chunks_emitted": n, "last_sequence": n - 1 if n else None,
                 "pending": 0, "failed": 0, "dp": {"checked": False}}
     return {
-        "session_id": session_id, "user_id": "beta-user", "device_id": "mac-cli-stub",
+        "capture_id": capture_id, "user_id": "beta-user", "device_id": "mac-cli-stub",
         "started_at": "2026-07-18T12:00:00Z", "ended": True,
         "expected_segments": n, "received_segments": n,
         "segment_states": {"received": 0, "emitted": n, "failed": 0},
-        "client_leg": {"missing_seqs": [], "missing_count": 0,
+        "client_leg": {"missing_segment_nums": [], "missing_count": 0,
                        "duplicate_deliveries": 0, "unterminated": False},
         "emit_leg": [leg("audio", "stub-a", "audio/wav"),
                      leg("video", "stub-v", "video/mp4")],
@@ -255,14 +255,14 @@ def stub():
                         "params": params, "body": body,
                         "content_type": self.headers.get("Content-Type"),
                     })
-                self._json(200, {"ok": True, "session_id": params["session_id"],
-                                 "seq": int(params["seq"]), "status": "received"})
+                self._json(200, {"ok": True, "capture_id": params["capture_id"],
+                                 "segment_num": int(params["segment_num"]), "status": "received"})
                 return
-            m = re.fullmatch(r"/capture/sessions/([^/]+)/end", url.path)
+            m = re.fullmatch(r"/capture/captures/([^/]+)/end", url.path)
             if m:
                 with state.lock:
                     state.ends.append({
-                        "session_id": m.group(1), "payload": json.loads(body),
+                        "capture_id": m.group(1), "payload": json.loads(body),
                         "content_type": self.headers.get("Content-Type"),
                     })
                 self._json(200, {"ok": True})
@@ -270,7 +270,7 @@ def stub():
             self._json(404, {"detail": "unknown path"})
 
         def do_GET(self):
-            m = re.fullmatch(r"/capture/sessions/([^/]+)/report", urlsplit(self.path).path)
+            m = re.fullmatch(r"/capture/captures/([^/]+)/report", urlsplit(self.path).path)
             if not m:
                 self._json(404, {"detail": "unknown path"})
                 return
@@ -291,13 +291,13 @@ def _mk_uploader(url, **kw):
     sleeps = []
     kw.setdefault("sleep", sleeps.append)
     kw.setdefault("log", lambda msg: None)
-    up = cap.SegmentUploader(url, cap.new_session_id(), "beta-user", "mac-cli-test", **kw)
+    up = cap.SegmentUploader(url, cap.new_capture_id(), "beta-user", "mac-cli-test", **kw)
     return up, sleeps
 
 
-def _seg_file(tmp_path, seq, data=None):
-    path = tmp_path / ("seg-%06d.mp4" % seq)
-    path.write_bytes(data if data is not None else b"segment-%d-bytes" % seq)
+def _seg_file(tmp_path, segment_num, data=None):
+    path = tmp_path / ("seg-%06d.mp4" % segment_num)
+    path.write_bytes(data if data is not None else b"segment-%d-bytes" % segment_num)
     return path
 
 
@@ -306,15 +306,15 @@ def _seg_file(tmp_path, seq, data=None):
 def test_uploader_in_order_sha256_and_delete_after_ack(stub, tmp_path):
     url, state = stub
     up, _sleeps = _mk_uploader(url)
-    for seq in range(3):
-        path = _seg_file(tmp_path, seq)
-        assert up.upload(path, seq, T0, T1) is True
+    for segment_num in range(3):
+        path = _seg_file(tmp_path, segment_num)
+        assert up.upload(path, segment_num, T0, T1) is True
         assert not path.exists()  # acked -> deleted from the spool
-    assert [int(s["params"]["seq"]) for s in state.segments] == [0, 1, 2]
+    assert [int(s["params"]["segment_num"]) for s in state.segments] == [0, 1, 2]
     for s in state.segments:
         assert s["content_type"] == "application/octet-stream"
         assert s["params"]["sha256"] == hashlib.sha256(s["body"]).hexdigest()
-        assert s["params"]["session_id"] == up.session_id
+        assert s["params"]["capture_id"] == up.capture_id
         assert s["params"]["device_id"] == "mac-cli-test"
         assert s["params"]["mime"] == "video/mp4"
         assert (s["params"]["t_start"], s["params"]["t_end"]) == (T0, T1)
@@ -386,7 +386,7 @@ def test_uploader_4xx_surfaced_counted_dropped_queue_continues(stub, tmp_path):
     assert any("400" in msg for msg in logs)  # surfaced
     p1 = _seg_file(tmp_path, 1)
     assert up.upload(p1, 1, T0, T1) is True  # the queue keeps moving
-    assert [int(s["params"]["seq"]) for s in state.segments] == [1]
+    assert [int(s["params"]["segment_num"]) for s in state.segments] == [1]
 
 
 def test_uploader_keep_segments_keeps_the_file(stub, tmp_path):
@@ -401,7 +401,7 @@ def test_end_marker_posts_last_seq_json(stub):
     url, state = stub
     up, _sleeps = _mk_uploader(url)
     assert up.end(6) is True
-    assert state.ends == [{"session_id": up.session_id, "payload": {"last_seq": 6},
+    assert state.ends == [{"capture_id": up.capture_id, "payload": {"last_segment_num": 6},
                            "content_type": "application/json"}]
 
 
@@ -411,13 +411,13 @@ def test_poll_report_round_trip(stub, tmp_path):
     up.upload(_seg_file(tmp_path, 0), 0, T0, T1)
     report = up.poll_report()
     assert report["verdict"] == "clean" and report["received_segments"] == 1
-    assert cap.poll_report(url, up.session_id)["session_id"] == up.session_id
+    assert cap.poll_report(url, up.capture_id)["capture_id"] == up.capture_id
 
 
 # ------------------------------------------------------- report -> exit codes
 
 def _report(verdict, *, ended=True, received=0):
-    return {"session_id": "S", "ended": ended, "verdict": verdict,
+    return {"capture_id": "S", "ended": ended, "verdict": verdict,
             "expected_segments": 2, "received_segments": 2,
             "segment_states": {"received": received, "emitted": 2, "failed": 0},
             "client_leg": {"missing_count": 0}, "emit_leg": []}
@@ -473,7 +473,7 @@ def test_list_devices_off_mac_is_a_doc_command():
 
 @needs_ffmpeg
 def test_record_refuses_a_stale_spool_dir(stub, tmp_path):
-    """seg-*.mp4 left in a reused --spool would upload into the NEW session as
+    """seg-*.mp4 left in a reused --spool would upload into the NEW capture as
     its first segments (the watcher cannot tell the runs apart) — refuse."""
     url, state = stub
     spool = tmp_path / "spool"
@@ -491,7 +491,7 @@ def test_record_refuses_a_stale_spool_dir(stub, tmp_path):
 
 
 def test_record_zero_segments_skips_end_and_report(stub, tmp_path):
-    """ffmpeg exiting CLEANLY with no segments: the session never existed
+    """ffmpeg exiting CLEANLY with no segments: the capture never existed
     server-side, so posting an end marker / polling the report would 404 and
     burn the whole --report-timeout. Exit 1 fast instead."""
     url, state = stub
@@ -533,9 +533,9 @@ def test_cli_record_test_source_end_to_end(stub, tmp_path):
 
     segs = state.segments
     assert len(segs) >= 2
-    assert [int(s["params"]["seq"]) for s in segs] == list(range(len(segs)))  # dense, in order
+    assert [int(s["params"]["segment_num"]) for s in segs] == list(range(len(segs)))  # dense, in order
 
-    sids = {s["params"]["session_id"] for s in segs}
+    sids = {s["params"]["capture_id"] for s in segs}
     assert len(sids) == 1
     sid = sids.pop()
     assert re.fullmatch(r"[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}", sid)  # ULID-ish
@@ -552,7 +552,7 @@ def test_cli_record_test_source_end_to_end(stub, tmp_path):
     for prev, nxt in zip(segs, segs[1:]):  # D-F2: exact adjacency across the wire
         assert prev["params"]["t_end"] == nxt["params"]["t_start"]
 
-    assert state.ends == [{"session_id": sid, "payload": {"last_seq": len(segs) - 1},
+    assert state.ends == [{"capture_id": sid, "payload": {"last_segment_num": len(segs) - 1},
                            "content_type": "application/json"}]
     assert "verdict: clean" in proc.stdout          # the stub's canned answer
     assert not list(spool.glob("seg-*.mp4"))        # acked segments were deleted

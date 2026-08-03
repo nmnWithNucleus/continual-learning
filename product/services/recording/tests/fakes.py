@@ -20,10 +20,10 @@ import json
 import httpx
 
 
-def _runs(seqs: list[int]) -> list[list[int]]:
-    """Collapse a sorted seq list into [lo, hi] runs (DP tracker's missing shape)."""
+def _runs(segment_nums: list[int]) -> list[list[int]]:
+    """Collapse a sorted segment_num list into [lo, hi] runs (DP tracker's missing shape)."""
     runs: list[list[int]] = []
-    for s in seqs:
+    for s in segment_nums:
         if runs and s == runs[-1][1] + 1:
             runs[-1][1] = s
         else:
@@ -166,7 +166,7 @@ class FakeDataProcessingM1(FakeDataProcessing):
         envs = [e for e in self.envelopes if e["stream_id"] == stream_id]
         if not envs:
             return httpx.Response(404, json={"detail": f"unknown stream {stream_id}"})
-        seqs = {e["sequence"] for e in envs}
+        segment_nums = {e["sequence"] for e in envs}
         deliveries = [(e["sequence"], e["chunk_id"]) for e in envs]
         return httpx.Response(
             200,
@@ -175,12 +175,12 @@ class FakeDataProcessingM1(FakeDataProcessing):
                 "modality": envs[0]["modality"],
                 "user_id": envs[0]["user_id"],
                 "device_id": envs[0]["device_id"],
-                "max_sequence": max(seqs),
-                "received": len(seqs),
+                "max_sequence": max(segment_nums),
+                "received": len(segment_nums),
                 # [lo, hi] runs — the REAL tracker's shape (continuity._gaps), so the
                 # report/client code that consumes it is exercised against production
                 # geometry, not a convenient flat list.
-                "missing": _runs(sorted(s for s in range(max(seqs)) if s not in seqs)),
+                "missing": _runs(sorted(s for s in range(max(segment_nums)) if s not in segment_nums)),
                 "duplicate_deliveries": len(deliveries) - len(set(deliveries)),
                 "sequence_conflicts": 0,
                 "first_seen": envs[0]["t_start"],

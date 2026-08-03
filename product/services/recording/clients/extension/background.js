@@ -17,7 +17,7 @@
  * the ACTIVE TAB — video + audio in ONE muxed stream via
  * chrome.tabCapture.getMediaStreamId({targetTabId}). No screen picker, no
  * chooseDesktopMedia, no cross-context stream-id handoff. One tab = one capture
- * = one ingest session; the server demuxes each muxed segment into audio + video
+ * = one ingest capture; the server demuxes each muxed segment into audio + video
  * C1 streams exactly like the phone/mac clients. Full-screen / other-app capture
  * is the mac CLI's job (clients/mac), which does it reliably.
  *
@@ -169,7 +169,7 @@ async function handleStart(msg) {
       return { ok: false, error: "offscreen start failed: " + errText(err) };
     }
     return reply && reply.ok
-      ? { ok: true, session: reply.session }
+      ? { ok: true, capture: reply.capture }
       : { ok: false, error: (reply && reply.error) || "capture did not start" };
   } finally {
     startsInFlight -= 1;
@@ -222,7 +222,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       closeOffscreen();
       return false;
     case "drained":
-      // Offscreen: the session posted its end marker and the report poll is
+      // Offscreen: the capture posted its end marker and the report poll is
       // terminal. Close the document unless a new start is mid-flight (it needs
       // the document; its own start resets the offscreen state) or the document
       // is still busy — asked authoritatively of the document itself.
@@ -238,7 +238,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         // Re-check AFTER the async status round-trip: a new start could have
         // begun during it, and it needs the document (skeptic round).
         if (startsInFlight > 0) return;
-        const s = st && st.ok ? st.session : null;
+        const s = st && st.ok ? st.capture : null;
         const busy = s && (s.active || !s.ended);
         if (!busy) closeOffscreen();
       })().catch((err) => console.warn("drained-close check failed:", err));

@@ -10,6 +10,29 @@
 
 ## Worklog
 
+### 2026-07-29 — client-wire nomenclature: `capture_id` + `segment_num`
+
+**Was** — the client wire said `session_id` + `seq`: `session_id` collided with the serve
+loop's chat `session_id` (C3/C4), and `seq` read as a sibling of C1's `sequence` when the
+two are different counters with different jobs.
+**Changed** — renamed across the wire, the ledger schema (with an in-place migration for
+old DBs), all three clients, the deno tests, the dashboard, and the current-facing docs:
+`session_id` → `capture_id`, `seq` → `segment_num`, `last_seq` → `last_segment_num`,
+`missing_seqs` → `missing_segment_nums`, routes `/capture/sessions/*` →
+`/capture/captures/*`, metrics `rec_sessions_*` → `rec_captures_*`. The glossary term
+*capture session* became *capture*. C1's `sequence` is untouched — a segment can lack a
+modality and carve/replay sources have no segments, so per-stream density needs its own
+counter (CTO review, field-guide modules 00–04).
+**Now** — the two legs read `(capture_id, segment_num)` client-side and
+`(stream_id, sequence)` DP-side; no identifier is shared with another service's
+vocabulary. Suites: 144 pytest + 18 deno, green. Dated records keep their
+contemporaneous names; each ws file carries a dated note saying so.
+**Payoff** — the disambiguation trap the glossary used to document is simply gone.
+Deliberately not a numbered decision (CTO call): a naming cleanup inside the internal
+wire, applied in place. Cost accepted: the node-7 fleet serves the old routes until its
+next restart, and open phone pages need one hard refresh after it (the `/ingest` →
+`/capture` precedent).
+
 ### 2026-07-27 — retired the completed `§Next` items from the canvas
 
 *The board's `§Next` carried five struck-through `DONE` records. Retired here **verbatim** so the

@@ -6,7 +6,7 @@
  * stop() draining the pending onstop exactly once, the stop-during-pending-
  * onstop race (stop() landing between the timer-fired recorder.stop() and its
  * async onstop) yielding no double segment and no hang, and empty-blob skip
- * with uploader seq numbering unaffected (density lives at enqueue).
+ * with uploader segment_num numbering unaffected (density lives at enqueue).
  *
  * Fake recorders mirror the MediaRecorder contract the segmenter relies on:
  * stop() flips state to "inactive" SYNCHRONOUSLY, onstop fires later (the test
@@ -180,7 +180,7 @@ Deno.test("empty segment skipped, loop continues, uploader numbering unaffected"
   const h = harness({ onSegment: (s) => up.enqueue(s) });
   up = createUploader({
     baseUrl: "http://s",
-    sessionId: "S",
+    captureId: "S",
     userId: "u",
     deviceId: "d",
     fetch,
@@ -214,9 +214,9 @@ Deno.test("empty segment skipped, loop continues, uploader numbering unaffected"
 
   assertEquals(h.segments.length, 2);
   assertEquals(
-    calls.map((u) => u.searchParams.get("seq")),
+    calls.map((u) => u.searchParams.get("segment_num")),
     ["0", "1"],
-    "seq assigned at enqueue: dense despite skipped windows",
+    "segment_num assigned at enqueue: dense despite skipped windows",
   );
   assertEquals(up.state().captured, 2);
 });

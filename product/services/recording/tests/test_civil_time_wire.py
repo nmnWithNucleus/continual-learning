@@ -16,14 +16,14 @@ from tests.test_capture_web import ingest  # noqa: F401 — the wiring fixture
 
 _BODY = b"\x00" * 64
 _ARGS = {
-    "session_id": "s-tz", "user_id": "beta-user", "device_id": "phone",
+    "capture_id": "s-tz", "user_id": "beta-user", "device_id": "phone",
     "t_start": "2026-07-20T12:00:00Z", "t_end": "2026-07-20T12:00:10Z",
     "mime": "audio/mp4", "sha256": hashlib.sha256(_BODY).hexdigest(),
 }
 
 
 def _post(ingest, **extra):  # noqa: F811
-    params = {**_ARGS, "seq": extra.pop("seq", 0), **extra}
+    params = {**_ARGS, "segment_num": extra.pop("segment_num", 0), **extra}
     return ingest.client.post("/capture/segments", params=params, content=_BODY,
                               headers={"content-type": "application/octet-stream"})
 
@@ -92,11 +92,11 @@ def test_envelope_omits_absent_fields_rather_than_nulling_them():
 
 _OLD_SEGMENTS = """
 CREATE TABLE segments (
-  session_id TEXT NOT NULL, seq INTEGER NOT NULL, sha256 TEXT NOT NULL,
+  capture_id TEXT NOT NULL, segment_num INTEGER NOT NULL, sha256 TEXT NOT NULL,
   bytes INTEGER NOT NULL, mime TEXT NOT NULL, t_start TEXT NOT NULL,
   t_end TEXT NOT NULL, received_at TEXT NOT NULL,
   state TEXT NOT NULL DEFAULT 'received', spool_path TEXT NOT NULL, error TEXT,
-  PRIMARY KEY (session_id, seq)
+  PRIMARY KEY (capture_id, segment_num)
 );
 """
 
@@ -109,7 +109,7 @@ def test_migration_adds_columns_without_inventing_a_zone(tmp_path):
     conn = sqlite3.connect(db)
     conn.executescript(_OLD_SEGMENTS)
     conn.execute(
-        "INSERT INTO segments (session_id, seq, sha256, bytes, mime, t_start,"
+        "INSERT INTO segments (capture_id, segment_num, sha256, bytes, mime, t_start,"
         " t_end, received_at, spool_path) VALUES"
         " ('s-old', 0, 'abc', 1, 'audio/mp4', 't0', 't1', 'r', '/tmp/x')"
     )

@@ -8,19 +8,19 @@ alias existed for one day and was removed 2026-07-19 — single-tester beta, a
 page refresh is cheaper than versioned routes.)
 
 POST /capture/segments                 — one self-contained A/V segment (raw bytes body).
-                                         Idempotent on (session_id, seq): same sha again
+                                         Idempotent on (capture_id, segment_num): same sha again
                                          -> {status:"duplicate"} (counted, not re-emitted);
                                          different sha -> 409. sha256 param verified when
                                          non-empty, computed server-side when empty.
                                          Ack = spool + ledger row are durable. Async mode
                                          acks immediately; RECORDING_INGEST_SYNC=1 awaits
                                          this segment's demux+emit first (tests/small ops).
-POST /capture/sessions/{id}/end        — client end marker {last_seq}; fixes
+POST /capture/captures/{id}/end        — client end marker {last_segment_num}; fixes
                                          expected_segments so the report can name a lost tail.
-GET  /capture/sessions                 — per-session summaries.
-GET  /capture/sessions/{id}/report     — the continuity/gap report joining both legs
-                                         (client->server seq, server->DP C1 sequence).
-POST /capture/sessions/{id}/retry      — re-enqueue this session's failed segments.
+GET  /capture/captures                 — per-capture summaries.
+GET  /capture/captures/{id}/report     — the continuity/gap report joining both legs
+                                         (client->server segment_num, server->DP C1 sequence).
+POST /capture/captures/{id}/retry      — re-enqueue this capture's failed segments.
 
 The report's DP side is checked LIVE against data-processing GET /continuity/{stream_id}
 (short timeout; unreachable/unknown -> checked:false, never a fabricated verdict).
@@ -50,18 +50,18 @@ router = APIRouter()
 # DP /continuity probe: short and best-effort — the report must not hang on DP.
 _CONTINUITY_TIMEOUT = 2.0
 
-# session_id becomes a spool directory name; keep it filesystem-safe (client mints
+# capture_id becomes a spool directory name; keep it filesystem-safe (client mints
 # ULID-ish ids, so this only ever rejects garbage/hostile input). '.'/'..' match the
 # class but are path navigation, not names — rejected explicitly.
 _SAFE_ID = re.compile(r"[A-Za-z0-9._-]+")
 
-# Upper bound on a session's segment numbering: at 10 s/segment this is ~3 years of
-# one session — anything larger is garbage/hostile, and bounding it keeps every
-# per-seq structure (ledger rows, report gap walk) trivially sized.
+# Upper bound on a capture's segment numbering: at 10 s/segment this is ~3 years of
+# one capture — anything larger is garbage/hostile, and bounding it keeps every
+# per-segment_num structure (ledger rows, report gap walk) trivially sized.
 MAX_SEQ = 9_999_999
 
-# The report returns at most this many individual missing seqs (missing_count always
-# carries the true total) so a pathological session can't balloon the payload.
+# The report returns at most this many individual missing segment_nums (missing_count always
+# carries the true total) so a pathological capture can't balloon the payload.
 _MISSING_LIST_CAP = 1000
 
 
@@ -75,12 +75,12 @@ def _ext_for_mime(mime: str) -> str:
 
 
 def _spool_path(
-    settings: Settings, session_id: str, seq: int, mime: str, sha256: str
+    settings: Settings, capture_id: str, segment_num: int, mime: str, sha256: str
 ) -> Path:
     # Content-addressed (sha prefix in the name): a conflicting re-POST of the same
-    # seq with different bytes can never clobber the original spooled bytes.
-    name = f"{seq}.{sha256[:12]}{_ext_for_mime(mime)}"
-    return Path(settings.var_dir) / "spool" / session_id / name
+    # segment_num with different bytes can never clobber the original spooled bytes.
+    name = f"{segment_num}.{sha256[:12]}{_ext_for_mime(mime)}"
+    return Path(settings.var_dir) / "spool" / capture_id / name
 
 
 async def _read_body_capped(request: Request, max_bytes: int) -> bytes:
@@ -102,8 +102,8 @@ async def _read_body_capped(request: Request, max_bytes: int) -> bytes:
 @router.post("/segments")
 async def upload_segment(
     request: Request,
-    session_id: str = Query(min_length=1),
-    seq: int = Query(ge=0, le=MAX_SEQ),
+    capture_id: str = Query(min_length=1),
+    segment_num: int = Query(ge=0, le=MAX_SEQ),
     user_id: str = Query(min_length=1),
     device_id: str = Query(min_length=1),
     t_start: str = Query(min_length=1),
@@ -113,8 +113,8 @@ async def upload_segment(
     device_tz: str | None = Query(default=None),
     device_utc_offset_minutes: int | None = Query(default=None, ge=-1080, le=1080),
 ) -> dict:
-    if not _SAFE_ID.fullmatch(session_id) or session_id in (".", ".."):
-        raise HTTPException(400, "session_id must be filesystem-safe ([A-Za-z0-9._-])")
+    if not _SAFE_ID.fullmatch(capture_id) or capture_id in (".", ".."):
+        raise HTTPException(400, "capture_id must be filesystem-safe ([A-Za-z0-9._-])")
     try:
         timeutil.parse_wallclock(t_start)
         timeutil.parse_wallclock(t_end)
@@ -149,7 +149,7 @@ async def upload_segment(
         raise HTTPException(400, f"sha256 mismatch: client sent {sha256}, body is {digest}")
 
     led = ledger.for_settings(settings)
-    led.ensure_session(session_id, user_id=user_id, device_id=device_id, started_at=t_start)
+    led.ensure_capture(capture_id, user_id=user_id, device_id=device_id, started_at=t_start)
 
     # SPOOL FIRST, ledger second — the ack contract is "spool + ledger row are
     # durable", and the client's retry pump treats ANY ok (received/duplicate) as
@@ -157,12 +157,12 @@ async def upload_segment(
     # committed first, a crash between row and spool would make the retry hit the
     # duplicate branch and ack bytes that exist nowhere. The spool name is
     # content-addressed, so this write can never clobber different bytes.
-    spool = _spool_path(settings, session_id, seq, mime, digest)
+    spool = _spool_path(settings, capture_id, segment_num, mime, digest)
     await asyncio.to_thread(_write_spool, spool, data)
 
     status, prior_state = led.record_segment(
-        session_id,
-        seq,
+        capture_id,
+        segment_num,
         sha256=digest,
         nbytes=len(data),
         mime=mime,
@@ -174,34 +174,34 @@ async def upload_segment(
         device_utc_offset_minutes=device_utc_offset_minutes,
     )
     if status == "conflict":
-        spool.unlink(missing_ok=True)  # keep only the original seq's bytes spooled
+        spool.unlink(missing_ok=True)  # keep only the original segment_num's bytes spooled
         raise HTTPException(
-            409, f"segment (session {session_id}, seq {seq}) already received with a different sha256"
+            409, f"segment (capture {capture_id}, segment_num {segment_num}) already received with a different sha256"
         )
 
     # A segment past the end marker means that marker is stale (a pagehide beacon
-    # fired mid-session and recording continued): reopen so the verdict can't read
+    # fired mid-capture and recording continued): reopen so the verdict can't read
     # 'clean' against a stale expected count while a tail is still uploading.
     if status == "received":
-        led.reopen_if_past_end(session_id, seq)
+        led.reopen_if_past_end(capture_id, segment_num)
 
     if status == "duplicate" and prior_state != "received":
         # Terminal (emitted/failed) — nothing to heal; /retry owns failed segments.
-        return {"ok": True, "session_id": session_id, "seq": seq, "status": "duplicate"}
+        return {"ok": True, "capture_id": capture_id, "segment_num": segment_num, "status": "duplicate"}
 
     # 'received' — fresh, or a duplicate of a segment still awaiting processing (a
     # retry after an ack whose enqueue/process never ran, e.g. crash). Enqueue is
     # idempotent downstream: process_segment no-ops on already-emitted segments and
-    # per-session FIFO serializes double entries.
-    fut = emitter.get_emitter(request.app).enqueue(session_id, seq)
+    # per-capture FIFO serializes double entries.
+    fut = emitter.get_emitter(request.app).enqueue(capture_id, segment_num)
     if settings.ingest_sync:
         try:
             await fut
         except Exception:
             # Already recorded as state='failed' in the ledger (the report shows it);
             # the ack still stands — the segment IS durably received.
-            logger.warning("sync processing of (%s, %d) failed", session_id, seq, exc_info=True)
-    return {"ok": True, "session_id": session_id, "seq": seq, "status": status}
+            logger.warning("sync processing of (%s, %d) failed", capture_id, segment_num, exc_info=True)
+    return {"ok": True, "capture_id": capture_id, "segment_num": segment_num, "status": status}
 
 
 def _write_spool(spool: Path, data: bytes) -> None:
@@ -215,23 +215,23 @@ def _write_spool(spool: Path, data: bytes) -> None:
 
 class EndRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    last_seq: int = Field(ge=-1, le=MAX_SEQ)  # -1: ended before any segment was captured
+    last_segment_num: int = Field(ge=-1, le=MAX_SEQ)  # -1: ended before any segment was captured
 
 
-@router.post("/sessions/{session_id}/end")
-async def end_session(session_id: str, body: EndRequest) -> dict:
+@router.post("/captures/{capture_id}/end")
+async def end_capture(capture_id: str, body: EndRequest) -> dict:
     led = ledger.for_settings(get_settings())
-    if not led.mark_ended(session_id, body.last_seq):
-        raise HTTPException(404, f"unknown session {session_id}")
+    if not led.mark_ended(capture_id, body.last_segment_num):
+        raise HTTPException(404, f"unknown capture {capture_id}")
     return {"ok": True}
 
 
-# ---------------------------------------------------------------- sessions list
+# ---------------------------------------------------------------- captures list
 
-@router.get("/sessions")
-async def list_sessions() -> dict:
+@router.get("/captures")
+async def list_captures() -> dict:
     led = ledger.for_settings(get_settings())
-    return {"sessions": led.session_summaries()}
+    return {"captures": led.capture_summaries()}
 
 
 # ------------------------------------------------------------------- gap report
@@ -239,11 +239,11 @@ async def list_sessions() -> dict:
 def _missing_info(
     received: list[int], *, ended: bool, expected: int | None
 ) -> tuple[list[int], int]:
-    """Client-leg gaps: (capped seq list, true total count).
+    """Client-leg gaps: (capped segment_num list, true total count).
 
-    Holes below the max received seq, plus — once the session ended with a known
+    Holes below the max received segment_num, plus — once the capture ended with a known
     expected count — the missing tail the end marker reveals. The walk is O(received)
-    (gaps between sorted seqs), never O(max seq), and the returned list is capped at
+    (gaps between sorted segment_nums), never O(max segment_num), and the returned list is capped at
     ``_MISSING_LIST_CAP`` while the count is always exact.
     """
     seen = sorted(set(received))
@@ -264,20 +264,20 @@ def _missing_info(
 def _runs_to_set(raw: list, limit_seq: int | None = None) -> set[int]:
     """Expand DP's ``[lo, hi]`` run list (or flat ints from older fakes) into a set of
     sequences, optionally clipped to ``<= limit_seq`` (what the ledger allocated)."""
-    seqs: set[int] = set()
+    segment_nums: set[int] = set()
     for item in raw or []:
         if isinstance(item, (list, tuple)) and len(item) == 2:
             hi = int(item[1]) if limit_seq is None else min(int(item[1]), limit_seq)
-            seqs.update(range(max(0, int(item[0])), hi + 1))
+            segment_nums.update(range(max(0, int(item[0])), hi + 1))
         elif isinstance(item, int) and item >= 0 and (limit_seq is None or item <= limit_seq):
-            seqs.add(item)
-    return seqs
+            segment_nums.add(item)
+    return segment_nums
 
 
 def _dp_missing_unacked(raw_missing: list, acked: set[int], limit_seq: int) -> list[int]:
     """DP-reported missing minus what OUR ledger holds a DP ack for.
 
-    DP's tracker is in-memory: a mid-session DP restart makes it report already
+    DP's tracker is in-memory: a mid-capture DP restart makes it report already
     -delivered-and-acked sequences as a leading gap. We hold the ack receipts, so a
     sequence is only truly missing if DP reports it AND we never got its `/ingest`
     ack. Accepts both the real tracker's [lo, hi] runs and flat ints (older fakes);
@@ -310,25 +310,25 @@ async def _dp_continuity(settings: Settings, stream_id: str) -> dict:
     }
 
 
-@router.get("/sessions/{session_id}/report")
-async def session_report(session_id: str) -> dict:
+@router.get("/captures/{capture_id}/report")
+async def capture_report(capture_id: str) -> dict:
     settings = get_settings()
     led = ledger.for_settings(settings)
-    session = led.get_session(session_id)
-    if session is None:
-        raise HTTPException(404, f"unknown session {session_id}")
+    capture = led.get_capture(capture_id)
+    if capture is None:
+        raise HTTPException(404, f"unknown capture {capture_id}")
 
-    seq_states = led.segment_states(session_id)
+    seq_states = led.segment_states(capture_id)
     received = [s for s, _state in seq_states]
-    ended = bool(session["ended"])
+    ended = bool(capture["ended"])
     missing, missing_count = _missing_info(
-        received, ended=ended, expected=session["expected_segments"]
+        received, ended=ended, expected=capture["expected_segments"]
     )
 
     emit_leg: list[dict] = []
     dp_reports_missing = False
     any_accepted_unconfirmed = False
-    for stream in led.streams_for_session(session_id):
+    for stream in led.streams_for_capture(capture_id):
         rows = led.stream_chunks(stream["stream_id"])
         dp_side = await _dp_continuity(settings, stream["stream_id"])
         dead_delivered: list[int] = []
@@ -408,14 +408,14 @@ async def session_report(session_id: str) -> dict:
         verdict = "clean"
 
     return {
-        "session_id": session_id,
-        "user_id": session["user_id"],
-        "device_id": session["device_id"],
-        "started_at": session["started_at"],
+        "capture_id": capture_id,
+        "user_id": capture["user_id"],
+        "device_id": capture["device_id"],
+        "started_at": capture["started_at"],
         "ended": ended,
-        "expected_segments": session["expected_segments"],
+        "expected_segments": capture["expected_segments"],
         "received_segments": len(received),
-        # Session-level drain state: per-stream `pending` can't see segments that
+        # Capture-level drain state: per-stream `pending` can't see segments that
         # haven't been demuxed yet (their modality is unknown until then), so this
         # is THE "is processing finished" signal for pollers and the client UI.
         "segment_states": {
@@ -424,9 +424,9 @@ async def session_report(session_id: str) -> dict:
             "failed": sum(1 for _s, state in seq_states if state == "failed"),
         },
         "client_leg": {
-            "missing_seqs": missing,          # capped at _MISSING_LIST_CAP entries
+            "missing_segment_nums": missing,          # capped at _MISSING_LIST_CAP entries
             "missing_count": missing_count,   # always the exact total
-            "duplicate_deliveries": session["duplicate_deliveries"],
+            "duplicate_deliveries": capture["duplicate_deliveries"],
             "unterminated": not ended,
         },
         "emit_leg": emit_leg,
@@ -436,30 +436,30 @@ async def session_report(session_id: str) -> dict:
 
 # ------------------------------------------------------------------------ retry
 
-@router.post("/sessions/{session_id}/redrive")
-async def redrive_accepted(session_id: str) -> dict:
-    """Re-push this session's accepted-but-unconfirmed chunks to DP (the D16 re-drive
+@router.post("/captures/{capture_id}/redrive")
+async def redrive_accepted(capture_id: str) -> dict:
+    """Re-push this capture's accepted-but-unconfirmed chunks to DP (the D16 re-drive
     path). Idempotent: DP's chunk_id dedup makes a done chunk short-circuit to
     200+record_ids (→ we confirm it), an in-flight one re-ACK 202, a lost one reprocess.
     Turns a post-queue-loss 'recording' verdict back to 'clean' without waiting for M7."""
     settings = get_settings()
-    if ledger.for_settings(settings).get_session(session_id) is None:
-        raise HTTPException(404, f"unknown session {session_id}")
-    result = await emitter.redrive_accepted_chunks(settings, session_id)
-    return {"ok": True, "session_id": session_id, **result}
+    if ledger.for_settings(settings).get_capture(capture_id) is None:
+        raise HTTPException(404, f"unknown capture {capture_id}")
+    result = await emitter.redrive_accepted_chunks(settings, capture_id)
+    return {"ok": True, "capture_id": capture_id, **result}
 
 
-@router.post("/sessions/{session_id}/retry")
-async def retry_failed(session_id: str, request: Request) -> dict:
+@router.post("/captures/{capture_id}/retry")
+async def retry_failed(capture_id: str, request: Request) -> dict:
     settings = get_settings()
     led = ledger.for_settings(settings)
-    if led.get_session(session_id) is None:
-        raise HTTPException(404, f"unknown session {session_id}")
-    seqs = led.reset_failed(session_id)
+    if led.get_capture(capture_id) is None:
+        raise HTTPException(404, f"unknown capture {capture_id}")
+    segment_nums = led.reset_failed(capture_id)
     em = emitter.get_emitter(request.app)
-    futures = [em.enqueue(session_id, seq) for seq in seqs]
+    futures = [em.enqueue(capture_id, segment_num) for segment_num in segment_nums]
     if settings.ingest_sync and futures:
         # Same contract as upload: wait for determinism, but outcomes (including a
         # repeat failure, already re-marked in the ledger) live in the report.
         await asyncio.gather(*futures, return_exceptions=True)
-    return {"ok": True, "session_id": session_id, "retried": len(seqs)}
+    return {"ok": True, "capture_id": capture_id, "retried": len(segment_nums)}

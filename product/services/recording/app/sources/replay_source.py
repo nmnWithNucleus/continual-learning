@@ -1,4 +1,4 @@
-"""The REPLAY ChunkSource: a recorded day of audio, re-emitted as a capture session.
+"""The REPLAY ChunkSource: a recorded day of audio, re-emitted as a capture.
 
 Phase 3 (the DP dogfood) pushes an already-recorded life-stream through the real emit
 path so the rest of the pipeline cannot tell it apart from a live capture. This is the
@@ -18,7 +18,7 @@ derived once and read by both services rather than re-derived in each (see conti
 scripts/phase3_build_replay.py). The source is deliberately dumb about time: it copies
 t_start/t_end straight from the plan.
 
-One plan file = ONE capture session = one day, so the whole day shares a stream_id and
+One plan file = ONE capture = one day, so the whole day shares a stream_id and
 gets a dense sequence, which is what an always-on capture actually looks like.
 
 The bytes are real audio, never a stand-in: the blob has to serve double duty as the
@@ -130,7 +130,7 @@ def build(
 
     ``source`` is the plan file. The carve/sample/base-wallclock overrides are
     deliberately ignored: a replay is not carved (each planned chunk is one chunk) and
-    its wall clock comes from the plan, not from a session base -- silently re-carving
+    its wall clock comes from the plan, not from a capture base -- silently re-carving
     or re-stamping it would break the join data-processing does against the same spine.
     """
     if not source:

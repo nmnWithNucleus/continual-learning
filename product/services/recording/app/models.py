@@ -51,7 +51,7 @@ class C1Envelope(_Strict):
 
 
 class CaptureRunRequest(_Strict):
-    """POST /capture/run body — run one capture session, headless.
+    """POST /capture/run body — run one capture, headless.
 
     ``storage_url`` / ``dp_url`` are required so the integrator wires the live ports;
     everything else falls back to service defaults (config.Settings).
@@ -73,7 +73,7 @@ class CaptureRunResponse(_Strict):
     chunks_emitted: int
     chunk_ids: list[str]
     sequences: list[int]
-    record_ids: list[str]                # all C2 record_ids across the session, flattened (a chunk may fan out to >1, e.g. video keyframes) — provenance
+    record_ids: list[str]                # all C2 record_ids across the capture, flattened (a chunk may fan out to >1, e.g. video keyframes) — provenance
 
 
 class Health(_Strict):

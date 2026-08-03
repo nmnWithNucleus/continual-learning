@@ -1,7 +1,7 @@
 """The ChunkSource seam — the modality-agnostic source of a continuous capture stream.
 
 This is the load-bearing factoring of the recording service. The blob-first
-PUT-to-/raw + C1-push emit path (``capturer.run_session``) is already modality-agnostic:
+PUT-to-/raw + C1-push emit path (``capturer.run_capture``) is already modality-agnostic:
 it takes opaque bytes + wall-clock timing + a modality/codec pair and does not care how
 those bytes were captured or carved. This module names that boundary so future capturers
 (screen / webcam / browser-extension / wearable; and the image / video / text pipelines)
@@ -50,7 +50,7 @@ class SourceChunk:
 class ChunkSource(Protocol):
     """A continuous capture source for ONE modality+codec, carved into ordered chunks.
 
-    The emit path (``capturer.run_session``) depends ONLY on this interface. A new
+    The emit path (``capturer.run_capture``) depends ONLY on this interface. A new
     modality is added by dropping in one file that provides an object satisfying it
     (structurally — no base class to import) plus a builder registered in
     ``app/sources/__init__.py``.

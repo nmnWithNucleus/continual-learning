@@ -7,7 +7,7 @@
 > wire is `/capture/*` only). Deep per-surface rationale: [ws-e](ws-e-extension.md) /
 > [ws-f](ws-f-mac-cli.md) / [ws-b](ws-b-phone-web-client.md).
 
-**Owner session:** recording computer-capture lead · **Last updated:** 2026-07-19
+**Owner session:** recording computer-capture lead · **Last updated:** 2026-07-29 (wire nomenclature: `capture_id` + `segment_num`, routes `/capture/captures/*`)
 
 ## Before you start (once)
 
@@ -17,11 +17,11 @@
 - On your mac: `git pull` this repo (the extension + CLI ship in it), `brew install ffmpeg`.
 - Use the same user id on every surface (suggestion: `nmn`) — it groups your `/context`
   records. Each surface auto-mints its own stable `device_id` (`phone-web-*`,
-  `ext-chrome-*`, `mac-cli-*`), which is how sessions stay attributable per device.
+  `ext-chrome-*`, `mac-cli-*`), which is how captures stay attributable per device.
 - Server-side truth is read on node-7 (storage/DP are not tunneled):
   ```bash
-  curl -s $TUNNEL/capture/sessions | python3 -m json.tool        # all sessions, any machine
-  curl -s $TUNNEL/capture/sessions/<id>/report | python3 -m json.tool
+  curl -s $TUNNEL/capture/captures | python3 -m json.tool        # all captures, any machine
+  curl -s $TUNNEL/capture/captures/<id>/report | python3 -m json.tool
   # on node-7 only — C2 records that landed for you today:
   curl -s "http://127.0.0.1:8083/context/records?user_id=nmn&from=2026-07-19T00:00:00Z&to=2026-07-20T00:00:00Z" | python3 -m json.tool
   ```
@@ -38,8 +38,8 @@ upload with HTTP 404 in the status area, that symptom = stale page, refresh agai
 | Tap stop | brief `uploading`, then badge → `clean`; report lines show `audio: N chunks` + `video: N chunks`, received N/N |
 | Pause 10 s mid-recording, resume, stop | no new segments while paused; final verdict `clean`; total segments ≈ recorded time / 10 s |
 | Camera toggle OFF, record 15 s, stop | mic-only: report shows an `audio` stream only; verdict `clean` |
-| Airplane mode 20 s mid-recording, back on, stop | queued climbs while offline, drains after; "retrying in Ns" appears then clears; verdict `clean`, **no missing seqs** |
-| Background the browser mid-recording, reopen | the hidden page beacons an end marker (ledger `ended` at that moment), but if iOS did NOT kill the tab the page still shows `recording` on return — that's expected: capture state survives backgrounding. If segments keep flowing, the server reopens the session (stale-marker protection, by design). Tap **Stop** for the real end marker → report typically `clean`. Only if the OS killed the tab do you come back to an idle page — then the old session's report is `clean` for what it received (a lost in-memory queue tail shows as client-leg missing — the design being honest; note it if seen) |
+| Airplane mode 20 s mid-recording, back on, stop | queued climbs while offline, drains after; "retrying in Ns" appears then clears; verdict `clean`, **no missing segment_nums** |
+| Background the browser mid-recording, reopen | the hidden page beacons an end marker (ledger `ended` at that moment), but if iOS did NOT kill the tab the page still shows `recording` on return — that's expected: capture state survives backgrounding. If segments keep flowing, the server reopens the capture (stale-marker protection, by design). Tap **Stop** for the real end marker → report typically `clean`. Only if the OS killed the tab do you come back to an idle page — then the old capture's report is `clean` for what it received (a lost in-memory queue tail shows as client-leg missing — the design being honest; note it if seen) |
 
 ## Surface 2 — Chrome extension (on the mac) — records the ACTIVE TAB
 
@@ -60,11 +60,11 @@ locks the settings — use **Discard unsent** in the draining state to bail out.
 
 | Step | Expect |
 |---|---|
-| Open the popup **on an ordinary web page** playing audio (e.g. a YouTube tab); leave "video" ✓ (or uncheck for audio-only); *Record* | **NO picker** — capture starts immediately on that tab. State → `recording`, one session block, counters ticking ~10 s. (On a chrome:// or extension page you get an honest "could not start tab capture…open an ordinary web page tab" error — that's correct.) |
+| Open the popup **on an ordinary web page** playing audio (e.g. a YouTube tab); leave "video" ✓ (or uncheck for audio-only); *Record* | **NO picker** — capture starts immediately on that tab. State → `recording`, one capture block, counters ticking ~10 s. (On a chrome:// or extension page you get an honest "could not start tab capture…open an ordinary web page tab" error — that's correct.) |
 | Listen | the captured tab is still audible (passthrough) |
-| Wait ~40 s → **Stop** | the queue drains, then the popup resets to the idle hint within seconds — that is the capture document closing after full drain, NOT a failure. **Verdict is server-side**: `/capture/sessions` → the `ext-chrome-*` session `clean`; its report shows an `audio` + `video` stream (or just `audio` if video was off), dense sequences; transcripts land in `/context` |
-| Drill: audio-only — uncheck "video", Record, Stop | one session, report shows only an `audio` stream, verdict `clean` |
-| Drill: close/navigate the captured tab mid-record | the session ends `clean` on its own (track ended → clean stop) |
+| Wait ~40 s → **Stop** | the queue drains, then the popup resets to the idle hint within seconds — that is the capture document closing after full drain, NOT a failure. **Verdict is server-side**: `/capture/captures` → the `ext-chrome-*` capture `clean`; its report shows an `audio` + `video` stream (or just `audio` if video was off), dense sequences; transcripts land in `/context` |
+| Drill: audio-only — uncheck "video", Record, Stop | one capture, report shows only an `audio` stream, verdict `clean` |
+| Drill: close/navigate the captured tab mid-record | the capture ends `clean` on its own (track ended → clean stop) |
 | Drill: escape hatch — set a bogus server URL, Save, record a few seconds, Stop | state sticks at `draining` with "network error … retrying" (by design); **Discard unsent** appears → click it → popup returns to idle and settings unlock; fix the URL and re-record |
 
 ## Surface 3 — mac CLI
@@ -103,11 +103,11 @@ python3 nucleus_capture.py record --server $TUNNEL --user nmn \
 | Let it run ~1 min, then **Ctrl-C once** | "stopping capture…", tail segment uploads, "waiting for the server's continuity report…", summary with `audio` + `video` chunk counts, `verdict: clean`, exit 0 |
 | Stamps in the seg lines | `t_end` of seg N == `t_start` of seg N+1 (exact adjacency — the CLI's continuity signal) |
 | Drill: pull Wi-Fi ~20 s mid-run, restore, Ctrl-C | "retrying in Ns" lines, then uploads resume; final verdict `clean` |
-| Drill: Ctrl-C twice quickly | polite abandon message with the session id + spool path; the report (from another machine) shows `unterminated` — expected, honest |
+| Drill: Ctrl-C twice quickly | polite abandon message with the capture id + spool path; the report (from another machine) shows `unterminated` — expected, honest |
 
 ## After each surface — the server-side cross-check
 
-1. `curl -s $TUNNEL/capture/sessions` — your session appears with the right device_id,
+1. `curl -s $TUNNEL/capture/captures` — your capture appears with the right device_id,
    `ended: true`, received == expected.
 2. Its `/report` — verdict `clean`; every `emit_leg` entry has `dp.checked: true` and
    `dp.missing_unacked: []`; `segment_states.received == 0` (fully drained).
@@ -119,8 +119,8 @@ python3 nucleus_capture.py record --server $TUNNEL --user nmn \
 
 ## Pass bar + what to report
 
-**Pass** = every non-drill session ends verdict `clean` with zero unexplained missing
-seqs, and every drill behaves per its Expect cell. Anything else: grab the `session_id`,
+**Pass** = every non-drill capture ends verdict `clean` with zero unexplained missing
+segment_nums, and every drill behaves per its Expect cell. Anything else: grab the `capture_id`,
 the full `/report` JSON, what you did, and (for the extension) any popup error rows —
 drop them in the founders' channel / an escalation note in this file's Worklog. Known
 truths that are NOT bugs: ~tens-of-ms capture gaps between phone/extension segments

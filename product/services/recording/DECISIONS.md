@@ -10,6 +10,11 @@
 > out in two places. The decision text now lives once, at its D-number; what stays here is
 > **recording's implementation of it** — which is genuinely ours.
 >
+> **Naming note (2026-07-29):** dated rows below mention `/capture/sessions/*` and
+> `session_id`/`seq`; the live wire says `/capture/captures/*` and
+> `capture_id`/`segment_num` since the nomenclature cleanup
+> ([handoff/worklog.md](handoff/worklog.md)). Records keep their contemporaneous wording.
+>
 > **Stage: PROTOTYPE** ([D19](../../DECISIONS.md)) — these evolve. A decision is superseded by a new
 > row, never rewritten to say something different; only *status* changes in place.
 

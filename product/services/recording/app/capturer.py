@@ -1,4 +1,4 @@
-"""The capture session — pull a modality's ChunkSource, then per chunk, blob-first:
+"""The capture — pull a modality's ChunkSource, then per chunk, blob-first:
 
   1. compute bytes + sha256 for the chunk
   2. mint a stable chunk_id (reused on retry; the dedup key)
@@ -12,7 +12,7 @@ which yields ordered ``SourceChunk``s of opaque bytes + wall-clock span for one
 modality+codec. Audio (WAV) is the one M0 source; future modalities (image/video/text,
 screen/webcam/wearable) drop in a new source file — this path never changes.
 
-One globally-unique stream_id for the whole session; dense zero-based sequence
+One globally-unique stream_id for the whole capture; dense zero-based sequence
 (0,1,2,... assigned here as chunks emit); at-least-once with retry on both legs (retry
 inside the client, so chunk_id/sequence never change across attempts).
 """
@@ -78,7 +78,7 @@ def _build_envelope(
     return envelope
 
 
-async def run_session(
+async def run_capture(
     *,
     settings: Settings,
     storage_url: str,
@@ -91,7 +91,7 @@ async def run_session(
     sample_seconds: float | None = None,
     modality: str = "audio",
 ) -> dict[str, Any]:
-    """Run one capture session end-to-end. Returns the session summary dict.
+    """Run one capture end-to-end. Returns the capture summary dict.
 
     ``modality`` selects the ChunkSource from the registry (default 'audio'). The rest of
     this function is modality-agnostic — it only reads ``source.modality`` / ``.codec``
@@ -110,7 +110,7 @@ async def run_session(
         base_wallclock=base_wallclock,
     )
 
-    # ONE globally-unique stream_id for the whole always-on session.
+    # ONE globally-unique stream_id for the whole always-on capture.
     stream_id = new_ulid()
 
     storage = StorageClient(

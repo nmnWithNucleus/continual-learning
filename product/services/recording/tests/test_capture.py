@@ -1,4 +1,4 @@
-"""End-to-end capture-session behaviour, driven through POST /capture/run.
+"""End-to-end capture-capture behaviour, driven through POST /capture/run.
 
 Every downstream call hits the in-process fakes (conftest). These assert the frozen
 C1 delivery semantics: blob-first, dense zero-based sequence, one stream_id, at-least-
@@ -34,7 +34,7 @@ def test_capture_response_shape_and_single_stream_id(wiring):
     assert out["sequences"] == [0, 1, 2]
     assert len(out["record_ids"]) == 3
 
-    # ONE globally-unique stream_id for the whole session, on every emitted envelope.
+    # ONE globally-unique stream_id for the whole capture, on every emitted envelope.
     assert isinstance(out["stream_id"], str) and len(out["stream_id"]) == 26
     stream_ids = {env["stream_id"] for env in wiring.dp.envelopes}
     assert stream_ids == {out["stream_id"]}
@@ -51,7 +51,7 @@ def test_capture_response_shape_and_single_stream_id(wiring):
 
 def test_ingest_fanout_flattens_record_ids(make_wiring):
     """One C1 (chunk) may fan out to >1 C2 record (e.g. video keyframes): /ingest
-    returns {ok, record_ids:[...]} and the session flattens them across chunks.
+    returns {ok, record_ids:[...]} and the capture flattens them across chunks.
     Regression guard for the /ingest response reshape (record_id -> record_ids):
     with the old singular read, record_ids would be [None, ...] and the response
     model (list[str]) would 500."""
@@ -76,16 +76,16 @@ def test_emitted_c1_validates_against_schema(wiring):
 
 def test_emitted_c1_fields(wiring):
     out = wiring.run(sample_seconds=10, chunk_seconds=5, user_id="u-42", device_id="mic-7")
-    for seq, env in enumerate(wiring.dp.envelopes):
+    for segment_num, env in enumerate(wiring.dp.envelopes):
         assert env["contract"] == "C1"
         assert env["version"] == "0"
         assert env["user_id"] == "u-42"
         assert env["device_id"] == "mic-7"
         assert env["modality"] == "audio"
         assert env["codec"] == "audio/wav"
-        assert env["sequence"] == seq
+        assert env["sequence"] == segment_num
         assert env["stream_id"] == out["stream_id"]
-        assert env["chunk_id"] == out["chunk_ids"][seq]
+        assert env["chunk_id"] == out["chunk_ids"][segment_num]
         # blob leg carried through: opaque ref + integrity fields.
         assert env["blob_ref"].endswith(f"{env['chunk_id']}.wav")
         assert env["blob_bytes"] > 0
@@ -97,8 +97,8 @@ def test_emitted_c1_fields(wiring):
 def test_sequence_is_dense_zero_based_plus_one(wiring):
     out = wiring.run(sample_seconds=27, chunk_seconds=5)   # ceil(27/5) = 6
     assert out["chunks_emitted"] == 6
-    seqs = [env["sequence"] for env in wiring.dp.envelopes]
-    assert seqs == [0, 1, 2, 3, 4, 5]                       # dense, zero-based, +1
+    segment_nums = [env["sequence"] for env in wiring.dp.envelopes]
+    assert segment_nums == [0, 1, 2, 3, 4, 5]                       # dense, zero-based, +1
 
 
 # ------------------------------------------------------------- blob-first ordering

@@ -158,7 +158,7 @@
     },
     {
       "type": "row",
-      "title": "Sessions & client leg",
+      "title": "Captures & client leg",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -169,7 +169,7 @@
     },
     {
       "type": "stat",
-      "title": "Sessions (total)",
+      "title": "Captures (total)",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -202,7 +202,7 @@
       },
       "targets": [
         {
-          "expr": "rec_sessions_total",
+          "expr": "rec_captures_total",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -222,7 +222,7 @@
     },
     {
       "type": "stat",
-      "title": "Sessions active",
+      "title": "Captures active",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -255,7 +255,7 @@
       },
       "targets": [
         {
-          "expr": "rec_sessions_active",
+          "expr": "rec_captures_active",
           "refId": "A",
           "datasource": {
             "type": "prometheus",

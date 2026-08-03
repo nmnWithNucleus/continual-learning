@@ -8,6 +8,11 @@
 
 **Status:** built + verified live (unit + E2E incl. loss/dup drills) · **Owner session:** recording M1 lead
 
+> **2026-07-29 — nomenclature:** the client wire now says `capture_id` + `segment_num`
+> (were `session_id` + `seq`), and `/capture/sessions/*` routes became
+> `/capture/captures/*`. Pinned spec blocks below are updated; dated worklog entries
+> keep their contemporaneous wording.
+
 ---
 
 ## Decisions
@@ -44,10 +49,10 @@
 ## Server pieces (all new files unless noted)
 
 - `app/ledger.py` — SQLite ledger. Tables:
-  - `sessions(session_id PK, user_id, device_id, started_at, ended INT, expected_segments INT NULL)`
-  - `segments(session_id, seq, sha256, bytes, mime, t_start, t_end, received_at, state, spool_path, PRIMARY KEY(session_id, seq))` — state: `received|emitted|failed`
-  - `streams(stream_id PK, session_id, modality, codec, next_sequence)`
-  - `chunks(stream_id, sequence, session_id, seq, modality, chunk_id, codec, bytes, sha256, blob_ref, dp_acked INT, record_ids TEXT, emitted_at, PRIMARY KEY(stream_id, sequence))`
+  - `captures(capture_id PK, user_id, device_id, started_at, ended INT, expected_segments INT NULL)`
+  - `segments(capture_id, segment_num, sha256, bytes, mime, t_start, t_end, received_at, state, spool_path, PRIMARY KEY(capture_id, segment_num))` — state: `received|emitted|failed`
+  - `streams(stream_id PK, capture_id, modality, codec, next_sequence)`
+  - `chunks(stream_id, sequence, capture_id, segment_num, modality, chunk_id, codec, bytes, sha256, blob_ref, dp_acked INT, record_ids TEXT, emitted_at, PRIMARY KEY(stream_id, sequence))`
 - `app/demux.py` — ffprobe track probe + ffmpeg demux of one spooled segment into per-modality
   chunk files (subprocess; binaries from `FFMPEG_BIN`/`FFPROBE_BIN`, default path).
 - `app/emitter.py` — per-session in-order worker: for each received segment, demux → per modality:
@@ -64,13 +69,13 @@
 - `app/config.py` (edit) — add `var_dir` (`RECORDING_VAR_DIR`, default `<service>/var`),
   `ffmpeg_bin`, `ffprobe_bin`, `ingest_sync`, `keep_spool`.
 
-## Gap report — `GET /capture/sessions/{id}/report`
+## Gap report — `GET /capture/captures/{id}/report`
 
 ```jsonc
 {
-  "session_id": "...", "user_id": "...", "device_id": "...",
+  "capture_id": "...", "user_id": "...", "device_id": "...",
   "started_at": "...", "ended": true, "expected_segments": 7, "received_segments": 7,
-  "client_leg": { "missing_seqs": [], "duplicate_deliveries": 0, "unterminated": false },
+  "client_leg": { "missing_segment_nums": [], "duplicate_deliveries": 0, "unterminated": false },
   "emit_leg": [
     { "modality": "audio", "stream_id": "...", "codec": "audio/wav",
       "chunks_emitted": 7, "last_sequence": 6, "pending": 0, "failed": 0,
@@ -84,8 +89,8 @@
 `dp` comes from querying data-processing `GET /continuity/{stream_id}` live (skipped →
 `checked:false` when DP is unreachable). **`verdict:"clean"` = session ended ∧ no client-leg
 missing ∧ every received segment emitted ∧ every DP-checked stream shows no missing** — the
-"zero silent loss" guarantee, checked end-to-end across both legs. `GET /capture/sessions`
-lists per-session summaries.
+"zero silent loss" guarantee, checked end-to-end across both legs. `GET /capture/captures`
+lists per-capture summaries.
 
 ## Tests (extend the M0 suite; 34 existing tests stay green)
 

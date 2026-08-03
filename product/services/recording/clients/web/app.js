@@ -6,18 +6,18 @@
  * - D-M1-1 edge chunking: MediaRecorder timeslice fragments are not self-contained
  *   (and iOS is unreliable with timeslice), so the recorder is RESTARTED every
  *   SEGMENT_SECONDS; each stop yields a standalone playable blob = one upload unit.
- *   The ~tens-of-ms capture gap per restart is a stated capture reality: `seq`
+ *   The ~tens-of-ms capture gap per restart is a stated capture reality: `segment_num`
  *   stays dense and per-segment t_start/t_end carry the true wall-clock spans.
  *
- * - ONE serialized upload queue: segment `seq` is sent only after `seq-1` is acked,
+ * - ONE serialized upload queue: segment `segment_num` is sent only after `segment_num-1` is acked,
  *   so arrival is in-order by construction. Network errors / 5xx retry forever
  *   (backoff 1s * 2^n, cap 30s); a 4xx is a client bug — surfaced, never retried.
  *   The queue is in-memory: a page reload loses queued segments and the server
  *   ledger flags exactly which (IndexedDB persistence is a later hardening).
  *
  * - Wire (same-origin, pinned jointly with WS-C — internal, not a C-contract):
- *   POST /capture/segments?session_id=&seq=&...  (raw blob body) -> {ok, status};
- *   POST /capture/sessions/{id}/end {last_seq};  GET /capture/sessions/{id}/report
+ *   POST /capture/segments?capture_id=&segment_num=&...  (raw blob body) -> {ok, status};
+ *   POST /capture/captures/{id}/end {last_segment_num};  GET /capture/captures/{id}/report
  *   polled every 5s — its verdict is the tester's "it landed" signal.
  *
  * No dependencies, no build step, no external resources: this IIFE is the client.
@@ -54,7 +54,7 @@
     recordBtn: $("record-btn"),
     userId: $("user-id"),
     cameraToggle: $("camera-toggle"),
-    sessionId: $("session-id"),
+    captureId: $("capture-id"),
     deviceId: $("device-id"),
     captured: $("captured"),
     uploaded: $("uploaded"),
@@ -76,12 +76,12 @@
     try { return localStorage.getItem(key); } catch { return null; }
   }
   function lsSet(key, value) {
-    try { localStorage.setItem(key, value); } catch { /* per-session fallback */ }
+    try { localStorage.setItem(key, value); } catch { /* per-capture fallback */ }
   }
 
   // ULID-ish id (matches the server's Crockford-base32 style): 48-bit ms
   // timestamp + 80-bit randomness. Time-ordered prefix is a debugging nicety;
-  // ordering is carried authoritatively by seq, never by the id.
+  // ordering is carried authoritatively by segment_num, never by the id.
   const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
   function encodeTime(ms, length) {
     let out = "";
@@ -119,10 +119,10 @@
   // ---------------------------------------------------------------- state
   // UI states: idle | recording | paused | uploading | error (colors in CSS).
   let state = "idle";
-  let session = null;   // per-record-press: see startSession() for the shape
-  let stream = null;    // the live MediaStream (one getUserMedia per session)
+  let capture = null;   // per-record-press: see startSession() for the shape
+  let stream = null;    // the live MediaStream (one getUserMedia per capture)
   let recorder = null;  // the MediaRecorder for the CURRENT segment
-  let mimeType = "";    // picked once per session
+  let mimeType = "";    // picked once per capture
   let segmentTimer = null;
   let timerInterval = null;
   let pollTimer = null;
@@ -155,8 +155,8 @@
 
   // ---------------------------------------------------------------- status UI
   function renderStatus() {
-    const s = session;
-    el.sessionId.textContent = s ? s.id : "—"; // full id (wraps): new id = new session
+    const s = capture;
+    el.captureId.textContent = s ? s.id : "—"; // full id (wraps): new id = new capture
     el.captured.textContent = s ? s.captured : "0";
     el.uploaded.textContent = s ? s.uploaded : "0";
     el.queued.textContent = s ? s.queue.length : "0";
@@ -198,8 +198,8 @@
     if (st.received) lines.push("server processing " + st.received + " segment(s)…");
     if (st.failed) lines.push(st.failed + " segment(s) FAILED server-side");
     const cl = report.client_leg || {};
-    if (Array.isArray(cl.missing_seqs) && cl.missing_seqs.length) {
-      lines.push("client leg missing seqs: " + cl.missing_seqs.join(", "));
+    if (Array.isArray(cl.missing_segment_nums) && cl.missing_segment_nums.length) {
+      lines.push("client leg missing segment_nums: " + cl.missing_segment_nums.join(", "));
     }
     for (const leg of report.emit_leg || []) {
       let t = (leg.modality || "?") + ": " + leg.chunks_emitted + " chunks emitted";
@@ -209,7 +209,7 @@
       if (dp.checked === false) t += " (DP unchecked)";
       else {
         // missing_unacked (ack-reconciled) is authoritative; entries may be
-        // [lo,hi] runs or flat seqs — count CHUNKS, not runs.
+        // [lo,hi] runs or flat segment_nums — count CHUNKS, not runs.
         const miss = Array.isArray(dp.missing_unacked) ? dp.missing_unacked : (dp.missing || []);
         const n = miss.reduce((acc, m) => acc + (Array.isArray(m) ? m[1] - m[0] + 1 : 1), 0);
         if (n) t += ", DP missing " + n;
@@ -237,14 +237,14 @@
   async function pollReport(s) {
     let report;
     try {
-      const res = await fetch("/capture/sessions/" + encodeURIComponent(s.id) + "/report");
+      const res = await fetch("/capture/captures/" + encodeURIComponent(s.id) + "/report");
       if (!res.ok) return; // 404 until the first segment lands; 5xx: just poll again
       report = await res.json();
     } catch { return; } // offline — keep polling
-    if (s !== session) return; // a newer session owns the panel now
+    if (s !== capture) return; // a newer capture owns the panel now
     s.report = report;
     renderReport(s, report);
-    // Stop only when the answer can't change: session ended, a terminal verdict,
+    // Stop only when the answer can't change: capture ended, a terminal verdict,
     // and the server has drained (a "gaps" verdict can appear while segments are
     // still processing — chunk counts keep moving until segment_states.received=0).
     const drained = !report.segment_states || report.segment_states.received === 0;
@@ -276,7 +276,7 @@
   async function uploadSegment(s, seg) {
     if (seg.sha256 === undefined) seg.sha256 = await digestHex(seg.blob); // cached across retries
     const qs = new URLSearchParams({
-      session_id: s.id, seq: String(seg.seq),
+      capture_id: s.id, segment_num: String(seg.segment_num),
       user_id: s.userId, device_id: deviceId,
       t_start: new Date(seg.tStart).toISOString(), // RFC3339 UTC, ms precision
       t_end: new Date(seg.tEnd).toISOString(),
@@ -299,7 +299,7 @@
       try { detail = (await res.text()).slice(0, 120); } catch { /* body optional */ }
       throw uploadError("HTTP " + res.status + (detail ? " — " + detail : ""), true);
     }
-    // Ack body is {ok, session_id, seq, status:"received"|"duplicate"}; both
+    // Ack body is {ok, capture_id, segment_num, status:"received"|"duplicate"}; both
     // statuses mean the bytes are on the server, nothing to branch on here.
   }
 
@@ -319,13 +319,13 @@
             if (err.fatal) {
               // A 4xx is a bug, not a transient — retrying cannot help. Drop the
               // segment so the queue (and the end marker) keeps moving; the
-              // ledger's client leg will show exactly this seq as missing.
+              // ledger's client leg will show exactly this segment_num as missing.
               s.failedCount += 1;
-              setLastError("seq " + seg.seq + ": " + err.message + " (4xx — not retried)");
+              setLastError("segment_num " + seg.segment_num + ": " + err.message + " (4xx — not retried)");
               break;
             }
             const delay = backoffDelay(attempt);
-            setLastError("seq " + seg.seq + ": " + err.message + " — retrying in " + Math.round(delay / 1000) + "s");
+            setLastError("segment_num " + seg.segment_num + ": " + err.message + " — retrying in " + Math.round(delay / 1000) + "s");
             await sleep(delay);
           }
         }
@@ -351,10 +351,10 @@
   async function postEnd(s, lastSeq) {
     for (let attempt = 0; ; attempt++) {
       try {
-        const res = await fetch("/capture/sessions/" + encodeURIComponent(s.id) + "/end", {
+        const res = await fetch("/capture/captures/" + encodeURIComponent(s.id) + "/end", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ last_seq: lastSeq }),
+          body: JSON.stringify({ last_segment_num: lastSeq }),
         });
         if (res.ok) return;
         if (res.status < 500) {
@@ -366,14 +366,14 @@
     }
   }
 
-  // A killed/hidden page still terminates the ledger session: beacon the end
-  // marker with the last *enqueued* seq (idempotent; a clean Stop later posts
-  // the same last_seq after the drain).
+  // A killed/hidden page still terminates the ledger capture: beacon the end
+  // marker with the last *enqueued* segment_num (idempotent; a clean Stop later posts
+  // the same last_segment_num after the drain).
   function beaconEnd() {
-    const s = session;
+    const s = capture;
     if (!s || s.ended || s.nextSeq === 0) return;
-    const url = "/capture/sessions/" + encodeURIComponent(s.id) + "/end";
-    const body = JSON.stringify({ last_seq: s.nextSeq - 1 });
+    const url = "/capture/captures/" + encodeURIComponent(s.id) + "/end";
+    const body = JSON.stringify({ last_segment_num: s.nextSeq - 1 });
     let sent = false;
     try {
       if (navigator.sendBeacon) sent = navigator.sendBeacon(url, new Blob([body], { type: "application/json" }));
@@ -452,8 +452,8 @@
       const mime = rec.mimeType || mimeType || (s.audioOnly ? "audio/webm" : "video/webm");
       const blob = new Blob(parts, { type: mime });
       if (blob.size > 0) {
-        // seq assigned at enqueue so it stays dense even if a segment came up empty
-        s.queue.push({ seq: s.nextSeq++, blob, tStart, tEnd, mime });
+        // segment_num assigned at enqueue so it stays dense even if a segment came up empty
+        s.queue.push({ segment_num: s.nextSeq++, blob, tStart, tEnd, mime });
         s.captured += 1;
         pump(s);
       }
@@ -504,7 +504,7 @@
     lsSet(LS_USER, userId);
 
     stopPolling();
-    session = {
+    capture = {
       id: newSessionId(), // minted per record-press (spec)
       userId,
       audioOnly: !wantVideo,
@@ -520,15 +520,15 @@
     timerInterval = setInterval(renderTimer, 250);
     renderTimer();
     renderStatus();
-    renderReport(session, null);
+    renderReport(capture, null);
     setState("recording");
     acquireWakeLock();
-    startPolling(session);
-    startSegment(session);
+    startPolling(capture);
+    startSegment(capture);
   }
 
   function pauseSession() {
-    const s = session;
+    const s = capture;
     if (!s || s.mode !== "rolling") return;
     s.mode = "paused";
     if (segmentTimer) { clearTimeout(segmentTimer); segmentTimer = null; }
@@ -541,7 +541,7 @@
   }
 
   function resumeSession() {
-    const s = session;
+    const s = capture;
     if (!s || s.mode !== "paused") return;
     s.mode = "rolling";
     activeSinceMs = Date.now();
@@ -553,7 +553,7 @@
   }
 
   function stopSession() {
-    const s = session;
+    const s = capture;
     if (!s || s.mode === "stopping") return;
     s.mode = "stopping";
     if (segmentTimer) { clearTimeout(segmentTimer); segmentTimer = null; }
@@ -613,7 +613,7 @@
   window.addEventListener("pagehide", beaconEnd);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") beaconEnd();
-    else if (session && !session.ended) acquireWakeLock(); // OS drops wake locks on hide
+    else if (capture && !capture.ended) acquireWakeLock(); // OS drops wake locks on hide
   });
 
   // ---------------------------------------------------------------- init

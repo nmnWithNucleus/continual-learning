@@ -132,10 +132,10 @@ def test_new_modality_flows_through_emit_path_unchanged(monkeypatch):
 
     # C1 carries the source's modality/codec — and STILL validates against the frozen
     # C1 schema (modality enum includes 'image'); the wire shape did not change.
-    for seq, env in enumerate(dp.envelopes):
+    for segment_num, env in enumerate(dp.envelopes):
         assert env["modality"] == "image"
         assert env["codec"] == "image/png"
-        assert env["sequence"] == seq
+        assert env["sequence"] == segment_num
         assert env["t_start"] == env["t_end"] == "2026-07-09T12:00:00Z"
         assert contracts.c1_errors(env) == [], env
 

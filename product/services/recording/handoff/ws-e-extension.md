@@ -17,6 +17,11 @@ Verified** (2026-07-19, CTO on Comet: session `01KXWCPB…` → verdict `clean`,
 audio+video C1, 7 real ASR transcripts of the tab's audio in `/context`) · *Owner session:*
 recording computer-capture lead
 
+> **2026-07-29 — nomenclature:** the client wire now says `capture_id` + `segment_num`
+> (were `session_id` + `seq`), and `/capture/sessions/*` routes became
+> `/capture/captures/*`. Pinned spec blocks below are updated; dated worklog entries
+> keep their contemporaneous wording.
+
 ---
 
 ## Decisions
@@ -161,10 +166,10 @@ muxed-webm shape (vp8+opus) demuxes to audio+video C1 streams.
 
 ## Wire mapping (one session per recording)
 
-Identical to ws-b §Wire; only the values differ: `session_id` minted per record-press;
+Identical to ws-b §Wire; only the values differ: `capture_id` minted per record-press;
 `user_id` from settings (default `beta-user`); `device_id` = `ext-chrome-<suffix>`; `mime` =
 the recorder's actual muxed webm mimeType; `t_start`/`t_end` wall-clock ms stamped at recorder
-start/stop; end marker `{last_seq}` after drain. Server URL prefix is the configured setting
+start/stop; end marker `{last_segment_num}` after drain. Server URL prefix is the configured setting
 (tunnel URL or `http://localhost:8084`). The server demuxes each muxed segment into audio +
 video C1 streams.
 
@@ -186,7 +191,7 @@ video C1 streams.
 4. Watch the popup counters climb (~1 segment / 10 s); **Stop** → queue drains. The popup
    resets to idle within seconds of the drain (the capture document auto-closes) — NOT a
    failure; the verdict is confirmed server-side in step 5.
-5. Cross-check: `GET /capture/sessions` shows the session (`ext-chrome-*` device); its report
+5. Cross-check: `GET /capture/captures` shows the capture (`ext-chrome-*` device); its report
    shows an `audio` + `video` stream (or just `audio` if the video toggle was off) with dense
    sequences and verdict `clean`; audio transcripts land in `/context` via DP.
 6. Drills: close/navigate the captured tab mid-record (session ends `clean` on its own); set a

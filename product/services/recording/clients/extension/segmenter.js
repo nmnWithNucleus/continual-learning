@@ -11,9 +11,9 @@
  *   playable blob = one upload unit. The ~tens-of-ms capture gap per restart
  *   is a stated capture reality; per-segment tStart/tEnd carry the true
  *   wall-clock spans (from the injected `now`).
- * - This module does NOT assign seq — onSegment receives {blob, tStart, tEnd,
+ * - This module does NOT assign segment_num — onSegment receives {blob, tStart, tEnd,
  *   mime} and the uploader numbers densely at enqueue, so an empty segment
- *   (blob.size 0: skipped here, loop continues) never punches a seq hole.
+ *   (blob.size 0: skipped here, loop continues) never punches a segment_num hole.
  * - stop() resolves after the FINAL segment's onstop has emitted — it drains
  *   the capture loop, not the upload queue (the uploader owns that drain).
  * - The stop-during-pending-onstop race (stop() landing between a timer-fired

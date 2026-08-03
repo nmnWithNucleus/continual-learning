@@ -2,7 +2,7 @@
  * WS-E — uploader.js conformance (deno test; no network, no chrome.*).
  *
  * Everything the module promises is checked against fakes: serialized order
- * (one request in flight, seq n only after n-1 acked), retry-forever backoff
+ * (one request in flight, segment_num n only after n-1 acked), retry-forever backoff
  * (1s*2^n cap 30s) on 5xx AND thrown network errors, 4xx = dropped+surfaced
  * with the queue continuing, the exact wire shape (query params, RFC3339
  * timestamps, octet-stream blob body), injected-digest behaviour incl. the
@@ -62,7 +62,7 @@ function fakeFetch(handler) {
 const mkUploader = (fetch, extra = {}) =>
   createUploader({
     baseUrl: "http://server:8084",
-    sessionId: "S",
+    captureId: "S",
     userId: "u",
     deviceId: "ext-chrome-test",
     fetch,
@@ -71,7 +71,7 @@ const mkUploader = (fetch, extra = {}) =>
     ...extra,
   });
 
-Deno.test("serialized pump: one request in flight, seq n only after n-1 acked", async () => {
+Deno.test("serialized pump: one request in flight, segment_num n only after n-1 acked", async () => {
   const pending = [];
   const fetch = fakeFetch(() => new Promise((resolve) => pending.push(resolve)));
   const up = mkUploader(fetch);
@@ -79,17 +79,17 @@ Deno.test("serialized pump: one request in flight, seq n only after n-1 acked", 
   up.enqueue(seg());
   up.enqueue(seg());
   await tick();
-  // Only seq 0 has been attempted — 1 and 2 wait for their predecessor's ack.
+  // Only segment_num 0 has been attempted — 1 and 2 wait for their predecessor's ack.
   assertEquals(pending.length, 1);
-  assertEquals(fetch.calls[0].url.searchParams.get("seq"), "0");
+  assertEquals(fetch.calls[0].url.searchParams.get("segment_num"), "0");
   assertEquals(up.state().queued, 3);
   pending[0](ok200());
   await tick();
   assertEquals(pending.length, 2);
-  assertEquals(fetch.calls[1].url.searchParams.get("seq"), "1");
+  assertEquals(fetch.calls[1].url.searchParams.get("segment_num"), "1");
   pending[1](ok200());
   await tick();
-  assertEquals(fetch.calls[2].url.searchParams.get("seq"), "2");
+  assertEquals(fetch.calls[2].url.searchParams.get("segment_num"), "2");
   pending[2](ok200());
   await up.drain();
   assertEquals(fetch.calls.length, 3);
@@ -142,7 +142,7 @@ Deno.test("thrown network error retries like a 5xx and surfaces in lastError", a
 
 Deno.test("4xx: dropped + surfaced, never retried, queue continues", async () => {
   const fetch = fakeFetch((call) =>
-    call.url.searchParams.get("seq") === "0" ? status(400, "bad t_start") : ok200()
+    call.url.searchParams.get("segment_num") === "0" ? status(400, "bad t_start") : ok200()
   );
   const up = mkUploader(fetch);
   up.enqueue(seg());
@@ -159,14 +159,14 @@ Deno.test("4xx: dropped + surfaced, never retried, queue continues", async () =>
   st = up.state();
   assertEquals(st.uploaded, 1);
   assertEquals(st.dropped, 1);
-  assertEquals(fetch.calls[1].url.searchParams.get("seq"), "1", "seq stays dense after a drop");
+  assertEquals(fetch.calls[1].url.searchParams.get("segment_num"), "1", "segment_num stays dense after a drop");
 });
 
 Deno.test("wire shape: path, query params, RFC3339 stamps, octet-stream blob body", async () => {
   const fetch = fakeFetch(() => ok200());
   const up = createUploader({
     baseUrl: "http://server:8084/", // trailing slash must be normalized away
-    sessionId: "SESH",
+    captureId: "SESH",
     userId: "u1",
     deviceId: "ext-chrome-abc",
     fetch,
@@ -183,8 +183,8 @@ Deno.test("wire shape: path, query params, RFC3339 stamps, octet-stream blob bod
   const call = fetch.calls[0];
   assertEquals(call.url.pathname, "/capture/segments");
   const sp = call.url.searchParams;
-  assertEquals(sp.get("session_id"), "SESH");
-  assertEquals(sp.get("seq"), "0");
+  assertEquals(sp.get("capture_id"), "SESH");
+  assertEquals(sp.get("segment_num"), "0");
   assertEquals(sp.get("user_id"), "u1");
   assertEquals(sp.get("device_id"), "ext-chrome-abc");
   assertEquals(sp.get("t_start"), new Date(1752800000000).toISOString());
@@ -209,7 +209,7 @@ Deno.test("digest failure degrades to sha256= empty (server computes)", async ()
   assertEquals(up.state().uploaded, 1);
 });
 
-Deno.test("end(): drains first, then posts {last_seq}; endedOk set", async () => {
+Deno.test("end(): drains first, then posts {last_segment_num}; endedOk set", async () => {
   const fetch = fakeFetch(() => ok200());
   const up = mkUploader(fetch);
   up.enqueue(seg());
@@ -217,10 +217,10 @@ Deno.test("end(): drains first, then posts {last_seq}; endedOk set", async () =>
   await up.end();
   assertEquals(fetch.calls.length, 3, "both segments before the end marker");
   const endCall = fetch.calls[2];
-  assertEquals(endCall.url.pathname, "/capture/sessions/S/end");
+  assertEquals(endCall.url.pathname, "/capture/captures/S/end");
   assertEquals(endCall.opts.method, "POST");
   assertEquals(endCall.opts.headers["content-type"], "application/json");
-  assertEquals(JSON.parse(endCall.opts.body), { last_seq: 1 });
+  assertEquals(JSON.parse(endCall.opts.body), { last_segment_num: 1 });
   assert(up.state().endedOk, "endedOk after a 2xx end marker");
 });
 
@@ -256,7 +256,7 @@ Deno.test("end() with zero captured segments: no wire call, vacuously ended", as
   const fetch = fakeFetch(() => ok200());
   const up = mkUploader(fetch);
   await up.end();
-  assertEquals(fetch.calls.length, 0, "no session row exists server-side — nothing to end");
+  assertEquals(fetch.calls.length, 0, "no capture row exists server-side — nothing to end");
   assert(up.state().endedOk);
 });
 
@@ -295,7 +295,7 @@ Deno.test("civil-time context rides the query string", async () => {
   const fetch = fakeFetch(() => ok200());
   const up = createUploader({
     baseUrl: "http://server:8084/",
-    sessionId: "SESH",
+    captureId: "SESH",
     userId: "u1",
     deviceId: "ext-chrome-abc",
     fetch,

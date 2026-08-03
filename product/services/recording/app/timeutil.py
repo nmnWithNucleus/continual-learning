@@ -1,7 +1,7 @@
 """Wall-clock helpers for C1's time-spine (t_start / t_end).
 
 C1 timestamps are device wall-clock, RFC3339 UTC. Recording stamps each chunk with
-the wall-clock span it covers. A ``base_wallclock`` can be pinned per capture session
+the wall-clock span it covers. A ``base_wallclock`` can be pinned per capture
 (the moment the stream's frame 0 was captured) so tests are deterministic; absent one,
 we use the real UTC clock at capture time.
 """

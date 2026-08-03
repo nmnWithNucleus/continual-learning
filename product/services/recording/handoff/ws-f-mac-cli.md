@@ -12,6 +12,11 @@ screen+mic, 7/7 segments, verdict `clean`, pixels confirmed real in VLC + spoken
 transcripts in `/context`; the fps-pin fix that made it work is in the worklog) · *Owner
 session:* recording computer-capture lead
 
+> **2026-07-29 — nomenclature:** the client wire now says `capture_id` + `segment_num`
+> (were `session_id` + `seq`), and `/capture/sessions/*` routes became
+> `/capture/captures/*`. Pinned spec blocks below are updated; dated worklog entries
+> keep their contemporaneous wording.
+
 ---
 
 ## Decisions
@@ -44,19 +49,19 @@ session:* recording computer-capture lead
   n+1 only after finalizing n, so a segment is uploadable when a higher-numbered file exists; on
   ffmpeg exit, all remaining files are final.
 - No inotify, no size-polling heuristics.
-- Upload strictly in filename (= seq) order, serialized — ws-b's queue semantics: retry forever on
+- Upload strictly in filename (= segment_num) order, serialized — ws-b's queue semantics: retry forever on
   network/5xx (backoff 1 s·2ⁿ, cap 30 s), 4xx surfaced + counted + dropped, sha256 always computed
   (stdlib hashlib).
 - Segment files are deleted after ack (`--keep-segments` keeps them).
 - **Stop semantics:** first Ctrl-C → graceful: `q` to ffmpeg's stdin (clean mp4 close; SIGINT
-  fallback), finalize + upload the tail, `POST /capture/sessions/{id}/end {last_seq}`, then poll
+  fallback), finalize + upload the tail, `POST /capture/captures/{id}/end {last_segment_num}`, then poll
   the gap report until the verdict is terminal AND `segment_states.received == 0` (drained), print
   the report summary.
 - Exit code: 0 `clean`, 2 `gaps`, 1 error.
-- Second Ctrl-C → abandon politely: print the session id, the spool path, and the fact that the
-  ledger will flag the session unterminated.
+- Second Ctrl-C → abandon politely: print the capture id, the spool path, and the fact that the
+  ledger will flag the capture unterminated.
 - Bounded runs via `--duration N` (mainly test mode) end the same graceful way.
-- **Identity:** `session_id` ULID-ish minted per run (same alphabet as the phone client);
+- **Identity:** `capture_id` ULID-ish minted per run (same alphabet as the phone client);
   `--user` default `beta-user`; `device_id` = `mac-cli-<suffix>`, suffix persisted at
   `~/.nucleus/device_id` (0600, dir 0700).
 
@@ -112,7 +117,7 @@ streams, `video` + `audio`, dense sequences; transcripts in `/context`).
 `tests/test_mac_client.py` (module loaded via importlib from `clients/mac/`): stamp
 chaining math; spool-scan completeness rule (next-file / ffmpeg-exit); serialized upload
 order + retry-then-success on 5xx; 4xx dropped + counted; sha256 + wire params against a
-stdlib http.server stub; end-marker `last_seq`; ffmpeg argv construction for both sources
+stdlib http.server stub; end-marker `last_segment_num`; ffmpeg argv construction for both sources
 (no avfoundation needed); plus an ffmpeg-marked integration run: `--source test
 --duration ~4 s` against the stub, asserting real mp4 segments cross the wire in order.
 Wire conformance against the real ingest app lives in `tests/test_wire_conformance.py`

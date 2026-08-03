@@ -166,7 +166,7 @@ def test_extraction_fills_the_cache_from_media(tmp_path, monkeypatch):
 
 @pytest.mark.anyio
 async def test_replayed_chunks_emit_schema_valid_audio_c1(tmp_path, monkeypatch):
-    """End to end through the REAL emit path: a replayed session PUTs blobs and pushes
+    """End to end through the REAL emit path: a replayed capture PUTs blobs and pushes
     C1 envelopes that validate against the frozen schema as modality 'audio'."""
 
     events: list = []
@@ -179,7 +179,7 @@ async def test_replayed_chunks_emit_schema_valid_audio_c1(tmp_path, monkeypatch)
     monkeypatch.setattr(clients, "async_client", fake_client)
     monkeypatch.setenv("RECORDING_RETRY_BACKOFF", "0")
 
-    result = await capturer.run_session(
+    result = await capturer.run_capture(
         settings=get_settings(), storage_url=STORAGE_URL, dp_url=DP_URL,
         modality="replay", source=two_chunk_plan(tmp_path),
         user_id="replay-speed", device_id="replay-tour-audio")

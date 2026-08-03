@@ -3,7 +3,7 @@
 This is the ONE concrete source built in M0. It wraps the audio-codec machinery in
 ``app/wav.py`` and ``app/carve.py`` (decode + carve into standalone WAVs) behind the
 modality-agnostic ``ChunkSource`` seam, and stamps each chunk's C1 wall-clock span from
-a session base time.
+a capture base time.
 
 Two carve modes (charter OQ4, decision D-M1-2). An EXPLICIT duration — the caller's
 ``chunk_seconds``, else the ``CHUNK_SECONDS`` env var — selects the fixed carve
@@ -101,7 +101,7 @@ def build(
     """Builder registered for modality 'audio' (see ``app/sources/__init__.py``).
 
     Resolves the continuous source (caller ``.wav`` path, else a synthetic sample),
-    the carve mode, and pins the session base wall-clock (RFC3339, or now-UTC when
+    the carve mode, and pins the capture base wall-clock (RFC3339, or now-UTC when
     omitted) for deterministic time stamping.
 
     Carve-mode resolution: an EXPLICIT fixed duration wins — the caller's

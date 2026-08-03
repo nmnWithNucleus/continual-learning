@@ -50,10 +50,10 @@ def _wire(monkeypatch, tmp_path, *, storage_fail_first=False):
     return app
 
 
-def _post(client, sid, seq, data):
-    start = BASE + timedelta(seconds=10 * seq)
+def _post(client, sid, segment_num, data):
+    start = BASE + timedelta(seconds=10 * segment_num)
     return client.post("/capture/segments", params={
-        "session_id": sid, "seq": seq, "user_id": "u", "device_id": "d",
+        "capture_id": sid, "segment_num": segment_num, "user_id": "u", "device_id": "d",
         "t_start": start.isoformat().replace("+00:00", "Z"),
         "t_end": (start + timedelta(seconds=10)).isoformat().replace("+00:00", "Z"),
         "mime": "audio/mp4", "sha256": hashlib.sha256(data).hexdigest(),
@@ -69,13 +69,13 @@ def test_metrics_reports_http_and_capture_health(monkeypatch, tmp_path, audio_by
         assert _post(client, sid, 0, audio_bytes).status_code == 200
         text = client.get("/metrics").text
 
-    # Baseline HTTP metrics (route-templated, not per-session).
+    # Baseline HTTP metrics (route-templated, not per-capture).
     assert "# TYPE rec_http_requests_total counter" in text
     assert 'path="/capture/segments"' in text
     # Capture-health, ledger-derived (one audio segment emitted -> one audio chunk).
     assert 'rec_segments{state="emitted"} 1' in text
     assert 'rec_chunks{modality="audio"} 1' in text
-    assert "rec_sessions_total 1" in text
+    assert "rec_captures_total 1" in text
     # dp_state gauge present (inline ack -> processed).
     assert 'rec_chunks_dp_state{dp_state="processed"} 1' in text
     # Emit latency histogram recorded.

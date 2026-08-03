@@ -5,7 +5,7 @@ record_ids — provenance is optional-at-accept. Recording must:
   * tolerate the ack-without-record_ids (no crash; empty provenance);
   * record it as ACCEPTED (dp_acked=0, dp_state='accepted'), NOT confirmed — so the gap
     report's ``dp_acked=1 ⇔ C2 written`` invariant survives;
-  * read the session as 'recording' (in-flight) while chunks are accepted-unconfirmed,
+  * read the capture as 'recording' (in-flight) while chunks are accepted-unconfirmed,
     'clean' once DP's /continuity reports them processed, and 'gaps' if DP dead-letters
     one — never a silent 'clean' for a lost chunk.
 
@@ -41,8 +41,8 @@ needs_ffmpeg = pytest.mark.skipif(
 BASE = datetime(2026, 7, 18, 12, 0, 0, tzinfo=timezone.utc)
 
 
-def _span(seq: int) -> tuple[str, str]:
-    start = BASE + timedelta(seconds=10 * seq)
+def _span(segment_num: int) -> tuple[str, str]:
+    start = BASE + timedelta(seconds=10 * segment_num)
     return start.isoformat().replace("+00:00", "Z"), \
         (start + timedelta(seconds=10)).isoformat().replace("+00:00", "Z")
 
@@ -107,17 +107,17 @@ def wiring(monkeypatch, tmp_path):
         yield client, storage, dp, var
 
 
-def _post_audio(client, sid, seq, data):
-    t_start, t_end = _span(seq)
+def _post_audio(client, sid, segment_num, data):
+    t_start, t_end = _span(segment_num)
     return client.post("/capture/segments", params={
-        "session_id": sid, "seq": seq, "user_id": "beta-user", "device_id": "phone",
+        "capture_id": sid, "segment_num": segment_num, "user_id": "beta-user", "device_id": "phone",
         "t_start": t_start, "t_end": t_end, "mime": "audio/mp4",
         "sha256": hashlib.sha256(data).hexdigest(),
     }, content=data, headers={"content-type": "application/octet-stream"})
 
 
 def _report(client, sid) -> dict:
-    r = client.get(f"/capture/sessions/{sid}/report")
+    r = client.get(f"/capture/captures/{sid}/report")
     assert r.status_code == 200, r.text
     return r.json()
 
@@ -127,7 +127,7 @@ def test_202_accept_recorded_as_accepted_not_confirmed(wiring, audio_segment_byt
     client, storage, dp, var = wiring
     sid = new_ulid()
     assert _post_audio(client, sid, 0, audio_segment_bytes).status_code == 200
-    client.post(f"/capture/sessions/{sid}/end", json={"last_seq": 0})
+    client.post(f"/capture/captures/{sid}/end", json={"last_segment_num": 0})
 
     # Ledger: the chunk is ACCEPTED, not confirmed — invariant dp_acked=1 ⇔ C2 written.
     conn = sqlite3.connect(var / "ledger.db"); conn.row_factory = sqlite3.Row
@@ -151,7 +151,7 @@ def test_processed_confirmation_flips_to_clean(wiring, audio_segment_bytes):
     client, storage, dp, var = wiring
     sid = new_ulid()
     _post_audio(client, sid, 0, audio_segment_bytes)
-    client.post(f"/capture/sessions/{sid}/end", json={"last_seq": 0})
+    client.post(f"/capture/captures/{sid}/end", json={"last_segment_num": 0})
 
     stream_id = _report(client, sid)["emit_leg"][0]["stream_id"]
     # DP now reports the chunk PROCESSED (C2 written).
@@ -202,7 +202,7 @@ def test_inline_ack_is_confirmed_and_processed_report_is_noop(inline_wiring, aud
     client, storage, dp, var = inline_wiring
     sid = new_ulid()
     _post_audio(client, sid, 0, audio_segment_bytes)
-    client.post(f"/capture/sessions/{sid}/end", json={"last_seq": 0})
+    client.post(f"/capture/captures/{sid}/end", json={"last_segment_num": 0})
 
     # Inline 200 -> CONFIRMED immediately (dp_acked=1, dp_state='processed').
     conn = sqlite3.connect(var / "ledger.db"); conn.row_factory = sqlite3.Row
@@ -236,12 +236,12 @@ def test_redrive_confirms_accepted_chunks(wiring, audio_segment_bytes):
     client, storage, dp, var = wiring
     sid = new_ulid()
     _post_audio(client, sid, 0, audio_segment_bytes)
-    client.post(f"/capture/sessions/{sid}/end", json={"last_seq": 0})
+    client.post(f"/capture/captures/{sid}/end", json={"last_segment_num": 0})
     assert _report(client, sid)["verdict"] == "recording"  # accepted, unconfirmed
 
     # DP finished processing on its worker; a re-push now short-circuits to a done-claim.
     dp.done = True
-    resp = client.post(f"/capture/sessions/{sid}/redrive")
+    resp = client.post(f"/capture/captures/{sid}/redrive")
     assert resp.status_code == 200
     body = resp.json()
     assert body["redriven"] == 1 and body["confirmed"] == 1 and body["still_accepted"] == 0
@@ -260,9 +260,9 @@ def test_redrive_leaves_still_pending_accepted(wiring, audio_segment_bytes):
     client, storage, dp, var = wiring
     sid = new_ulid()
     _post_audio(client, sid, 0, audio_segment_bytes)
-    client.post(f"/capture/sessions/{sid}/end", json={"last_seq": 0})
+    client.post(f"/capture/captures/{sid}/end", json={"last_segment_num": 0})
     # dp.done stays False -> re-push re-ACKs 202.
-    body = client.post(f"/capture/sessions/{sid}/redrive").json()
+    body = client.post(f"/capture/captures/{sid}/redrive").json()
     assert body["redriven"] == 1 and body["confirmed"] == 0 and body["still_accepted"] == 1
     assert _report(client, sid)["verdict"] == "recording"
 
@@ -272,7 +272,7 @@ def test_dead_letter_reads_as_gaps(wiring, audio_segment_bytes):
     client, storage, dp, var = wiring
     sid = new_ulid()
     _post_audio(client, sid, 0, audio_segment_bytes)
-    client.post(f"/capture/sessions/{sid}/end", json={"last_seq": 0})
+    client.post(f"/capture/captures/{sid}/end", json={"last_segment_num": 0})
 
     stream_id = _report(client, sid)["emit_leg"][0]["stream_id"]
     # DP dead-lettered the chunk (accepted, then processing failed terminally).

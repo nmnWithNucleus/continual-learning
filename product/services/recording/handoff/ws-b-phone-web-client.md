@@ -9,6 +9,11 @@
 renamed `/capture/*` wire* — CTO's iPhone Safari, 4/4 `clean`, blobs sha256+ffprobe-checked)
 · *Owner session:* recording M1 lead
 
+> **2026-07-29 — nomenclature:** the client wire now says `capture_id` + `segment_num`
+> (were `session_id` + `seq`), and `/capture/sessions/*` routes became
+> `/capture/captures/*`. Pinned spec blocks below are updated; dated worklog entries
+> keep their contemporaneous wording.
+
 ---
 
 ## Decision D-M1-1 — edge chunking via segmented recorder (pinned)
@@ -75,12 +80,12 @@ data-processing's C1 receiver. No alias (removed 2026-07-19, CTO call — single
 tester, a page refresh beats versioned routes): a page loaded before the rename
 must be hard-refreshed or every upload 404s.**
 
-- `POST /capture/segments?session_id=&seq=&user_id=&device_id=&t_start=&t_end=&mime=&sha256=`
+- `POST /capture/segments?capture_id=&segment_num=&user_id=&device_id=&t_start=&t_end=&mime=&sha256=`
   — body = raw segment bytes (`application/octet-stream`). `t_*` RFC3339 UTC (ms precision),
-  `mime` URL-encoded. → `{ok, session_id, seq, status:"received"|"duplicate"}`; idempotent on
-  `(session_id, seq)`.
-- `POST /capture/sessions/{session_id}/end` — JSON `{last_seq}` → `{ok}`; idempotent.
-- `GET /capture/sessions/{session_id}/report` — the continuity/gap report (shape in WS-C).
+  `mime` URL-encoded. → `{ok, capture_id, segment_num, status:"received"|"duplicate"}`; idempotent on
+  `(capture_id, segment_num)`.
+- `POST /capture/captures/{capture_id}/end` — JSON `{last_segment_num}` → `{ok}`; idempotent.
+- `GET /capture/captures/{capture_id}/report` — the continuity/gap report (shape in WS-C).
 
 ## Worklog
 - 2026-07-18 — spec written (decisions above); handed to the build fan-out.

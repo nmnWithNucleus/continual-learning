@@ -7,10 +7,10 @@ keyframes into a spool dir); this process watches the spool and speaks the
 exact phone-client wire (handoff/ws-b-phone-web-client.md / ws-c, server side
 app/capture_web.py — internal to recording, not a C-contract):
 
-  POST /capture/segments?session_id=&seq=&user_id=&device_id=&t_start=&t_end=
+  POST /capture/segments?capture_id=&segment_num=&user_id=&device_id=&t_start=&t_end=
        &mime=&sha256=                (raw mp4 bytes; ack -> spool file deleted)
-  POST /capture/sessions/{id}/end    {"last_seq": n}
-  GET  /capture/sessions/{id}/report (polled until drained; verdict -> exit code)
+  POST /capture/captures/{id}/end    {"last_segment_num": n}
+  GET  /capture/captures/{id}/report (polled until drained; verdict -> exit code)
 
 Segments are muxed A/V exactly like the phone client — the server demuxes into
 two C1 streams. Decisions pinned in handoff/ws-f-mac-cli.md:
@@ -31,9 +31,9 @@ two C1 streams. Decisions pinned in handoff/ws-f-mac-cli.md:
 - Stop: first Ctrl-C -> graceful: 'q' to ffmpeg stdin (clean moov; SIGINT
         fallback), upload the tail, POST end, poll the report until drained,
         print the summary. Exit 0 clean / 2 gaps / 1 error-or-timeout. Second
-        Ctrl-C -> abandon politely (the ledger flags the session unterminated).
+        Ctrl-C -> abandon politely (the ledger flags the capture unterminated).
 
-Upload queue semantics are ws-b's: ONE serialized queue in seq order; retry
+Upload queue semantics are ws-b's: ONE serialized queue in segment_num order; retry
 forever on network/5xx (backoff 1 s * 2^n, cap 30 s); a 4xx is a client bug —
 surfaced, counted, dropped (the file stays in the spool as evidence).
 """
@@ -80,7 +80,7 @@ def _crockford(value: int, length: int) -> str:
     return "".join(chars)
 
 
-def new_session_id() -> str:
+def new_capture_id() -> str:
     """26-char ULID-ish id: 48-bit ms timestamp + 80-bit randomness."""
     ts_ms = int(time.time() * 1000) & ((1 << 48) - 1)
     rand = int.from_bytes(os.urandom(10), "big")
@@ -180,18 +180,18 @@ def chain_stamps(anchor_ms: int, durations_s) -> list:
     return out
 
 
-def slot_duration(durations: list, seq: int, dur: float, default_s: float) -> None:
-    """Idempotently record ``seq``'s probed duration (gaps padded with the
+def slot_duration(durations: list, segment_num: int, dur: float, default_s: float) -> None:
+    """Idempotently record ``segment_num``'s probed duration (gaps padded with the
     nominal segment length).
 
     SLOTTED, never appended: a Ctrl-C landing inside an in-flight upload aborts
-    process_ready before the seq reaches ``done``, and the graceful-stop pass
-    re-processes the same seq — an append there would double-count the duration
+    process_ready before the segment_num reaches ``done``, and the graceful-stop pass
+    re-processes the same segment_num — an append there would double-count the duration
     and silently shift every later chained stamp (review round, WS-F worklog).
     """
-    while len(durations) <= seq:
+    while len(durations) <= segment_num:
         durations.append(float(default_s))
-    durations[seq] = float(dur)
+    durations[segment_num] = float(dur)
 
 
 # ---------------------------------------------------------------- spool scan
@@ -202,7 +202,7 @@ _SEGMENT_NAME = re.compile(r"^seg-(\d{6,})\.mp4$")
 
 
 def uploadable_segments(listing, ffmpeg_exited: bool) -> list:
-    """D-F4: [(seq, name)] sorted by seq, final segments only.
+    """D-F4: [(segment_num, name)] sorted by segment_num, final segments only.
 
     While ffmpeg runs, the highest-numbered file is the one still being
     written (the muxer opens n+1 only after finalizing n) — held back. On
@@ -326,9 +326,9 @@ def _stderr(msg: str) -> None:
     print(msg, file=sys.stderr, flush=True)
 
 
-def poll_report(server: str, session_id: str, get=None) -> dict:
+def poll_report(server: str, capture_id: str, get=None) -> dict:
     status, text = (get or _http_get)(
-        "%s/capture/sessions/%s/report" % (server.rstrip("/"), session_id)
+        "%s/capture/captures/%s/report" % (server.rstrip("/"), capture_id)
     )
     if status != 200:
         raise RuntimeError("report: HTTP %s: %s" % (status, text[:200]))
@@ -336,7 +336,7 @@ def poll_report(server: str, session_id: str, get=None) -> dict:
 
 
 class SegmentUploader:
-    """Serialized wire speaker: one segment at a time, arrival order == seq order.
+    """Serialized wire speaker: one segment at a time, arrival order == segment_num order.
 
     ws-b queue semantics: retry forever on network error / 5xx with exponential
     backoff; a 4xx is a client bug — surfaced, counted, dropped, and the queue
@@ -344,11 +344,11 @@ class SegmentUploader:
     spool unless keep_segments; a 4xx-dropped file is kept as evidence.
     """
 
-    def __init__(self, server, session_id, user_id, device_id, *,
+    def __init__(self, server, capture_id, user_id, device_id, *,
                  keep_segments=False, post=None, get=None,
                  sleep=time.sleep, log=_stderr):
         self.server = server.rstrip("/")
-        self.session_id = session_id
+        self.capture_id = capture_id
         self.user_id = user_id
         self.device_id = device_id
         self.keep_segments = keep_segments
@@ -381,11 +381,11 @@ class SegmentUploader:
             self._sleep(delay)
             attempt += 1
 
-    def upload(self, path, seq, t_start, t_end, mime="video/mp4") -> bool:
+    def upload(self, path, segment_num, t_start, t_end, mime="video/mp4") -> bool:
         path = Path(path)
         body = path.read_bytes()
         params = urllib.parse.urlencode({
-            "session_id": self.session_id, "seq": seq,
+            "capture_id": self.capture_id, "segment_num": segment_num,
             "user_id": self.user_id, "device_id": self.device_id,
             "t_start": t_start, "t_end": t_end, "mime": mime,
             "sha256": hashlib.sha256(body).hexdigest(),
@@ -393,7 +393,7 @@ class SegmentUploader:
         })
         ok = self._post_with_retry(
             "%s/capture/segments?%s" % (self.server, params),
-            body, "application/octet-stream", "segment %d" % seq,
+            body, "application/octet-stream", "segment %d" % segment_num,
         )
         if not ok:
             self.dropped += 1
@@ -403,22 +403,22 @@ class SegmentUploader:
             path.unlink(missing_ok=True)
         return True
 
-    def end(self, last_seq: int) -> bool:
+    def end(self, last_segment_num: int) -> bool:
         return self._post_with_retry(
-            "%s/capture/sessions/%s/end" % (self.server, self.session_id),
-            json.dumps({"last_seq": last_seq}).encode(), "application/json",
+            "%s/capture/captures/%s/end" % (self.server, self.capture_id),
+            json.dumps({"last_segment_num": last_segment_num}).encode(), "application/json",
             "end marker",
         )
 
     def poll_report(self) -> dict:
-        return poll_report(self.server, self.session_id, get=self._get)
+        return poll_report(self.server, self.capture_id, get=self._get)
 
 
 # ------------------------------------------------------------ report -> exit
 
 def print_report_summary(report: dict, out=print) -> None:
     expected = report.get("expected_segments")
-    out("session %s:" % report.get("session_id"))
+    out("capture %s:" % report.get("capture_id"))
     out("  segments: %s received / %s expected"
         % (report.get("received_segments"), "?" if expected is None else expected))
     for leg in report.get("emit_leg", []):
@@ -428,7 +428,7 @@ def print_report_summary(report: dict, out=print) -> None:
     out("  verdict: %s" % report.get("verdict"))
 
 
-def await_final_report(server, session_id, *, timeout_s=120.0, get=None,
+def await_final_report(server, capture_id, *, timeout_s=120.0, get=None,
                        sleep=time.sleep, clock=time.monotonic, out=print) -> int:
     """Poll every 2 s until the verdict is terminal AND the server has drained
     (ended, verdict != recording, segment_states.received == 0), or timeout.
@@ -437,7 +437,7 @@ def await_final_report(server, session_id, *, timeout_s=120.0, get=None,
     last = None
     while True:
         try:
-            last = poll_report(server, session_id, get=get)
+            last = poll_report(server, capture_id, get=get)
         except Exception as exc:
             out("report poll failed (%s); retrying" % exc)
         else:
@@ -446,7 +446,7 @@ def await_final_report(server, session_id, *, timeout_s=120.0, get=None,
                 break
         if clock() >= deadline:
             out("report did not settle within %.0fs — check GET "
-                "%s/capture/sessions/%s/report" % (timeout_s, server.rstrip("/"), session_id))
+                "%s/capture/captures/%s/report" % (timeout_s, server.rstrip("/"), capture_id))
             if last is not None:
                 print_report_summary(last, out=out)
             return 1
@@ -498,12 +498,12 @@ def cmd_record(args) -> int:
         if stale:
             _stderr("record: spool %s already holds %d seg-*.mp4 file(s) from a "
                     "previous run — the watcher cannot tell them from THIS run's "
-                    "output and would upload them into the new session. Empty the "
+                    "output and would upload them into the new capture. Empty the "
                     "directory (or omit --spool for a fresh temp dir) and re-run."
                     % (spool, len(stale)))
             return 1
 
-    session_id = new_session_id()
+    capture_id = new_capture_id()
     device_id = load_device_id()
     cfg = CaptureConfig(
         source=args.source, spool_dir=str(spool),
@@ -513,9 +513,9 @@ def cmd_record(args) -> int:
         video_encoder=pick_video_encoder(probe_encoders(ffmpeg_bin)),
         capture_cursor=not args.no_cursor, ffmpeg_bin=ffmpeg_bin,
     )
-    uploader = SegmentUploader(args.server, session_id, args.user, device_id,
+    uploader = SegmentUploader(args.server, capture_id, args.user, device_id,
                                keep_segments=args.keep_segments)
-    print("session %s" % session_id)  # full id: it IS the "new session" signal
+    print("capture %s" % capture_id)  # full id: it IS the "new capture" signal
     print("  device %s  user %s" % (device_id, args.user))
     print("  spool  %s" % spool)
     print("  server %s  (~%ds segments; Ctrl-C to stop)"
@@ -525,16 +525,16 @@ def cmd_record(args) -> int:
     proc = subprocess.Popen(build_ffmpeg_argv(cfg), stdin=subprocess.PIPE,
                             start_new_session=True)  # SIGINT stays ours to route
 
-    # Per-run chaining state (D-F2): the anchor plus per-seq ffprobe durations;
-    # seq n's stamps derive from anchor + durations[0..n].
+    # Per-run chaining state (D-F2): the anchor plus per-segment_num ffprobe durations;
+    # segment_num n's stamps derive from anchor + durations[0..n].
     anchor_ms = None
     durations = []
     done = set()
 
     def process_ready(ffmpeg_exited: bool) -> None:
         nonlocal anchor_ms
-        for seq, name in uploadable_segments(os.listdir(spool), ffmpeg_exited):
-            if seq in done:
+        for segment_num, name in uploadable_segments(os.listdir(spool), ffmpeg_exited):
+            if segment_num in done:
                 continue
             path = spool / name
             if anchor_ms is None:
@@ -547,23 +547,23 @@ def cmd_record(args) -> int:
                 dur = probe_duration_s(ffprobe_bin, path)
             except (ValueError, OSError):
                 dur = float(cfg.segment_seconds)
-            slot_duration(durations, seq, dur, cfg.segment_seconds)
-            t_start, t_end = chain_stamps(anchor_ms, durations)[seq]
+            slot_duration(durations, segment_num, dur, cfg.segment_seconds)
+            t_start, t_end = chain_stamps(anchor_ms, durations)[segment_num]
             size = path.stat().st_size
-            if uploader.upload(path, seq, t_start, t_end, mime="video/mp4"):
-                print("  seg %d  %s -> %s  (%d bytes)" % (seq, t_start, t_end, size),
+            if uploader.upload(path, segment_num, t_start, t_end, mime="video/mp4"):
+                print("  seg %d  %s -> %s  (%d bytes)" % (segment_num, t_start, t_end, size),
                       flush=True)
-            done.add(seq)
+            done.add(segment_num)
 
     def abandon(signum=None, frame=None):
         try:
             proc.kill()
         except OSError:
             pass
-        _stderr("\nabandoned: session %s was NOT terminated cleanly — the server "
+        _stderr("\nabandoned: capture %s was NOT terminated cleanly — the server "
                 "ledger will flag it unterminated.\n  spool (any unsent segments): %s\n"
-                "  report: GET %s/capture/sessions/%s/report"
-                % (session_id, spool, uploader.server, session_id))
+                "  report: GET %s/capture/captures/%s/report"
+                % (capture_id, spool, uploader.server, capture_id))
         os._exit(1)
 
     try:
@@ -582,8 +582,8 @@ def cmd_record(args) -> int:
         process_ready(ffmpeg_exited=True)  # the tail: all on-disk files are final
         if not done:
             # No end marker, no report poll: zero segments means the server never
-            # opened this session — the end POST would 404 and the report poll
-            # would spin against a session that does not exist.
+            # opened this capture — the end POST would 404 and the report poll
+            # would spin against a capture that does not exist.
             if proc.returncode != 0:
                 _stderr("ffmpeg exited with %d before producing any segment — nothing "
                         "captured.\n(macOS: check the Screen Recording permission and the "
@@ -591,22 +591,22 @@ def cmd_record(args) -> int:
                         "with --framerate 30)" % proc.returncode)
             else:
                 _stderr("ffmpeg exited cleanly but produced no segments — nothing was "
-                        "captured, so session %s never reached the server (nothing to "
-                        "report)." % session_id)
+                        "captured, so capture %s never reached the server (nothing to "
+                        "report)." % capture_id)
             return 1
 
-        last_seq = max(done) if done else -1
-        uploader.end(last_seq)
+        last_segment_num = max(done) if done else -1
+        uploader.end(last_segment_num)
         print("uploaded %d, dropped %d; waiting for the server's continuity report..."
               % (uploader.uploaded, uploader.dropped), flush=True)
 
         def poll_interrupted(signum=None, frame=None):
-            _stderr("\nreport poll interrupted (session ended cleanly) — check GET "
-                    "%s/capture/sessions/%s/report" % (uploader.server, session_id))
+            _stderr("\nreport poll interrupted (capture ended cleanly) — check GET "
+                    "%s/capture/captures/%s/report" % (uploader.server, capture_id))
             os._exit(1)
         signal.signal(signal.SIGINT, poll_interrupted)
 
-        code = await_final_report(uploader.server, session_id,
+        code = await_final_report(uploader.server, capture_id,
                                   timeout_s=args.report_timeout)
         if spool_minted:
             try:

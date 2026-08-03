@@ -3,13 +3,13 @@
 /*
  * WS-E — offscreen capture engine (D-E5): the stream, recorder, queue, poll.
  *
- * D-E7 — ONE tab, ONE muxed capture, ONE ingest session. getUserMedia pulls the
+ * D-E7 — ONE tab, ONE muxed capture, ONE ingest capture. getUserMedia pulls the
  * active tab's video + audio together (chromeMediaSource "tab") from the stream
  * id background minted; a single MediaRecorder writes ~10 s self-contained webm
  * segments (video+audio muxed), a serialized uploader speaks the wire, and the
  * server demuxes each segment into audio + video C1 streams — the same
  * muxed-A/V path the phone and mac clients already use. No screen picker, no
- * two-session bookkeeping, no cross-context stream-id handoff.
+ * two-capture bookkeeping, no cross-context stream-id handoff.
  *
  * Segmentation is the D-M1-1 restart loop (~10 s self-contained blobs; timeslice
  * fragments aren't self-contained). The 5 s report poll's verdict is the
@@ -19,11 +19,11 @@
  * through an AudioContext passthrough to keep it audible.
  *
  * Source-ended semantics: closing / navigating the captured tab (or the browser
- * stop-sharing affordance) fires track.onended -> the session stops cleanly
+ * stop-sharing affordance) fires track.onended -> the capture stops cleanly
  * (final segment, drain, end marker).
  *
  * Shutdown reality: pagehide -> keepalive end marker, best-effort only. A hard
- * Chrome kill leaves the session unterminated — exactly what the ledger's
+ * Chrome kill leaves the capture unterminated — exactly what the ledger's
  * `unterminated` flag is for.
  */
 
@@ -40,8 +40,8 @@ const AUDIO_MIMES = ["audio/webm;codecs=opus", "audio/webm"];
 
 const errText = (err) => String((err && err.message) || err);
 
-// ULID-ish session id (same Crockford idiom as clients/web/app.js): 48-bit ms
-// timestamp + 80-bit randomness. Ordering is carried by seq, never by the id.
+// ULID-ish capture id (same Crockford idiom as clients/web/app.js): 48-bit ms
+// timestamp + 80-bit randomness. Ordering is carried by segment_num, never by the id.
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 function encodeTime(ms, length) {
   let out = "";
@@ -69,22 +69,22 @@ function pickMime(candidates) {
 
 // ------------------------------------------------------------------- state
 let config = null; // {baseUrl, userId, deviceId} — set by the start message
-let session = null; // the single active/draining capture session (see startCapture)
-let starting = false; // a start is between its guard and assigning `session`
-let startError = null; // a start that never produced a session (getUserMedia refusal)
+let capture = null; // the single active/draining capture (see startCapture)
+let starting = false; // a start is between its guard and assigning `capture`
+let startError = null; // a start that never produced a capture (getUserMedia refusal)
 let drainedSent = false;
 
 // After the end marker, a report that keeps answering non-OK will never turn
-// terminal (e.g. every segment 4xx-dropped: no session server-side). Stop after
+// terminal (e.g. every segment 4xx-dropped: no capture server-side). Stop after
 // this many post-end polls instead of leaking the document open.
 const DEAD_POLL_LIMIT = 6; // x 5s interval = ~30s of grace
 
-// A start that produced NO session keeps the document alive only long enough to
+// A start that produced NO capture keeps the document alive only long enough to
 // explain itself, then asks to be closed.
 const ZERO_SOURCE_LINGER_MS = 60_000;
 let startGeneration = 0; // bumps per start; stale linger timers self-disarm
 
-const isActive = () => !!(session && session.active);
+const isActive = () => !!(capture && capture.active);
 
 // -------------------------------------------------------------- report poll
 
@@ -99,8 +99,8 @@ function reportLines(report) {
   if (st.received) lines.push("server processing " + st.received + " segment(s)…");
   if (st.failed) lines.push(st.failed + " segment(s) FAILED server-side");
   const cl = report.client_leg || {};
-  if (Array.isArray(cl.missing_seqs) && cl.missing_seqs.length) {
-    lines.push("client leg missing seqs: " + cl.missing_seqs.join(", "));
+  if (Array.isArray(cl.missing_segment_nums) && cl.missing_segment_nums.length) {
+    lines.push("client leg missing segment_nums: " + cl.missing_segment_nums.join(", "));
   }
   for (const leg of report.emit_leg || []) {
     let t = (leg.modality || "?") + ": " + leg.chunks_emitted + " chunks emitted";
@@ -110,7 +110,7 @@ function reportLines(report) {
     if (dp.checked === false) t += " (DP unchecked)";
     else {
       // missing_unacked (ack-reconciled) is authoritative; entries may be
-      // [lo,hi] runs or flat seqs — count CHUNKS, not runs.
+      // [lo,hi] runs or flat segment_nums — count CHUNKS, not runs.
       const miss = Array.isArray(dp.missing_unacked) ? dp.missing_unacked : (dp.missing || []);
       const n = miss.reduce((acc, m) => acc + (Array.isArray(m) ? m[1] - m[0] + 1 : 1), 0);
       if (n) t += ", DP missing " + n;
@@ -132,7 +132,7 @@ function startPolling(s) {
 }
 
 async function pollReport(s) {
-  if (s !== session) return; // a newer session owns the document now
+  if (s !== capture) return; // a newer capture owns the document now
   if (s.ended && s.uploader.state().captured === 0) {
     // Nothing ever reached the server — there is no report to fetch.
     stopPolling(s);
@@ -142,7 +142,7 @@ async function pollReport(s) {
   let report;
   try {
     const res = await fetch(
-      config.baseUrl + "/capture/sessions/" + encodeURIComponent(s.sessionId) + "/report",
+      config.baseUrl + "/capture/captures/" + encodeURIComponent(s.captureId) + "/report",
     );
     if (!res.ok) {
       // 404 until the first segment lands; 5xx: poll again. Once ENDED, a report
@@ -150,7 +150,7 @@ async function pollReport(s) {
       // window instead of leaking this document open forever.
       if (s.ended && ++s.deadPolls >= DEAD_POLL_LIMIT) {
         s.reportLines = [
-          "no server report for this session (HTTP " + res.status + ") — " +
+          "no server report for this capture (HTTP " + res.status + ") — " +
             "nothing landed, or the server lost it; the ledger is the record",
         ];
         stopPolling(s);
@@ -177,13 +177,13 @@ async function pollReport(s) {
 }
 
 function maybeSendDrained() {
-  // The document's job is done when the session posted its end marker and its
+  // The document's job is done when the capture posted its end marker and its
   // report poll reached a terminal state (or had nothing to poll). Background
   // then closes this document. While the server is unreachable the polls (and
   // end-marker retries) keep going — the document honestly stays open until the
   // ledger has the truth.
   if (drainedSent) return;
-  if (!session || !session.ended || session.pollTimer) return;
+  if (!capture || !capture.ended || capture.pollTimer) return;
   drainedSent = true;
   try {
     chrome.runtime.sendMessage({ target: "background", type: "drained" }).catch(() => {});
@@ -204,7 +204,7 @@ async function startCapture(tabStreamId, wantVideo) {
   const stream = await navigator.mediaDevices.getUserMedia({ audio, video });
 
   const s = {
-    sessionId: newSessionId(),
+    captureId: newSessionId(),
     stream,
     audioCtx: null,
     audioOnly: !wantVideo,
@@ -238,36 +238,36 @@ async function startCapture(tabStreamId, wantVideo) {
 
   s.uploader = createUploader({
     baseUrl: config.baseUrl,
-    sessionId: s.sessionId,
+    captureId: s.captureId,
     userId: config.userId,
     deviceId: config.deviceId,
   });
   s.segmenter = createSegmenter({
     createRecorder: () => new MediaRecorder(stream, recOpts),
     segmentMs: SEGMENT_MS,
-    onSegment: (seg) => s.uploader.enqueue(seg), // seq assigned at enqueue
+    onSegment: (seg) => s.uploader.enqueue(seg), // segment_num assigned at enqueue
     onError: (err) => {
       s.lastCaptureError = "capture: " + errText(err);
     },
   });
 
   // Captured tab closed / navigated (or a stop-sharing affordance) ends a
-  // track -> stop the session cleanly. Identity-guarded: an onended from a
-  // superseded stream must never stop the CURRENT session.
+  // track -> stop the capture cleanly. Identity-guarded: an onended from a
+  // superseded stream must never stop the CURRENT capture.
   for (const track of stream.getTracks()) {
     track.onended = () => {
-      if (session === s) stopCapture();
+      if (capture === s) stopCapture();
     };
   }
 
   s.segmenter.start();
-  session = s;
+  capture = s;
   startPolling(s);
   return s;
 }
 
 function stopCapture() {
-  const s = session;
+  const s = capture;
   if (!s || s.stopChain) return s ? s.stopChain : Promise.resolve();
   s.captureStopped = (async () => {
     await s.segmenter.stop(); // final segment flushed (capture-loop drain)
@@ -303,30 +303,30 @@ function stopCapture() {
 async function handleStart(msg) {
   // `starting` spans the getUserMedia await inside startCapture — without it a
   // second concurrent start (e.g. an impatient double Record during the
-  // first-run permission dialog) would pass the guard while `session` is still
+  // first-run permission dialog) would pass the guard while `capture` is still
   // null and orphan the first capture (skeptic round).
-  if (starting || (session && (session.active || !session.ended))) {
+  if (starting || (capture && (capture.active || !capture.ended))) {
     return { ok: false, error: "a recording is still active or draining" };
   }
-  if (session) stopPolling(session);
+  if (capture) stopPolling(capture);
   config = msg.config;
-  session = null;
+  capture = null;
   startError = null;
   drainedSent = false;
   starting = true;
 
   try {
     await startCapture(msg.tabStreamId, msg.video !== false);
-    startGeneration += 1; // a real session invalidates any stale linger timer
-    return { ok: true, session: snapshot() };
+    startGeneration += 1; // a real capture invalidates any stale linger timer
+    return { ok: true, capture: snapshot() };
   } catch (err) {
-    // getUserMedia refused (e.g. the tab became uncapturable). No session
+    // getUserMedia refused (e.g. the tab became uncapturable). No capture
     // exists; keep the reason visible on the status surface (the popup may have
     // died) but don't leak the document — self-close after the grace window.
     startError = errText(err);
     const gen = ++startGeneration;
     setTimeout(() => {
-      if (gen !== startGeneration || session) return;
+      if (gen !== startGeneration || capture) return;
       try {
         chrome.runtime.sendMessage({ target: "background", type: "drained" }).catch(() => {});
       } catch {
@@ -340,7 +340,7 @@ async function handleStart(msg) {
 }
 
 async function handleStop() {
-  const s = session;
+  const s = capture;
   if (!s) return { ok: true, idle: true };
   stopCapture();
   await s.captureStopped; // reply once capture stopped; uploads drain after
@@ -348,13 +348,13 @@ async function handleStop() {
 }
 
 function snapshot() {
-  if (!session) return null;
-  const s = session;
+  if (!capture) return null;
+  const s = capture;
   return {
     active: s.active,
     ended: s.ended,
     audioOnly: s.audioOnly,
-    sessionId: s.sessionId,
+    captureId: s.captureId,
     uploader: s.uploader.state(),
     verdict: s.verdict,
     reportLines: s.reportLines,
@@ -367,8 +367,8 @@ function statusSnapshot() {
     ok: true,
     active: isActive(),
     config,
-    session: snapshot(),
-    // A start that produced no session (getUserMedia refusal): the popup renders
+    capture: snapshot(),
+    // A start that produced no capture (getUserMedia refusal): the popup renders
     // this reason as an error row — otherwise a failed start simply vanishes.
     startError,
   };
@@ -397,20 +397,20 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 });
 
 // Best-effort last-gasp end marker (stated shutdown reality): keepalive fetch
-// with the last ENQUEUED seq if the session isn't ended. A hard kill still
+// with the last ENQUEUED segment_num if the capture isn't ended. A hard kill still
 // leaves it unterminated — the ledger's `unterminated` flag is for that.
 window.addEventListener("pagehide", () => {
-  const s = session;
+  const s = capture;
   if (!s || s.ended) return;
   const captured = s.uploader.state().captured;
-  if (captured === 0) return; // no session row exists server-side
+  if (captured === 0) return; // no capture row exists server-side
   try {
     fetch(
-      config.baseUrl + "/capture/sessions/" + encodeURIComponent(s.sessionId) + "/end",
+      config.baseUrl + "/capture/captures/" + encodeURIComponent(s.captureId) + "/end",
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ last_seq: captured - 1 }),
+        body: JSON.stringify({ last_segment_num: captured - 1 }),
         keepalive: true,
       },
     ).catch(() => {});

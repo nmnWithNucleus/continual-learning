@@ -1,6 +1,6 @@
 """Recording service HTTP surface (FastAPI, :8084).
 
-POST /capture/run  — run one headless capture session: carve a continuous audio
+POST /capture/run  — run one headless capture: carve a continuous audio
                      source into chunks and, per chunk (blob-first), PUT bytes to
                      storage /raw then push a C1 envelope to data-processing /ingest.
                      Returns {stream_id, chunks_emitted, chunk_ids, sequences, record_ids}.
@@ -34,19 +34,19 @@ _PROM_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
 
 def _rec_route_template(path: str) -> str:
     """Collapse variable path segments so HTTP-metric cardinality is one series per
-    ROUTE, not per session_id."""
-    if path.startswith("/capture/sessions/"):
-        rest = path[len("/capture/sessions/"):]
+    ROUTE, not per capture_id."""
+    if path.startswith("/capture/captures/"):
+        rest = path[len("/capture/captures/"):]
         tail = rest.split("/", 1)
         suffix = f"/{tail[1]}" if len(tail) > 1 else ""
-        return "/capture/sessions/{session_id}" + suffix
+        return "/capture/captures/{capture_id}" + suffix
     if path.startswith("/client/"):
         return "/client/*"
     return path
 
 
 # One /metrics scrape invokes all seven ledger-derived gauge sources back-to-back; without
-# this each would re-open sqlite + re-walk sessions on the event loop under the metrics lock.
+# this each would re-open sqlite + re-walk captures on the event loop under the metrics lock.
 # Memoize the snapshot per (var_dir) with a short TTL so a scrape does ONE ledger pass while
 # staying fresh across scrapes. Keyed on var_dir so a test's fresh tmp ledger never reads a
 # prior test's cached snapshot.
@@ -82,10 +82,10 @@ def _register_metric_sources() -> None:
         lambda: [((s,), n) for s, n in snap()["chunks_by_dp_state"].items()],
         labelnames=["dp_state"],
     )
-    METRICS.add_gauge_source("rec_sessions_total", "Capture sessions seen.",
-                             lambda: snap()["sessions_total"])
-    METRICS.add_gauge_source("rec_sessions_active", "Capture sessions still recording.",
-                             lambda: snap()["sessions_active"])
+    METRICS.add_gauge_source("rec_captures_total", "Captures seen.",
+                             lambda: snap()["captures_total"])
+    METRICS.add_gauge_source("rec_captures_active", "Captures still recording.",
+                             lambda: snap()["captures_active"])
     METRICS.add_gauge_source("rec_client_missing_total",
                              "Client-leg missing segments (dropped before the server).",
                              lambda: snap()["client_missing_total"])
@@ -147,7 +147,7 @@ async def health() -> Health:
 @app.post("/capture/run", response_model=CaptureRunResponse)
 async def capture_run(req: CaptureRunRequest) -> CaptureRunResponse:
     settings = get_settings()
-    result = await capturer.run_session(
+    result = await capturer.run_capture(
         settings=settings,
         storage_url=req.storage_url,
         dp_url=req.dp_url,

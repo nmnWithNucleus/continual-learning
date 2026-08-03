@@ -5,26 +5,26 @@
  *
  * Design intent (spec: handoff/ws-e-extension.md D-E4; wire: ws-b §Wire / ws-c):
  *
- * - ONE serialized queue per ingest session: `seq` is assigned densely at
+ * - ONE serialized queue per ingest capture: `segment_num` is assigned densely at
  *   enqueue, and segment n is sent only after n-1 is acked — in-order arrival
  *   by construction (the server ledger still catches anomalies).
  * - Network errors / 5xx retry forever with exponential backoff (1s * 2^n,
  *   cap 30s). A 4xx is a client bug — surfaced via state() and DROPPED so the
  *   queue (and the end marker) keeps moving; the server's client-leg report
- *   then names exactly the dropped seq as missing. Never silent.
+ *   then names exactly the dropped segment_num as missing. Never silent.
  * - sha256 via an injectable digest (default: crypto.subtle over the blob's
  *   bytes; empty string on ANY failure — the server computes it then).
- * - end() waits for the queue to drain, then POSTs {last_seq} with the same
- *   retry semantics (4xx logged, not retried — the session reads as
+ * - end() waits for the queue to drain, then POSTs {last_segment_num} with the same
+ *   retry semantics (4xx logged, not retried — the capture reads as
  *   unterminated in the ledger, which is the honest outcome).
  * - The queue is in-memory: if the offscreen document dies, queued segments
  *   are lost and the ledger flags exactly which (unterminated / missing tail).
  *
  * Wire (absolute, cross-origin — the extension's runtime host grant bypasses
  * CORS, so the server needs no CORS middleware; D-E1):
- *   POST {baseUrl}/capture/segments?session_id=&seq=&user_id=&device_id=&
+ *   POST {baseUrl}/capture/segments?capture_id=&segment_num=&user_id=&device_id=&
  *        t_start=&t_end=&mime=&sha256=       raw blob body, octet-stream
- *   POST {baseUrl}/capture/sessions/{id}/end  JSON {last_seq}
+ *   POST {baseUrl}/capture/captures/{id}/end  JSON {last_segment_num}
  */
 
 const BACKOFF_BASE_MS = 1000;
@@ -52,7 +52,7 @@ async function defaultDigest(blob) {
 
 export function createUploader(opts) {
   const baseUrl = String(opts.baseUrl || "").replace(/\/+$/, "");
-  const { sessionId, userId, deviceId } = opts;
+  const { captureId, userId, deviceId } = opts;
   const fetchFn = opts.fetch || ((...args) => globalThis.fetch(...args));
   const sleepFn = opts.sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
   const digestFn = opts.digest || defaultDigest;
@@ -61,7 +61,7 @@ export function createUploader(opts) {
   // from the segments themselves (stamped at recorder start/stop, D-M1-1).
   void opts.now;
 
-  const queue = []; // FIFO of {seq, blob, tStart, tEnd, mime, sha256?}
+  const queue = []; // FIFO of {segment_num, blob, tStart, tEnd, mime, sha256?}
   let nextSeq = 0; // dense, zero-based — assigned at enqueue, never reused
   let uploaded = 0;
   let dropped = 0;
@@ -122,8 +122,8 @@ export function createUploader(opts) {
       }
     }
     const qs = new URLSearchParams({
-      session_id: sessionId,
-      seq: String(seg.seq),
+      capture_id: captureId,
+      segment_num: String(seg.segment_num),
       user_id: userId,
       device_id: deviceId,
       t_start: new Date(seg.tStart).toISOString(), // RFC3339 UTC, ms precision
@@ -152,7 +152,7 @@ export function createUploader(opts) {
       }
       throw wireError("HTTP " + res.status + (detail ? " — " + detail : ""), true);
     }
-    // Ack body is {ok, session_id, seq, status:"received"|"duplicate"}; both
+    // Ack body is {ok, capture_id, segment_num, status:"received"|"duplicate"}; both
     // statuses mean the bytes are durably on the server — nothing to branch on.
   }
 
@@ -171,15 +171,15 @@ export function createUploader(opts) {
           } catch (err) {
             if (err.fatal) {
               // 4xx: drop so the queue keeps moving; the ledger's client leg
-              // will show exactly this seq as missing (checked loss, D-E4).
+              // will show exactly this segment_num as missing (checked loss, D-E4).
               dropped += 1;
               lastError =
-                "seq " + seg.seq + ": " + err.message + " (4xx — dropped, not retried)";
+                "segment_num " + seg.segment_num + ": " + err.message + " (4xx — dropped, not retried)";
               break;
             }
             const delay = backoffDelay(attempt);
             lastError =
-              "seq " + seg.seq + ": " + err.message +
+              "segment_num " + seg.segment_num + ": " + err.message +
               " — retrying in " + Math.round(delay / 1000) + "s";
             emitState();
             await sleepFn(delay);
@@ -197,11 +197,11 @@ export function createUploader(opts) {
   }
 
   function enqueue({ blob, tStart, tEnd, mime }) {
-    const seg = { seq: nextSeq++, blob, tStart, tEnd, mime };
+    const seg = { segment_num: nextSeq++, blob, tStart, tEnd, mime };
     queue.push(seg);
     emitState();
     pump();
-    return seg.seq;
+    return seg.segment_num;
   }
 
   function drain() {
@@ -212,18 +212,18 @@ export function createUploader(opts) {
   async function end() {
     await drain();
     if (nextSeq === 0) {
-      // No segment ever reached the wire, so the server holds no session row
+      // No segment ever reached the wire, so the server holds no capture row
       // to terminate (the POST would 404). Vacuously ended.
       endedOk = true;
       emitState();
       return;
     }
-    const body = JSON.stringify({ last_seq: nextSeq - 1 });
+    const body = JSON.stringify({ last_segment_num: nextSeq - 1 });
     for (let attempt = 0; ; attempt++) {
       let res;
       try {
         res = await fetchFn(
-          baseUrl + "/capture/sessions/" + encodeURIComponent(sessionId) + "/end",
+          baseUrl + "/capture/captures/" + encodeURIComponent(captureId) + "/end",
           {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -243,7 +243,7 @@ export function createUploader(opts) {
         return;
       }
       if (res.status < 500) {
-        // A 4xx end marker is a bug: logged, never retried; the session stays
+        // A 4xx end marker is a bug: logged, never retried; the capture stays
         // unterminated in the ledger — visible, not silent.
         lastError = "end marker: HTTP " + res.status + " (4xx — not retried)";
         emitState();

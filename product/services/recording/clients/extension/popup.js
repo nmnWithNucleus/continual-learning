@@ -3,7 +3,7 @@
 /*
  * WS-E — Nucleus Capture popup: UI ONLY (D-E5). Record/stop, settings, and a
  * ~1s status pull from the offscreen capture engine — the single active-tab
- * session's counters, verdict badge, and report lines.
+ * capture's counters, verdict badge, and report lines.
  *
  * - Settings (server URL, user id, video toggle) live in chrome.storage.local.
  *   Save is the USER GESTURE that runs chrome.permissions.request for exactly
@@ -132,7 +132,7 @@
     try {
       await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
     } catch {
-      /* recording still works this session */
+      /* recording still works this capture */
     }
     // The upload origin must be granted before capture starts — this click is
     // still a gesture, so a missing grant can be requested right here.
@@ -229,7 +229,7 @@
     return s;
   }
 
-  function sessionBlock(snap) {
+  function captureBlock(snap) {
     const wrap = document.createElement("div");
     wrap.className = "source";
 
@@ -242,7 +242,7 @@
     head.querySelector(".k").className = "k source-name";
     wrap.appendChild(head);
 
-    wrap.appendChild(row("session", span("v mono", snap.sessionId)));
+    wrap.appendChild(row("capture", span("v mono", snap.captureId)));
 
     const u = snap.uploader || {};
     const counters = span(
@@ -274,8 +274,8 @@
 
   function render(status) {
     const live = status && status.ok ? status : null;
-    const snap = live ? live.session : null;
-    // A start that failed (getUserMedia refusal) has no session but must not
+    const snap = live ? live.capture : null;
+    // A start that failed (getUserMedia refusal) has no capture but must not
     // vanish: the start reply may have been lost, so this is the surface that
     // tells the user why capture never began.
     const startErr = live && live.startError;
@@ -295,7 +295,7 @@
 
     el.sources.textContent = "";
     if (snap) {
-      el.sources.appendChild(sessionBlock(snap));
+      el.sources.appendChild(captureBlock(snap));
     } else if (startErr) {
       const wrap = document.createElement("div");
       wrap.className = "source";

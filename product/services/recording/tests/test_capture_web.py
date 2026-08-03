@@ -5,7 +5,7 @@ the bottom of this module).
 
 Same fake pattern as test_capture.py (httpx MockTransport via the clients.async_client
 seam) plus the DP M1 continuity surface (FakeDataProcessingM1). ffmpeg-dependent tests
-generate one tiny real A/V segment per pytest session and skip cleanly when ffmpeg is
+generate one tiny real A/V segment per pytest capture and skip cleanly when ffmpeg is
 absent; everything ledger/report-shaped runs on garbage bytes (those segments simply
 end 'failed', which the assertions never depend on).
 
@@ -44,9 +44,9 @@ needs_ffmpeg = pytest.mark.skipif(
 BASE = datetime(2026, 7, 18, 12, 0, 0, tzinfo=timezone.utc)
 
 
-def span(seq: int) -> tuple[str, str]:
-    """Deterministic 10s wall-clock span for segment ``seq``."""
-    start = BASE + timedelta(seconds=10 * seq)
+def span(segment_num: int) -> tuple[str, str]:
+    """Deterministic 10s wall-clock span for segment ``segment_num``."""
+    start = BASE + timedelta(seconds=10 * segment_num)
     return timeutil.rfc3339(start), timeutil.rfc3339(start + timedelta(seconds=10))
 
 
@@ -54,7 +54,7 @@ def span(seq: int) -> tuple[str, str]:
 
 @pytest.fixture(scope="session")
 def av_segment_bytes(tmp_path_factory) -> bytes:
-    """~2s self-contained A/V mp4 (testsrc2 + sine), generated once per session."""
+    """~2s self-contained A/V mp4 (testsrc2 + sine), generated once per capture."""
     path = tmp_path_factory.mktemp("media") / "av.mp4"
     subprocess.run(
         [FFMPEG_BIN, "-v", "error", "-y",
@@ -91,8 +91,8 @@ class IngestWiring:
 
     def post_segment(
         self,
-        session_id: str,
-        seq: int,
+        capture_id: str,
+        segment_num: int,
         data: bytes,
         *,
         mime: str = "video/mp4",
@@ -100,10 +100,10 @@ class IngestWiring:
         user_id: str = "beta-user",
         device_id: str = "phone-web-test",
     ) -> httpx.Response:
-        t_start, t_end = span(seq)
+        t_start, t_end = span(segment_num)
         params = {
-            "session_id": session_id,
-            "seq": seq,
+            "capture_id": capture_id,
+            "segment_num": segment_num,
             "user_id": user_id,
             "device_id": device_id,
             "t_start": t_start,
@@ -118,11 +118,11 @@ class IngestWiring:
             headers={"content-type": "application/octet-stream"},
         )
 
-    def end(self, session_id: str, last_seq: int) -> httpx.Response:
-        return self.client.post(f"/capture/sessions/{session_id}/end", json={"last_seq": last_seq})
+    def end(self, capture_id: str, last_segment_num: int) -> httpx.Response:
+        return self.client.post(f"/capture/captures/{capture_id}/end", json={"last_segment_num": last_segment_num})
 
-    def report(self, session_id: str) -> dict:
-        resp = self.client.get(f"/capture/sessions/{session_id}/report")
+    def report(self, capture_id: str) -> dict:
+        resp = self.client.get(f"/capture/captures/{capture_id}/report")
         assert resp.status_code == 200, resp.text
         return resp.json()
 
@@ -190,10 +190,10 @@ def test_root_redirects_to_client(ingest):
     assert resp.headers["location"] == "/client/"
 
 
-def test_report_unknown_session_404(ingest):
-    assert ingest.client.get("/capture/sessions/nope/report").status_code == 404
-    assert ingest.client.post("/capture/sessions/nope/retry").status_code == 404
-    assert ingest.client.post("/capture/sessions/nope/end", json={"last_seq": 0}).status_code == 404
+def test_report_unknown_capture_404(ingest):
+    assert ingest.client.get("/capture/captures/nope/report").status_code == 404
+    assert ingest.client.post("/capture/captures/nope/retry").status_code == 404
+    assert ingest.client.post("/capture/captures/nope/end", json={"last_segment_num": 0}).status_code == 404
 
 
 # --------------------------------------------------------- upload validation legs
@@ -208,7 +208,7 @@ def test_sha256_mismatch_400(ingest):
     resp = ingest.post_segment(sid, 0, b"not-a-real-segment", sha256="0" * 64)
     assert resp.status_code == 400
     assert "sha256 mismatch" in resp.text
-    # Nothing was recorded: the same seq can still be delivered correctly.
+    # Nothing was recorded: the same segment_num can still be delivered correctly.
     resp = ingest.post_segment(sid, 0, b"not-a-real-segment")
     assert resp.status_code == 200
     assert resp.json()["status"] == "received"
@@ -221,7 +221,7 @@ def test_server_computes_sha_when_param_empty(ingest):
     assert resp.status_code == 200
     with ingest.db() as conn:
         row = conn.execute(
-            "SELECT sha256, bytes FROM segments WHERE session_id=? AND seq=0", (sid,)
+            "SELECT sha256, bytes FROM segments WHERE capture_id=? AND segment_num=0", (sid,)
         ).fetchone()
     assert row["sha256"] == hashlib.sha256(data).hexdigest()
     assert row["bytes"] == len(data)
@@ -245,7 +245,7 @@ def test_duplicate_delivery_is_counted_not_reemitted(ingest, av_segment_bytes):
 
     resp = ingest.post_segment(sid, 0, av_segment_bytes)
     assert resp.status_code == 200
-    assert resp.json() == {"ok": True, "session_id": sid, "seq": 0, "status": "duplicate"}
+    assert resp.json() == {"ok": True, "capture_id": sid, "segment_num": 0, "status": "duplicate"}
     # No re-spool, no re-emit: downstream call counts are unchanged.
     assert (ingest.storage.put_count, ingest.dp.post_count) == (puts, posts)
 
@@ -258,9 +258,9 @@ def test_duplicate_delivery_is_counted_not_reemitted(ingest, av_segment_bytes):
 @needs_ffmpeg
 def test_av_segments_demux_to_two_dense_streams(ingest, av_segment_bytes):
     sid = new_ulid()
-    for seq in (0, 1):
-        assert ingest.post_segment(sid, seq, av_segment_bytes).status_code == 200
-    assert ingest.end(sid, last_seq=1).json() == {"ok": True}
+    for segment_num in (0, 1):
+        assert ingest.post_segment(sid, segment_num, av_segment_bytes).status_code == 200
+    assert ingest.end(sid, last_segment_num=1).json() == {"ok": True}
 
     report = ingest.report(sid)
     assert report["ended"] is True
@@ -268,7 +268,7 @@ def test_av_segments_demux_to_two_dense_streams(ingest, av_segment_bytes):
     assert report["received_segments"] == 2
     assert report["segment_states"] == {"received": 0, "emitted": 2, "failed": 0}
     assert report["client_leg"] == {
-        "missing_seqs": [], "missing_count": 0, "duplicate_deliveries": 0,
+        "missing_segment_nums": [], "missing_count": 0, "duplicate_deliveries": 0,
         "unterminated": False,
     }
     assert [leg["modality"] for leg in report["emit_leg"]] == ["audio", "video"]
@@ -316,7 +316,7 @@ def test_audio_only_segment_makes_single_stream(ingest, audio_segment_bytes, mon
     monkeypatch.setenv("RECORDING_KEEP_SPOOL", "1")
     sid = new_ulid()
     assert ingest.post_segment(sid, 0, audio_segment_bytes, mime="audio/mp4").status_code == 200
-    ingest.end(sid, last_seq=0)
+    ingest.end(sid, last_segment_num=0)
 
     report = ingest.report(sid)
     assert report["verdict"] == "clean"
@@ -332,11 +332,11 @@ def test_audio_only_segment_makes_single_stream(ingest, audio_segment_bytes, mon
 def test_end_marker_idempotent_and_sets_expected(ingest):
     sid = new_ulid()
     ingest.post_segment(sid, 0, b"garbage-segment")
-    assert ingest.end(sid, last_seq=0).status_code == 200
-    assert ingest.end(sid, last_seq=0).status_code == 200  # idempotent
+    assert ingest.end(sid, last_segment_num=0).status_code == 200
+    assert ingest.end(sid, last_segment_num=0).status_code == 200  # idempotent
 
-    sessions = ingest.client.get("/capture/sessions").json()["sessions"]
-    entry = next(s for s in sessions if s["session_id"] == sid)
+    captures = ingest.client.get("/capture/captures").json()["captures"]
+    entry = next(s for s in captures if s["capture_id"] == sid)
     assert entry["ended"] is True
     assert entry["expected_segments"] == 1
     assert entry["received_segments"] == 1
@@ -345,25 +345,25 @@ def test_end_marker_idempotent_and_sets_expected(ingest):
 def test_missing_seqs_hole_and_tail(ingest):
     sid = new_ulid()
     ingest.post_segment(sid, 0, b"garbage-a")
-    ingest.post_segment(sid, 2, b"garbage-b")   # seq 1 lost client-side
+    ingest.post_segment(sid, 2, b"garbage-b")   # segment_num 1 lost client-side
 
     report = ingest.report(sid)                  # still recording: hole visible, verdict honest
-    assert report["client_leg"]["missing_seqs"] == [1]
+    assert report["client_leg"]["missing_segment_nums"] == [1]
     assert report["client_leg"]["unterminated"] is True
     assert report["verdict"] == "recording"
 
-    ingest.end(sid, last_seq=3)                  # seq 3 was captured but never arrived
+    ingest.end(sid, last_segment_num=3)                  # segment_num 3 was captured but never arrived
     report = ingest.report(sid)
-    assert report["client_leg"]["missing_seqs"] == [1, 3]
+    assert report["client_leg"]["missing_segment_nums"] == [1, 3]
     assert report["client_leg"]["unterminated"] is False
     assert report["verdict"] == "gaps"
 
 
-def test_sessions_list_covers_all_sessions(ingest):
+def test_captures_list_covers_all_captures(ingest):
     a, b = new_ulid(), new_ulid()
     ingest.post_segment(a, 0, b"garbage-1")
     ingest.post_segment(b, 0, b"garbage-2", user_id="u-2")
-    ids = {s["session_id"] for s in ingest.client.get("/capture/sessions").json()["sessions"]}
+    ids = {s["capture_id"] for s in ingest.client.get("/capture/captures").json()["captures"]}
     assert {a, b} <= ids
 
 
@@ -381,33 +381,33 @@ def test_failed_emit_marked_and_retry_reuses_chunk_id(ingest, av_segment_bytes, 
 
     with ingest.db() as conn:
         seg = conn.execute(
-            "SELECT state, error FROM segments WHERE session_id=? AND seq=0", (sid,)
+            "SELECT state, error FROM segments WHERE capture_id=? AND segment_num=0", (sid,)
         ).fetchone()
         chunk = conn.execute(
             "SELECT chunk_id, sequence, dp_acked FROM chunks"
-            " WHERE session_id=? AND seq=0 AND modality='audio'", (sid,)
+            " WHERE capture_id=? AND segment_num=0 AND modality='audio'", (sid,)
         ).fetchone()
     assert seg["state"] == "failed" and seg["error"]
     # chunk identity was persisted BEFORE the failed attempt.
     assert chunk["dp_acked"] == 0
     chunk_id_before = chunk["chunk_id"]
 
-    ingest.end(sid, last_seq=0)
+    ingest.end(sid, last_segment_num=0)
     report = ingest.report(sid)
     assert report["verdict"] == "gaps"
     audio_leg = next(l for l in report["emit_leg"] if l["modality"] == "audio")
     assert audio_leg["failed"] == 1 and audio_leg["chunks_emitted"] == 0
 
     # DP recovers; /retry re-enqueues the failure and re-emits with the SAME identity.
-    resp = ingest.client.post(f"/capture/sessions/{sid}/retry")
-    assert resp.json() == {"ok": True, "session_id": sid, "retried": 1}
+    resp = ingest.client.post(f"/capture/captures/{sid}/retry")
+    assert resp.json() == {"ok": True, "capture_id": sid, "retried": 1}
 
     report = ingest.report(sid)
     assert report["verdict"] == "clean"
     with ingest.db() as conn:
         chunk = conn.execute(
             "SELECT chunk_id, sequence, dp_acked FROM chunks"
-            " WHERE session_id=? AND seq=0 AND modality='audio'", (sid,)
+            " WHERE capture_id=? AND segment_num=0 AND modality='audio'", (sid,)
         ).fetchone()
     assert chunk["chunk_id"] == chunk_id_before
     assert chunk["dp_acked"] == 1
@@ -418,7 +418,7 @@ def test_failed_emit_marked_and_retry_reuses_chunk_id(ingest, av_segment_bytes, 
     assert {e["sequence"] for e in audio_deliveries} == {0}
     assert len(ingest.dp.records[chunk_id_before]) == 1
 
-    resp = ingest.client.post(f"/capture/sessions/{sid}/retry")   # nothing left to retry
+    resp = ingest.client.post(f"/capture/captures/{sid}/retry")   # nothing left to retry
     assert resp.json()["retried"] == 0
 
 
@@ -435,14 +435,14 @@ def test_restart_reenqueues_received_and_reuses_chunk_ids(monkeypatch, tmp_path,
         assert w.post_segment(sid, 0, av_segment_bytes).status_code == 200
         with w.db() as conn:
             chunk_id_before = conn.execute(
-                "SELECT chunk_id FROM chunks WHERE session_id=? AND seq=0 AND modality='audio'",
+                "SELECT chunk_id FROM chunks WHERE capture_id=? AND segment_num=0 AND modality='audio'",
                 (sid,),
             ).fetchone()["chunk_id"]
         # Simulate crashing AFTER the ack but BEFORE processing finished: the row
         # goes back to 'received' exactly as an interrupted worker leaves it.
         with w.db() as conn:
             conn.execute(
-                "UPDATE segments SET state='received', error=NULL WHERE session_id=?", (sid,)
+                "UPDATE segments SET state='received', error=NULL WHERE capture_id=?", (sid,)
             )
 
     w.dp.fail_times = 0
@@ -450,14 +450,14 @@ def test_restart_reenqueues_received_and_reuses_chunk_ids(monkeypatch, tmp_path,
         def emitted() -> bool:
             with w.db() as conn:
                 row = conn.execute(
-                    "SELECT state FROM segments WHERE session_id=? AND seq=0", (sid,)
+                    "SELECT state FROM segments WHERE capture_id=? AND segment_num=0", (sid,)
                 ).fetchone()
             return row["state"] == "emitted"
         assert _wait(emitted), "reenqueued segment never emitted"
 
     with w.db() as conn:
         chunk = conn.execute(
-            "SELECT chunk_id, dp_acked FROM chunks WHERE session_id=? AND seq=0 AND modality='audio'",
+            "SELECT chunk_id, dp_acked FROM chunks WHERE capture_id=? AND segment_num=0 AND modality='audio'",
             (sid,),
         ).fetchone()
     assert chunk["chunk_id"] == chunk_id_before   # minted once, reused across restart
@@ -471,15 +471,15 @@ def test_restart_reenqueues_received_and_reuses_chunk_ids(monkeypatch, tmp_path,
 def test_async_mode_acks_then_emits_in_background(ingest_async, av_segment_bytes):
     w = ingest_async
     sid = new_ulid()
-    for seq in (0, 1):
-        resp = w.post_segment(sid, seq, av_segment_bytes)
+    for segment_num in (0, 1):
+        resp = w.post_segment(sid, segment_num, av_segment_bytes)
         assert resp.status_code == 200
         assert resp.json()["status"] == "received"
-    w.end(sid, last_seq=1)
+    w.end(sid, last_segment_num=1)
 
     def clean() -> bool:
         return w.report(sid)["verdict"] == "clean"
-    assert _wait(clean), f"session never became clean: {w.report(sid)}"
+    assert _wait(clean), f"capture never became clean: {w.report(sid)}"
 
     report = w.report(sid)
     for leg in report["emit_leg"]:
@@ -493,7 +493,7 @@ def test_async_mode_acks_then_emits_in_background(ingest_async, av_segment_bytes
 def test_report_merges_live_dp_continuity(ingest, av_segment_bytes):
     sid = new_ulid()
     ingest.post_segment(sid, 0, av_segment_bytes)
-    ingest.end(sid, last_seq=0)
+    ingest.end(sid, last_segment_num=0)
 
     report = ingest.report(sid)
     assert report["verdict"] == "clean"
@@ -504,7 +504,7 @@ def test_report_merges_live_dp_continuity(ingest, av_segment_bytes):
         "missing_unacked": [], "duplicate_deliveries": 0,
     }
 
-    # DP amnesia (its in-memory tracker restarted mid-session) reports our
+    # DP amnesia (its in-memory tracker restarted mid-capture) reports our
     # delivered-and-ACKED sequence as a leading-gap run. The ledger holds the ack
     # receipt, so the report must reconcile — NOT fabricate a permanent 'gaps'
     # verdict for chunks that provably landed.
@@ -514,7 +514,7 @@ def test_report_merges_live_dp_continuity(ingest, av_segment_bytes):
     }
     report = ingest.report(sid)
     audio_leg = next(l for l in report["emit_leg"] if l["modality"] == "audio")
-    # seq 0 is dp_acked in the ledger -> subtracted; 2..3 exceed anything the
+    # segment_num 0 is dp_acked in the ledger -> subtracted; 2..3 exceed anything the
     # ledger ever allocated (bogus claim) -> clipped. Nothing truly missing.
     assert audio_leg["dp"] == {
         "checked": True, "max_sequence": 3, "missing": [[0, 0], [2, 3]],
@@ -544,17 +544,17 @@ def test_duplicate_of_lost_spool_self_heals(ingest, av_segment_bytes):
     # are gone and the segment was never processed (state forced back to received).
     with ingest.db() as conn:
         row = conn.execute(
-            "SELECT spool_path FROM segments WHERE session_id = ? AND seq = 0", (sid,)
+            "SELECT spool_path FROM segments WHERE capture_id = ? AND segment_num = 0", (sid,)
         ).fetchone()
         conn.execute(
-            "UPDATE segments SET state = 'received' WHERE session_id = ? AND seq = 0",
+            "UPDATE segments SET state = 'received' WHERE capture_id = ? AND segment_num = 0",
             (sid,),
         )
     Path(row["spool_path"]).unlink(missing_ok=True)  # gone either way post-"crash"
 
     resp = ingest.post_segment(sid, 0, av_segment_bytes)  # the client's retry
     assert resp.json()["status"] == "duplicate"
-    ingest.end(sid, last_seq=0)
+    ingest.end(sid, last_segment_num=0)
     report = ingest.report(sid)
     assert report["segment_states"]["emitted"] == 1     # re-spooled AND emitted
     assert report["verdict"] == "clean"
@@ -572,7 +572,7 @@ def test_seq_bound_rejected(ingest):
 
 
 def test_missing_list_capped_count_exact(ingest):
-    """A far-future seq must not balloon the report: the list is capped, the count
+    """A far-future segment_num must not balloon the report: the list is capped, the count
     exact, and the report stays fast (the walk is O(received))."""
     sid = new_ulid()
     ingest.post_segment(sid, 0, b"garbage-a")
@@ -580,17 +580,17 @@ def test_missing_list_capped_count_exact(ingest):
     report = ingest.report(sid)
     leg = report["client_leg"]
     assert leg["missing_count"] == 49_999
-    assert len(leg["missing_seqs"]) == 1000
-    assert leg["missing_seqs"][0] == 1 and leg["missing_seqs"][-1] == 1000
+    assert len(leg["missing_segment_nums"]) == 1000
+    assert leg["missing_segment_nums"][0] == 1 and leg["missing_segment_nums"][-1] == 1000
 
 
 @needs_ffmpeg
 def test_late_segment_reopens_stale_end_marker(ingest, av_segment_bytes):
-    """A pagehide beacon mid-session must not freeze 'expected': segments arriving
-    past the marker reopen the session; a newer end marker closes it honestly."""
+    """A pagehide beacon mid-capture must not freeze 'expected': segments arriving
+    past the marker reopen the capture; a newer end marker closes it honestly."""
     sid = new_ulid()
     ingest.post_segment(sid, 0, av_segment_bytes)
-    ingest.end(sid, last_seq=0)                     # stale beacon: claims 1 segment
+    ingest.end(sid, last_segment_num=0)                     # stale beacon: claims 1 segment
     assert ingest.report(sid)["ended"] is True
 
     ingest.post_segment(sid, 1, av_segment_bytes)   # recording actually continued
@@ -598,13 +598,13 @@ def test_late_segment_reopens_stale_end_marker(ingest, av_segment_bytes):
     assert report["ended"] is False                  # reopened — verdict can't be
     assert report["verdict"] == "recording"          # 'clean' against stale expected
 
-    ingest.end(sid, last_seq=1)                      # the real end marker
+    ingest.end(sid, last_segment_num=1)                      # the real end marker
     report = ingest.report(sid)
     assert report["ended"] is True
     assert report["expected_segments"] == 2
     assert report["verdict"] == "clean"
 
-    ingest.end(sid, last_seq=0)                      # a LATE stale beacon replays
+    ingest.end(sid, last_segment_num=0)                      # a LATE stale beacon replays
     assert ingest.report(sid)["expected_segments"] == 2   # monotonic — not lowered
 
 
@@ -620,22 +620,22 @@ def test_partial_emit_failure_keeps_sequence_order(ingest, av_segment_bytes):
     ingest.post_segment(sid, 1, av_segment_bytes)
     ingest.dp.fail_times = 0
     ingest.post_segment(sid, 2, av_segment_bytes)   # later segment keeps emitting
-    ingest.end(sid, last_seq=2)
+    ingest.end(sid, last_segment_num=2)
     assert ingest.report(sid)["verdict"] == "gaps"  # the failure is visible
 
-    resp = ingest.client.post(f"/capture/sessions/{sid}/retry")
+    resp = ingest.client.post(f"/capture/captures/{sid}/retry")
     assert resp.json()["retried"] == 1
     report = ingest.report(sid)
     assert report["verdict"] == "clean"
-    # Per stream: sequences must follow segment seq order (0,1,2 -> 0,1,2).
+    # Per stream: sequences must follow segment segment_num order (0,1,2 -> 0,1,2).
     with ingest.db() as conn:
         for stream_id in [l["stream_id"] for l in report["emit_leg"]]:
             rows = conn.execute(
-                "SELECT seq, sequence FROM chunks WHERE stream_id = ? ORDER BY seq",
+                "SELECT segment_num, sequence FROM chunks WHERE stream_id = ? ORDER BY segment_num",
                 (stream_id,),
             ).fetchall()
             assert [r["sequence"] for r in rows] == sorted(r["sequence"] for r in rows)
-            assert [r["seq"] for r in rows] == [0, 1, 2]
+            assert [r["segment_num"] for r in rows] == [0, 1, 2]
 
 
 # --------------------------------------------- /ingest is NOT ours (invariant)
@@ -645,7 +645,7 @@ def test_no_ingest_routes_exist_on_recording(ingest):
     NOTHING under it (a one-day transitional alias was removed 2026-07-19)."""
     paths = ingest.client.get("/openapi.json").json()["paths"]
     assert "/capture/segments" in paths
-    assert "/capture/sessions/{session_id}/report" in paths
+    assert "/capture/captures/{capture_id}/report" in paths
     assert not any(p.startswith("/ingest") for p in paths)
     assert ingest.client.post("/ingest/segments").status_code == 404
-    assert ingest.client.get("/ingest/sessions").status_code == 404
+    assert ingest.client.get("/ingest/captures").status_code == 404
