@@ -1,0 +1,1436 @@
+<title>Recording Service — Field Guide</title>
+<style>
+/* ============================================================= tokens */
+:root {
+  --ground: #EEF1EF;
+  --panel: #FFFFFF;
+  --panel-2: #E4E9E6;
+  --ink: #1A201C;
+  --ink-soft: #47524C;
+  --ink-faint: #6B7770;
+  --line: #CDD5D0;
+  --line-soft: #DCE2DE;
+  --accent: #D8393F;
+  --accent-soft: #F6E3E3;
+  --ok: #2F8A5D;
+  --ok-soft: #DFEEE5;
+  --warn: #B77916;
+  --warn-soft: #F4EAD5;
+  --info: #33689C;
+  --info-soft: #E1EAF3;
+  --code-bg: #1B211D;
+  --code-ink: #D7DFD9;
+  --mono: "SF Mono", "Cascadia Code", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --shadow: 0 1px 2px rgba(20,28,24,.06), 0 8px 24px -12px rgba(20,28,24,.14);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #0E1210;
+    --panel: #161B18;
+    --panel-2: #1C231F;
+    --ink: #DCE3DE;
+    --ink-soft: #9FABA4;
+    --ink-faint: #778279;
+    --line: #2A322D;
+    --line-soft: #232A26;
+    --accent: #F0554F;
+    --accent-soft: #35201F;
+    --ok: #4CC38A;
+    --ok-soft: #17281F;
+    --warn: #E0A336;
+    --warn-soft: #2C2415;
+    --info: #6FA3D8;
+    --info-soft: #182430;
+    --code-bg: #121714;
+    --code-ink: #C8D2CB;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #0E1210; --panel: #161B18; --panel-2: #1C231F; --ink: #DCE3DE;
+  --ink-soft: #9FABA4; --ink-faint: #778279; --line: #2A322D; --line-soft: #232A26;
+  --accent: #F0554F; --accent-soft: #35201F; --ok: #4CC38A; --ok-soft: #17281F;
+  --warn: #E0A336; --warn-soft: #2C2415; --info: #6FA3D8; --info-soft: #182430;
+  --code-bg: #121714; --code-ink: #C8D2CB;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.6);
+}
+:root[data-theme="light"] {
+  --ground: #EEF1EF; --panel: #FFFFFF; --panel-2: #E4E9E6; --ink: #1A201C;
+  --ink-soft: #47524C; --ink-faint: #6B7770; --line: #CDD5D0; --line-soft: #DCE2DE;
+  --accent: #D8393F; --accent-soft: #F6E3E3; --ok: #2F8A5D; --ok-soft: #DFEEE5;
+  --warn: #B77916; --warn-soft: #F4EAD5; --info: #33689C; --info-soft: #E1EAF3;
+  --code-bg: #1B211D; --code-ink: #D7DFD9;
+  --shadow: 0 1px 2px rgba(20,28,24,.06), 0 8px 24px -12px rgba(20,28,24,.14);
+}
+
+/* ============================================================= base */
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0; background: var(--ground); color: var(--ink);
+  font-family: var(--sans); font-size: 16.5px; line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4 { line-height: 1.2; text-wrap: balance; }
+p { max-width: 68ch; }
+a { color: var(--info); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:hover { color: var(--accent); }
+code {
+  font-family: var(--mono); font-size: .84em;
+  background: var(--panel-2); border-radius: 4px; padding: .1em .35em;
+}
+pre {
+  background: var(--code-bg); color: var(--code-ink);
+  border-radius: 10px; padding: 16px 18px; overflow-x: auto;
+  font-family: var(--mono); font-size: 13px; line-height: 1.6;
+}
+pre code { background: none; padding: 0; font-size: inherit; color: inherit; }
+button { font-family: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+/* ============================================================= shell */
+.shell { display: grid; grid-template-columns: 236px minmax(0, 1fr); max-width: 1240px; margin: 0 auto; }
+.rail {
+  position: sticky; top: 0; align-self: start; height: 100dvh;
+  padding: 28px 10px 28px 22px; overflow-y: auto;
+  border-right: 1px solid var(--line-soft);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.rail-brand { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 14px; }
+.rail-brand b { color: var(--ink); font-weight: 600; display: block; font-size: 12px; }
+.rail a.tk {
+  display: flex; gap: 10px; align-items: baseline; padding: 6px 10px;
+  border-radius: 7px; text-decoration: none; color: var(--ink-soft); font-size: 13.5px;
+  border-left: 2px solid transparent;
+}
+.rail a.tk .n { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); min-width: 20px; }
+.rail a.tk:hover { background: var(--panel-2); color: var(--ink); }
+.rail a.tk.on { color: var(--accent); background: var(--panel-2); border-left-color: var(--accent); }
+.rail a.tk.on .n { color: var(--accent); }
+.rail-foot { margin-top: auto; padding: 14px 10px 0; font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); line-height: 1.7; }
+main { min-width: 0; padding: 0 40px 90px; }
+@media (max-width: 960px) {
+  .shell { grid-template-columns: 1fr; }
+  .rail { position: static; height: auto; flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--line-soft); padding: 14px 16px; }
+  .rail-brand, .rail-foot { display: none; }
+  .rail a.tk { border-left: 0; border: 1px solid var(--line-soft); }
+  main { padding: 0 18px 70px; }
+}
+
+/* ============================================================= hero */
+.hero { padding: 46px 0 26px; }
+.rec-strip {
+  border: 1px solid var(--line); border-radius: 14px; background: var(--panel);
+  box-shadow: var(--shadow); overflow: hidden;
+}
+.rec-head {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 18px; border-bottom: 1px solid var(--line-soft);
+  font-family: var(--mono); font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft);
+}
+.rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); animation: blink 1.6s steps(2, start) infinite; }
+@keyframes blink { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .rec-dot { animation: none; } }
+.rec-head .tc { margin-left: auto; color: var(--ink); font-variant-numeric: tabular-nums; }
+#wave { display: block; width: 100%; height: 88px; }
+.hero-body { padding: 30px 26px 30px; }
+.hero h1 { font-size: clamp(30px, 4.6vw, 46px); font-weight: 800; letter-spacing: -.02em; margin: 0 0 12px; }
+.hero h1 em { font-style: normal; color: var(--accent); }
+.hero .sub { font-size: 18px; color: var(--ink-soft); margin: 0; max-width: 62ch; }
+.stage-chip {
+  display: inline-flex; gap: 8px; align-items: center; margin-top: 18px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+  background: var(--warn-soft); color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+  padding: 5px 12px; border-radius: 999px;
+}
+.statrow { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 26px; }
+.stat { background: var(--panel); border: 1px solid var(--line-soft); border-radius: 10px; padding: 12px 14px; }
+.stat .v { font-family: var(--mono); font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stat .k { font-size: 12px; color: var(--ink-faint); margin-top: 2px; }
+
+/* ============================================================= modules */
+section.module { padding: 54px 0 10px; border-top: 1px solid var(--line-soft); margin-top: 44px; scroll-margin-top: 12px; }
+section.module:first-of-type { border-top: 0; margin-top: 0; }
+.eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; display: flex; gap: 10px; align-items: center; }
+.eyebrow .lvl { color: var(--ink-faint); }
+section.module h2 { font-size: clamp(23px, 3vw, 30px); font-weight: 800; letter-spacing: -.015em; margin: 0 0 6px; }
+.dek { font-size: 17px; color: var(--ink-soft); margin: 0 0 22px; max-width: 64ch; }
+h3 { font-size: 18.5px; font-weight: 700; margin: 34px 0 10px; }
+h4 { font-size: 15px; font-weight: 700; margin: 22px 0 8px; }
+
+.card { background: var(--panel); border: 1px solid var(--line-soft); border-radius: 12px; padding: 18px 20px; box-shadow: var(--shadow); }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+
+.note { border-left: 3px solid var(--info); background: var(--info-soft); border-radius: 0 10px 10px 0; padding: 12px 16px; margin: 16px 0; }
+.note.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+.note.hot { border-left-color: var(--accent); background: var(--accent-soft); }
+.note p { margin: 0; }
+.note b.tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; display: block; margin-bottom: 3px; }
+
+.pill { display: inline-block; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; border-radius: 999px; padding: 2px 9px; border: 1px solid; vertical-align: 1px; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+.pill.hot { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.pill.dim { color: var(--ink-faint); background: var(--panel-2); border-color: var(--line); }
+.pill.info { color: var(--info); background: var(--info-soft); border-color: color-mix(in srgb, var(--info) 40%, transparent); }
+
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+.tblwrap { overflow-x: auto; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); }
+th { text-align: left; font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); padding: 10px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 10px 14px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+
+/* loop diagram */
+.loopmap { display: flex; flex-direction: column; gap: 14px; margin: 20px 0; }
+.loop { background: var(--panel); border: 1px solid var(--line-soft); border-radius: 12px; padding: 14px 16px; overflow-x: auto; }
+.loop .lt { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 10px; color: var(--ink-soft); }
+.chips { display: flex; align-items: center; gap: 6px; min-width: max-content; }
+.chip {
+  font-family: var(--mono); font-size: 12px; padding: 7px 11px; border-radius: 8px;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--ink-soft); white-space: nowrap;
+}
+.chip.me { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.chip.store { border-style: dashed; }
+.arr { color: var(--ink-faint); font-family: var(--mono); font-size: 12px; }
+.cnum { color: var(--accent); font-family: var(--mono); font-size: 10.5px; }
+
+/* vocab cards */
+.vocab { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.vocab details { background: var(--panel); border: 1px solid var(--line-soft); border-radius: 10px; overflow: hidden; }
+.vocab summary { cursor: pointer; list-style: none; padding: 12px 14px; display: flex; align-items: baseline; gap: 10px; }
+.vocab summary::-webkit-details-marker { display: none; }
+.vocab summary .w { font-family: var(--mono); font-weight: 600; font-size: 14px; }
+.vocab summary .hint { font-size: 12px; color: var(--ink-faint); margin-left: auto; white-space: nowrap; }
+.vocab details[open] summary { border-bottom: 1px solid var(--line-soft); background: var(--panel-2); }
+.vocab .def { padding: 12px 14px; font-size: 13.5px; color: var(--ink-soft); }
+.vocab .def p { margin: 0 0 8px; }
+.vocab .def p:last-child { margin: 0; }
+
+/* envelope explorer */
+.envelope { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 860px) { .envelope { grid-template-columns: 1fr; } }
+.env-json { background: var(--code-bg); color: var(--code-ink); border-radius: 12px; padding: 14px 6px 14px 14px; font-family: var(--mono); font-size: 12.5px; line-height: 1.75; overflow-x: auto; }
+.env-json .row { display: block; padding: 0 8px; border-radius: 6px; white-space: pre; cursor: pointer; border: 0; background: none; color: inherit; font: inherit; text-align: left; width: 100%; }
+.env-json .row:hover { background: rgba(255,255,255,.07); }
+.env-json .row.on { background: rgba(240,85,79,.18); }
+.env-json .k { color: #8AB8E8; }
+.env-json .s { color: #A8D8A8; }
+.env-json .n { color: #E8C88A; }
+.env-json .c { color: #7A857E; }
+.env-detail { position: sticky; top: 16px; align-self: start; }
+.env-detail .card { min-height: 200px; }
+.env-detail h4 { margin: 0 0 6px; font-family: var(--mono); font-size: 14px; }
+.env-detail p { font-size: 14px; color: var(--ink-soft); margin: 0 0 10px; }
+
+/* client tabs */
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: -1px; position: relative; z-index: 1; }
+.tabs button {
+  cursor: pointer; border: 1px solid var(--line-soft); border-bottom: 0; background: var(--panel-2);
+  color: var(--ink-soft); font-family: var(--mono); font-size: 12.5px; padding: 9px 16px;
+  border-radius: 10px 10px 0 0;
+}
+.tabs button.on { background: var(--panel); color: var(--accent); font-weight: 600; border-color: var(--line); }
+.tabpanel { background: var(--panel); border: 1px solid var(--line); border-radius: 0 12px 12px 12px; padding: 20px 22px; box-shadow: var(--shadow); }
+.tabpanel[hidden] { display: none; }
+.specs { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px 20px; margin: 12px 0; font-size: 13.5px; }
+.specs div b { display: block; font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); }
+
+/* path explorer */
+.explorer { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
+.exp-controls { display: flex; gap: 14px; flex-wrap: wrap; padding: 16px 18px; border-bottom: 1px solid var(--line-soft); background: var(--panel-2); align-items: end; }
+.exp-controls label { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); display: block; margin-bottom: 4px; }
+.exp-controls > div { flex: 1 1 240px; min-width: 0; }
+.exp-controls .btns { flex: 0 0 auto; }
+.exp-controls select {
+  font-family: var(--mono); font-size: 13px; color: var(--ink); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; max-width: 100%;
+}
+.exp-controls .btns { display: flex; gap: 8px; margin-left: auto; }
+.exp-controls .btns button {
+  cursor: pointer; font-family: var(--mono); font-size: 12.5px; padding: 9px 16px;
+  border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+}
+.exp-controls .btns button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.exp-controls .btns button:disabled { opacity: .45; cursor: default; }
+.stations { display: flex; flex-direction: column; padding: 16px 18px 14px; }
+.lane-label { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-faint); margin: 12px 0 6px; }
+.stations .lane-label:first-child { margin-top: 0; }
+.st-row { display: flex; }
+.st-box {
+  flex: 1 1 auto; max-width: 560px; text-align: left; padding: 8px 14px; border-radius: 9px;
+  border: 1px solid var(--line); background: var(--panel-2); font-family: var(--mono); font-size: 11.5px;
+  color: var(--ink-faint); line-height: 1.4; transition: all .18s ease;
+}
+.st-box.done { border-color: color-mix(in srgb, var(--ok) 50%, transparent); color: var(--ink); background: var(--ok-soft); }
+.st-box.now { border-color: var(--accent); color: var(--ink); background: var(--accent-soft); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.st-box.fail { border-color: color-mix(in srgb, var(--warn) 60%, transparent); background: var(--warn-soft); color: var(--ink); }
+.st-down { color: var(--ink-faint); font-family: var(--mono); font-size: 11px; padding: 1px 0 1px 18px; line-height: 1.2; }
+.exp-log { border-top: 1px solid var(--line-soft); padding: 16px 18px 18px; min-height: 170px; }
+.exp-log .step-title { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--accent); margin-bottom: 4px; }
+.exp-log .step-body { font-size: 14.5px; color: var(--ink); }
+.exp-log .step-body code { font-size: .85em; }
+.exp-log .why { margin-top: 10px; font-size: 13px; color: var(--ink-soft); border-left: 2px solid var(--line); padding-left: 12px; }
+.exp-status { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 0 18px 16px; }
+.verdict-chip { font-family: var(--mono); font-size: 12px; padding: 6px 14px; border-radius: 999px; border: 1.5px solid; letter-spacing: .06em; }
+.verdict-chip.clean { color: var(--ok); border-color: var(--ok); background: var(--ok-soft); }
+.verdict-chip.gaps { color: var(--warn); border-color: var(--warn); background: var(--warn-soft); }
+.verdict-chip.recording { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.verdict-chip.none { color: var(--ink-faint); border-color: var(--line); background: var(--panel-2); }
+.exp-progress { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); margin-left: auto; font-variant-numeric: tabular-nums; }
+
+/* decision timeline */
+.timeline { display: flex; gap: 12px; overflow-x: auto; padding: 6px 2px 14px; }
+.tl-card { min-width: 250px; max-width: 280px; background: var(--panel); border: 1px solid var(--line-soft); border-radius: 11px; padding: 14px 16px; flex-shrink: 0; }
+.tl-card .d { font-family: var(--mono); font-size: 11px; color: var(--accent); font-weight: 600; letter-spacing: .06em; }
+.tl-card .t { font-weight: 700; font-size: 14.5px; margin: 4px 0 6px; }
+.tl-card p { font-size: 13px; color: var(--ink-soft); margin: 0; }
+.tl-card .when { font-family: var(--mono); font-size: 10px; color: var(--ink-faint); margin-top: 8px; }
+
+/* ripple cards */
+.ripple { border-top: 3px solid var(--info); }
+.ripple .svc { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--info); margin-bottom: 6px; }
+.ripple ul { margin: 8px 0 0; padding-left: 18px; font-size: 13.5px; color: var(--ink-soft); }
+.ripple li { margin-bottom: 8px; }
+.ripple li:last-child { margin-bottom: 0; }
+
+/* open board */
+.board { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 12px; }
+.bd-item { background: var(--panel); border: 1px solid var(--line-soft); border-radius: 11px; padding: 14px 16px; }
+.bd-item .hd { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+.bd-item .hd b { font-size: 14.5px; }
+.bd-item p { font-size: 13.5px; color: var(--ink-soft); margin: 0; }
+
+/* file tree */
+.tree { font-family: var(--mono); font-size: 12.5px; line-height: 1.9; white-space: pre; background: var(--panel); border: 1px solid var(--line-soft); border-radius: 12px; padding: 16px 18px; overflow-x: auto; }
+.tree .dir { color: var(--info); font-weight: 600; }
+.tree .cm { color: var(--ink-faint); }
+.tree .f { color: var(--ink); }
+
+/* quiz */
+.quiz-q { background: var(--panel); border: 1px solid var(--line-soft); border-radius: 12px; padding: 18px 20px; margin-bottom: 14px; }
+.quiz-q .qt { font-weight: 700; margin-bottom: 12px; }
+.quiz-q .opts { display: flex; flex-direction: column; gap: 8px; }
+.quiz-q .opts button {
+  cursor: pointer; text-align: left; font-size: 14px; padding: 10px 14px; border-radius: 9px;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--ink);
+}
+.quiz-q .opts button:hover { border-color: var(--ink-faint); }
+.quiz-q .opts button.right { border-color: var(--ok); background: var(--ok-soft); color: var(--ok); font-weight: 600; }
+.quiz-q .opts button.wrong { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.quiz-q .expl { display: none; margin-top: 12px; font-size: 13.5px; color: var(--ink-soft); border-left: 2px solid var(--ok); padding-left: 12px; }
+.quiz-q.answered .expl { display: block; }
+#quiz-score { font-family: var(--mono); font-size: 13px; }
+
+.kbd-note { font-size: 12.5px; color: var(--ink-faint); margin-top: 8px; }
+.mono-h { font-family: var(--mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); margin: 26px 0 10px; }
+ul.tight { padding-left: 20px; margin: 10px 0; }
+ul.tight li { margin-bottom: 8px; max-width: 68ch; }
+
+/* flip cards (module 05) */
+.flipdeck { align-items: stretch; }
+.flip { perspective: 1200px; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; min-height: 250px; font: inherit; color: inherit; }
+.flip-inner { position: relative; display: block; width: 100%; height: 100%; min-height: 250px; transition: transform .45s; transform-style: preserve-3d; }
+.flip.on .flip-inner { transform: rotateY(180deg); }
+@media (prefers-reduced-motion: reduce) { .flip-inner { transition: none; } }
+.flip-front, .flip-back { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 12px; border: 1px solid var(--line-soft); background: var(--panel); box-shadow: var(--shadow); }
+.flip-front { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; font-family: var(--mono); font-size: 16.5px; color: var(--ink); }
+.flip-front small { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-faint); }
+.flip-back { transform: rotateY(180deg); padding: 14px 16px; overflow-y: auto; font-size: 13.5px; color: var(--ink-soft); line-height: 1.55; }
+.flip-back b { display: block; font-family: var(--mono); font-size: 12.5px; color: var(--ink); margin-bottom: 6px; }
+.flip-back p { margin: 0 0 8px; max-width: none; }
+</style>
+
+<div class="shell">
+<nav class="rail" aria-label="Modules">
+  <div class="rail-brand"><b>NUCLEUS · RECORDING</b>field guide for new engineers</div>
+  <a class="tk" href="#m0"><span class="n">00</span> Briefing</a>
+  <a class="tk" href="#m1"><span class="n">01</span> Why Nucleus exists</a>
+  <a class="tk" href="#m2"><span class="n">02</span> Vocabulary</a>
+  <a class="tk" href="#m3"><span class="n">03</span> The C1 contract</a>
+  <a class="tk" href="#m4"><span class="n">04</span> The three clients</a>
+  <a class="tk" href="#m5"><span class="n">05</span> Life of a segment</a>
+  <a class="tk" href="#m6"><span class="n">06</span> Async &amp; crash safety</a>
+  <a class="tk" href="#m7"><span class="n">07</span> Civil time (D17)</a>
+  <a class="tk" href="#m8"><span class="n">08</span> Decisions &amp; ripples</a>
+  <a class="tk" href="#m9"><span class="n">09</span> Observability</a>
+  <a class="tk" href="#m10"><span class="n">10</span> The open board</a>
+  <a class="tk" href="#m11"><span class="n">11</span> Codebase &amp; day one</a>
+  <a class="tk" href="#m12"><span class="n">12</span> Check yourself</a>
+  <div class="rail-foot">stage: PROTOTYPE (D19)<br>sources: CHARTER · HANDOFF ·<br>DECISIONS · ARCHITECTURE ·<br>app/ · clients/ · tests/</div>
+</nav>
+
+<main>
+
+<!-- ============================================================ HERO -->
+<header class="hero">
+  <div class="rec-strip">
+    <div class="rec-head">
+      <span class="rec-dot" aria-hidden="true"></span> REC · life stream
+      <span>·</span> <span>3 surfaces live</span>
+      <span class="tc" id="timecode">00:00:00</span>
+    </div>
+    <canvas id="wave" height="88" aria-hidden="true"></canvas>
+    <div class="hero-body">
+      <h1>The Recording Service<br>owns everything between the user's <em>senses</em> and our backend.</h1>
+      <p class="sub">This is the field guide for engineers joining the recording team. It starts from zero, builds to the sharp edges, and is honest about what's unfinished. Everything here comes from the charter, the decision registers, and the code itself.</p>
+      <span class="stage-chip">⚠ Stage: PROTOTYPE (D19) — docs speak production; the build is a prototype</span>
+      <div class="statrow">
+        <div class="stat"><div class="v">144</div><div class="k">tests green in the recording suite</div></div>
+        <div class="stat"><div class="v">3</div><div class="k">capture clients verified <span class="pill ok">clean</span> on real hardware</div></div>
+        <div class="stat"><div class="v">:8084</div><div class="k">our port (storage :8083 · data-processing :8085)</div></div>
+        <div class="stat"><div class="v">C1</div><div class="k">the one contract we produce</div></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ============================================================ 00 BRIEFING -->
+<section class="module" id="m0">
+  <div class="eyebrow"><span class="lvl">MODULE 00</span> Briefing</div>
+  <h2>What you're joining, in sixty seconds</h2>
+  <p class="dek">If you read nothing else today, read this card.</p>
+
+  <div class="card">
+    <ul class="tight">
+      <li><b>Nucleus is building a personal AI</b> that continuously fine-tunes a model on the user's own life. Your life doesn't scroll out of a context window — it <b>compounds into weights</b>, every night.</li>
+      <li><b>Recording is the head of that pipeline.</b> Nothing sits upstream of us except the user. We capture their physical and digital life (phone, browser tab, mac screen and mic; a wearable body-cam later), and we deliver it downstream with <b>zero silent loss</b> — every gap known, every byte timestamped and attributable to a device.</li>
+      <li>We speak exactly <b>one outward contract: C1</b>. Bytes go to storage <code>/raw</code> first, then a small JSON "envelope" tells data-processing where they landed.</li>
+      <li>We <b>never interpret</b> the stream. No transcription, no captioning, no enrichment — that is data-processing's job. We are transport, integrity, and honesty.</li>
+      <li>We are also the <b>privacy front line</b>: pause / mute / delete-last-N-minutes are chartered as first-class deliverables. They are deliberately deferred right now (D13) because the only users are consenting teammates — but the design keeps a seat open for them.</li>
+      <li>The service is <b>alpha-complete</b> for computer capture: three real clients, a checked loss guarantee, and a live fleet on node-7. The wearable, consent enforcement, and fleet-scale telemetry are the open road ahead.</li>
+    </ul>
+  </div>
+
+  <div class="note">
+    <b class="tag">How to read this guide</b>
+    <p>Modules 01–03 are the foundations (why, the words, the wire). 04–07 go inside the machine. 08–10 are the judgment layer — why things are the way they are, and what's honestly open. 11 gets you running code. Take module 12's quiz when you're done; it covers the traps that bite real sessions.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 01 WHY -->
+<section class="module" id="m1">
+  <div class="eyebrow"><span class="lvl">MODULE 01</span> The big picture</div>
+  <h2>Why Nucleus exists, and where recording sits</h2>
+  <p class="dek">You can't reason about our design choices without the company's one big idea.</p>
+
+  <h3>The one big idea: context becomes weights</h3>
+  <p>Every AI assistant today meets its user fresh. Context windows grew from 128k to 1M tokens, but a window is still a ceiling — your history gets lossily compressed and hopefully survives the next session. And the model itself is identical for everyone; only prompts differ.</p>
+  <p>Nucleus's bet: a whole human life is about <b>876K hours</b> of perception (24&nbsp;h × 365&nbsp;d × 100&nbsp;y). Frontier models pre-train on millions of hours — <b>a single life fits</b>. So take an open vision-language model (Qwen3-VL-32B, decision D6), give each user their own LoRA adapter, and fine-tune it nightly on what they actually lived that day. The model that answers you tomorrow morning <i>remembers yesterday</i>, because it was trained on it overnight — the memory lives in the weights rather than in a prompt.</p>
+
+  <h3>Two loops, one system</h3>
+  <p>Everything in v0 is one of two loops sharing the same stores and the same per-user model:</p>
+
+  <div class="loopmap">
+    <div class="loop">
+      <div class="lt">LEARN LOOP · background, nightly — <b>this is our loop</b></div>
+      <div class="chips">
+        <span class="chip">User's life</span><span class="arr">→</span>
+        <span class="chip me">RECORDING</span><span class="arr">→ <span class="cnum">C1</span> →</span>
+        <span class="chip">Data-Processing<br><small>ASR · captions · OCR</small></span><span class="arr">→ <span class="cnum">C2</span> →</span>
+        <span class="chip store">Storage /context</span><span class="arr">→ <span class="cnum">C10</span> →</span>
+        <span class="chip">Continuum<br><small>nightly fine-tune</small></span><span class="arr">→ <span class="cnum">C5</span> →</span>
+        <span class="chip store">Model directory</span>
+      </div>
+    </div>
+    <div class="loop">
+      <div class="lt">SERVE LOOP · interactive, seconds — not ours, but know it exists</div>
+      <div class="chips">
+        <span class="chip">User asks</span><span class="arr">→</span>
+        <span class="chip">Input / QueryBuilder</span><span class="arr">→ <span class="cnum">C3</span> →</span>
+        <span class="chip">Inference<br><small>vLLM + user's LoRA</small></span><span class="arr">→ <span class="cnum">C9</span> →</span>
+        <span class="chip">Output</span><span class="arr">→</span>
+        <span class="chip">User</span>
+      </div>
+    </div>
+  </div>
+
+  <p>The founders' framing: <b>the serve loop makes the product usable today; the learn loop is why it exists.</b> We are the first mile of the learn loop. If we drop a chunk of someone's day silently, the model simply never learns that part of their life — and nobody would know it's missing. That's why our headline guarantee is "zero <i>silent</i> loss": loss can happen (networks fail, browsers die), but it must always be <b>detectable and named</b>, never quiet.</p>
+
+  <div class="note hot">
+    <b class="tag">Boundary you must respect</b>
+    <p>Interactive chat requests (a user asking their AI something) go through the <b>input</b> service, never through us. We carry only the passive, always-on life stream. The charter marks C3/C8 as "boundary markers" — if someone proposes routing a chat payload through <code>/capture/*</code>, the answer is no.</p>
+  </div>
+
+  <h3>The eight services, one line each</h3>
+  <div class="tblwrap"><table>
+    <tr><th>Service</th><th>One-liner</th><th>Our relationship</th></tr>
+    <tr><td><b>Recording</b> ← you are here</td><td>Captures the life stream, lands it durably</td><td>—</td></tr>
+    <tr><td>Data-Processing (DP)</td><td>Raw chunks → timestamped, enriched records (ASR, captions, OCR)</td><td>Our direct consumer: we push C1 envelopes to its <code>/ingest</code></td></tr>
+    <tr><td>Storage</td><td>All durable stores: <code>/raw</code>, <code>/context</code>, <code>/sessions</code>, model directory</td><td>We PUT raw bytes into its <code>/raw</code> — we are the writer while storage stays the owner (D11)</td></tr>
+    <tr><td>Continuum</td><td>Nightly per-user fine-tuning, eval-gated</td><td>Indirect: trains on what we captured, rendered as a "day-log"</td></tr>
+    <tr><td>Input</td><td>Chat surfaces + QueryBuilder</td><td>Owns interactive capture; owns wearable interaction UX</td></tr>
+    <tr><td>Inference</td><td>vLLM + per-user LoRA hot-swap, mentors</td><td>None direct</td></tr>
+    <tr><td>Output</td><td>Delivers answers (text to computer, speech to phone)</td><td>None direct</td></tr>
+    <tr><td>Platform</td><td>Infra, CI, observability backbone, consent policy, deletion orchestration</td><td>Decides consent policy; <b>we enforce it on-device</b>. Runs the Prometheus/Grafana we emit to</td></tr>
+  </table></div>
+</section>
+
+<!-- ============================================================ 02 VOCAB -->
+<section class="module" id="m2">
+  <div class="eyebrow"><span class="lvl">MODULE 02</span> Vocabulary</div>
+  <h2>Speak recording before you read recording</h2>
+  <p class="dek">Five words carry this whole service, and two of them look interchangeable until they bite you. Click each card.</p>
+
+  <div class="vocab">
+    <details open>
+      <summary><span class="w">segment</span><span class="hint">client → server</span></summary>
+      <div class="def"><p>The <b>upload unit</b>: a ~10-second, self-contained media clip a client POSTs to <code>/capture/segments</code>. Its counter is <code>segment_num</code>, dense per capture.</p><p>Self-contained matters: each segment is a complete playable file, so an offline queue can retry any one of them alone, in any order — losing one never poisons the rest.</p></div>
+    </details>
+    <details>
+      <summary><span class="w">chunk</span><span class="hint">server → DP</span></summary>
+      <div class="def"><p>The <b>emission unit</b>: one single-modality piece (one <code>/raw</code> blob + one C1 envelope). The server demuxes each A/V segment into an audio chunk and a video chunk. Its counter is <code>sequence</code>, dense per stream.</p><p>Segment ≠ chunk. One segment typically becomes two chunks.</p></div>
+    </details>
+    <details>
+      <summary><span class="w">stream</span><span class="hint">crosses services</span></summary>
+      <div class="def"><p>One continuous <b>single-modality flow</b> from one device capture — "this phone's audio", "this tab's video". <code>stream_id</code> is a ULID, globally unique, and is the identity that crosses service boundaries. Gap detection lives inside a stream: <code>(stream_id, sequence)</code> must be dense.</p></div>
+    </details>
+    <details>
+      <summary><span class="w">capture</span><span class="hint">never travels past C1</span></summary>
+      <div class="def"><p>One start→stop on a device: press-record→stop, CLI run→Ctrl-C, extension click→click. First-class in our ledger as <code>capture_id</code>; it <b>never crosses the C1 wire</b> (C1 carries <code>stream_id</code>).</p><p>Until 2026-07-29 this was a <i>capture session</i> with a <code>session_id</code> — renamed because that collided with the serve loop's chat <code>session_id</code> (C3/C4). The collision is gone; older docs' dated entries still use the old words.</p></div>
+    </details>
+    <details>
+      <summary><span class="w">record</span><span class="hint">downstream artifact</span></summary>
+      <div class="def"><p>One row in storage <code>/context</code> conforming to the C2 contract — a transcript, a caption, an OCR pass. Data-processing makes them; we never do.</p><p>When DP processes a chunk inline, its reply to our <code>/ingest</code> push lists the <code>record_ids</code> it wrote — the only place we ever see them, and we keep them in the ledger as provenance. Under async ingest the 202 accept carries none; the ids stay derivable rather than stored (a recorded D16 caveat).</p></div>
+    </details>
+    <details>
+      <summary><span class="w">envelope</span><span class="hint">the C1 payload</span></summary>
+      <div class="def"><p>The metadata describing a captured chunk: who, which device and stream, when, and where the bytes live (<code>blob_ref</code>). The bytes themselves never ride the envelope — they're already durable in <code>/raw</code> before the envelope exists.</p></div>
+    </details>
+    <details>
+      <summary><span class="w">ledger</span><span class="hint">our memory</span></summary>
+      <div class="def"><p>The SQLite database (<code>var/ledger.db</code>) tracking captures, segments, streams, and chunks. It stores bookkeeping, never the recordings themselves: which segments arrived, which chunks were sent onward, and what the downstream services acknowledged. The media bytes live in storage.</p><p>Because this bookkeeping is on disk, a crash loses nothing, and the gap report always has receipts to check claims against.</p></div>
+    </details>
+    <details>
+      <summary><span class="w">verdict</span><span class="hint">clean | gaps | recording</span></summary>
+      <div class="def"><p>The gap report's one-word answer for a capture. <span class="pill ok">clean</span> = every segment arrived, every chunk was delivered, and DP has <b>finished</b> processing each one — the C2 records are durably written in storage. An acknowledgement alone is never enough. <span class="pill warn">gaps</span> = something was lost, and the report names exactly what. <span class="pill hot">recording</span> = work still honestly in flight. There is no fourth word.</p></div>
+    </details>
+    <details>
+      <summary><span class="w">demux</span><span class="hint">split, don't interpret</span></summary>
+      <div class="def"><p>Splitting a muxed A/V segment into per-modality chunk files with ffmpeg. Audio is re-encoded to 16&nbsp;kHz mono WAV (the shape ASR natively wants); video is container-copied, never re-encoded. This is the one media transformation we're allowed: we change the packaging, and interpreting the content (transcribing, captioning) stays data-processing's job.</p></div>
+    </details>
+    <details>
+      <summary><span class="w">spool</span><span class="hint">bytes in transit</span></summary>
+      <div class="def"><p>The on-disk staging dir where uploaded segment bytes wait between <b>received</b> (accepted by our server, acked to the client) and <b>emitted</b> (that segment's chunks delivered to both destinations — bytes in storage <code>/raw</code>, C1 envelope pushed to DP). Deleted after emit by default; <code>RECORDING_KEEP_SPOOL=1</code> keeps it — that knob is the designed holdback point for the future consent gate (delete-last-N before anything leaves the device path).</p></div>
+    </details>
+  </div>
+
+  <div class="note">
+    <b class="tag">Why two counters?</b>
+    <p>The client→server leg (<code>segment_num</code> per capture) and the server→DP leg (<code>sequence</code> per stream) are <b>two separate continuity domains</b>, joined by the ledger. A segment a phone dropped shows up as a client-leg hole; downstream C1 streams stay dense by construction, so the gap report is always honest about <i>where</i> a loss happened.</p><p>Why the stream can't just reuse <code>segment_num</code>: a segment can lack a modality — camera off for segment 1 means a video stream numbered by segments would read 0, 2, a hole that looks exactly like a lost chunk. And some sources (the headless carve, the replay plan, the future bodycam link) have no segments at all. Density is the loss alarm, so each counter lives in the namespace where density is guaranteed.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 03 C1 -->
+<section class="module" id="m3">
+  <div class="eyebrow"><span class="lvl">MODULE 03</span> The contract</div>
+  <h2>C1 — the only promise we make</h2>
+  <p class="dek">A contract is a pinned payload shape between two services. Ours is C1, and it has two legs. Click any field in the envelope to see why it exists.</p>
+
+  <h3>Two legs, always in this order</h3>
+  <div class="grid2">
+    <div class="card">
+      <h4>1 · Blob leg — bytes first</h4>
+      <p style="font-size:14px; color:var(--ink-soft)">We <code>PUT</code> the raw bytes to storage <code>/raw/blobs</code>. Storage mints an opaque <code>blob_ref</code> — a claim ticket saying "the bytes are at this locker", idempotent on <code>chunk_id</code>. <b>Bytes go first, always:</b> the envelope announcing a chunk is only sent after storage confirms the deposit, so a reference can never point at bytes that don't exist. The announcement is proof of deposit.</p>
+    </div>
+    <div class="card">
+      <h4>2 · Envelope leg — then the announcement</h4>
+      <p style="font-size:14px; color:var(--ink-soft)">We <b>push</b> the JSON envelope to data-processing <code>POST /ingest</code>: "here are a few seconds of this user's life, and here is where I put the bytes." Delivery is at-least-once; DP dedups on <code>chunk_id</code>.</p>
+    </div>
+  </div>
+
+  <h3>The envelope, annotated</h3>
+  <div class="envelope">
+    <div class="env-json" id="env-json" role="listbox" aria-label="C1 envelope fields"></div>
+    <div class="env-detail">
+      <div class="card" id="env-detail">
+        <h4>← click a field</h4>
+        <p>Every field earned its place through a decision or a bug. The detail panel explains each one.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>The four rules a builder must honour</h3>
+  <ul class="tight">
+    <li><b>Blob first.</b> The bytes are durable in <code>/raw</code> before the envelope is emitted. And because bytes in <code>/raw</code> can be legitimately deleted later (delete-last-N, right-to-be-forgotten), consumers treat "these bytes are gone" as a normal answer.</li>
+    <li><b>At-least-once, dedup on <code>chunk_id</code>.</b> Retries re-send the identical request; both storage and DP are idempotent on <code>chunk_id</code>, so duplicates have exactly-once <i>effect</i>.</li>
+    <li><b><code>sequence</code> is dense, zero-based, +1 per chunk</b> inside a globally-unique <code>stream_id</code>. Any break — including a first-seen value that isn't 0 — means lost chunks. This is the "zero silent loss" mechanism. Ordering and identity are separate jobs — the dedup key is <code>chunk_id</code>.</li>
+    <li><b><code>t_start</code>/<code>t_end</code> are RFC3339 UTC</b> — the canonical instant, the axis every downstream alignment uses. The device's timezone rides <i>beside</i> them (module 07), never instead of them.</li>
+  </ul>
+
+  <div class="note warn">
+    <b class="tag">Prototype posture (D19)</b>
+    <p>The repo deliberately avoids the word "frozen" for contracts: a pinned shape is "stable enough to build against today", never immutable. But changing C1 is not a recording decision — it edits <code>ARCHITECTURE.md §Contracts</code> first, then <code>contracts/*.json</code>, then both owning services' canvases, ratified at the founders' board. Cheap to change ≠ unowned.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 04 CLIENTS -->
+<section class="module" id="m4">
+  <div class="eyebrow"><span class="lvl">MODULE 04</span> The capture surfaces</div>
+  <h2>Three clients, one client-agnostic wire</h2>
+  <p class="dek">All three speak the exact same <code>/capture/*</code> wire. The wire is client-agnostic: a new capture surface requires <b>zero server changes</b>.</p>
+
+  <div class="tabs" role="tablist">
+    <button class="on" data-tab="phone" role="tab" aria-selected="true">📱 Phone web</button>
+    <button data-tab="ext" role="tab" aria-selected="false">🧩 Chrome extension</button>
+    <button data-tab="mac" role="tab" aria-selected="false">💻 Mac CLI</button>
+    <button data-tab="headless" role="tab" aria-selected="false">⚙ Headless / replay</button>
+  </div>
+
+  <div class="tabpanel" id="tab-phone" role="tabpanel">
+    <p><b>What it is:</b> a static, no-build-step web page (<code>clients/web/</code>) served by our own server at <code>/client/</code>, reached from a phone over an HTTPS tunnel. Mic + camera via <code>getUserMedia</code>. It's the <b>bodycam stand-in</b> and the beta tester's press-record surface.</p>
+    <div class="specs">
+      <div><b>segmenting</b> recorder restart every ~10 s (D-M1-1)</div>
+      <div><b>media</b> mp4 H.264+AAC on iOS Safari</div>
+      <div><b>device_id</b> <code>phone-web-&lt;suffix&gt;</code> — suffix minted once, saved in the browser's localStorage, so the same phone keeps the same id</div>
+      <div><b>upload</b> one serialized queue, in-order by construction</div>
+      <div><b>end marker</b> sent on Stop; if the page closes first, the browser's <code>sendBeacon</code> API delivers it as a last gasp</div>
+      <div><b>keep-alive</b> screen wake lock while recording</div>
+    </div>
+    <h4>The decision that shaped it: D-M1-1</h4>
+    <p style="font-size:14.5px">MediaRecorder's <code>timeslice</code> fragments are <b>not self-contained</b> (only the first carries the container header, and iOS is unreliable with timeslice). So the client <b>restarts the recorder</b> every 10 s — each stop yields a standalone playable blob = one durable upload unit. Cost, stated honestly: a ~tens-of-ms capture gap at each restart. The data records it truthfully — <code>segment_num</code> stays dense and the wall-clock spans carry the real gap (<code>t_end[n] &lt; t_start[n+1]</code> by the restart amount).</p>
+    <h4>Failure honesty</h4>
+    <p style="font-size:14.5px">The upload queue is in-memory: a page reload loses queued segments, and the ledger flags <i>exactly which ones</i> (client-leg missing). Retry is forever on network/5xx with exponential backoff (1 s·2ⁿ, cap 30 s); a 4xx is a client bug — surfaced, never retried. IndexedDB persistence is a named later hardening.</p>
+  </div>
+
+  <div class="tabpanel" id="tab-ext" role="tabpanel" hidden>
+    <p><b>What it is:</b> a Chrome MV3 extension (<code>clients/extension/</code>) that records the <b>active browser tab</b> — video + audio in one muxed webm (vp8+opus) stream via <code>chrome.tabCapture</code>. A deliberately <b>passive</b> surface: no content scripts, no DOM access, no static host permissions — it can see nothing about the page except its pixels and sound.</p>
+    <div class="specs">
+      <div><b>capture</b> direct tab capture (D-E7)</div>
+      <div><b>permissions</b> exactly <code>tabCapture</code> · <code>offscreen</code> · <code>storage</code></div>
+      <div><b>device_id</b> <code>ext-chrome-&lt;suffix&gt;</code></div>
+      <div><b>captures</b> one tab = one capture = one muxed stream</div>
+      <div><b>audio</b> AudioContext passthrough keeps the tab audible</div>
+      <div><b>tests</b> 17 deno tests on DI'd ES modules</div>
+    </div>
+    <h4>The pivot worth learning from: D-E7</h4>
+    <p style="font-size:14.5px">The original design used Chrome's desktop screen-picker (<code>desktopCapture</code>). It survived unit tests, adversarial review, and two skeptic rounds — then <b>failed three times on the tester's real browser</b> (Comet). The picker's window list showed only its own window; "Entire Screen" errored; the cross-context stream-id handoff proved inherently fragile. Instead of another patch, the team deleted the whole picker path and pivoted to <code>tabCapture</code>, the most stable Chromium capture primitive. It worked on the first real run.</p>
+    <h4>Accepted trade-off</h4>
+    <p style="font-size:14.5px">The extension captures a browser <i>tab</i>, not the whole desktop. Full-screen capture is the mac CLI's job. Escape hatch worth knowing: a recording pointed at a bad server URL retries forever by design — the <b>Discard unsent</b> button (draining state only) is how a user bails out.</p>
+  </div>
+
+  <div class="tabpanel" id="tab-mac" role="tabpanel" hidden>
+    <p><b>What it is:</b> a single-file, stdlib-only Python CLI (<code>clients/mac/nucleus_capture.py</code>, ~725 lines). ffmpeg's avfoundation captures screen + mic, cuts ~10 s self-contained mp4 segments into a spool dir, and a Python uploader thread speaks the same wire. Full-desktop capture lives here.</p>
+    <div class="specs">
+      <div><b>deps</b> python3 ≥3.9 + <code>brew install ffmpeg</code>, nothing else</div>
+      <div><b>timestamps</b> duration-chained from a wall-clock anchor (D-F2)</div>
+      <div><b>completeness</b> a segment uploads once the next numbered file exists (D-F4)</div>
+      <div><b>device_id</b> <code>mac-cli-&lt;suffix&gt;</code> in <code>~/.nucleus/</code></div>
+      <div><b>stop</b> Ctrl-C once = graceful drain; twice = polite abandon</div>
+      <div><b>exit codes</b> 0 clean · 2 gaps · 1 error</div>
+    </div>
+    <h4>Three clever bits</h4>
+    <ul class="tight" style="font-size:14.5px">
+      <li><b>Duration chaining (D-F2):</b> anchor = wall-clock at capture start; then <code>t_end[n] = t_start[n] + duration[n]</code> (ffprobe per segment), <code>t_start[n+1] = t_end[n]</code>. Capture IS continuous here (unlike the phone's restart gaps), so exact adjacency is honest — and it doubles as a continuity signal.</li>
+      <li><b><code>--source test</code> (D-F3):</b> ffmpeg can synthesize media out of thin air — a moving test-pattern video and a pure tone. This flag swaps only the capture <i>input</i> for those generators; the encoding, 10-second segmenting, uploading and server demux are the identical code path a real screen recording takes. It's how our headless dev server (no screen, no mic) E2E-tests the client, and how a mac user smoke-tests the connection before granting any permissions.</li>
+      <li><b>Upload-when-finished (D-F4):</b> the CLI must never upload a file ffmpeg is still writing. It leans on a guarantee of ffmpeg's segment writer: file N+1 is only opened after file N is finished, so "the next numbered file exists" proves the previous one is complete — and when ffmpeg exits, everything left is final. No filesystem watchers, no size-polling guesswork.</li>
+    </ul>
+    <h4>Alpha war story</h4>
+    <p style="font-size:14.5px">First real run: <b>zero segments ever finalized</b>. The screen device refused <code>-framerate 15</code>, ffmpeg derived a garbage output rate, duplicated frames endlessly, and the segment muxer — which cuts on <i>media time</i> — never reached 10 media-seconds. Fix: pin the output rate with an <code>fps=</code> filter regardless of what the device negotiates. Also observed and documented: segment 0 spans ~18 s (device warm-up — audio flows before the first video frame). First-segment-only; the time axis stays continuous.</p>
+  </div>
+
+  <div class="tabpanel" id="tab-headless" role="tabpanel" hidden>
+    <p><b>What it is:</b> the server's own capture modes — no human device involved.</p>
+    <ul class="tight" style="font-size:14.5px">
+      <li><b><code>POST /capture/run</code></b> — the original M0 path: carve a continuous WAV (or a synthetic tone) into chunks and emit them through the same blob-first + C1 path. It's how the learn loop gets smoke-tested, and where <b>VAD-cut chunking</b> lives (module 05).</li>
+      <li><b>The replay source</b> (<code>app/sources/replay_source.py</code>) — re-emits an already-recorded day of audio from a plan file, chunk by chunk, with the plan's original timestamps. Built for Phase-3 dogfooding: the rest of the pipeline <i>cannot tell it apart from a live capture</i>, which is exactly the property the experiment needed. One plan = one capture = one stream, dense sequence — what an always-on capture actually looks like.</li>
+    </ul>
+    <div class="note warn" style="margin-top:14px"><b class="tag">Status — what stays, what retires</b><p>The replay source is a validation rig: no production path hits it, and it stays useful for pipeline regression. The <code>/capture/run</code> endpoint is dev and smoke tooling and may eventually retire. The carve machinery underneath them is different — VAD-cut chunking is the ratified production design (D-M1-2) for any source where the server owns a continuous feed, which is exactly the future bodycam device link. Test paths on top; the front half of M3 underneath.</p></div>
+    <h4>The seam that makes new surfaces cheap</h4>
+    <p style="font-size:14.5px">Both are <code>ChunkSource</code>s — the registry pattern in <code>app/sources/__init__.py</code>. A source owns <i>modality</i> concerns (how a stream is captured and carved, each chunk's wall-clock span); the emit path owns <i>stream</i> concerns (<code>stream_id</code> minting, dense <code>sequence</code>, hashing, blob-first PUT, validated C1 push). Adding a modality = drop one new file + register one line. The emit path and the C1 wire never change. This is the seam a future wearable or webcam source plugs into.</p>
+  </div>
+
+  <h3>Same wire, compared</h3>
+  <div class="tblwrap"><table>
+    <tr><th>Surface</th><th>Captures</th><th>Segmenting</th><th>Stream(s) after demux</th><th>Alpha result</th></tr>
+    <tr><td>Phone web</td><td>mic + camera (or mic-only)</td><td>fixed ~10 s, recorder restart</td><td>audio + video</td><td><span class="pill ok">clean</span> 4/4 segs, real iPhone via tunnel</td></tr>
+    <tr><td>Extension</td><td>active tab (video + audio)</td><td>fixed ~10 s, muxed webm</td><td>audio + video</td><td><span class="pill ok">clean</span> 7/7 segs, real ASR of tab audio</td></tr>
+    <tr><td>Mac CLI</td><td>screen + mic</td><td>ffmpeg <code>-f segment</code>, forced keyframes</td><td>audio + video</td><td><span class="pill ok">clean</span> 7/7 segs, pixels verified in VLC</td></tr>
+    <tr><td>Headless / replay</td><td>WAV file · synthetic tone · replay plan</td><td>VAD carve [5–30 s] or fixed</td><td>audio</td><td>M0 exit criterion met, idempotency proven</td></tr>
+  </table></div>
+</section>
+
+<!-- ============================================================ 05 EXPLORER -->
+<section class="module" id="m5">
+  <div class="eyebrow"><span class="lvl">MODULE 05</span> Inside the server</div>
+  <h2>Life of a segment — the interactive path</h2>
+  <p class="dek">This is the heart of the guide. Pick a client and a scenario, then step through what actually happens — including every failure path the service was designed around. The verdict chip shows what the gap report would say at each moment.</p>
+
+  <div class="explorer">
+    <div class="exp-controls">
+      <div>
+        <label for="exp-client">Client</label>
+        <select id="exp-client">
+          <option value="phone">Phone web (camera + mic)</option>
+          <option value="ext">Chrome extension (browser tab)</option>
+          <option value="mac">Mac CLI (screen + mic)</option>
+          <option value="headless">Headless server run (WAV file)</option>
+        </select>
+      </div>
+      <div>
+        <label for="exp-scenario">Scenario</label>
+        <select id="exp-scenario"></select>
+      </div>
+      <div class="btns">
+        <button id="exp-back" aria-label="Previous step">◂ Back</button>
+        <button id="exp-next" class="primary" aria-label="Next step">Step ▸</button>
+        <button id="exp-reset" aria-label="Restart scenario">↺ Reset</button>
+      </div>
+    </div>
+    <div class="stations" id="exp-stations" aria-hidden="true"></div>
+    <div class="exp-log" id="exp-log" aria-live="polite">
+      <div class="step-title">Ready</div>
+      <div class="step-body">Choose a scenario and press <b>Step</b>. Each step names the exact code that runs.</div>
+    </div>
+    <div class="exp-status">
+      <span style="font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-faint)">report verdict:</span>
+      <span class="verdict-chip none" id="exp-verdict">—</span>
+      <span class="exp-progress" id="exp-progress"></span>
+    </div>
+  </div>
+
+  <h3>The pieces you just watched, named</h3>
+  <p style="font-size:14px; color:var(--ink-soft)">Six files carry the whole path. Tap a card to turn it over.</p>
+  <div class="grid2 flipdeck">
+    <button class="flip" aria-expanded="false"><span class="flip-inner">
+      <span class="flip-front"><code>capture_web.py</code><small>the wire · tap to turn</small></span>
+      <span class="flip-back"><b>capture_web.py — the wire</b><p>This is the router every client talks to. It accepts segment uploads and makes them durable before answering, records end markers, lists captures, builds the gap report, and offers the two recovery verbs — <code>/retry</code> for failed segments and <code>/redrive</code> for chunks stuck at "accepted".</p><p>It is also the bouncer: a made-up timezone like <code>PST</code> is turned away right here with a 400, while the client is still on the line to see the error instead of a renderer choking on it weeks later.</p></span>
+    </span></button>
+    <button class="flip" aria-expanded="false"><span class="flip-inner">
+      <span class="flip-front"><code>ledger.py</code><small>the memory · tap to turn</small></span>
+      <span class="flip-back"><b>ledger.py — the memory</b><p>One SQLite file that remembers everything operational: which captures exist, which segments arrived, which streams and chunks were minted, and what the downstream services acknowledged. It never holds the recordings themselves — the media bytes belong to storage.</p><p>Every claim is written to disk before the action that depends on it, which is why a crash can always be replayed from here. Chunk identities are minted in this file before the first emit attempt, so a retry re-uses them instead of inventing new ones.</p></span>
+    </span></button>
+    <button class="flip" aria-expanded="false"><span class="flip-inner">
+      <span class="flip-front"><code>emitter.py</code><small>the worker · tap to turn</small></span>
+      <span class="flip-back"><b>emitter.py — the worker</b><p>Each capture gets one background worker that drains its segments strictly in upload order, while different captures run side by side. When a segment fails, the worker records the failure and moves on — one bad segment never blocks the rest of the capture.</p><p>Before making any network call for a segment, it allocates every chunk's identity up front. That small discipline is what lets a retried segment slot back into its original position in the stream.</p></span>
+    </span></button>
+    <button class="flip" aria-expanded="false"><span class="flip-inner">
+      <span class="flip-front"><code>demux.py</code><small>the splitter · tap to turn</small></span>
+      <span class="flip-back"><b>demux.py — the splitter</b><p>Takes one uploaded segment and splits it into per-modality files with ffmpeg. It asks ffprobe what tracks actually exist rather than trusting the upload's mime type — a "video/mp4" upload can genuinely contain only audio when the camera was off.</p><p>Audio is re-encoded to 16 kHz mono WAV, the shape the speech models natively consume. Video is copied out without re-encoding, so no quality is ever lost. A 120-second timeout stops a wedged ffmpeg from stalling the capture's worker.</p></span>
+    </span></button>
+    <button class="flip" aria-expanded="false"><span class="flip-inner">
+      <span class="flip-front"><code>carve.py</code><small>VAD chunking · tap to turn</small></span>
+      <span class="flip-back"><b>carve.py — VAD chunking</b><p>For continuous audio the server itself owns — the headless run today, the bodycam feed later — this module chooses where to cut. It measures loudness over ~30 ms windows, learns the stream's own noise floor, finds the pauses, and cuts at pause midpoints so no word is ever split. Each chunk lands between 5 and 30 seconds.</p><p>It is deliberately simple, deterministic and dependency-free. A real VAD model can replace it later behind the same <code>find_cuts</code> seam without anything else changing.</p></span>
+    </span></button>
+    <button class="flip" aria-expanded="false"><span class="flip-inner">
+      <span class="flip-front"><code>clients.py</code><small>downstream I/O · tap to turn</small></span>
+      <span class="flip-back"><b>clients.py — downstream I/O</b><p>The two HTTP clients the emitter uses — one for storage, one for data-processing — with the at-least-once retry loop built in: four attempts with a small backoff, and only for transient trouble like network errors and 5xx responses.</p><p>A 4xx means our own request was malformed, so it surfaces immediately instead of being retried — repeating a broken request can never fix it. Every retry re-sends the identical call, which is what keeps <code>chunk_id</code> and <code>sequence</code> stable across attempts.</p></span>
+    </span></button>
+  </div>
+
+  <h3>How the verdict is computed</h3>
+  <p>The report joins <b>both legs plus a live DP cross-check</b> (<code>GET /continuity/{stream_id}</code> on data-processing, 2 s budget, best-effort):</p>
+  <pre><code>clean      = capture ended
+           ∧ no client-leg hole (missing_count == 0)
+           ∧ every received segment emitted (none failed)
+           ∧ every DP-checked stream: nothing missing-unacked,
+             nothing dead-lettered, nothing merely "accepted"
+
+recording  = not ended, or work honestly in flight
+gaps       = anything lost — and the report names exactly what</code></pre>
+  <p>Read that carefully: <b><code>clean</code> is earned, never assumed.</b> The report is also honest about what it could not check: each stream's DP block carries a <code>checked</code> flag. <code>checked: true</code> means data-processing answered the live continuity question; <code>checked: false</code> means it was unreachable, and the report makes no claim in either direction. Absence of evidence is reported as exactly that, never turned into a verdict.</p>
+</section>
+
+<!-- ============================================================ 06 ASYNC -->
+<section class="module" id="m6">
+  <div class="eyebrow"><span class="lvl">MODULE 06</span> Hard-won correctness</div>
+  <h2>The async seam, and why crashes lose nothing</h2>
+  <p class="dek">Two designs here look fussy until you see the failure they close. Both are ratified decisions — D16 at the founders' board, R-2 locally — each with a named failure mode it exists to kill.</p>
+
+  <h3>The 202 problem</h3>
+  <p>In inline mode — today's fleet default — DP does all of its work <i>inside</i> our <code>/ingest</code> request, and the <code>200 {record_ids}</code> reply only comes back once the records are durably written. That couples our capture cadence to DP's processing time: transcription for audio, captioning and OCR for video, whatever the pipeline runs for that chunk. DP's async mode (<code>INGEST_ASYNC</code>) decouples the two — DP answers <code>202 {accepted}</code> immediately and does the work on a worker pool.</p>
+  <p><b>But a 202 opens a silent-loss window:</b> DP said "got it", then could crash before processing. If we treated "accepted" as "done", a lost chunk would read <span class="pill ok">clean</span> forever. The rule that closes it — agreed at the founders' board and now part of the wire's contract (D16):</p>
+  <div class="note hot">
+    <b class="tag">The invariant (decision D16)</b>
+    <p><code>dp_acked = 1</code> ⇔ <b>the C2 record is durably written</b>. An accepted-but-unconfirmed chunk keeps <code>dp_acked = 0</code>, <code>dp_state = 'accepted'</code> — and the verdict stays <span class="pill hot">recording</span>, never <span class="pill ok">clean</span>. Confirmation happens later, when DP's <code>/continuity</code> reports the chunk processed — and we <i>persist</i> that promotion, so a DP restart (whose in-memory sets are volatile) can never un-confirm what we know landed.</p>
+  </div>
+  <p>The safety valve is <b>re-drive</b> (<code>POST /capture/captures/{id}/redrive</code>): re-push each accepted-but-unconfirmed chunk's <i>original</i> C1 envelope and let DP's dedup sort out the truth. One of three things happens to each chunk:</p>
+  <ul class="tight" style="font-size:14.5px">
+    <li><b>DP already processed it</b> — the push short-circuits to <code>200 {record_ids}</code>, and we mark the chunk confirmed.</li>
+    <li><b>DP still has it queued</b> — we get another 202, and the chunk simply stays "accepted" until the next check.</li>
+    <li><b>DP genuinely lost it</b> — the push re-claims the chunk, and DP processes it now.</li>
+  </ul>
+  <p>The bytes never travel again — they are already durable in <code>/raw</code>. Only the small envelope is re-sent.</p>
+  <p><span class="pill dim">status</span>&nbsp; <code>INGEST_ASYNC</code> is <b>off by default</b> — inline is the shipped path today. Nothing further needs deciding before the flip; what remains is operational: a founders' go, one re-drive drill run against the live fleet, and retiring the <code>RECORDING_HTTP_TIMEOUT=120</code> override that inline mode needs (it reverts to 30 s). The item sits on the recording board's next-list.</p>
+
+  <h3>Crash safety — the three-legged stool</h3>
+  <div class="grid3">
+    <div class="card">
+      <h4>1 · Spool before ledger</h4>
+      <p style="font-size:13.5px; color:var(--ink-soft)">The ack contract is "spool + ledger row are durable". The spool is written <i>first</i> (atomic <code>.part</code> rename, content-addressed name). If the row committed first, a crash between the two would make the client's retry hit the duplicate branch and <b>ack bytes that exist nowhere</b>. Found by adversarial review, fixed, regression-tested.</p>
+    </div>
+    <div class="card">
+      <h4>2 · Identity before emit</h4>
+      <p style="font-size:13.5px; color:var(--ink-soft)"><code>chunk_id</code> + <code>sequence</code> are minted and persisted in the ledger <i>before</i> the first emit attempt. A retry or a post-restart re-emit uses the <b>same identity</b> — idempotent downstream, no fabricated gaps, no double blobs.</p>
+    </div>
+    <div class="card">
+      <h4>3 · Re-enqueue at startup</h4>
+      <p style="font-size:13.5px; color:var(--ink-soft)">On boot, <code>reenqueue_pending()</code> re-queues every segment still in state <code>received</code> (acked, never emitted). An ack-then-crash loses nothing. <code>failed</code> stays failed until an explicit <code>/retry</code> — failure stays a visible state that someone explicitly resolves.</p>
+    </div>
+  </div>
+
+  <h3>One more reconciliation worth knowing</h3>
+  <p>DP's continuity tracker was originally in-memory. A mid-capture DP restart made it report already-delivered chunks as a permanent leading gap — verdict <span class="pill warn">gaps</span> forever, falsely. The report now reconciles DP's "missing" claim against <b>our own persisted ack receipts</b>: a sequence counts as lost only if DP misses it AND we hold no confirmed ack (<code>dp.missing_unacked</code>). DP has since grown its own durable journal, so the guarantee is durable on both legs — and our reconciliation stays as belt-and-suspenders.</p>
+</section>
+
+<!-- ============================================================ 07 CIVIL TIME -->
+<section class="module" id="m7">
+  <div class="eyebrow"><span class="lvl">MODULE 07</span> Civil time</div>
+  <h2>The device owns the fact of where you were</h2>
+  <p class="dek">A timezone bug here doesn't crash anything. It silently trains a model on the wrong shape of someone's day. That's why this one decision (D17) touches four services.</p>
+
+  <h3>The problem, from first principles</h3>
+  <p>All timestamps are UTC — correct for ordering and range queries. But the nightly trainer renders a human-readable "day-log" with anchors like <i>"On Tuesday, around 09:00–09:20 local time…"</i>. UTC alone can answer "the last 24 hours"; it <b>cannot</b> answer "the user's Tuesday morning". So beside every UTC instant, the system needs to know which timezone the moment was lived in — and only one party can know that.</p>
+
+  <h3>The split that solves it</h3>
+  <div class="grid2">
+    <div class="card">
+      <h4>The fact — where the user physically was</h4>
+      <p style="font-size:14px; color:var(--ink-soft)">Owned by <b>the capturing device</b> — the only thing that can know it. Every client reports <code>device_tz</code> (an IANA id like <code>Asia/Tokyo</code>) and <code>device_utc_offset_minutes</code> with each <b>segment</b> it uploads; the server copies them onto every chunk demuxed from that segment, and C1 carries them onward per chunk. In the browser clients this is a single line of code: <code>Intl.DateTimeFormat().resolvedOptions().timeZone</code>.</p>
+    </div>
+    <div class="card">
+      <h4>The policy — when the user's "night" is</h4>
+      <p style="font-size:14px; color:var(--ink-soft)">Owned by <b>storage</b>, as the per-user profile value <code>home_tz</code> (contract C12). It schedules the nightly training cycle and serves as the <i>fallback</i> when a record carries no device zone. The user <b>declares</b> it themselves. An earlier design had the system guess it from the first device report; the founders reversed that (D19), because a guessed zone can never be corrected by the person who knows, while a declared one can. And it does not move when they travel.</p>
+    </div>
+  </div>
+
+  <p style="margin-top:16px">The travel test decides everything. Say your <code>home_tz</code> is Los Angeles and the nightly training cycle fires at 4:00 AM home time — a fixed moment each day, so every training window covers exactly one 24-hour slice of your life. You fly to Tokyo, nine time zones ahead. Every segment you capture there carries <code>device_tz: Asia/Tokyo</code>, so the day-log renders those mornings as Tokyo mornings — the <i>fact</i> travels with you.</p>
+  <p>Now imagine <code>home_tz</code> had followed you instead. "4:00 AM" would suddenly mean 4:00 AM <i>Tokyo</i> time, which is nine hours earlier on the absolute clock. The night you land, the boundary fires 9 hours sooner than yesterday's boundary did — so that training window covers only 15 hours of your life. When you fly home and the zone snaps back, the opposite happens and one window stretches to 33 hours. Two distorted "days" would enter the model's weights for no reason except bookkeeping. Keeping <code>home_tz</code> declared and unmoving means every window stays a clean 24 hours, while the Tokyo mornings still render correctly from the per-segment facts. <b>Correct under travel, by construction.</b></p>
+
+  <h3>What recording enforces at the edge</h3>
+  <ul class="tight">
+    <li><b><code>PST</code> is rejected with a 400.</b> Abbreviations are ambiguous and DST-sensitive; IANA ids only. Rejecting at the capture edge beats a renderer blowing up weeks later, far from the client that sent it. (Live-verified: <code>Asia/Tokyo</code> accepted and persisted; <code>PST</code> → 400.)</li>
+    <li><b>Absent is honest.</b> A client that can't know its zone omits the fields entirely — no null, no guess — and downstream falls back to the declared <code>home_tz</code>. The same discipline covers old ledger rows written before clients reported zones: they stay empty rather than being backfilled, because the only guess available would be the timezone of the machine our server runs on — and that says where the server lives, never where the user was.</li>
+    <li><b>The offset rides along</b> because it is not derivable from the zone: it's the independent witness of what the device <i>believed</i>, the only way to detect stale tzdata after the fact.</li>
+    <li><b>Re-driven chunks carry their original zone</b> — the emitter joins the segments table so a re-push can never re-derive a fresher, wrong zone.</li>
+  </ul>
+
+  <div class="note">
+    <b class="tag">Why this module is in a recording guide</b>
+    <p>Because we're the origin. The zone travels C1 → C2 (data-processing copies it <i>verbatim</i>, no timezone logic allowed there) → storage columns → continuum's renderer. Four services carry it; only our clients can create it. If a new capture surface forgets its one line of timezone code, the whole chain degrades to fallback — silently correct-looking, subtly wrong under travel.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 08 DECISIONS -->
+<section class="module" id="m8">
+  <div class="eyebrow"><span class="lvl">MODULE 08</span> Judgment layer</div>
+  <h2>The decisions that made this service — and their ripples</h2>
+  <p class="dek">This repo's culture: every choice is written down, numbered, and cited — never restated. D-numbers are founders' decisions; R/D-M1/D-E/D-F are ours. Scroll the timeline.</p>
+
+  <div class="timeline">
+    <div class="tl-card"><div class="d">D4 · D5</div><div class="t">The device shape</div><p>Wearable = camera + mic, <b>no speaker</b> (no market bodycam has one). Speech output routes to the phone → Bluetooth. The mobile app ships in v0 — but only mobile <i>screen capture</i> is deferred (iOS forbids it).</p><div class="when">2026-07-09</div></div>
+    <div class="tl-card"><div class="d">D10 · D11</div><div class="t">The skeleton + the two legs</div><p>First learn-loop path: computer mic → ASR → /context, nothing else. C1 split into blob leg + envelope leg; push, at-least-once, dedup on chunk_id, gaps via dense (stream_id, sequence).</p><div class="when">2026-07-09</div></div>
+    <div class="tl-card"><div class="d">D13</div><div class="t">Consent gate → back burner</div><p>Consent/deletion lands <b>before any non-team pilot user</b>, not before beta — beta testers are consenting teammates. The M2 red-team exit bar is unchanged whenever it lands.</p><div class="when">2026-07-18</div></div>
+    <div class="tl-card"><div class="d">D-M1-1</div><div class="t">Segmented recorder</div><p>MediaRecorder timeslice fragments aren't self-contained → restart the recorder every ~10 s. Each stop = one standalone, durable upload unit.</p><div class="when">2026-07-18</div></div>
+    <div class="tl-card"><div class="d">D-M1-2</div><div class="t">VAD-cut chunking (OQ4)</div><p>Chunking decided per source: server-owned audio = VAD cuts in [5–30 s]; phone = fixed 10 s edge segments; video = fixed windows. Pause-aligned cuts made overlap unnecessary.</p><div class="when">2026-07-18</div></div>
+    <div class="tl-card"><div class="d">D-M1-3</div><div class="t">Ledger = SQLite</div><p>Bookkeeping only — which segments arrived, which chunks went out, what was acknowledged. WAL, crash-safe identity minting. The media bytes stay with storage /raw.</p><div class="when">2026-07-18</div></div>
+    <div class="tl-card"><div class="d">D14 / R-1</div><div class="t">Segmented HTTP transport</div><p>Our path is the loss-intolerant <b>archive/training</b> job — the Axon-bodycam pattern. Low-latency live view (the Ring/Nest pattern) is a different job we deliberately don't run. Streaming ingest (WebSocket/RTSP/SRT) is a deferred <i>additive</i> leg; C1 deliberately begins after transport.</p><div class="when">2026-07-19</div></div>
+    <div class="tl-card"><div class="d">D-E7</div><div class="t">The extension pivot</div><p>Desktop screen-picker failed 3× on a real browser → deleted, replaced with direct tabCapture. Passed on the first real run. Lesson: prove capture surfaces on real hardware first.</p><div class="when">2026-07-19</div></div>
+    <div class="tl-card"><div class="d">D16 / R-2</div><div class="t">The async ingest wire</div><p>DP may ACK 202 before processing. Non-negotiable invariant: <code>dp_acked</code> ⇔ C2 durably written. Ratification condition: a named + drilled re-drive path — built in-slice.</p><div class="when">2026-07-19</div></div>
+    <div class="tl-card"><div class="d">D9 → M6</div><div class="t">Observability emission</div><p>Every service exposes /metrics + owns its dashboard JSON; platform runs the one shared Prometheus/Grafana. Our emission shipped 2026-07-19; the shared backbone is still unbuilt.</p><div class="when">2026-07-19</div></div>
+    <div class="tl-card"><div class="d">D17</div><div class="t">Civil-time custody</div><p>The device owns the fact (device_tz per chunk), storage owns the policy (home_tz). UTC stays canonical. PST rejected 400 at our edge.</p><div class="when">2026-07-26</div></div>
+    <div class="tl-card"><div class="d">D19</div><div class="t">Stage: PROTOTYPE</div><p>Nothing is set in stone, contracts included — but nothing goes unrecorded either, and "built" is never claimed for "decided". Every charter carries the banner.</p><div class="when">2026-07-27</div></div>
+  </div>
+
+  <h3>Where our choices ripple into other services</h3>
+  <div class="grid3">
+    <div class="card ripple">
+      <div class="svc">→ Data-Processing</div>
+      <ul>
+        <li><b>Demux shape is DP's ask:</b> audio lands as 16 kHz mono WAV because Whisper, pyannote and AST are all 16 kHz-native — a higher rate buys the models nothing (charter OQ3, resolved jointly). Video is container-copied to avoid generational loss.</li>
+        <li><b>VAD pairing:</b> our pause-aligned cuts pair with DP's VAD gate before ASR (silence → honest empty transcript, kills Whisper's silence hallucination).</li>
+        <li><b>Our gap report queries DP live</b> (<code>/continuity</code>) — their break/dup detector is the other half of our loss guarantee.</li>
+        <li><b>ASR language pinning</b> exists because our real phone capture surfaced Whisper hallucinating Hindi/Korean script on faint room audio → DP grew <code>ASR_LANGUAGE</code>.</li>
+      </ul>
+    </div>
+    <div class="card ripple">
+      <div class="svc">→ Storage</div>
+      <ul>
+        <li><b>We write /raw; storage owns it</b> (D11). Blob-first ordering is what lets storage mint <code>blob_ref</code> idempotently on <code>chunk_id</code>.</li>
+        <li><b>Production lean (OQ8, open):</b> storage mints signed GCS URLs and clients upload directly — bytes bypass storage's process. Until then everything proxies through <code>PUT /raw/blobs</code>, which caps at tens-of-GB/day/user scale.</li>
+        <li><b>Our device_tz columns</b> persist beside every UTC instant in /context — storage stores the fact we captured, and C12's <code>home_tz</code> is only the fallback.</li>
+        <li><b>Deletion:</b> storage owns purge primitives for /raw; our delete-last-N (M2) will lean on them for anything already uploaded — the holdback buffer exists so it usually won't have to.</li>
+      </ul>
+    </div>
+    <div class="card ripple">
+      <div class="svc">→ Continuum</div>
+      <ul>
+        <li><b>Everything it trains on started here.</b> The day-log's anchored blocks render from records whose spans and zones we stamped. A wrong <code>t_start</code> is a scene on the wrong Tuesday.</li>
+        <li><b>A silent capture gap = an un-trainable hole</b> in the user's life the model never learns — discovered too late to re-capture. That's the mission sentence behind the verdict machinery.</li>
+        <li><b>Chunk granularity is a cost lever:</b> escalation E-1 asks for <code>--segment-seconds 10→60</code> — the single largest processing-cost lever measured (5.8×) — but it moves the audio leg too, so it's a joint call with DP-audio, parked with the founders.</li>
+        <li><b>The replay source exists for continuum's sake:</b> Phase-3 proved the whole pipeline on a real recorded day by replaying it through our unmodified emit path.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note">
+    <b class="tag">Culture note — how decisions work here</b>
+    <p>A decision inside our chartered autonomy gets an R-number in <code>services/recording/DECISIONS.md</code>. Anything that re-cuts a charter, moves a contract, or binds a sibling is <b>not ours to settle</b> — it's proposed in the root <code>HANDOFF.md §Escalations</code> and ratified at a founders' session with a D-number. A decision is never rewritten to say something different; it's superseded by a new numbered row. When you see "D-E7" in a comment, you can trace exactly why the code is shaped that way.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 09 OBSERVABILITY -->
+<section class="module" id="m9">
+  <div class="eyebrow"><span class="lvl">MODULE 09</span> Observability</div>
+  <h2>We emit; platform watches (once it builds the watcher)</h2>
+  <p class="dek">D9's split: every service instruments itself and owns its dashboard; platform runs the one shared Prometheus + Grafana both founders open.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h4>What we emit at <code>/metrics</code></h4>
+      <ul class="tight" style="font-size:13.5px">
+        <li><b>HTTP baseline:</b> request rate by route/status + latency histograms — via a pure-ASGI middleware that never touches response bodies, with route templating so cardinality stays one series per route, not per session id.</li>
+        <li><b>Capture health (ledger-derived, at scrape time):</b> segments by state, chunks by modality, chunks by DP state (accepted/processed/unemitted), captures total/active, client-leg missing + duplicate deliveries.</li>
+        <li><b>Pipeline:</b> segment received→fully-emitted latency histogram; downstream retry counter per target service.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Choices worth copying</h4>
+      <ul class="tight" style="font-size:13.5px">
+        <li><b>Zero dependencies:</b> a ~300-line in-house registry + renderer (<code>app/metrics.py</code>) instead of pulling <code>prometheus_client</code> into the pinned requirements — the headless CI suite stays dependency-free.</li>
+        <li><b>Pull-time gauges:</b> ledger counts are computed at scrape, memoized 1 s, so a scrape does one ledger pass instead of seven.</li>
+        <li><b>A metric must never break the request</b> — every observation path is wrapped so telemetry can't fail the emit.</li>
+      </ul>
+    </div>
+  </div>
+
+  <p style="margin-top:16px">The dashboard (<code>dashboards/recording.json</code>) ships panels for capture health, emit latency p50/p95, downstream retries, request rates and 5xx. <b>The catch:</b> platform's shared backbone is still <span class="pill dim">designed</span> and unbuilt — nobody has a Grafana URL yet, which is exactly why our M6 milestone's exit criterion ("scraped by the shared Prometheus") stays open even though our emission half is done and tested. It's item 2 on the founders' board.</p>
+</section>
+
+<!-- ============================================================ 10 OPEN BOARD -->
+<section class="module" id="m10">
+  <div class="eyebrow"><span class="lvl">MODULE 10</span> The honest board</div>
+  <h2>What's open — and why that's an invitation</h2>
+  <p class="dek">This service is alpha-complete, and the road from here is real work someone gets to own. Everything below is named and unclaimed. If one of these makes you lean in — that's your first project.</p>
+
+  <h3>Milestones, honestly stated</h3>
+  <div class="tblwrap"><table>
+    <tr><th>M</th><th>Deliverable</th><th>State</th><th>What's actually left</th></tr>
+    <tr><td>M0</td><td>Ingest spine</td><td><span class="pill ok">built</span></td><td>— (blob-first, idempotent retry, proven E2E)</td></tr>
+    <tr><td>M1</td><td>Computer capture</td><td><span class="pill warn">partial</span></td><td>Webcam capture, the pairing flow, a full-workday soak (alpha was minutes), a mac menu-bar GUI app with a visible capture indicator</td></tr>
+    <tr><td>M2</td><td>Consent controls</td><td><span class="pill dim">deferred (D13)</span></td><td>Pause / mute / delete-last-N + holdback buffer + always-visible indicator. Red-team exit bar: delete-last-10-min leaves zero bytes server-side; pause ≤ 2 s; no bypass path. Lands before any non-team pilot.</td></tr>
+    <tr><td>M3</td><td>Wearable body cam</td><td><span class="pill dim">not started</span></td><td>The hardware pick itself (OQ1: off-the-shelf SDK cam vs RPi-class custom), capture firmware, buffering, opportunistic upload, a full-day wear test with battery/thermal numbers</td></tr>
+    <tr><td>M4</td><td>Browser extension</td><td><span class="pill ok">essentially met</span></td><td>Consent path rides M2</td></tr>
+    <tr><td>M5</td><td>Fleet telemetry + hardening</td><td><span class="pill dim">not started</span></td><td>Capture-health dashboard, automatic gap/staleness alerting, crash watchdogs, 7-day pilot fleet soak. Also: ledger retention/compaction (rows are currently permanent)</td></tr>
+    <tr><td>M6</td><td>Metrics + dashboard</td><td><span class="pill warn">emission done</span></td><td>Exit criterion needs platform's D9 backbone to exist and scrape us</td></tr>
+  </table></div>
+
+  <h3>Open questions &amp; escalations</h3>
+  <div class="board">
+    <div class="bd-item"><div class="hd"><span class="pill hot">E-1</span><b>Segment length 10→60 s</b></div><p>The single largest cost lever measured: 5.8×. Moves the audio leg too → joint call with DP-audio, parked at the founders' board.</p></div>
+    <div class="bd-item"><div class="hd"><span class="pill hot">E-6</span><b>Auto-retry of failed segments</b></div><p>A DP 503 is recoverable back-pressure, but our 4-attempt/0.25 s-backoff client makes it terminal in ~1.5 s — then waits for a manual <code>/retry</code>. A periodic re-drive of <code>failed</code> is the ask.</p></div>
+    <div class="bd-item"><div class="hd"><span class="pill info">OQ1</span><b>Wearable hardware pick</b></div><p>Off-the-shelf bodycam with an SDK vs a small custom build. Drives buffering, codec, and upload design. Decide before M3.</p></div>
+    <div class="bd-item"><div class="hd"><span class="pill info">OQ2</span><b>Delete-after-upload</b></div><p>v0 lean: an on-device holdback buffer (upload only after the delete window expires) so deletion never needs downstream cooperation.</p></div>
+    <div class="bd-item"><div class="hd"><span class="pill info">OQ6</span><b>Device identity &amp; auth</b></div><p>Today device_ids are self-minted and nothing authenticates. Platform-owned identity with device-scoped tokens vs self-issued until platform exists.</p></div>
+    <div class="bd-item"><div class="hd"><span class="pill info">OQ7</span><b>Bystander policy</b></div><p>Two-party-consent jurisdictions, mute zones, indicator norms. Platform decides, we enforce. Needed before M3 wear tests.</p></div>
+    <div class="bd-item"><div class="hd"><span class="pill info">OQ8</span><b>Direct-to-GCS upload</b></div><p>The remaining piece of the /raw path: storage mints a signed URL, clients upload straight to GCS. Needed before tens-of-GB/day/user scale. (The demux half is built.)</p></div>
+    <div class="bd-item"><div class="hd"><span class="pill info">OQ9</span><b>Capture-everything vs gated</b></div><p>Research question: does VAD/motion gating starve the training signal continuum depends on? Joint experiment once fine-tuning runs on real streams.</p></div>
+    <div class="bd-item"><div class="hd"><span class="pill dim">D16</span><b>Flip INGEST_ASYNC=1 on the fleet</b></div><p>The wire and re-drive path are built and drilled; making async the production default stays a founders' call.</p></div>
+    <div class="bd-item"><div class="hd"><span class="pill dim">D14</span><b>Streaming ingest (additive leg)</b></div><p>Socket receiver → continuity buffer → server-side segmenter, terminating in the existing machinery. Build only when a surface needs sub-segment latency or bodycam firmware demands it.</p></div>
+    <div class="bd-item"><div class="hd"><span class="pill dim">ws-E</span><b>Deferred surfaces</b></div><p>System/desktop audio for the extension; multi-tab simultaneous capture (feasible — the wire already supports N captures per device); Windows client if pilots need one (OQ5: pin the pilot OS fleet first).</p></div>
+    <div class="bd-item"><div class="hd"><span class="pill dim">ws-B</span><b>Client hardening</b></div><p>IndexedDB persistence for the phone's in-memory upload queue; persisting final per-source verdicts in the extension popup.</p></div>
+  </div>
+
+  <div class="note warn">
+    <b class="tag">The path to production, in dependency order</b>
+    <ol style="margin:8px 0 0; padding-left:20px; font-size:14px; line-height:1.7">
+      <li>The shared observability backbone, so gaps are <i>seen</i> — this closes M6 (D9).</li>
+      <li>Device identity and auth (OQ6) — today nothing authenticates a capture device.</li>
+      <li>Consent controls with their red-team bar (M2) — required before any non-team user (D13).</li>
+      <li>Direct-to-GCS upload (OQ8) — required before real per-user data volume.</li>
+      <li>Fleet telemetry and a seven-day soak (M5).</li>
+      <li>The wearable: hardware pick (OQ1), then the build (M3), gated on bystander policy (OQ7).</li>
+    </ol>
+    <p style="margin-top:10px">Every one of these is a named, scoped project a new engineer could own.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 11 CODEBASE -->
+<section class="module" id="m11">
+  <div class="eyebrow"><span class="lvl">MODULE 11</span> Codebase &amp; day one</div>
+  <h2>The map, and how to run the thing</h2>
+  <p class="dek">~2,800 lines of clients, ~2,600 of server, 144 tests. Everything lives in <code>product/services/recording/</code>.</p>
+
+  <div class="tree"><span class="dir">services/recording/</span>
+├── CHARTER.md            <span class="cm">mission, scope, milestones — stable; read first</span>
+├── HANDOFF.md            <span class="cm">the volatile board: where things stand today</span>
+├── DECISIONS.md          <span class="cm">R-numbers (our calls) citing D-numbers (founders')</span>
+├── handoff/              <span class="cm">worklog + per-workstream files (ws-b/c/d/e/f) + alpha-runbook</span>
+├── <span class="dir">app/</span>                  <span class="cm">the FastAPI service (:8084)</span>
+│   ├── main.py           <span class="cm">routes, lifespan (startup re-enqueue), /metrics, /client mount</span>
+│   ├── capture_web.py    <span class="cm">the /capture/* wire: upload · end · report · retry · redrive</span>
+│   ├── ledger.py         <span class="cm">SQLite continuity ledger — the crash-safety heart</span>
+│   ├── emitter.py        <span class="cm">per-capture FIFO workers; allocate-then-emit; re-drive</span>
+│   ├── demux.py          <span class="cm">ffprobe decides, ffmpeg splits; audio→wav16k, video copy</span>
+│   ├── capturer.py       <span class="cm">headless emit path: blob-first PUT + validated C1 push</span>
+│   ├── carve.py          <span class="cm">energy-VAD find_cuts + carve_at (D-M1-2)</span>
+│   ├── clients.py        <span class="cm">storage + DP httpx clients, at-least-once retry</span>
+│   ├── contracts.py      <span class="cm">C1 JSON-Schema validation (schema = source of truth)</span>
+│   ├── models.py         <span class="cm">pydantic mirrors, extra="forbid"</span>
+│   ├── metrics.py        <span class="cm">zero-dep Prometheus registry + ASGI middleware</span>
+│   ├── ids.py · timeutil.py · wav.py · config.py · cli.py
+│   └── <span class="dir">sources/</span>          <span class="cm">the ChunkSource seam: base · wav_source · replay_source</span>
+├── <span class="dir">clients/</span>
+│   ├── web/              <span class="cm">phone client — index.html + app.js (vanilla IIFE) + css</span>
+│   ├── extension/        <span class="cm">MV3: background · offscreen · popup · uploader · segmenter</span>
+│   └── mac/nucleus_capture.py  <span class="cm">single-file stdlib CLI</span>
+├── tests/                <span class="cm">16 files — wire, ledger, carve, clients, conformance, civil time</span>
+├── dashboards/recording.json   <span class="cm">the Grafana dashboard we own (D9)</span>
+├── run.sh                <span class="cm">uvicorn on :8084</span>
+└── run_tunnel.sh         <span class="cm">cloudflared HTTPS tunnel; URL rotates → var/tunnel_url.txt</span></div>
+
+  <h3>Day-one runbook</h3>
+  <div style="display:grid; gap:14px">
+    <div class="card">
+      <h4>Run the suite, then the loop</h4>
+      <pre style="margin:8px 0 0"><code>cd product/services/recording
+pytest                  # 144 tests, no GPU needed
+
+# whole learn fleet (storage + DP + recording):
+bash ../platform/deploy/run_learn.sh
+bash ../platform/deploy/run_learn.sh --status
+
+# one headless capture through the live loop:
+curl -X POST localhost:8084/capture/run \
+  -H 'content-type: application/json' \
+  -d '{"storage_url":"http://localhost:8083",
+       "dp_url":"http://localhost:8085"}'</code></pre>
+    </div>
+    <div class="card">
+      <h4>Poke the live surfaces</h4>
+      <pre style="margin:8px 0 0"><code># the fleet lives on node-7:
+#   storage :8083 · recording :8084 · dp :8085
+cat var/tunnel_url.txt        # rotates per restart!
+
+curl -s $TUNNEL/capture/captures | python3 -m json.tool
+curl -s $TUNNEL/capture/captures/&lt;id&gt;/report \
+  | python3 -m json.tool      # → the verdict
+
+# phone client: open $TUNNEL/client/ on a phone
+# full three-surface drill: handoff/alpha-runbook.md</code></pre>
+    </div>
+  </div>
+
+  <h3>Reading order for your first week</h3>
+  <ul class="tight">
+    <li><b>Day 1:</b> this guide, then <code>product/VISION.md</code> (10 min) and the recording <code>CHARTER.md</code>. Skim root <code>ARCHITECTURE.md</code> for the C1 card and the vocabulary table.</li>
+    <li><b>Day 2:</b> <code>app/capture_web.py</code> top-to-bottom with the module-05 explorer beside it, then <code>ledger.py</code>'s schema and <code>emitter.py</code>.</li>
+    <li><b>Day 3:</b> run the alpha runbook against the fleet with a real phone. Nothing teaches the verdict machinery like pulling your own Wi-Fi mid-upload.</li>
+    <li><b>Day 4:</b> the recording <code>HANDOFF.md</code> + <code>DECISIONS.md</code>, then the ws-files for whichever surface you'll touch. Note how every ws worklog records its adversarial review rounds — that's the working style here.</li>
+    <li><b>Day 5:</b> root <code>DECISIONS.md</code> D13–D19 and <code>ORG.md</code>'s documentation protocol — how to write things down before you write things down.</li>
+  </ul>
+
+  <div class="note">
+    <b class="tag">House rules that will save you a review round</b>
+    <p><b>One fact, one home</b> — link, never restate. Boards are rewritten in place; worklogs prepend, newest first. Status is a controlled word: <code>designed</code> or <code>built</code>, nothing else. POCs are reference, never source (D7) — if you catch yourself copying a POC file, stop and re-derive. And commits carry no attribution, ever.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 12 QUIZ -->
+<section class="module" id="m12">
+  <div class="eyebrow"><span class="lvl">MODULE 12</span> Check yourself</div>
+  <h2>Six questions the codebase will eventually ask you</h2>
+  <p class="dek">Each one is a real trap that a real session (or reviewer) hit. No score is recorded — this is for you.</p>
+
+  <div id="quiz"></div>
+  <p id="quiz-score"></p>
+</section>
+
+<footer style="margin-top:70px; padding-top:24px; border-top:1px solid var(--line-soft); font-family:var(--mono); font-size:11px; color:var(--ink-faint)">
+  NUCLEUS · RECORDING SERVICE FIELD GUIDE · updated 2026-07-30
+</footer>
+
+</main>
+</div>
+
+<script>
+/* ================================================================ helpers */
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => [...r.querySelectorAll(s)];
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ================================================================ timecode */
+(() => {
+  const el = $('#timecode');
+  const t0 = Date.now();
+  const tick = () => {
+    const s = Math.floor((Date.now() - t0) / 1000);
+    const hh = String(Math.floor(s/3600)).padStart(2,'0');
+    const mm = String(Math.floor(s%3600/60)).padStart(2,'0');
+    const ss = String(s%60).padStart(2,'0');
+    el.textContent = `${hh}:${mm}:${ss}`;
+  };
+  tick(); setInterval(tick, 1000);
+})();
+
+/* ================================================================ waveform */
+(() => {
+  const canvas = $('#wave');
+  const ctx = canvas.getContext('2d');
+  let bars = [];
+  const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  function resize() {
+    canvas.width = canvas.clientWidth * devicePixelRatio;
+    canvas.height = 88 * devicePixelRatio;
+  }
+  function draw() {
+    const w = canvas.width, h = canvas.height, bw = 3*devicePixelRatio, gap = 2*devicePixelRatio;
+    const n = Math.ceil(w/(bw+gap));
+    while (bars.length < n+2) {
+      const prev = bars.length ? bars[bars.length-1] : .3;
+      let v = prev + (Math.random()-.5)*.35;
+      v = Math.max(.04, Math.min(1, v));
+      if (Math.random() < .06) v = .05 + Math.random()*.1; // pauses (the VAD would cut here)
+      bars.push(v);
+    }
+    ctx.clearRect(0,0,w,h);
+    const ink = css('--accent') || '#D8393F';
+    const faint = css('--line') || '#ccc';
+    for (let i=0; i<n; i++) {
+      const v = bars[i];
+      const bh = v*h*.82;
+      ctx.fillStyle = v < .16 ? faint : ink;
+      ctx.globalAlpha = v < .16 ? .8 : .28 + v*.55;
+      ctx.fillRect(i*(bw+gap), (h-bh)/2, bw, bh);
+    }
+    ctx.globalAlpha = 1;
+  }
+  function step() { bars.shift(); draw(); }
+  resize(); draw();
+  addEventListener('resize', () => { resize(); draw(); });
+  new MutationObserver(draw).observe(document.documentElement, {attributes:true, attributeFilter:['data-theme']});
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', draw);
+  if (!reduceMotion) setInterval(step, 120);
+})();
+
+/* ================================================================ scrollspy */
+(() => {
+  const links = $$('.rail a.tk');
+  const map = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(a => a.classList.remove('on'));
+        const a = map.get(e.target.id);
+        if (a) a.classList.add('on');
+      }
+    });
+  }, {rootMargin: '-20% 0px -70% 0px'});
+  $$('section.module').forEach(s => obs.observe(s));
+})();
+
+/* ================================================================ client tabs */
+(() => {
+  const btns = $$('.tabs button');
+  btns.forEach(b => b.addEventListener('click', () => {
+    btns.forEach(x => { x.classList.remove('on'); x.setAttribute('aria-selected','false'); });
+    b.classList.add('on'); b.setAttribute('aria-selected','true');
+    $$('.tabpanel').forEach(p => p.hidden = true);
+    $('#tab-' + b.dataset.tab).hidden = false;
+  }));
+})();
+
+/* ================================================================ flip cards */
+(() => {
+  $$('.flip').forEach(f => f.addEventListener('click', () => {
+    f.classList.toggle('on');
+    f.setAttribute('aria-expanded', f.classList.contains('on') ? 'true' : 'false');
+  }));
+})();
+
+/* ================================================================ envelope explorer */
+(() => {
+  const F = [
+    ['contract', '"C1"', 'The payload names itself. Anyone who encounters one — in a log line, a queue, a debugger — can tell what it is and how to read it just by looking at it.'],
+    ['version', '"0"', 'Contract version. Additive optional fields (like device_tz) need no bump; a breaking change writes a new *.vN.json and edits the ARCHITECTURE card first.'],
+    ['user_id', '"nmn"', 'Whose life this is. Per-user isolation starts here: everything downstream is scoped by user_id, and one user\'s queries return none of another user\'s records — verified end to end.'],
+    ['device_id', '"phone-web-44W7BV2R"', 'Each of a user\'s devices has its own stable id — phone-web-*, ext-chrome-*, mac-cli-*, with the suffix minted once and saved on the device. So when several devices capture the same day, every chunk still says which device it came from.'],
+    ['stream_id', '"01KXWE2DQY7Q4R8T2M5X0A3B9C"', 'One continuous single-modality flow, ULID-minted, globally unique — never a reusable per-device counter, so (stream_id, sequence) cannot collide across concurrent devices. The namespace gap detection lives in.'],
+    ['sequence', '7', 'Dense, zero-based, +1 per chunk within a stream. Any break — including a first-seen value above 0 — means chunks are missing right now; a late delivery (a retry, a re-drive) heals it on the next continuity check. The dedup key is chunk_id: ordering and identity are separate jobs.'],
+    ['chunk_id', '"01KXWE3F0AQZP6H2N4V8SBJDKM"', 'THE dedup key. Client-minted ULID, constant across retries — that constancy is what turns at-least-once delivery into exactly-once effect downstream.'],
+    ['modality', '"audio"', 'audio | image | video | text. One envelope format serves all four, so vision pipelines never reshape the wire. Each demuxed track gets its own single-modality stream.'],
+    ['codec', '"audio/wav"', 'MIME token of the blob. Audio is always audio/wav 16 kHz mono after demux (ASR-native); video keeps its capture container (video/mp4 or video/webm, no re-encode).'],
+    ['t_start', '"2026-07-19T17:04:10Z"', 'Chunk start — device wall-clock, RFC3339 UTC. The time-spine axis every cross-device alignment and range query uses. UTC stays canonical everywhere (D17).'],
+    ['t_end', '"2026-07-19T17:04:20Z"', 'Chunk end — device wall-clock, RFC3339 UTC. When the server itself cuts one continuous recording (the carve path; later the bodycam link), the end of chunk n is exactly the start of chunk n+1. That perfect hand-off is a free second loss check: a missing chunk leaves a visible time hole even if the numbering somehow lied.'],
+    ['blob_ref', '"raw/01KXWE3F0AQZP6H2N4V8SBJDKM"', 'The reference storage minted when the bytes landed in /raw. Treat it as a sealed token: never parse it, never guess a file path from it — only storage can turn it back into bytes. Since bytes in /raw can be legitimately deleted later (delete-last-N, right-to-be-forgotten), anyone following a blob_ref treats "gone" as a normal answer.'],
+    ['blob_sha256', '"e3b0c442…"', 'SHA-256 of the blob bytes — lets anyone verify that what sits in /raw is exactly what the device captured.'],
+    ['blob_bytes', '163840', 'The blob\'s size in bytes. Together with the hash, it lets anyone check that what was stored matches what was sent.'],
+    ['device_tz', '"America/Los_Angeles"', 'D17, optional-additive. IANA id of where the capturing device was — never an abbreviation (PST is rejected 400 at our edge). Omitted (not null) when unknown → downstream falls back to the user\'s declared home_tz.'],
+    ['device_utc_offset_minutes', '-420', 'The UTC offset the device actually applied at t_start, in minutes — real zones sit on half and quarter hours (India +330, Nepal +345). device_tz is the claim; this is the witness. If a device\'s timezone database was stale, the zone name and the offset disagree, and that is the only way to catch a wrong local clock after the fact.'],
+    ['device_location', 'null · omitted', 'Optional lat/lon/accuracy where hardware allows — the future source for DP\'s geo-enrichment. Omitted today.'],
+    ['device_clock', '"synced" · omitted', 'Whether the device clock is NTP-disciplined — input to DP\'s future cross-device skew handling.'],
+  ];
+  const jsonEl = $('#env-json'), detail = $('#env-detail');
+  jsonEl.innerHTML = '<span class="c">// one C1 envelope — recording → data-processing /ingest</span>\n{\n' +
+    F.map(([k,v],i) => {
+      const isNum = /^[\d-]/.test(v);
+      const vv = isNum ? `<span class="n">${v}</span>` : `<span class="s">${v.replace(/</g,'&lt;')}</span>`;
+      return `<button class="row" data-i="${i}" role="option">  <span class="k">"${k}"</span>: ${vv}${i<F.length-1?',':''}</button>`;
+    }).join('') + '\n}';
+  jsonEl.addEventListener('click', e => {
+    const row = e.target.closest('.row'); if (!row) return;
+    $$('.row', jsonEl).forEach(r => r.classList.remove('on'));
+    row.classList.add('on');
+    const [k, v, why] = F[+row.dataset.i];
+    detail.innerHTML = `<h4>${k}</h4><p style="font-family:var(--mono); font-size:12px; color:var(--ink-faint)">example: ${v.replace(/</g,'&lt;')}</p><p>${why}</p>`;
+  });
+})();
+
+/* ================================================================ path explorer */
+(() => {
+  const LABELS = {
+    client: "Client — your device",
+    wire: "POST /capture/segments — the upload arrives",
+    spool: "Spool — bytes written to disk first",
+    ledger: "Ledger — the durable row; the ack returns to the client here",
+    queue: "Emit queue — this capture's worker picks the segment up",
+    demux: "Demux — ffmpeg splits the audio and video tracks",
+    alloc: "Allocate — chunk identities minted and saved",
+    raw: "Storage — bytes PUT to /raw (the blob leg)",
+    ingest: "Data-processing — the C1 envelope pushed to /ingest",
+    report: "Gap report — the verdict, recomputed every time it is asked",
+  };
+  const LANES = [
+    ["While the client waits — the ack path", ["client", "wire", "spool", "ledger"]],
+    ["After the ack — the background emit path", ["queue", "demux", "alloc", "raw", "ingest"]],
+    ["Whenever anyone asks — the report", ["report"]],
+  ];
+  const CLIENT_FLAVOR = {
+    phone:    { name: 'the phone', seg: 'a ~10 s self-contained mp4 (H.264+AAC) from a MediaRecorder restart', tracks: 'an audio track and a video track' },
+    ext:      { name: 'the extension', seg: 'a ~10 s muxed webm (vp8+opus) of the active tab', tracks: 'the tab\'s audio and video tracks' },
+    mac:      { name: 'the mac CLI', seg: 'a ~10 s mp4 that ffmpeg\'s segment muxer just finalized (screen + mic)', tracks: 'an audio track and a video track' },
+    headless: { name: 'the headless /capture/run path', seg: 'a VAD-carved standalone WAV chunk (5–30 s, cut at a speech pause)', tracks: 'audio only — no demux needed on this path' },
+  };
+  // Each step: [stationKey, title, body, verdict, why?, failStation?]
+  const SCENARIOS = {
+    happy: {
+      label: 'Everything works — the happy path (inline DP)',
+      steps: [
+        ['client', 'A segment is born', c => `${cap(c.name)} finishes ${c.seg}. It computes sha256 (crypto.subtle / hashlib), stamps the wall-clock span, reads its IANA timezone in one line, and POSTs the raw bytes.`, 'recording', 'Segments are self-contained on purpose (D-M1-1): any one of them can be retried alone from an offline queue.'],
+        ['wire', 'The wire checks everything it can', () => `Query params validated: capture_id must be filesystem-safe, segment_num ≤ 9,999,999, timestamps must parse, device_tz must be a real IANA zone (PST → 400 here, at the edge). Body streamed against the 64 MB cap. sha256 recomputed and compared.`, 'recording', 'Reject garbage where the client can still see the error — not three services later.'],
+        ['spool', 'Bytes hit disk FIRST', () => `The segment is written to the spool: <code>.part</code> file, then an atomic rename, name content-addressed as <code>segment_num.sha[:12].ext</code>. Only now is anything recorded about it.`, 'recording', 'Spool-before-ledger is the ack contract: if the ledger row committed first, a crash between the two would let a retry ack bytes that exist nowhere (a confirmed adversarial-review find).'],
+        ['ledger', 'The ledger takes the row', () => `<code>record_segment()</code> inserts (capture, segment_num, sha, span, device_tz, spool_path) with state <code>received</code>, inside BEGIN IMMEDIATE. The client gets <code>{ok, status:"received"}</code> — the ack now means "durably on the server".`, 'recording'],
+        ['queue', 'FIFO per session', () => `The segment enters its capture's emit queue. One asyncio worker per capture drains strictly in order; other captures proceed concurrently.`, 'recording', 'Per-capture ordering keeps sequence == capture order without a global lock.'],
+        ['demux', 'Split, don\'t interpret', c => `ffprobe lists what tracks actually exist (never trust the mime), then ffmpeg splits ${c.tracks}: audio re-encoded to 16 kHz mono WAV (what Whisper/pyannote natively eat), video container-copied — zero generational loss.`, 'recording'],
+        ['alloc', 'Identity minted BEFORE emitting', () => `For every track: get-or-create its stream (own ULID stream_id per modality), then <code>allocate_chunk()</code> mints (sequence, chunk_id) and persists them — all tracks allocated before any network call.`, 'recording', 'A mid-emit failure must not let later segments steal these sequence numbers; a retry re-emits the SAME identity. Crash-safety cornerstone.'],
+        ['raw', 'Blob leg: bytes → /raw', () => `<code>PUT /raw/blobs</code> to storage with chunk_id, sha256, size. Storage mints the opaque <code>blob_ref</code>, idempotent on chunk_id. The bytes are durable before anything announces them.`, 'recording'],
+        ['ingest', 'Envelope leg: C1 → DP', () => `The C1 envelope is built, validated against the JSON Schema AND the pydantic mirror, then POSTed to DP <code>/ingest</code>. DP (inline mode) runs ASR and answers <code>200 {record_ids}</code>. Ledger: <code>dp_acked=1, dp_state='processed'</code>.`, 'recording'],
+        ['report', 'Stop → drain → verdict', () => `The client sends the end marker <code>{last_segment_num}</code>; the report joins the client leg (no missing seqs), the emit leg (all emitted), and a LIVE DP <code>/continuity</code> cross-check (nothing missing, nothing dead-lettered). Verdict: <b>clean</b> — earned across both legs.`, 'clean'],
+      ],
+    },
+    async202: {
+      label: 'DP accepts now, processes later — the async handshake',
+      steps: [
+        ['client', 'Same start', c => `${cap(c.name)} uploads ${c.seg}. Everything through demux + allocation is identical to the happy path.`, 'recording'],
+        ['ingest', 'DP answers 202, not 200', () => `The fleet runs <code>INGEST_ASYNC=1</code>: DP claims the chunk and answers <code>202 {accepted:true}</code> — no record_ids, processing happens on its worker pool. Ledger: <code>dp_state='accepted'</code>, but <code>dp_acked stays 0</code>.`, 'recording', 'The D16 invariant: dp_acked=1 ⇔ the C2 is durably written. "Accepted" is only a promise; the fact arrives when DP confirms.'],
+        ['report', 'The verdict refuses to flatter', () => `The capture ended and everything was emitted — but the report counts <code>accepted_unconfirmed: 1</code>, so the verdict stays <b>recording</b> until DP confirms. A 202 opens a silent-loss window; the verdict holds it open honestly.`, 'recording'],
+        ['ingest', 'DP finishes; /continuity says so', () => `The next report poll queries DP <code>GET /continuity/{stream_id}</code>. Its <code>processed</code> runs now include our sequence → <code>confirm_chunk()</code> promotes the row: <code>dp_acked=1, dp_state='processed'</code> — and the promotion is PERSISTED.`, 'recording', 'Persisting matters: DP\'s processed set was in-memory; a DP restart must never un-confirm what we know landed.'],
+        ['report', 'Now it\'s earned', () => `All chunks confirmed, both legs whole → verdict <b>clean</b>. If DP had never confirmed, <code>/redrive</code> re-pushes the original envelopes — DP dedup makes that free (done → 200+record_ids; pending → 202 again; lost → reprocess).`, 'clean'],
+      ],
+    },
+    offline: {
+      label: 'The network drops mid-capture — the retry queue',
+      steps: [
+        ['client', 'Wi-Fi disappears mid-capture', c => `${cap(c.name)} keeps capturing — segments accumulate in the serialized upload queue. Upload of segment_num 3 fails with a network error.`, 'recording'],
+        ['client', 'Backoff, forever', () => `The uploader retries segment 3 with exponential backoff (1 s·2ⁿ, cap 30 s) — forever, because a network error or 5xx is transient by definition. A 4xx surfaces immediately instead: it means the client itself sent something wrong, and retrying can't fix that.`, 'recording', 'Strictly serialized: segment 4 is only sent after segment 3 acks, so arrival order is guaranteed by construction.'],
+        ['wire', 'Network returns', () => `Segment 3 lands, then 4, 5, 6 drain in order. Each takes the normal spool → ledger → emit path. The report\'s <code>segment_states.received</code> ticks down as the emit workers catch up.`, 'recording'],
+        ['report', 'No harm done', () => `End marker after the drain → all segment_nums present, all emitted, DP confirms → <b>clean</b>, zero missing. The drill in the alpha runbook does exactly this with airplane mode.`, 'clean'],
+      ],
+    },
+    lostseg: {
+      label: 'A segment dies on the client — the honest gap',
+      steps: [
+        ['client', 'A page reload eats the queue', c => `${cap(c.name)} had segments 4 and 5 waiting in its in-memory upload queue when the page reloaded. They are gone — the client can no longer send them.`, 'recording', 'The queue is deliberately in-memory in v0; IndexedDB persistence is a named later hardening.'],
+        ['wire', 'Seq 6 arrives anyway', () => `The new page (same capture via the report URL, or the capture simply never terminated) — segments after the hole keep landing. The server has 0-3, then 6.`, 'recording'],
+        ['report', 'The client leg names the hole', () => `<code>_missing_info()</code> walks the received segment_nums: holes below the max, plus the tail the end marker reveals. Report: <code>client_leg.missing_segment_nums: [4,5]</code>, verdict <b>gaps</b>.`, 'gaps', 'The walk is O(received), the list capped at 1000 with an exact count beside it — a hostile segment_num can\'t balloon the payload (review find #2).'],
+        ['ingest', 'Downstream stays truthful', () => `Crucially: the C1 streams stay DENSE. Chunks were only ever minted for segments that arrived, so DP sees no gap at all. A client-side loss appears in the client leg and is never fabricated as a C1 gap — two continuity domains, joined by the ledger.`, 'gaps', 'If we faked C1 gaps for client losses, DP\'s detector would double-report every one, and nobody could tell where a loss actually happened.'],
+      ],
+    },
+    dup: {
+      label: 'The same segment arrives twice — deduplication',
+      steps: [
+        ['client', 'An ack gets lost in transit', c => `${cap(c.name)} uploaded segment 2, the server processed it — but the ack never made it back (timeout). The client, correctly, retries segment 2.`, 'recording'],
+        ['wire', 'Same (capture, segment_num), same sha', () => `<code>record_segment()</code> finds the existing row, shas match → status <code>duplicate</code>, counted in <code>duplicate_deliveries</code> (observability), NOT re-emitted. The client treats duplicate as success and moves on.`, 'recording', 'If the prior state is still received (first pass never finished — e.g. crash before enqueue), the duplicate re-enqueues it: the retry self-heals the lost-enqueue window.'],
+        ['wire', 'Different bytes? That\'s a 409', () => `Had the same segment_num arrived with a DIFFERENT sha, that is a client bug: <code>409 conflict</code>, and the content-addressed spool name guarantees the original bytes were never clobbered.`, 'recording'],
+        ['report', 'Clean, with a footnote', () => `Verdict <b>clean</b>; <code>duplicate_deliveries: 1</code> in the client leg. At-least-once delivery + idempotent handling = exactly-once effect. The same logic guards the C1 legs downstream (chunk_id dedup at storage and DP).`, 'clean'],
+      ],
+    },
+    badtz: {
+      label: 'A bad timezone is rejected at the door',
+      steps: [
+        ['client', 'A client sends "PST"', c => `Imagine a buggy build of ${c.name} sending <code>device_tz=PST</code> instead of an IANA id.`, 'none'],
+        ['wire', '400, immediately', () => `The wire checks: no "/" and not UTC/GMT → <code>400 "device_tz must be an IANA zone id like 'America/Los_Angeles'"</code>. Even a plausible-looking id is resolved against the tz database (<code>ZoneInfo</code>) before acceptance.`, 'none', 'PST is ambiguous (Pacific? Philippine?) and DST-blind. An unresolvable zone accepted here would explode weeks later in continuum\'s renderer, far from the client that sent it.'],
+        ['client', 'The honest alternative', () => `A client that genuinely can\'t know its zone OMITS the fields entirely (never null, never a guess). Downstream falls back to the user\'s declared <code>home_tz</code> — a documented degradation, not a silent lie.`, 'none', 'Absence is normal, not an error. Inventing a server-side zone would be exactly the silent-wrong-timezone failure D17 exists to kill.'],
+      ],
+    },
+    demuxfail: {
+      label: 'A corrupt segment fails demux, then gets retried',
+      steps: [
+        ['queue', 'A poisoned segment', c => `A segment from ${c.name} is truncated or corrupt. It was acked (bytes are durable in the spool) and now reaches its capture's worker.`, 'recording'],
+        ['demux', 'ffprobe finds nothing', () => `<code>probe_track_types()</code> returns no audio/video streams → <code>DemuxError</code>, a PERMANENT failure (vs the 120 s timeout guarding a merely hung ffmpeg).`, 'recording'],
+        ['ledger', 'Failure is a visible state', () => `The segment is marked <code>failed</code> with the error string stored for the report. The spool file is deliberately KEPT — a retry needs bytes to work from. The capture\'s later segments keep flowing.`, 'gaps', 'Failure here is a visible state that a human (or E-6\'s future auto-retry) explicitly resolves — never an invisible retry loop, never a silent drop.'],
+        ['wire', 'POST /capture/captures/{id}/retry', () => `<code>reset_failed()</code> flips failed → received and re-enqueues. If demux now succeeds, chunks allocated earlier keep their sequences; a segment that never got allocations emits late sequences — visible in the report, with t_start still the honest time axis (a documented residual).`, 'recording'],
+        ['report', 'Until then, the report says so', () => `While failed segments exist: verdict <b>gaps</b> with <code>segment_states.failed ≥ 1</code>. After a successful retry and DP confirmation: <b>clean</b>.`, 'clean'],
+      ],
+    },
+    dp503: {
+      label: 'Data-processing is overloaded — the known rough edge',
+      steps: [
+        ['ingest', 'DP is overloaded', () => `The C1 push hits DP\'s bounded queue → <code>503</code>. That\'s transient by definition — DP is saying "not right now".`, 'recording'],
+        ['ingest', 'Four attempts, 1.5 seconds', () => `Our retry policy: 4 attempts, backoff 0.25 s·n → the last retry fires ~1.5 s after the first. Against a load spike lasting minutes, all four fail.`, 'recording', 'Each retry re-issues the IDENTICAL request — same chunk_id, same sequence — so idempotency holds whatever happens.'],
+        ['ledger', 'Terminal — arguably too fast', () => `The segment is marked <code>failed</code>. This is escalation <b>E-6</b> verbatim: "a 503 is recoverable but becomes terminal in 1.5 s". The bytes are safe in the spool; the state is visible; but convergence needs a manual /retry.`, 'gaps'],
+        ['report', 'The designed fix', () => `Verdict <b>gaps</b> until someone retries. The fix now has a written two-phase design on the recording board (refined 2026-07-30): first an error-class column so a capped, spaced auto-retry loop can re-drive only the segments data-processing declined; then a full \"rejected\" state with its own verdict semantics. A tidy first project for a new engineer.`, 'gaps'],
+      ],
+    },
+    crash: {
+      label: 'The server crashes mid-work and loses nothing',
+      steps: [
+        ['queue', 'Kill -9 at the worst moment', () => `The service dies after acking segments 0-5, having emitted only 0-2. Segments 3-5 sit in the spool with ledger state <code>received</code>; segment 3\'s chunks were already allocated (identity persisted), maybe half-emitted.`, 'none'],
+        ['ledger', 'The ledger IS the recovery plan', () => `Nothing in flight was only in memory: bytes in the spool, state and minted identities in SQLite (WAL). That was the whole point of spool-first and allocate-before-emit.`, 'none'],
+        ['queue', 'Startup re-enqueue', () => `On boot, the lifespan hook runs <code>reenqueue_pending()</code>: every <code>received</code> segment re-enters its capture's queue, in order. <code>failed</code> stays failed — restart is not an excuse to blindly retry a poisoned segment.`, 'recording'],
+        ['raw', 'Same identity, everywhere', () => `Segment 3 re-processes: <code>allocate_chunk()</code> finds the persisted row and returns the SAME (sequence, chunk_id). The /raw PUT and the C1 push both dedup on chunk_id → no dup blob, no dup record, no fabricated gap.`, 'recording'],
+        ['report', 'As if nothing happened', () => `The drain completes, DP confirms, verdict <b>clean</b>. The client never noticed: its acks were always "durably received", never "processed".`, 'clean'],
+      ],
+    },
+    staleend: {
+      label: 'A stale end marker — the backgrounded-phone trap',
+      steps: [
+        ['client', 'iOS backgrounds the browser', c => `Mid-recording, the user switches apps. The page\'s <code>pagehide</code> fires and <code>sendBeacon</code>s an end marker with the last enqueued segment_num (say 4) — insurance in case iOS kills the tab.`, 'recording'],
+        ['ledger', 'Capture marked ended', () => `<code>mark_ended(4)</code> → expected_segments = 5. If the tab HAD died, this is what lets the report name the lost tail instead of waiting forever.`, 'clean', 'mark_ended is monotonic on expected_segments: a stale/late marker can never LOWER what a newer marker established.'],
+        ['wire', 'But the tab lived', () => `The user comes back; capture never stopped; segment 5 arrives — at or past the marker. <code>reopen_if_past_end()</code>: the marker is provably stale → the capture reopens (<code>ended=0</code>), expected count raised.`, 'recording', 'Without this, the verdict could read clean against a stale expected count while a tail was still uploading — a confirmed review find.'],
+        ['report', 'The real Stop closes it', () => `The user taps Stop → a fresh end marker with the true last segment_num → drain → <b>clean</b>. The runbook documents the returning-page behavior precisely so testers don\'t misread it as a bug.`, 'clean'],
+      ],
+    },
+    dprestart: {
+      label: 'Data-processing restarts and forgets — receipts save the verdict',
+      steps: [
+        ['ingest', 'A whole capture delivered', () => `Chunks 0-9 pushed and acked (dp_acked=1 recorded per chunk). Mid-capture, DP restarts; its (originally in-memory) continuity tracker forgets everything before the restart.`, 'recording'],
+        ['report', 'DP claims a gap that isn\'t', () => `The report\'s live cross-check asks DP /continuity: it reports sequences 0-6 MISSING — a permanent leading gap, according to a tracker that just woke up.`, 'none'],
+        ['ledger', 'We hold the receipts', () => `<code>_dp_missing_unacked()</code>: DP-missing MINUS what our ledger holds a confirmed ack for. 0-6 all have dp_acked=1 → <code>missing_unacked: []</code>. The raw claim is still shown (transparency), but the verdict runs on the reconciled view.`, 'clean', 'Before this fix, a mid-capture DP restart meant verdict gaps forever, falsely — adversarial review find #4.'],
+        ['report', 'Both legs durable now', () => `Verdict <b>clean</b>. DP has since grown a durable ingest journal (its restart re-hydrates processed/dead-lettered from disk), so the guarantee is durable on BOTH legs — and our reconciliation remains as belt-and-suspenders.`, 'clean'],
+      ],
+    },
+  };
+  function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
+
+  const selClient = $('#exp-client'), selScen = $('#exp-scenario');
+  const stationsEl = $('#exp-stations'), logEl = $('#exp-log');
+  const verdictEl = $('#exp-verdict'), progEl = $('#exp-progress');
+  const btnNext = $('#exp-next'), btnBack = $('#exp-back'), btnReset = $('#exp-reset');
+
+  Object.entries(SCENARIOS).forEach(([k, s]) => {
+    const o = document.createElement('option'); o.value = k; o.textContent = s.label;
+    selScen.appendChild(o);
+  });
+
+  let idx = -1;
+  function scen(){ return SCENARIOS[selScen.value]; }
+  function flavor(){ return CLIENT_FLAVOR[selClient.value]; }
+
+  function renderStations() {
+    const steps = scen().steps;
+    const doneKeys = new Set(idx > 0 ? steps.slice(0, idx).map(s => s[0]) : []);
+    const nowKey = idx >= 0 && idx < steps.length ? steps[idx][0] : null;
+    const failNow = nowKey !== null && steps[idx][3] === 'gaps';
+    stationsEl.innerHTML = LANES.map(([label, keys]) => {
+      const rows = keys.map((key, i) => {
+        let cls = 'st-box';
+        if (key === nowKey) cls += (failNow ? ' fail now' : ' now');
+        else if (doneKeys.has(key)) cls += ' done';
+        const down = i < keys.length - 1 ? '<div class="st-down">↓</div>' : '';
+        return `<div class="st-row"><span class="${cls}">${LABELS[key]}</span></div>${down}`;
+      }).join('');
+      return `<div class="lane-label">${label}</div>${rows}`;
+    }).join('');
+    const nowEl = stationsEl.querySelector('.st-box.now');
+    if (nowEl && nowEl.scrollIntoView) nowEl.scrollIntoView({block:'nearest', behavior: reduceMotion?'auto':'smooth'});
+  }
+  function renderStep() {
+    const steps = scen().steps;
+    if (idx < 0) {
+      logEl.innerHTML = '<div class="step-title">Ready</div><div class="step-body">Press <b>Step</b> to begin. Each step names the exact behavior in code.</div>';
+      verdictEl.className = 'verdict-chip none'; verdictEl.textContent = '—';
+      progEl.textContent = `0 / ${steps.length}`;
+    } else {
+      const [ , title, body, verdict, why] = steps[idx];
+      const bodyText = typeof body === 'function' ? body(flavor()) : body;
+      logEl.innerHTML = `<div class="step-title">STEP ${idx+1} · ${title}</div><div class="step-body">${bodyText}</div>` +
+        (why ? `<div class="why"><b>Why it's this way:</b> ${why}</div>` : '');
+      if (verdict === 'none') { verdictEl.className = 'verdict-chip none'; verdictEl.textContent = 'n/a'; }
+      else { verdictEl.className = 'verdict-chip ' + verdict; verdictEl.textContent = verdict; }
+      progEl.textContent = `${idx+1} / ${steps.length}`;
+    }
+    btnBack.disabled = idx < 0;
+    btnNext.disabled = idx >= steps.length - 1;
+    renderStations();
+  }
+  btnNext.addEventListener('click', () => { if (idx < scen().steps.length-1) { idx++; renderStep(); } });
+  btnBack.addEventListener('click', () => { if (idx >= 0) { idx--; renderStep(); } });
+  btnReset.addEventListener('click', () => { idx = -1; renderStep(); });
+  selScen.addEventListener('change', () => { idx = -1; renderStep(); });
+  selClient.addEventListener('change', () => { renderStep(); });
+  renderStep();
+})();
+
+/* ================================================================ quiz */
+(() => {
+  const QUESTIONS = [
+    {
+      q: 'A retry re-sends a chunk to data-processing. What prevents a duplicate transcript?',
+      opts: ['The sequence number is checked for gaps', 'DP dedups on chunk_id, which never changes across retries', 'The server refuses duplicate POSTs with a 409'],
+      right: 1,
+      why: 'chunk_id is THE dedup key, minted once and persisted before the first emit. sequence carries ordering and loss detection only — identity is a separate job (C1 rules).',
+    },
+    {
+      q: 'A phone page reloads and loses 3 queued segments. What does downstream DP see?',
+      opts: ['A gap in the C1 sequence, flagged by its continuity detector', 'Nothing unusual — the C1 streams stay dense; the loss shows in the client leg of OUR report', 'Three null chunks as placeholders'],
+      right: 1,
+      why: 'Two continuity domains: chunks are only minted for segments that arrived, so C1 stays dense by construction. The client-leg report names exactly which seqs died — never fabricated as a C1 gap.',
+    },
+    {
+      q: 'In the ledger, what does dp_acked = 1 mean under the async wire?',
+      opts: ['DP answered 202 and accepted the chunk', 'The C2 record is durably written in /context', 'The blob landed in /raw'],
+      right: 1,
+      why: 'The D16 invariant. A 202 sets dp_state=accepted with dp_acked still 0 — and the verdict reads "recording", never "clean", until DP\'s /continuity confirms processing.',
+    },
+    {
+      q: 'The user flies to Tokyo for a week. What changes in the data?',
+      opts: ['home_tz updates to Asia/Tokyo so the nightly stays aligned', 'Every chunk\'s device_tz becomes Asia/Tokyo; home_tz does not move', 'Nothing — timestamps are UTC, so timezone is irrelevant'],
+      right: 1,
+      why: 'D17\'s fact/policy split. The device reports where the user actually was (per chunk); the declared home_tz keeps the nightly training boundary from jumping 9 hours. UTC stays the canonical axis throughout.',
+    },
+    {
+      q: 'The service is kill -9\'d with 4 acked segments unprocessed. After restart?',
+      opts: ['Those segments are lost; the report shows a server-side gap', 'They re-enqueue automatically and re-emit with the SAME chunk_ids', 'They re-emit with fresh chunk_ids, and DP dedups the content'],
+      right: 1,
+      why: 'Spool-first + identity-persisted-before-emit + reenqueue_pending() at startup. Same chunk_id and sequence on the re-emit means idempotent downstream, no dup blobs, no fabricated gaps.',
+    },
+    {
+      q: 'Where do a chunk\'s bytes go, relative to its envelope?',
+      opts: ['Envelope first — DP needs the metadata to know a blob is coming', 'Bytes to /raw first; the envelope only exists after blob_ref is minted', 'Together, in one multipart request'],
+      right: 1,
+      why: 'Bytes-first is a C1 invariant: the envelope is only sent after storage confirms the deposit, so a blob_ref can never point at bytes that don\'t exist. (And since /raw bytes can be legitimately deleted later, consumers treat "gone" as a normal answer.)',
+    },
+  ];
+  const root = $('#quiz'); let score = 0, answered = 0;
+  QUESTIONS.forEach((item, qi) => {
+    const div = document.createElement('div'); div.className = 'quiz-q';
+    div.innerHTML = `<div class="qt">${qi+1}. ${item.q}</div>` +
+      `<div class="opts">` + item.opts.map((o,i)=>`<button data-i="${i}">${o}</button>`).join('') + `</div>` +
+      `<div class="expl">${item.why}</div>`;
+    div.addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b || div.classList.contains('answered')) return;
+      div.classList.add('answered'); answered++;
+      const i = +b.dataset.i;
+      if (i === item.right) { b.classList.add('right'); score++; }
+      else { b.classList.add('wrong'); $$('.opts button', div)[item.right].classList.add('right'); }
+      $('#quiz-score').textContent = answered === QUESTIONS.length
+        ? `Score: ${score}/${QUESTIONS.length} — ${score === QUESTIONS.length ? 'you are ready for the codebase. Welcome to recording.' : 'revisit the modules for the ones you missed; the traps are worth knowing cold.'}`
+        : `Answered ${answered}/${QUESTIONS.length}`;
+    });
+    root.appendChild(div);
+  });
+})();
+</script>

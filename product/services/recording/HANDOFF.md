@@ -5,9 +5,9 @@
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
 **Status:** built · recording suite **144 tests** (110 + 7 async-seam/redrive/migration +
-3 metrics) · *Last updated:* 2026-07-19 (async-observability session)
+3 metrics) · *Last updated:* 2026-07-30 (E-6 refined into the two-phase rejected-path design)
 
-**Where we are.** The computer-capture-surfaces slice is alpha-complete: all three surfaces were
+**Where we are.** The client wire speaks `capture_id` + `segment_num` as of 2026-07-29 (were `session_id` + `seq`; routes `/capture/sessions/*` → `/capture/captures/*` — reasoning in [CHARTER.md](CHARTER.md) §Glossary, record in [handoff/worklog.md](handoff/worklog.md)). The computer-capture-surfaces slice is alpha-complete: all three surfaces were
 verified `clean` end to end on real devices on 2026-07-19. Each ran a real capture that landed
 verdict `clean`, with blobs sha256-verified and ffprobe-decoded in storage, and real ASR
 transcripts in `/context`. Runbook: [handoff/alpha-runbook.md](handoff/alpha-runbook.md).
@@ -68,8 +68,8 @@ processed it, without ever reporting a lost chunk as `clean`.
   backoff, an end marker (plus `sendBeacon` on pagehide), a wake lock, and a live gap-report poll
   with a verdict badge.
 - **Capture-wire server** (`app/capture_web.py` + `ledger.py` + `demux.py` + `emitter.py`).
-  `POST /capture/segments` is idempotent on `(session_id, seq)`, sha-verified, spool→ledger ack.
-- Per session a FIFO emit worker runs: ffmpeg **demuxes into per-modality chunks** (audio →
+  `POST /capture/segments` is idempotent on `(capture_id, segment_num)`, sha-verified, spool→ledger ack.
+- Per capture a FIFO emit worker runs: ffmpeg **demuxes into per-modality chunks** (audio →
   `audio/wav` 16 kHz mono; video → container copy mp4/webm) → per modality get-or-create stream
   (*own `stream_id`, same `device_id`*) → chunk identity minted and persisted *before* the
   first emit → blob-first PUT → validated C1 push → acks recorded.
@@ -83,13 +83,13 @@ processed it, without ever reporting a lost chunk as `clean`.
   instead of versioning routes).
 - A test asserts recording serves nothing under `/ingest`.
 - **Gap detection is now a checked guarantee** (was emit-side-only affordance in M0): the SQLite
-  *continuity ledger* (`var/ledger.db`) tracks both legs; `GET /capture/sessions/{id}/report`
+  *continuity ledger* (`var/ledger.db`) tracks both legs; `GET /capture/captures/{id}/report`
   joins client leg (missing seqs, dups, unterminated), emit leg (per-stream dense sequences,
   pending/failed, `segment_states` drain signal), and a *live DP cross-check* (`GET
   /continuity/{stream_id}` on data-processing) into a `clean|gaps|recording` verdict.
 - Client-side loss appears in the client leg and never as a fabricated C1 gap (two continuity
   domains, joined by the ledger).
-- Verified live: clean, loss-drill (`gaps` + `missing_seqs`), dup-drill (acked `duplicate`, not
+- Verified live: clean, loss-drill (`gaps` + `missing_segment_nums`), dup-drill (acked `duplicate`, not
   re-emitted).
 - **Chunking (OQ4) ratified — D-M1-2** (charter §Open questions 4 updated): VAD-cut variable
   chunks [5–30 s] where the server owns a continuous feed (`app/carve.py`, now the audio
@@ -116,7 +116,7 @@ processed it, without ever reporting a lost chunk as `clean`.
   of server CORS).
 - *Records the active tab — video and audio in one muxed stream via `chrome.tabCapture` (D-E7,
   pivoted 2026-07-19 off the fragile desktopCapture screen-picker after it failed 3× on the
-  tester's Comet browser).* One tab = ONE session = one muxed-webm (vp8+opus) segment loop; the
+  tester's Comet browser).* One tab = ONE capture = one muxed-webm (vp8+opus) segment loop; the
   *server demuxes each segment into audio + video C1 streams*, the same muxed-A/V path the
   phone/mac clients use, zero server changes.
 - AudioContext passthrough keeps the tab audible; `device_id` = `ext-chrome-<suffix>`. D-M1-1
@@ -139,14 +139,14 @@ processed it, without ever reporting a lost chunk as `clean`.
 - **Wire conformance** (`tests/test_wire_conformance.py`): the client-shape matrix —
   video-only webm/vp8 (extension screen), audio-only webm/opus (extension tab), muxed mp4
   h264+aac (mac CLI), each demuxes to exactly the right C1 streams with spans preserved;
-  the D-E3 two-session-same-device pattern and client-agnostic gap detection proven
+  the D-E3 two-captures-same-device pattern and client-agnostic gap detection proven
   against the real app.
 - **Adversarial review + real-browser alpha reshaped the extension** (detail in ws-E/ws-F
   worklogs): the pre-alpha review round (5-lens → 2-skeptic, 19 → 10 confirmed) hardened the
   then-current screen-picker path; then two real-chrome runs on Comet exposed the
   desktopCapture picker as fundamentally fragile (worker-context refusal, same-tab capture
   collision), so *D-E7 pivoted to direct tab capture* — deleting the picker, the
-  `desktopCapture` permission, and the two-session bookkeeping. mac CLI review headliners
+  `desktopCapture` permission, and the multi-capture bookkeeping. mac CLI review headliners
   stand: Ctrl-C stamp corruption (idempotent duration slotting), stale-spool reuse refusal,
   HTTPException escaping the retry pump.
 - **Tests:** recording *110* (72 M1 + 38 new across the computer-capture slice: mac CLI,
@@ -171,7 +171,7 @@ session — it does not stay here struck through.
   of this slice by scope); multi-tab simultaneous capture (feasible; deferred — ws-E); a mac
   menu-bar/GUI app (ScreenCaptureKit, visible capture indicator, autostart), capability exists
   today via the CLI, UX later; continuous streaming ingest (D-M1-5 additive leg).
-- Retry ergonomics: `/capture/sessions/{id}/retry` is manual; consider an automatic periodic
+- Retry ergonomics: `/capture/captures/{id}/retry` is manual; consider an automatic periodic
   re-drive of `failed` segments once real-world failure modes are seen.
 - Continuity ledger growth: rows are permanent (fine at beta scale); add retention/compaction
   before fleet scale (M5 telemetry work).
@@ -179,4 +179,45 @@ session — it does not stay here struck through.
   point; nothing here forecloses it.
 - **`INGEST_ASYNC=1` on the fleet** — still the open [D16](../../DECISIONS.md) re-drive-drill decision. DP's durable journal has since made the guarantee durable on both legs; flipping the production default stays a founders' call.
 - **E-1 — `--segment-seconds 10 → 60`** ([../../HANDOFF.md](../../HANDOFF.md) §Escalations): the single largest cost lever (5.8×). It moves the audio leg too, so it is a joint call with DP-audio.
-- **E-6 — auto-retry of `failed` segments** (same escalation table): a 503 is recoverable but becomes terminal in 1.5 s.
+- **E-6 — auto-retry of downstream-declined segments** — refined 2026-07-30 into a two-phase design ([↓](#e-6--the-rejected-path-two-phase-design)).
+
+### E-6 — the rejected path, two-phase design
+> refined 2026-07-30 (CTO × recording session) · supersedes the one-line ask · escalation row:
+> [../../HANDOFF.md](../../HANDOFF.md) §Escalations
+
+**In one line.** A DP 503 is recoverable backpressure but becomes terminal in ~1.5 s (4 attempts ×
+0.25 s backoff); the fix is machine-owned retry for segments the *neighbor declined*, human-owned
+recovery for everything that failed *inside our walls*.
+
+**Phase 1 — an `error_class` column (small blast radius, build first)**
+
+- Ledger `segments` gains `error_class` ∈ `downstream_backpressure` · `media` · `internal`,
+  stamped when a segment is marked `failed`.
+- Only the [D16](../../DECISIONS.md)-pinned 503 maps to `downstream_backpressure`. Timeouts, 5xx
+  and poison-shaped errors stay `internal` — the gate is deliberately narrow, widened only on
+  evidence from real failures.
+- A periodic re-drive loop re-enqueues `failed` segments whose class is `downstream_backpressure`,
+  exponentially spaced with jitter, capped at N rounds.
+- No report-shape, verdict or metrics change; the class is visible in the row for debugging.
+
+**Phase 2 — promote to a fourth state `rejected` (immediate follow-up)**
+
+- State machine: `received → emitted | failed | rejected`, with `rejected → emitted` (weather
+  cleared) or `rejected → failed` (budget exhausted).
+- Verdict semantics: `rejected` with budget remaining counts as in-flight (`recording`); budget
+  exhausted demotes to `failed` → `gaps`. Neither hides a wedged DP nor cries wolf during
+  ordinary backpressure.
+- The report's `segment_states` gains a `rejected` count, so "waiting on DP" reads separately
+  from "needs a human".
+- The human is never deleted from the loop, only moved to the budget's end.
+
+**Watch out for**
+
+- A wedged DP emits 503s indefinitely — the budget-then-demote rule is what keeps that visible
+  instead of retrying forever under a calm verdict.
+- `/retry` stays the manual verb and becomes the daemon's verb for `rejected`; `/redrive` remains
+  the separate verb for async-`accepted` chunks. Two stuck states, two verbs — do not merge them.
+- Demux/ffprobe failures are *recording-internal* (`app/demux.py` runs here); DP-side processing
+  failures already have their own channel (inline error replies · async dead-letter via
+  `/continuity`) and are out of this design's scope.
+

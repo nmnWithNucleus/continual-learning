@@ -4,6 +4,10 @@
 > durably, losslessly, and consentfully on the backend. This is the stable doc; working state
 > lives in [HANDOFF.md](HANDOFF.md); system-wide architecture + contracts in
 > [../../ARCHITECTURE.md](../../ARCHITECTURE.md).
+>
+> **New to the service?** Start with the interactive onboarding field guide —
+> [onboarding/field-guide.html](onboarding/field-guide.html), hosted at
+> <https://claude.ai/code/artifact/4614435a-6a69-4ce9-9c8e-3fdeddc1170f> — then come back here.
 
 > ### ⚠️ STAGE: PROTOTYPE (pre-dev, pre-production) — D19, 2026-07-27
 > This charter is written in a production voice. **It is aspirational, not a commitment.** We are
@@ -18,7 +22,7 @@
 
 
 **Status:** chartered; **capture M1 + computer surfaces alpha-complete** (see §v0 deliverables
-milestone-progress note) · *Last updated:* 2026-07-19
+milestone-progress note) · *Last updated:* 2026-07-30 (§Parked for the stage flip added)
 
 ---
 
@@ -281,6 +285,36 @@ deferred additive leg — recorded on the founders' board as D14).
 
 ---
 
+## Parked for the stage flip
+
+> Decisions and cleanups deliberately deferred under stage PROTOTYPE ([D19](../../DECISIONS.md)).
+> Append here as they arise; work them only when the stage moves (beta → dev → prod).
+> [ARCHITECTURE.md](../../ARCHITECTURE.md) §Stage promises every parked item is picked up before we
+> serve a general audience — this section is recording's share of that promise.
+
+### Retire the gap-report DP reconciliation?
+> parked 2026-07-30 · CTO × recording session · code: `app/capture_web.py` (`_dp_missing_unacked`)
+
+**In one line.** DP now keeps a durable ingest journal, so reconciling its claimed-missing
+sequences against our ledger receipts looks redundant — retirement was discussed and deliberately
+declined while the stage is PROTOTYPE.
+
+**Why it stays for now**
+
+- Wipes are licensed under D19 and can be asymmetric: DP's journal cleared while our ledger
+  retains receipts would flip every historical report to a false `gaps`.
+- Fleet builds skew — the running fleet has lagged merges by days, and a DP rollback resurrects
+  the restart-amnesia this guards against.
+- The excuse it grants is safe by construction: a receipt means the C2 is durable in *storage*,
+  a fact DP's memory loss cannot un-make. It prevents false alarms and can never hide real loss.
+- The raw `missing` vs `missing_unacked` pair in the report is also the diagnostic that makes
+  DP state loss visible instead of a hand-debugged mystery.
+
+**Revisit trigger** — pinned deploys plus symmetric backup/restore discipline for both stores'
+state; then keep-vs-retire becomes a recorded decision, never a cleanup commit.
+
+---
+
 ## Risks
 
 | Risk | Impact | Mitigation |
@@ -315,15 +349,20 @@ Pinned so docs and sessions stay unambiguous. Moved here from the canvas 2026-07
 stable reference, and the canvas is rewritten every session.
 
 **segment** = client→server
-upload unit (~10 s self-contained clip; `seq` dense per capture session) · **chunk** =
+upload unit (~10 s self-contained clip; `segment_num` dense per capture) · **chunk** =
 server→DP single-modality unit (one `/raw` blob + one C1 envelope; `sequence` dense per
-stream) · *stream* = one continuous single-modality flow from one device session
-(`stream_id` — the identity that crosses service boundaries) · *capture session* = one
+stream) · *stream* = one continuous single-modality flow from one capture
+(`stream_id` — the identity that crosses service boundaries) · *capture* = one
 start→stop on a device (press-record→stop / CLI run→Ctrl-C / extension click→click);
-first-class in the ledger, *never travels past C1* (C1 carries `stream_id`, not
-`session_id`) · *record* = one `/context` row conforming to the C2 contract.
-Disambiguation: a *capture session* (recording) is NOT the serve-loop *chat session*
-(`session_id` in C3/C4, storage `/sessions`) — qualify the word when both are in frame.
+first-class in the ledger as `capture_id`, *never travels past C1* (C1 carries
+`stream_id`, never `capture_id`) · *record* = one `/context` row conforming to the C2
+contract.
+The client-wire names were `session_id` + `seq` until 2026-07-29; they were renamed
+`capture_id` + `segment_num` (and the `/capture/sessions/*` routes became
+`/capture/captures/*`) to stop colliding with the serve loop's chat `session_id` and
+with C1's `sequence`. `sequence` stays: it is a separate counter — a segment can lack a
+modality, and carve/replay sources have no segments at all, so per-stream density needs
+its own axis.
 
 ## Related work
 
