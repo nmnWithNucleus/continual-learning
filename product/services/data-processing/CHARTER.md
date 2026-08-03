@@ -20,7 +20,8 @@
 > Full posture + what changes at dev/prod: [ARCHITECTURE.md](../../ARCHITECTURE.md) §Stage.
 
 
-**Status:** chartered · **Last updated:** 2026-07-29 (onboarding field-guide link added) ·
+**Status:** chartered · **Last updated:** 2026-08-03 (field guide revised under the
+teaching-view rules, [D22](../../DECISIONS.md)) ·
 [D18](../../DECISIONS.md) / [D19](../../DECISIONS.md) / [D20](../../DECISIONS.md)
 
 - **2026-07-27** — C2 gains an additive-optional `discriminator`, surfaced so storage's day-log
