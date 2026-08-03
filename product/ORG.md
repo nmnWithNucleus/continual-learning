@@ -5,7 +5,7 @@
 > document reads like. Launch prompts: [PROMPTS.md](PROMPTS.md) · live status:
 > [HANDOFF.md](HANDOFF.md).
 
-**Last updated:** 2026-07-28
+**Last updated:** 2026-07-30 (onboarding teaching views, [D22](DECISIONS.md))
 
 ## The structure
 
@@ -98,6 +98,15 @@ workstream) maintains:
 | `HANDOFF.md` | **Volatile board** — status tables, where we are, what's next, gotchas. *Rewritten in place* every session. | POC `HANDOFF.md` |
 | `handoff/<ws>.md` | Per-workstream / per-aspect working file: the reasoning and a newest-first worklog | POC `phase-N-*.md` / `wsN-*.md` |
 | `DECISIONS.md` | **Append-at-top register** of ratified decisions, cited everywhere and restated nowhere. Root holds the D-numbers; a service opens one only when it has local decisions | — (new 2026-07-27) |
+| `onboarding/*` | **Derived teaching view** — a guided explanation for newcomers, in whatever format teaches best. Optional | — (new 2026-07-30, [D22](DECISIONS.md)) |
+
+**A teaching view is allowed to restate, and pays for it.** [STYLE.md](STYLE.md) rule 8 forbids a
+second home for a fact; an onboarding view is the **sanctioned exception**, because explaining
+something requires repeating it. It buys that exception with three obligations: it is *linked from
+the node's CHARTER* so it is discoverable; the **repo wins** whenever the two disagree; and it is
+*corrected in the same session* as the change it teaches, exactly as a canvas is stamped. A view
+nobody maintains is worse than no view — it becomes the stale parallel copy [D2](DECISIONS.md)
+abolished. What it reads like is [STYLE.md](STYLE.md) §Teaching views.
 
 **Deliberate deviation from the original plan — one format, not two.** The original intent
 was parallel human-readable and AI-readable copies at every level (4+ docs per node). We

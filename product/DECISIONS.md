@@ -63,6 +63,7 @@ That is expected, and this register is built for it:
 
 | # | Decision | Date | Status | Lineage | Card |
 |---|---|---|---|---|---|
+| **D22** | Onboarding teaching views are a sanctioned document type | 2026-07-30 | ratified | — | [↓](#d22--onboarding-teaching-views) |
 | **D21** | STYLE.md is the SOP for every document edit in `product/` | 2026-07-28 | ratified | — | [↓](#d21--the-document-style-sop) |
 | **D20** | The exit bar for the storage↔continuum cutover, and a definition of "done" | 2026-07-27 | **BUILT** 2026-07-27 | — | [↓](#d20--the-cutover-exit-bar) |
 | **D19** | Stage is PROTOTYPE: nothing is set in stone, contracts included | 2026-07-27 | ratified | supersedes **D18** (2 clauses) | [↓](#d19--stage-prototype) |
@@ -84,6 +85,32 @@ That is expected, and this register is built for it:
 | **D3** | Serve-loop first | 2026-07-09 | ratified | — | [↓](#d3--serve-loop-first) |
 | **D2** | Single-markdown doc protocol | 2026-07-09 | ratified | — | [↓](#d2--single-markdown-doc-protocol) |
 | **D1** | Platform is a ratified service | 2026-07-09 | ratified | — | [↓](#d1--platform-is-a-service) |
+
+### D22 — onboarding teaching views
+
+> `ratified` 2026-07-30 · recorded in [ORG.md](ORG.md) §Documentation protocol +
+> [STYLE.md](STYLE.md) §Teaching views · first instance:
+> [services/recording/onboarding/](services/recording/onboarding/)
+
+**In one line.** A node may keep a derived onboarding view that teaches newcomers, and it is the
+one sanctioned exception to *one fact, one home*.
+
+**What was decided**
+
+- A node may keep `onboarding/*` — a guided explanation in whatever format teaches best, markdown
+  or HTML or interactive. Optional, and opened only when a node is worth teaching.
+- The view is **derived and non-authoritative**. The repo wins whenever the two disagree.
+- It is exempt from [STYLE.md](STYLE.md) rule 8, and pays for the exemption with three obligations:
+  linked from the node's CHARTER, repo-wins precedence, and corrected in the same session as the
+  change it teaches.
+- Voice and shape are governed by [STYLE.md](STYLE.md) §Teaching views, where rules 1, 5 and 6 are
+  lifted and four teaching rules imposed.
+
+**Watch out for**
+
+- **A view nobody maintains is worse than no view.** The same-session obligation is the entire
+  price of the exemption; drop it and the view becomes the stale parallel copy
+  [D2](#d2--single-markdown-doc-protocol) abolished.
 
 ### D21 — the document style SOP
 

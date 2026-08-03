@@ -3,8 +3,9 @@
 > [ORG.md](ORG.md) decides **which file** a fact belongs in; this file decides **what it reads
 > like**. Binds every node: root, service, workstream.
 
-**Last updated:** 2026-07-29 · ratified — [D21](DECISIONS.md). The file is ratified, not this
-revision; editing it is a founders' act. §Was / Changed / Now / Payoff trimmed 2026-07-28: the
+**Last updated:** 2026-07-30 · ratified — [D21](DECISIONS.md). The file is ratified, not this
+revision; editing it is a founders' act. §Teaching views added 2026-07-30 ([D22](DECISIONS.md)):
+onboarding views are read start to finish, so three rules are lifted for them and four imposed. §Was / Changed / Now / Payoff trimmed 2026-07-28: the
 example is the teaching, so the glosses restating it and the duplicate worklog-entry block went.
 Rule 6's general cap raised 25 → 40 on 2026-07-29: 40 is where one idea plus its citation lands,
 and past it a bullet is usually carrying a second clause.
@@ -120,6 +121,21 @@ it would change a future decision.
 
 "Be careful with timezones" is not a learning. "Per-user `home_tz` could not survive travel, so the
 device reports the zone per chunk ([D17](DECISIONS.md))" is.
+
+## Teaching views
+
+An onboarding view ([ORG.md](ORG.md) §Documentation protocol) is read start to finish by a person,
+so it inverts most of this file. **Rules 1, 5 and 6 do not bind it:** it wants flowing sentences
+rather than table cells and clipped bullets. What does bind it:
+
+- **Write full sentences a newcomer could read aloud.** Noun fragments and keyword lists belong on
+  a board, where someone is scanning rather than learning.
+- **Meaning first, the id in brackets.** *"The founders reversed that (D19)"* — never *"per D19"*,
+  which sends a reader away mid-thought to a register they have not met yet.
+- **Basics before advanced**, with every coined term introduced where it first appears. §Self-check's
+  joinee test is the bar, and here it is the whole bar.
+- **Be honest about what is unbuilt.** A view that quietly teaches the system we intend rather than
+  the one we have will mislead precisely the reader who cannot yet tell the difference.
 
 ## Growing a worklog
 
