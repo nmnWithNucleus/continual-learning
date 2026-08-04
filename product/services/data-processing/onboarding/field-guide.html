@@ -243,7 +243,7 @@ tr:last-child td { border-bottom: 0; }
 }
 .cmp-out { padding: 16px 18px; }
 .cmp-line { font-family: var(--mono); font-size: 13px; margin-bottom: 10px; overflow-x: auto; white-space: nowrap; padding-bottom: 2px; }
-.cmp-line .lbl { color: var(--ink-faint); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; display: inline-block; min-width: 128px; }
+.cmp-line .lbl { color: var(--ink-faint); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; display: inline-block; min-width: 128px; margin-right: 12px; }
 .cmp-line .frag { display: inline-block; border-radius: 6px; padding: 2px 7px; margin-right: 3px; border: 1px solid var(--line); background: var(--panel-2); }
 .cmp-line .frag.base { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); font-weight: 600; }
 .cmp-line .frag.mut { border-color: var(--warn); color: var(--warn); background: var(--warn-soft); }
@@ -284,18 +284,19 @@ tr:last-child td { border-bottom: 0; }
 }
 .exp-controls .btns button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 .exp-controls .btns button:disabled { opacity: .45; cursor: default; }
-.stations { display: flex; gap: 4px; padding: 18px; overflow-x: auto; align-items: stretch; }
-.station { display: flex; align-items: center; gap: 4px; }
+.stations { display: flex; flex-direction: column; padding: 16px 18px 14px; }
+.lane-label { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-faint); margin: 12px 0 6px; }
+.stations .lane-label:first-child { margin-top: 0; }
+.st-row { display: flex; }
 .st-box {
-  min-width: 92px; text-align: center; padding: 10px 8px; border-radius: 9px;
-  border: 1px solid var(--line); background: var(--panel-2); font-family: var(--mono); font-size: 11px;
-  color: var(--ink-faint); line-height: 1.35; transition: all .18s ease;
+  flex: 1 1 auto; max-width: 560px; text-align: left; padding: 8px 14px; border-radius: 9px;
+  border: 1px solid var(--line); background: var(--panel-2); font-family: var(--mono); font-size: 11.5px;
+  color: var(--ink-faint); line-height: 1.4; transition: all .18s ease;
 }
-.st-box .sv { display: block; font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; margin-top: 3px; color: var(--ink-faint); }
 .st-box.done { border-color: color-mix(in srgb, var(--ok) 50%, transparent); color: var(--ink); background: var(--ok-soft); }
 .st-box.now { border-color: var(--accent); color: var(--ink); background: var(--accent-soft); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
 .st-box.fail { border-color: color-mix(in srgb, var(--warn) 60%, transparent); background: var(--warn-soft); color: var(--ink); }
-.st-arr { color: var(--ink-faint); font-family: var(--mono); font-size: 12px; padding: 0 2px; }
+.st-down { color: var(--ink-faint); font-family: var(--mono); font-size: 11px; padding: 1px 0 1px 18px; line-height: 1.2; }
 .exp-log { border-top: 1px solid var(--line-soft); padding: 16px 18px 18px; min-height: 175px; }
 .exp-log .step-title { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--accent); margin-bottom: 4px; }
 .exp-log .step-body { font-size: 14.5px; color: var(--ink); max-width: 78ch; }
@@ -532,13 +533,13 @@ ul.tight li { margin-bottom: 8px; max-width: 70ch; }
     <li><code>chunk_id</code> is <b>the dedup key</b>: the client mints it once and it never changes across retries, and that constancy is where our whole idempotency story starts.</li>
     <li><code>(stream_id, sequence)</code> is dense and zero-based, so any break — including a first-seen value above zero — means a lost chunk. Our continuity tracker turns breaks into visible gaps, and recording's report cross-checks them live.</li>
     <li><code>blob_ref</code> says where the bytes live and <code>blob_sha256</code> lets us verify them end to end. The ref is <b>opaque</b>: we never parse it or infer a path from it — we ask storage.</li>
-    <li><code>modality</code> is one of <code>audio | video | image | text</code>. One envelope shape serves all four, which is why the vision build never had to reshape the wire.</li>
+    <li><code>modality</code> is one of <code>audio | video | image | text</code>. One envelope shape serves all four, so a modality built later plugs into the same wire the first one used — video and image arrived after audio and changed nothing about C1.</li>
     <li><code>t_start</code> and <code>t_end</code> are the chunk's span of the user's life in RFC3339 UTC — the time spine every downstream alignment leans on.</li>
     <li><code>device_tz</code>, <code>device_utc_offset_minutes</code> and <code>device_location</code> carry the civil-time provenance the founders assigned to the capturing device when they split timezone custody (D17). We copy them <b>verbatim</b>, and DP performs <em>zero timezone logic</em>, ever — no deriving, no validating, no guessing.</li>
   </ul>
 
   <h3>C2 — what leaves <span class="pill law">produced</span></h3>
-  <p>For every unit of meaning a chunk contains, we emit one <b>C2 processed record</b> to storage <code>/context</code>. Click any field:</p>
+  <p>For every unit of meaning a chunk contains, we emit one <b>C2 processed record</b> to storage <code>/context</code>. Below is a complete, honest example — the record an audio chunk produces on today's beta fleet (real ASR, everything else at defaults). Note the nesting: <code>source</code> and <code>content</code> are objects inside the record, and the example's <code>record_id</code> is the genuine sha256 of this example's own <code>chunk_id</code> and <code>pipeline_version</code>, so you can reproduce it by hand. Click any field for the story behind it:</p>
 
   <div class="envelope">
     <div class="env-json" id="c2-json" role="listbox" aria-label="C2 record fields"></div>
@@ -551,7 +552,7 @@ ul.tight li { margin-bottom: 8px; max-width: 70ch; }
   </div>
 
   <div class="note warn">
-    <p><b class="tag">The mirror trap (D17's scar)</b>The C2 shape is defined three times: the JSON Schema in <code>product/contracts/</code> (source of truth), DP's pydantic mirror, and storage's pydantic mirror — and both mirrors are <code>extra="forbid"</code>. Add a field to the schema without touching <em>both</em> mirrors and the system fails closed. That is deliberate: better a loud rejection than two services silently disagreeing about a shape. When you edit a contract: ARCHITECTURE first, then the schema, then both mirrors, same change.</p>
+    <p><b class="tag">The mirror trap — a story worth knowing (D17)</b>The C2 shape is written down three times: the JSON Schema in <code>product/contracts/</code> is the source of truth, and both DP and storage keep a pydantic "mirror" of it in code, each declared <code>extra="forbid"</code> — any field a mirror does not know gets the whole record rejected. Here is how it bit: when the founders split timezone custody (D17) the schema gained the new civil-time fields, and a strict mirror had not moved with it — so perfectly schema-valid records carrying the new fields were refused by the side holding the stale mirror. Storage's strict mirror caught the omission in test, the mirrors were moved together, and the lesson became the rule this note exists to teach: a contract edit is one change with four parts — the ARCHITECTURE card, the schema, and <em>both</em> mirrors — landed together. The strictness is deliberate: a loud rejection at the edge beats two services silently disagreeing about what a record is.</p>
   </div>
 
   <h3>C8 — the door that isn't built yet</h3>
@@ -582,7 +583,7 @@ ul.tight li { margin-bottom: 8px; max-width: 70ch; }
   <p style="margin-top:18px"><b>Why a hash at all?</b> Storage's <code>/context</code> write is a <em>blind upsert</em> on <code>record_id</code>. Because the id is a pure function of its inputs, processing the same chunk twice writes the same id — the second write lands on the first. That single property converts recording's at-least-once delivery into an exactly-once <em>effect</em>, makes <code>kill -9</code> recovery safe, and makes reprocessing history a version bump instead of a migration.</p>
 
   <div class="note">
-    <p><b class="tag">The ␀ between the parts</b>Components are joined with a NUL byte before hashing. Without a separator, <code>("ab","c")</code> and <code>("a","bc")</code> would hash identically — the classic composite-key collision. Also load-bearing: an <em>empty</em> discriminator is skipped entirely, so audio's 1:1 id is byte-identical to the id from before discriminators existed. Nothing ever re-keyed. (<code>app/pipeline.py:33-46</code>)</p>
+    <p><b class="tag">The ␀ between the parts</b>Components are joined with a NUL byte before hashing. Without a separator, <code>("ab","c")</code> and <code>("a","bc")</code> would hash identically — the classic composite-key collision. Also load-bearing: an <em>empty</em> discriminator is skipped entirely, so a single-record chunk hashes exactly the way it did before discriminators existed. In plain words — "re-keying" a record means its identity hash changes, and when this field was introduced, not one already-stored record changed its <code>record_id</code>. (<code>app/pipeline.py:33-46</code>)</p>
   </div>
 
   <h3>Play with the dialect</h3>
@@ -636,7 +637,7 @@ ul.tight li { margin-bottom: 8px; max-width: 70ch; }
   </div>
 
   <div class="note warn">
-    <p><b class="tag">Forward-only, by design</b>A <code>pipeline_version</code> bump never repairs the past. Old records stay in <code>/context</code>; new ones land beside them, and storage's day-log picks <em>one dialect per record</em> (latest <code>ingest_time</code> wins). There is a cost, and the founders accepted it in writing when they moved the training window onto storage's ingest clock (D18): the same lived moment can train twice, in two dialects. Suppressing that would also suppress the correction — and the correction wins.</p>
+    <p><b class="tag">Forward-only, by design</b>Walk this chain slowly, because it explains a sentence people trip on. A dialect bump means reprocessed records get new ids and land in <code>/context</code> <em>beside</em> the old ones — nothing is repaired in place. Storage's day-log then keeps one voice per unit (the copy it received most recently), so any single day-log reads cleanly. But training already happened: the old dialect's text was baked into the user's adapter on some earlier night, and weights cannot be un-trained. Meanwhile the corrected records arrive with fresh ingest times, so they fall into the <em>next</em> training window — and get trained too. Net effect: one lived moment teaches the model twice, once in each voice. The founders looked at that squarely when they moved the training window onto storage's ingest clock (D18) and accepted it, because the only way to prevent the double exposure would be to suppress reprocessed records of already-trained chunks — which would also suppress the correction, and the correction is the entire reason the bump was made. The correction wins.</p>
   </div>
 </section>
 
@@ -644,7 +645,7 @@ ul.tight li { margin-bottom: 8px; max-width: 70ch; }
 <section class="module" id="m5">
   <div class="eyebrow"><span class="lvl">MODULE 05</span> The core interactive</div>
   <h2>Life of a chunk — every path through the service</h2>
-  <p class="dek">This is the whole request surface. Pick what arrives (modality), how we're configured (ingest mode), and what goes wrong (scenario) — then step through. Every step names the real behavior in code, and every combination below exists in the test suite.</p>
+  <p class="dek">This is the whole request surface. Pick what arrives (modality), how we're configured (ingest mode), and what goes wrong (scenario) — then step through. Every step names the real behavior in code, and every combination below exists in the test suite. The chart reads top to bottom, the way a chunk actually travels, and the lane labels carry the concurrency: once the async 202 is out, the worker lane runs while recording gets on with its day.</p>
 
   <div class="explorer">
     <div class="exp-controls">
@@ -683,7 +684,20 @@ ul.tight li { margin-bottom: 8px; max-width: 70ch; }
       <span class="exp-progress" id="exp-progress"></span>
     </div>
   </div>
-  <p class="kbd-note">The reply matrix in one line: <code>400</code> bad JSON · <code>422</code> C1 schema violation · <code>501</code> no processor for the modality · <code>200 {record_ids}</code> processed (inline, or a done-duplicate) · <code>202 {accepted}</code> async claim · <code>503</code> queue full · <code>502</code> blob trouble. The first three resolve synchronously in <em>both</em> modes — a deterministic rejection is never deferred into a silent dead-letter.</p>
+  <h3>The reply matrix</h3>
+  <div class="tblwrap"><table>
+    <thead><tr><th>Reply</th><th>When you get it</th><th>What it tells recording</th></tr></thead>
+    <tbody>
+      <tr><td><code>400</code></td><td>The body was not JSON at all.</td><td>A client bug — fix and resend; nothing was recorded.</td></tr>
+      <tr><td><code>422</code> + violations</td><td>The envelope failed the C1 schema.</td><td>A client bug, named field by field, while the client can still see it.</td></tr>
+      <tr><td><code>501</code></td><td>A valid modality with no processor registered.</td><td>The fleet cannot process this kind yet — the chunk still counted as delivered coverage.</td></tr>
+      <tr><td><code>200 {ok, record_ids}</code></td><td>Inline success — or any redelivery of a finished chunk, in either mode.</td><td>The C2 records exist durably; safe to confirm.</td></tr>
+      <tr><td><code>202 {ok, accepted, chunk_id}</code></td><td>Async accept (<code>duplicate: true</code> when it was already in flight).</td><td>A durable promise, not completion — watch <code>/continuity</code> for processed.</td></tr>
+      <tr><td><code>503</code></td><td>The bounded queue is full, or not ready.</td><td>Honest overload; nothing was accepted — retry later.</td></tr>
+      <tr><td><code>502</code></td><td>Blob unfetchable or corrupt, or the storage write failed (inline mode).</td><td>The chunk was <em>not</em> marked done — a healthy retry can still succeed.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="kbd-note">The first three resolve synchronously, pre-claim, in <em>both</em> modes — a deterministic rejection is never deferred into a silent dead-letter.</p>
 </section>
 
 <!-- ============================================================ 06 STAGE GRAPH -->
@@ -993,7 +1007,7 @@ ul.tight li { margin-bottom: 8px; max-width: 70ch; }
   </ul>
 
   <div class="note warn">
-    <p><b class="tag">Metric truths worth knowing</b>Under subprocess isolation, child-side increments are invisible to the parent registry — the load-bearing per-unit counters were deliberately moved parent-side. <code>dp_partial_write_total</code> is the <em>only</em> signal that a caption landed without its OCR sibling (the A-4 window). And <code>dp_caption_ungrounded_quote_total</code> currently measures an empty set — mock captions carry zero double-quotes — its widened scorer exists in <code>scripts/prompt_ab.py</code> and wiring it is an open follow-up.</p>
+    <p><b class="tag">Metric truths worth knowing</b>Under subprocess isolation, child-side increments are invisible to the parent registry — the load-bearing per-unit counters were deliberately moved parent-side. <code>dp_partial_write_total</code> is the <em>only</em> signal that a caption landed without its OCR sibling — the partial-write window, item A-4 on the video workstream's accepted-caveat list. And <code>dp_caption_ungrounded_quote_total</code> currently measures an empty set — mock captions carry zero double-quotes — its widened scorer exists in <code>scripts/prompt_ab.py</code> and wiring it is an open follow-up.</p>
   </div>
 </section>
 
@@ -1221,36 +1235,75 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /* ================================================================ C2 record explorer */
 (() => {
-  const F = [
-    ['contract · version', '"C2" · "0"', 'Self-describing payloads: every contract body names itself. Additive optional fields (like discriminator) need no version bump; a breaking change writes a new schema file and edits the ARCHITECTURE card first.'],
-    ['record_id', '"9f2c41ae…" (sha256 hex)', 'THE identity: sha256(chunk_id ␀ pipeline_version [␀ discriminator]). Deterministic, so reprocessing is an idempotent upsert. Never random, never a counter — module 04 is entirely about this field.'],
-    ['user_id', '"nmn"', 'Whose life this is. Per-user isolation starts here and holds all the way down to storage, where cross-user reads fail closed.'],
-    ['source.device_id · stream_id · chunk_id', '"mac-cli-A1…" · ULIDs', 'Provenance carried verbatim from C1: which device, which continuous stream, which chunk. chunk_id ties the record back to the exact seconds of raw capture — and to the /raw blob, for as long as it lives.'],
-    ['source.blob_ref', '"raw/01KX…" (opaque)', 'Where the raw bytes lived when we processed them. Opaque means it: never parse it, never infer a path. A since-deleted blob is normal — deletion of raws is a privacy feature.'],
-    ['source.modality', '"audio"', 'audio | video | image | text. One record shape serves all four — which is why the vision build never touched the wire.'],
-    ['source.device_tz · device_utc_offset_minutes', '"Asia/Tokyo" · 540', 'D17 civil time, copied VERBATIM from C1. DP performs zero timezone logic — no deriving, validating, or inferring. Absent when the device didn\'t report one (absence, never null); downstream falls back to the user\'s declared home_tz.'],
-    ['t_start · t_end', '"2026-07-19T17:04:10Z"', 'The span of the user\'s life this record describes — RFC3339 UTC, the sole ordering axis system-wide. Emitted as the C1 strings verbatim where possible: storage compares windows as raw strings, so a re-rendered "+00:00" would silently fall out of its window.'],
-    ['content.kind', '"transcript"', 'transcript | caption | ocr | text — the frozen enum, and the day-log\'s routing key: captions render as Scene:, ocr as World text (OCR):, transcripts as Heard:. One kind per record; a chunk with several kinds emits several records.'],
-    ['content.text', '"okay so the plan for today…"', 'The payload — and, after storage renders it into day-log blocks, literally the text the user\'s model trains on. Clip-path video records keep it single-line (D-12) and char-budgeted at 22 chars per second of life (D-11); the unbudgeted legacy caption volume is one of the defects the clip path fixes.'],
-    ['content.segments', '[{t_start, t_end, text, speaker}]', 'Transcript-only sub-spans with absolute RFC3339 times. speaker is null until diarization is enabled — the field shipped before the content so the shape never moves.'],
-    ['enrichments', '{speakers:[], faces:[], places:[], objects:[]}', 'Present-but-empty in v0, mirroring C4\'s empty trace arrays: the shape ships before the content so world-data enrichment (M5) never reshapes the record. Read by nobody today — which is exactly why the law\'s T2 test refuses to store more here (see E-5).'],
-    ['pipeline_version', '"asr-fw-v1+diar-pyannote-v1"', 'The dialect: which processing produced this text. Composed from the primary\'s base fragment + mutate fragments in chain order + sorted sidecar fragments. Feeds record_id, so it is the versioning mechanism for the whole corpus.'],
-    ['discriminator', '"ocr" · absent in the 1:1 case', 'Which unit within the chunk. The founders surfaced it as a readable, additive-optional field when they took the prototype-stage calls (D19). Absent — not "" and not null — when a chunk yields one record. Storage\'s one-dialect rule groups on (chunk_id, kind, discriminator); duplicates within a chunk are rejected at the executor.'],
-    ['processed_at', '"2026-07-19T17:04:31Z"', 'When we processed it — deliberately NOT part of record_id, so a reprocess overwrites the same record with a fresh timestamp. Note what is absent here: ingest_time is storage\'s own clock, assigned at write, never carried in C2.'],
+  // Each field: [display key, JSON value (string exactly as rendered), detail title, detail body]
+  // Structural lines (braces, comments) carry no index and are not clickable.
+  const D = {
+    contract: ['contract · version', 'Self-describing payloads: every contract body names itself and its version, so a consumer can log or route on it with no out-of-band context. Additive optional fields need no version bump; a breaking change writes a new schema file and edits the ARCHITECTURE card first.'],
+    record_id: ['record_id', 'The identity of the record, and the single most load-bearing value in the service: the sha256 hash, printed as 64 hex characters, of chunk_id, then a NUL byte, then pipeline_version — with the discriminator folded in only when one exists. It is deterministic, so reprocessing the same chunk writes the same id and storage upserts instead of duplicating. The value shown here is the real hash of this example’s own chunk_id and pipeline_version — you can verify it with one line of Python.'],
+    user_id: ['user_id', 'Whose life this is. Per-user isolation starts here and holds all the way down into storage, where cross-user reads fail closed.'],
+    src_device: ['source.device_id', 'Which capture device produced the chunk — stable per device (mac-cli-*, phone-web-*, ext-chrome-*), so multi-device days stay attributable.'],
+    src_stream: ['source.stream_id', 'One continuous, single-modality flow from one device, minted as a ULID. Dense sequence numbers live inside this namespace — it is where gap detection has meaning.'],
+    src_chunk: ['source.chunk_id', 'The tie back to the exact seconds of raw capture, and the first input to record_id. It never changes across retries, which is what makes redelivery harmless.'],
+    src_blob: ['source.blob_ref', 'Where the raw bytes lived when we processed them. The value is opaque by contract: we never parse it or infer a path from it — only storage resolves it. It may look like it contains the chunk_id; treating that as meaningful would be a bug. A since-deleted blob is normal, because deleting raws is a privacy feature.'],
+    src_modality: ['source.modality', 'One of audio, video, image, text. One record shape serves all four, so modalities built later (video, image) never had to touch the wire.'],
+    src_tz: ['source.device_tz', 'The IANA timezone the capturing device reported for this chunk — the "fact" half of the timezone split the founders made (D17). We copy it verbatim and perform no timezone logic at all. When a device reports nothing, the field is absent (never null), and downstream falls back to the user’s declared home_tz.'],
+    src_off: ['source.device_utc_offset_minutes', 'The UTC offset the device actually applied at capture, in minutes — 540 means UTC+09:00. It is not redundant with device_tz: if a device’s timezone database was stale, the zone name and the offset disagree, and this is the only witness that catches it after the fact.'],
+    t: ['t_start · t_end', 'The span of the user’s life this record describes, in RFC3339 UTC — the sole ordering axis system-wide. We emit the C1 strings verbatim wherever we can: storage compares time windows as raw strings, so a timestamp re-rendered from Z-form into +00:00 would silently fall out of its window.'],
+    c_kind: ['content.kind', 'One of transcript, caption, ocr, text — the frozen enum, and the day-log’s routing key: captions render as Scene: lines, ocr as World text (OCR):, transcripts as Heard:. One kind per record; a chunk with several kinds emits several records.'],
+    c_text: ['content.text', 'The payload — and, after storage renders it into day-log blocks, literally the text the user’s model trains on. Clip-path video records keep it single-line and char-budgeted at 22 characters per second of life (design rows D-12 and D-11); the unbudgeted legacy caption volume is one of the defects the clip path fixes.'],
+    c_lang: ['content.language', 'The language the transcriber worked in. The beta fleet pins ASR to English (a runtime knob, deliberately not part of the dialect), after auto-detect hallucinated other scripts on faint room audio in the first real phone session.'],
+    c_seg: ['content.segments', 'Transcript-only sub-spans with absolute RFC3339 times, clamped into the chunk span. speaker is null until diarization is switched on — the field shipped before the capability so the shape never has to move.'],
+    enr: ['enrichments', 'Present but empty in v0, mirroring C4’s empty trace arrays: the shape ships before the content, so world-data enrichment (faces, places, objects — milestone M5) can land without reshaping the record. Nothing reads it today, which is exactly why the emission law’s T2 test refuses to store more here for now (the parked edit is escalation E-5).'],
+    pv: ['pipeline_version', 'The dialect — which processing produced this text. It composes from the primary’s base fragment, then any mutate fragments in chain order, then the remaining fragments sorted. asr-fw-v1 is today’s real-fleet audio dialect: faster-whisper with the VAD gate. It feeds record_id, so it is the versioning mechanism for the whole corpus.'],
+    disc: ['discriminator (absent here)', 'The within-chunk sub-key that keeps a chunk’s several records distinct — "ocr", "translation", a keyframe index. This chunk produced exactly one record, so the field is absent: not empty-string, not null, simply not there. Absence is the 1:1 contract, and it keeps this record’s id byte-identical to the era before discriminators existed. The founders surfaced the field as readable when they took the prototype-stage calls (D19).'],
+    pa: ['processed_at', 'When we processed it — deliberately not an input to record_id, so a reprocess overwrites the same record with a fresh timestamp. Also note what is not here at all: ingest_time is storage’s own clock, stamped on arrival, never carried inside C2.'],
+  };
+  const L = [
+    ['{'],
+    ['  "contract": "C2",', 'contract'],
+    ['  "version": "0",', 'contract'],
+    ['  "record_id": "d559bd4b3b5de794d1c5690a4d9c880440bbc0fa5977e7120c0b829e07514a06",', 'record_id'],
+    ['  "user_id": "nmn",', 'user_id'],
+    ['  "source": {'],
+    ['    "device_id": "mac-cli-7F3K9Q",', 'src_device'],
+    ['    "stream_id": "01KXWE2DQY5RT8MZ0V4H6B1JNC",', 'src_stream'],
+    ['    "chunk_id": "01KXWE3F0AQ8Z2V9T1N4C6R7SD",', 'src_chunk'],
+    ['    "blob_ref": "raw/01KXWE3F0AQ8Z2V9T1N4C6R7SD",', 'src_blob'],
+    ['    "modality": "audio",', 'src_modality'],
+    ['    "device_tz": "Asia/Tokyo",', 'src_tz'],
+    ['    "device_utc_offset_minutes": 540', 'src_off'],
+    ['  },'],
+    ['  "t_start": "2026-07-19T17:04:10Z",', 't'],
+    ['  "t_end": "2026-07-19T17:04:22Z",', 't'],
+    ['  "content": {'],
+    ['    "kind": "transcript",', 'c_kind'],
+    ['    "text": "okay so the plan for today is the emission law tests",', 'c_text'],
+    ['    "language": "en",', 'c_lang'],
+    ['    "segments": [ { "t_start": "…26Z", "t_end": "…22Z", "text": "…", "speaker": null } ]', 'c_seg'],
+    ['  },'],
+    ['  "enrichments": { "speakers": [], "faces": [], "places": [], "objects": [] },', 'enr'],
+    ['  "pipeline_version": "asr-fw-v1",', 'pv'],
+    ['  // "discriminator" is absent — this chunk produced exactly one record', 'disc'],
+    ['  "processed_at": "2026-07-19T17:04:31Z"', 'pa'],
+    ['}'],
   ];
   const jsonEl = $('#c2-json'), detail = $('#c2-detail');
-  jsonEl.innerHTML = '<span class="c">// one C2 processed record — data-processing → storage /context</span>\n{\n' +
-    F.map(([k,v],i) => {
-      const key = k.split(' ·')[0].trim();
-      const vv = '0123456789[{'.includes(v.charAt(0)) ? `<span class="n">${v.replace(/</g,'&lt;')}</span>` : `<span class="s">${v.replace(/</g,'&lt;')}</span>`;
-      return `<button class="row" data-i="${i}" role="option">  <span class="k">"${key}"</span>: ${vv}${i<F.length-1?',':''}</button>`;
-    }).join('') + '\n}';
+  const paint = t => t
+    .replace(/"([^"]+)":/g, '<span class="k">"$1"</span>:')
+    .replace(/: "([^"]*)"/g, ': <span class="s">"$1"</span>')
+    .replace(/: (\d+)/g, ': <span class="n">$1</span>');
+  jsonEl.innerHTML = '<span class="c">// one C2 processed record — data-processing → storage /context</span>\n' +
+    L.map(([txt, key], i) => {
+      if (!key) return `<span class="row" style="cursor:default">${paint(txt)}</span>`;
+      const painted = txt.startsWith('  //') ? `<span class="c">${txt}</span>` : paint(txt);
+      return `<button class="row" data-k="${key}" role="option">${painted}</button>`;
+    }).join('');
   jsonEl.addEventListener('click', e => {
-    const row = e.target.closest('.row'); if (!row) return;
+    const row = e.target.closest('button.row'); if (!row) return;
     $$('.row', jsonEl).forEach(r => r.classList.remove('on'));
     row.classList.add('on');
-    const [k, v, why] = F[+row.dataset.i];
-    detail.innerHTML = `<h4>${k}</h4><p style="font-family:var(--mono); font-size:12px; color:var(--ink-faint)">example: ${v.replace(/</g,'&lt;')}</p><p>${why}</p>`;
+    const [title, why] = D[row.dataset.k];
+    detail.innerHTML = `<h4>${title}</h4><p>${why}</p>`;
   });
 })();
 
@@ -1278,7 +1331,7 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
       if (els.diar.value !== 'off') parts.push({t: `+diar-${els.diar.value}-v1`, c: 'mut'});
       const recs = [{kind:'transcript', disc:'""'}];
       if (els.translate.value !== 'off') recs.push({kind:'transcript', disc:'"translation"'});
-      let note = 'Diarize is the mutate: turning it on forks the whole chunk\'s dialect — every record above re-keys together, and reprocessed output lands beside the old records, never over them.';
+      let note = 'Diarize is the mutate: turning it on changes the one pipeline_version stamped on the whole chunk, so every record the chunk produces — the primary and any sidecars — comes out with a different record_id than it would have had. They fork together, as a set. And note what does NOT happen: nothing already stored is edited. The "in-place edit" a mutate performs is to in-memory slots, inside a single processing run, before assembly — never to a stored record. The next run simply writes new records beside the old dialect\'s.';
       if (els.translate.value !== 'off' && els.diar.value === 'off')
         note = 'Translate is an additive sidecar: it added a second record with its own discriminator but contributed no fragment — the dialect (and every record_id\'s version input) is unchanged. That is rider R1\'s converse: forking on an additive toggle would re-key the primary for a change that never touched it. (Fine print: TRANSLATE_TARGET is the master switch — backend alone does nothing — and the whisper backend is X→English only; the record is skipped when the detected language already equals the target.)';
       if (els.asr.value !== 'mock' && els.diar.value === 'off' && els.translate.value === 'off')
@@ -1323,7 +1376,7 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
     const key = isAudio ? 'audio' : 'video';
     if (!(key in defaults)) defaults[key] = version;
     const h = await sha(`${CHUNK}\u0000${version}`);
-    els.recid.innerHTML = `<span class="lbl">record_id (disc "")</span><span class="hash">${h.slice(0,20)}…</span>`;
+    els.recid.innerHTML = `<span class="lbl">record_id · primary record, no discriminator</span>= <span class="hash">${h}</span>`;
     const forked = version !== defaults[key];
     els.records.innerHTML = recs.map(r =>
       `<span class="rec-chip${forked ? ' forked' : ''}"><b>${r.kind}</b> · disc ${r.disc}${forked ? ' · re-keyed' : ''}</span>`).join('');
@@ -1335,32 +1388,46 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /* ================================================================ life-of-a-chunk explorer */
 (() => {
-  const STATIONS = [
-    ['push','recording POST /ingest'], ['gate','validate + note'], ['claim','dedup claim'],
-    ['journal','journal (SQLite)'], ['queue','bounded queue'], ['blob','pull /raw + sha'],
-    ['graph','stage graph'], ['emit','build C2'], ['store','POST /context'], ['reply','reply / verdict'],
+  const LABELS = {
+    push:    'recording pushes the C1 envelope — POST /ingest',
+    gate:    'the synchronous gate — 400 · 422 · 501, plus the continuity note',
+    claim:   'the dedup claim — done · in-flight · claimed',
+    journal: 'the durable accept — the full C1 into the SQLite journal',
+    ack:     'the early reply to recording — 202 accepted · 503 queue full',
+    queue:   'the bounded queue — a worker takes a fairness permit at dispatch',
+    blob:    'pull the bytes from /raw + verify sha256',
+    graph:   'the stage graph runs — independent stages in parallel',
+    emit:    'build_c2 — identity, spans, validation',
+    store:   'POST /context (idempotent upsert) → durable receipt',
+    reply:   'the confirmation — 200 record_ids (inline) · /continuity shows processed (async)',
+  };
+  const LANES = [
+    ['Before anything is owed — synchronous, in both modes', ['push','gate','claim']],
+    ['The accept — async answers recording here; inline keeps it waiting', ['journal','ack']],
+    ['The worker path — runs in parallel once the 202 is out', ['queue','blob','graph','emit','store']],
+    ['How done becomes visible', ['reply']],
   ];
   const MOD = {
-    audio:  { name: 'a 12 s mic chunk (wav, 16 kHz mono)', graph: 'The audio graph runs. <code>acoustic</code> (needs=∅) would start in parallel with <code>asr</code>, but it\'s off by default — so <code>asr</code> transcribes in the threadpool with the VAD gate on: speech becomes segments, silence becomes an honest empty transcript. Diarize/translate: off, contributing nothing to the dialect.', out: '1 × transcript (disc absent)', pv: 'asr-mock-v0' },
-    videok: { name: 'a 10 s screen chunk (mp4, container-copy)', graph: 'The legacy video graph: <code>keyframes</code> (sidecar, the one frozen R1 exemption) extracts a uniform grid ∪ scene-change frames via ffmpeg; <code>captions</code> (primary) fans one VLM call per keyframe concurrently over a shared client, then assembles one caption per frame with sub-spans partitioning the chunk exactly.', out: '4 × caption (disc "0"…"3")', pv: 'vidproc-mock-v0' },
-    videoc: { name: 'a 10 s screen chunk (clip path)', graph: 'The clip graph: <code>clipprep(5)</code> runs two VFR-safe ffmpeg passes + the delta gate (binarize → 32×32 map → IDLE/LAYOUT/TEXT); <code>screentext(15)</code> asserts the OCR sidecar\'s model SHAs, reads delta-selected frames at native 1728 px, redacts secrets; <code>clipcap(20)</code> makes ONE multi-image VLM call with OCR injected as labelled input, and the parse ladder absorbs whatever comes back.', out: '1 × caption (disc "") + 1 × ocr (disc "ocr")', pv: 'vidclip-mock-v1#cfg+cp-v1+ocr-mock-v1' },
-    image:  { name: 'a screenshot (png)', graph: 'The image processor is a deliberate STUB — the founders deferred image and text pipelines until a producing surface exists, and nothing on the fleet emits an image chunk yet (D15). It runs a mock dense caption with an “On-screen text:” clause standing in for the decoupled-OCR design the founders chose for reading screen text (D8). The real ImgProc → OCR → caption pipeline lands by editing one plugin file, zero core edits.', out: '1 × caption (stub, imgproc-mock-v0)', pv: 'imgproc-mock-v0' },
-    text:   { name: 'a clipboard/text capture', graph: 'The text processor is a STUB: lenient UTF-8 decode, NUL strip, whitespace collapse — textnorm-mock-v0. Real normalization waits until some surface actually produces text chunks — the founders deferred it on exactly that trigger (D15).', out: '1 × text (stub, textnorm-mock-v0)', pv: 'textnorm-mock-v0' },
+    audio:  { name: 'a 12 s mic chunk (wav, 16 kHz mono)', graph: 'The audio graph runs. <code>acoustic</code> (needs=∅) would start in parallel with <code>asr</code>, but it\'s off by default — so <code>asr</code> transcribes in the threadpool with the VAD gate on: speech becomes segments, silence becomes an honest empty transcript. Diarize/translate: off, contributing nothing to the dialect.', out: '1 transcript record — no discriminator (a single-record chunk)', pv: 'asr-mock-v0' },
+    videok: { name: 'a 10 s screen chunk (mp4, container-copy)', graph: 'The legacy video graph: <code>keyframes</code> (sidecar, the one frozen R1 exemption) extracts a uniform grid ∪ scene-change frames via ffmpeg; <code>captions</code> (primary) fans one VLM call per keyframe concurrently over a shared client, then assembles one caption per frame with sub-spans partitioning the chunk exactly.', out: '4 caption records — discriminators "0" through "3", one per keyframe', pv: 'vidproc-mock-v0' },
+    videoc: { name: 'a 10 s screen chunk (clip path)', graph: 'The clip graph: <code>clipprep(5)</code> runs two VFR-safe ffmpeg passes + the delta gate (binarize → 32×32 map → IDLE/LAYOUT/TEXT); <code>screentext(15)</code> asserts the OCR sidecar\'s model SHAs, reads delta-selected frames at native 1728 px, redacts secrets; <code>clipcap(20)</code> makes ONE multi-image VLM call with OCR injected as labelled input, and the parse ladder absorbs whatever comes back.', out: '1 caption record (no discriminator) + 1 ocr record (discriminator "ocr")', pv: 'vidclip-mock-v1#cfg+cp-v1+ocr-mock-v1' },
+    image:  { name: 'a screenshot (png)', graph: 'The image processor is a deliberate STUB — the founders deferred image and text pipelines until a producing surface exists, and nothing on the fleet emits an image chunk yet (D15). It runs a mock dense caption with an “On-screen text:” clause standing in for the decoupled-OCR design the founders chose for reading screen text (D8). The real ImgProc → OCR → caption pipeline lands by editing one plugin file, zero core edits.', out: '1 caption record (stub dialect imgproc-mock-v0)', pv: 'imgproc-mock-v0' },
+    text:   { name: 'a clipboard/text capture', graph: 'The text processor is a STUB: lenient UTF-8 decode, NUL strip, whitespace collapse — textnorm-mock-v0. Real normalization waits until some surface actually produces text chunks — the founders deferred it on exactly that trigger (D15).', out: '1 text record (stub dialect textnorm-mock-v0)', pv: 'textnorm-mock-v0' },
   };
   // step: {st, t, b(mod), chip, why, modes}
   const S = (st,t,b,chip,why,modes) => ({st,t,b,chip,why,modes});
   const SCEN = {
     happy: { label: '✅ Happy path', modes: 'any', steps: [
       S('push','A chunk arrives', m => `Recording pushes the C1 envelope for ${m.name}. The bytes are already durable in storage /raw (blob-first); delivery is at-least-once, so everything downstream must tolerate a repeat.`, 'none'),
-      S('gate','The synchronous gate', () => `Bad JSON → 400. C1 schema violation → 422. Both resolve before anything is recorded. A <em>schema-valid</em> delivery is then noted by the continuity tracker — <code>(stream_id, sequence)</code> counts as coverage even if its modality draws a 501 next, and dedup can never swallow a gap signal. All deterministic rejections (400/422/501) resolve <b>pre-claim, in both modes</b> — never deferred into a dead letter.`, 'none'),
-      S('claim','The dedup claim', () => `Fresh chunk → <b>claimed</b>: this request owns it. (Inline holds a per-chunk asyncio lock and re-checks, so a racing redelivery returns the winner\'s ids instead of double-processing.)`, 'none'),
+      S('gate','The synchronous gate', () => `Bad JSON → 400. C1 schema violation → 422. Both resolve before anything is recorded. A <em>schema-valid</em> delivery is then noted by the continuity tracker — <code>(stream_id, sequence)</code> counts as coverage even if its modality draws a 501 next, and dedup can never swallow a gap signal. All deterministic rejections (400/422/501) resolve <b>pre-claim, in both modes</b> — never deferred into a dead letter.`, 'none', 'Why note-before-everything-else: coverage means "the bytes reached us", and a valid envelope whose modality we cannot process yet still arrived — transport did its job, so the gap report must not call it a hole. And because the note fires before the dedup short-circuit, even a redelivery that returns in one line still registers: a duplicate or a sequence conflict can never hide behind the cache.'),
+      S('claim','The dedup claim', () => `Fresh chunk → <b>claimed</b>: nothing has finished it before (no receipt in memory or in the journal) and nobody is processing it right now, so this very request takes ownership — any duplicate arriving from here on sees <b>in-flight</b> instead. In inline mode the same job is done by a per-chunk asyncio lock: a racing redelivery waits its turn, re-checks, and returns the winner\'s ids instead of double-processing.`, 'none'),
       S('journal','Durable before the ACK', () => `The full C1 is committed to the SQLite journal (WAL, <code>BEGIN IMMEDIATE</code>) with its epoch set (bumped on every later re-accept) — <b>before</b> the 202 leaves the process. The ACK never lies: die a microsecond later and startup re-drives this row.`, 'none', 'A 202 that only existed in RAM would be a promise the next crash breaks. Write-ahead is the whole trick.', ['async']),
-      S('reply','202 accepted', () => `<code>202 {ok, accepted, chunk_id}</code> goes back — recording records <code>dp_state='accepted'</code> but <b>dp_acked stays 0</b>. Accepted is a promise, not a fact — the invariant the founders pinned when they ratified this wire (D16).`, 'r202', null, ['async']),
+      S('ack','202 accepted', () => `<code>202 {ok, accepted, chunk_id}</code> goes back — recording records <code>dp_state='accepted'</code> but <b>dp_acked stays 0</b>. Accepted is a promise, not a fact — the invariant the founders pinned when they ratified this wire (D16).`, 'r202', null, ['async']),
       S('queue','Dispatch', () => `A worker takes the chunk from the bounded queue — atomically taking its modality permit in the same event-loop tick, scanning past capped jobs (no head-of-line blocking).`, 'r202', null, ['async']),
       S('blob','Bytes in, verified', () => `<code>GET /raw/blobs?ref=…</code> pulls the bytes; sha256 runs <em>off the event loop</em> and must match <code>blob_sha256</code>. End-to-end integrity: what recording captured is what we process.`, 'none'),
       S('graph','The stage graph runs', m => m.graph, 'none', 'Every stage is a drop-in file; the executor gives each a future per dependency and runs whatever is ready. Blocking work is always threadpooled — the event loop never freezes.'),
       S('emit','Records assembled', m => `<code>build_c2</code> wraps each unit: record_id = sha256(chunk_id ␀ <code>${m.pv}</code> [␀ disc]), C1 span carried verbatim, civil-time fields copied untouched. Each record validates against the JSON Schema AND the pydantic mirror before anything is written.`, 'none'),
-      S('store','Idempotent upsert', m => `Each record POSTs to storage /context — a blind upsert on record_id. Then the processed receipt lands in the journal <b>before</b> the in-memory dedup map: a crash between them re-drives into a harmless upsert.`, 'none'),
+      S('store','Idempotent upsert', m => `Each record POSTs to storage /context — a blind upsert on record_id. Once <em>every</em> unit is durably written, two pieces of bookkeeping happen in a deliberate order: first the durable receipt (<code>journal.mark_processed</code>, one SQLite transaction that also clears the pending row), and only then the fast in-memory done-map (<code>dedup.put</code>). Crash after the records but before the receipt? The pending row survives, startup re-drives the chunk, and every re-written record upserts onto itself — a no-op. Crash between receipt and memory? Memory was going to die in the crash anyway, and the journal now answers for it.`, 'none', 'The rule being taught: promote durably first, cache second. A cache can always be rebuilt from the journal; the reverse is not true.'),
       S('reply','200 with the goods', m => `<code>200 {ok, record_ids}</code>. <b>${m.out}</b> now exist in /context, ready for tonight\'s day-log.`, 'r200', null, ['inline']),
       S('reply','Confirmed, honestly', m => `<code>/continuity</code> now lists this sequence under <code>processed</code>. Recording\'s next report poll sees it and promotes <code>dp_acked=1</code> — its verdict can now say <b>clean</b> and mean it. <b>${m.out}</b> landed.`, 'r200', null, ['async']),
     ]},
@@ -1368,16 +1435,16 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
       S('push','The same chunk again', m => `Recording re-pushes ${m.name} — a lost ack, a crash replay, or a /redrive sweep. Same chunk_id, by construction.`, 'none'),
       S('gate','Counted, not confused', () => `The gate passes and continuity notes a <code>duplicate_delivery</code> — observable, never alarming.`, 'none'),
       S('claim','Done → short-circuit', () => `The claim finds the chunk <b>done</b> (in-memory map, falling back to the durable journal after a restart — with a dialect staleness check).`, 'none'),
-      S('reply','200, prior ids, zero work', () => `<code>200 {ok, record_ids}</code> with the original ids. No blob pull, no model call, storage untouched. At-least-once delivery + idempotent handling = exactly-once effect.`, 'r200', 'This is the property everything else leans on. If this scenario ever costs a model call, something upstream broke.'),
+      S('reply','200, prior ids, zero work', () => `<code>200 {ok, record_ids}</code> with the original ids. No blob pull, no model call, storage untouched. At-least-once delivery + idempotent handling = exactly-once effect.`, 'r200', 'This is the property everything else leans on — if this scenario ever costs a model call, something upstream broke. Two honest footnotes: the in-memory done-map and the journal\'s processed table both grow without bound today, a documented dev-scale posture with retention parked on the open board (module 13); and after a restart it is the durable journal that answers, with a dialect staleness check attached — the last scenario in this list shows that check firing.'),
     ]},
     dupinflight: { label: '⏳ Redelivery while still processing', modes: 'async', steps: [
       S('push','A duplicate mid-flight', () => `The first delivery is still on a worker when its twin arrives.`, 'none'),
       S('claim','In-flight → no second enqueue', () => `<code>claim_for_async</code> answers <b>inflight</b> atomically under one lock — two racing redeliveries can never both come back "claimed".`, 'none'),
-      S('reply','202, duplicate:true', () => `<code>202 {ok, accepted, chunk_id, duplicate:true}</code>. One caveat worth knowing: at ACK time this reply is indistinguishable from a chunk that will later dead-letter — recording must watch /continuity, not the ACK.`, 'r202'),
+      S('ack','202, duplicate:true', () => `<code>202 {ok, accepted, chunk_id, duplicate:true}</code>. One caveat worth knowing: at ACK time this reply is indistinguishable from a chunk that will later dead-letter — recording must watch /continuity, not the ACK.`, 'r202'),
     ]},
     badc1: { label: '🚫 Malformed envelope', modes: 'any', steps: [
       S('push','Garbage arrives', () => `An envelope with a missing required field, or a body that isn\'t JSON at all.`, 'none'),
-      S('gate','Rejected at the edge', () => `400 for non-JSON, 422 with the exact schema violations. Crucially: <b>continuity never notes it</b> (an invalid delivery is not coverage) and <b>no claim is taken</b>. The error reaches recording while the client can still see it — not three services later.`, 'rerr', 'That deterministic rejections resolve synchronously, pre-claim, is one of the rules the async wire was ratified with (D16): a 422 deferred into a dead letter would be loss wearing a queue costume.'),
+      S('gate','Rejected at the edge', () => `400 for non-JSON, 422 with the exact schema violations. Crucially: <b>continuity never notes it</b> (an invalid delivery is not coverage) and <b>no claim is taken</b>. The error reaches recording while the client can still see it — not three services later.`, 'rerr', 'In plain terms: a malformed envelope will be malformed every single time, so queueing it just schedules the same failure for later, out of sight — the chunk would eventually dead-letter, looking like an operational casualty when it is really a client bug that deserved an instant, visible 422. That deterministic rejections resolve synchronously, pre-claim, is one of the rules the async wire was ratified with (D16).'),
     ]},
     nomodality: { label: '🧩 No processor for the modality', modes: 'any', steps: [
       S('push','A valid stranger', () => `A schema-valid C1 whose modality has no registered plugin (imagine a future <code>sensor</code> stream before its processor lands).`, 'none'),
@@ -1386,13 +1453,13 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
     queuefull: { label: '⛔ Queue full — backpressure', modes: 'async', steps: [
       S('push','Overload', () => `A capture burst outruns the workers; the bounded queue (INGEST_QUEUE_MAX, default 256) is at capacity.`, 'none'),
       S('claim','Claimed…', () => `The claim is taken, and the journal even accepts the row —`, 'none'),
-      S('queue','…but no room', () => `<code>submit</code> raises QueueFull. Now the bookkeeping must un-happen: <code>journal.unaccept</code> restores/deletes the row (the journal must never contradict a 503) and the claim is released in the finally.`, 'none', 'A fresh row is deleted; a row that had replaced a dead_letter is restored with its history intact.'),
-      S('reply','503 — the honest answer', () => `<code>503 ingest queue full</code>. Recording retries later; overload becomes visible, never an OOM that silently drops the backlog. One sharp edge to know: recording\'s retry budget makes a sustained 503 terminal in about 1.5 s. That ask has since grown into a two-phase design on recording\'s board (escalation E-6, refined 2026-07-30): first an <code>error_class</code> column so a capped, spaced re-drive loop retries only what the neighbor declined, then a first-class <em>rejected</em> state with its own verdict semantics. It is designed, not built — so the queue bound is still today\'s real defence.`, 'rerr'),
+      S('queue','…but no room', () => `<code>submit</code> raises QueueFull. We journaled <em>before</em> trying to enqueue — deliberately: the 202 must never outrun the journal, and checking capacity first would just race, because the queue can fill in the gap between a check and a submit. So now the bookkeeping must un-happen. <code>journal.unaccept</code> deletes the fresh row — or, if this accept had revived an old dead-letter row, puts that row back exactly as it was — and the dedup claim is released in a <code>finally</code>. The request ends with the journal agreeing with the wire: 503 means <em>not accepted</em>, anywhere.`, 'none', 'If the accepted row survived a 503, the next restart would re-drive a chunk recording was told to retry itself — two owners for one chunk, and a verdict nobody could trust.'),
+      S('ack','503 — the honest answer', () => `<code>503 ingest queue full</code>. Recording retries later; overload becomes visible, never an OOM that silently drops the backlog. One sharp edge to know: recording\'s retry budget makes a sustained 503 terminal in about 1.5 s. That ask has since grown into a two-phase design on recording\'s board (escalation E-6, refined 2026-07-30): first an <code>error_class</code> column so a capped, spaced re-drive loop retries only what the neighbor declined, then a first-class <em>rejected</em> state with its own verdict semantics. It is designed, not built — so the queue bound is still today\'s real defence.`, 'rerr'),
     ]},
     blobgone: { label: '🕳 Blob missing (404)', modes: 'any', steps: [
       S('blob','The bytes are gone', () => `storage answers 404 for the blob_ref — deleted (a privacy feature!) or never landed. This is <b>terminal</b>: a retry pulls the same 404 forever.`, 'none', 'The transient/terminal split is load-bearing: 5xx/408/429 retry; 404/410/403 and sha mismatches never do.'),
       S('reply','Inline: 502, not marked done', () => `<code>502</code> to recording, and the chunk is NOT marked done — if the blob reappears (a redelivery after a re-upload), reprocessing still works.`, 'rerr', null, ['inline']),
-      S('store','Async: dead-letter, visibly', () => `The worker dead-letters immediately: durable journal mark (epoch-guarded) → continuity <code>dead_lettered</code> → claim released <em>last</em>, so a redelivery can only re-claim after the mark lands.`, 'none', null, ['async']),
+      S('store','Async: dead-letter, visibly', () => `The 202 went out long ago, so there is no error reply left to send — instead the worker dead-letters the chunk, and the order of the three steps is itself the safety. First the durable journal mark, guarded by the epoch so a stale worker from before some redelivery cannot clobber a fresh attempt. Then the in-process continuity tracker adds this sequence to its <code>dead_lettered</code> set, which is what recording\'s next poll will see. And only <em>last</em> is the dedup claim released — release it first, and a racing redelivery could claim the chunk while the old failure was still being written over it.`, 'none', null, ['async']),
       S('reply','The verdict tells the truth', () => `Recording\'s gap report reads <code>dead_lettered</code> → verdict <b>gaps</b>. A lost slice of the user\'s day is named, never silently absorbed. Only recording re-pushing the chunk (with a healthy blob) resets the row.`, 'rdead', null, ['async']),
     ]},
     shamismatch: { label: '🧪 Corrupt bytes (sha mismatch)', modes: 'any', steps: [
@@ -1401,28 +1468,28 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
       S('store','Async: dead-letter, visibly', () => `The 202 already went out before the blob was pulled, so no error reply exists to send. The worker dead-letters immediately: durable journal mark → continuity <code>dead_lettered</code> → claim released last. Nothing written to /context — garbage never becomes training data.`, 'rdead', null, ['async']),
     ]},
     storagedown: { label: '🌩 Storage flaky on the write', modes: 'async', steps: [
-      S('store','The write fails', m => `The /context POST gets a 503 — transient by definition. If this chunk emits several records (${m.out}), some siblings may already be durably written: the A-4 partial-write window, counted by <code>dp_partial_write_total</code>.`, 'none'),
-      S('queue','Retry with backoff', () => `The worker sleeps (releasing its modality permit so it can\'t block the pool — and re-acquiring with a reservation so fresh work can\'t barge in), then re-runs the chunk end to end: re-pull, re-process, re-POST <b>all</b> units. Idempotent upsert makes the repeat free.`, 'none'),
+      S('store','The write fails', m => `The /context POST gets a 503 — transient by definition. If this chunk emits several records (${m.out}), some siblings may already be durably written, and until the retry lands one record can sit without its partner — the partial-write window, counted by <code>dp_partial_write_total</code> (the video workstream\'s accepted-caveat list records it as item A-4).`, 'none'),
+      S('queue','Retry with backoff', () => `The worker sleeps (releasing its modality permit so it can\'t block the pool — and re-acquiring with a reservation so fresh work can\'t barge in), then re-runs the chunk end to end: re-pull, re-process, re-POST <b>all</b> units. Notice it re-runs the <em>whole chunk</em>, not just the failed POST: retry lives at the job level, nothing keeps half-finished units in memory between attempts (the attempt may even have died with a subprocess child), and idempotent upserts make the coarse retry exactly as correct as a surgical one — already-landed records simply overwrite themselves.`, 'none', 'Per-unit checkpointing would buy almost nothing here and would add bookkeeping that must itself survive crashes. When repeats are free, coarse-grained retry is the simpler correct design.'),
       S('store','Retries exhausted', () => `After INGEST_MAX_RETRIES (3), the chunk dead-letters: journal → continuity → claim release, plus a loud ERROR log and a capped sample list.`, 'none'),
       S('reply','Visible, recoverable', () => `Verdict <b>gaps</b> until recording re-pushes — and because the bytes still sit in /raw, a re-push after storage recovers processes cleanly.`, 'rdead'),
     ]},
     kill9: { label: '🔥 kill −9 mid-processing', modes: 'async', steps: [
       S('journal','The promise is on disk', () => `The chunk was 202-accepted, its C1 journaled with epoch N — and the process dies with work in flight. Nothing in RAM survives. Everything needed doesn\'t live in RAM.`, 'none'),
-      S('journal','Startup: recovery is a query', () => `The lifespan hook runs <code>pending_for_redrive</code>: rows over the crash-loop cap (<code>redrive_attempts &gt; DP_REDRIVE_MAX_ATTEMPTS</code>, charged only when processing actually <em>started</em>) flip to dead_letter; the rest return oldest-first.`, 'none', 'Evidence-based attribution matters: an earlier per-restart counter dead-lettered innocent chunks queued behind one poison pill.'),
+      S('journal','Startup: recovery is a query', () => `On boot, the lifespan hook asks the journal one question — <code>pending_for_redrive</code>. In a single SQLite transaction it looks at every row still in state <code>accepted</code>, which is exactly the set of promises the dead process never kept, and splits them two ways: rows whose <code>redrive_attempts</code> already exceed the crash-loop cap flip durably to <code>dead_letter</code> (a chunk that kills the service every time it runs must not get to keep doing so — and the counter was only ever charged when that chunk\'s processing actually <em>started</em>, so innocent neighbors are never blamed); every other row comes back oldest-first, each carrying the full C1 envelope stored at accept time plus its epoch. Recovery is literally a query.`, 'none', 'Evidence-based attribution matters: an earlier per-restart counter dead-lettered innocent chunks queued behind one poison pill.'),
       S('gate','No fabricated gaps', () => `Continuity rehydrates from the journal — and still-pending rows count as <b>seen</b> coverage. A restart can never read its own backlog as a gap in the user\'s life.`, 'none'),
-      S('queue','Re-drive', () => `A background task re-submits each row with a <em>waiting</em> submit, so a backlog larger than the queue bound drains fully. Jobs run under CURRENT config.`, 'none'),
+      S('queue','Re-drive', () => `A background task walks the recovered rows. For each one it re-resolves the processor first — if the modality\'s plugin has vanished from this build, the row is dead-lettered and continuity told, visible rather than stuck forever. Then it takes the dedup claim exactly as a fresh delivery would (a row the journal already answers as done is simply skipped), and submits with the <em>waiting</em> variant, which blocks for queue capacity instead of 503-ing itself — so a backlog bigger than the queue bound drains completely. Each job is marked as a re-drive, its attempt is charged only when processing starts, and it runs under <em>today\'s</em> config and dialect, not the config of the night it was accepted.`, 'none'),
       S('store','Same identity, same records', () => `Processing lands on the same record_ids (same chunk_id, same dialect) — the upsert makes recovery indistinguishable from a slow first pass.`, 'none'),
       S('reply','As if nothing happened', () => `<code>/continuity</code> reads processed; recording confirms; verdict <b>clean</b>. kill −9 is a test case here (tests/test_journal.py runs two app instances over one journal), not an incident.`, 'r200'),
     ]},
     poison: { label: '💥 Poison chunk (with isolation on)', modes: 'async', steps: [
       S('graph','Native code dies', m => `With <code>INGEST_ISOLATION=subprocess</code>, the Processor step runs in a killable child. This chunk\'s bytes hit a decoder bug — the child segfaults. In-process, that would have killed the whole service.`, 'none'),
       S('queue','Fresh child, then judgment', () => `The parent sees a dead child → transient → retries with a <b>fresh child</b> each attempt. Still dying after 3 retries → dead-letter. The taxonomy (transient/terminal, status, detail) crosses the process boundary intact — even unpicklable errors degrade to strings rather than lying about what happened.`, 'none'),
-      S('reply','Blast radius: one chunk', () => `Service healthy, queue flowing, one chunk parked visibly. Cost accepted and documented: per-chunk process start, child-side metrics invisible to the parent, and no wall-clock kill for a hung child yet (open board).`, 'rdead'),
+      S('reply','Blast radius: one chunk', () => `Service healthy, queue flowing, one chunk parked visibly. Isolation is not free, and its three costs are written down rather than hidden. Every chunk pays a fresh process start, and a model load with it — no warm child pool exists yet. Metrics incremented inside the child never reach the parent\'s /metrics registry, which is why the load-bearing per-unit counters were deliberately moved to the parent side. And a child that <em>hangs</em> without dying keeps its worker forever, because the wall-clock kill knob is designed but unbuilt. All three sit as named items in the hardening milestone\'s remainder on the open board (module 13) — engineering backlog, not a founders\' question.`, 'rdead'),
     ]},
     dialectbump: { label: '🔀 Redelivery across a backend flip', modes: 'any', steps: [
       S('push','Same chunk, new world', m => `This chunk was processed weeks ago under <code>${m.pv}</code>. Since then an operator flipped a real backend on. Now a redelivery arrives.`, 'none'),
       S('claim','The staleness check', () => `The in-memory map is empty (restart happened); the journal fallback finds the receipt — but its stored pipeline_version ≠ today\'s dialect for this modality. The honest answer is <b>not</b> the stale ids.`, 'none'),
-      S('graph','Version-forward reprocess', () => `The chunk reprocesses under the new dialect. New record_ids, new records — the old ones stay in /context untouched. Downstream, storage\'s day-log keeps one dialect per record: latest ingest_time wins per (chunk_id, kind, discriminator).`, 'none', 'During a deliberate fleet flip, DP_DIALECT_FREEZE=1 suspends this: stale receipts are served so a two-dialect fleet drains without a mass reprocess.'),
+      S('graph','Version-forward reprocess', () => `The chunk reprocesses under the new dialect. New record_ids, new records — the old ones stay in /context untouched. Downstream, when storage next builds a day-log, both dialects of this unit are candidates; the materializer groups candidates by (chunk_id, kind, discriminator) and, inside each little group, keeps the row storage itself received most recently — latest ingest_time, storage\'s own write clock, chosen because composed dialect strings cannot be ordered. One unit of life, one voice in the day-log.`, 'none', 'One operational escape hatch: during a deliberate fleet flip, redeliveries would hit this staleness check en masse and reprocess a mountain of chunks in the middle of a deploy. Setting DP_DIALECT_FREEZE=1 — read fresh from the environment, so an operator can arm and disarm it on a live process — makes the journal serve old-dialect receipts as if they were current: redeliveries get their 200s, nothing reprocesses, and once the fleet has drained onto one dialect the flag comes off.'),
       S('reply','History is append-only', () => `<code>200</code> with the new ids. Nothing was edited in place; the correction trains going forward. The founders accepted the cost in writing when the training window moved to storage's ingest clock (D18): the same lived moment can train twice, in two dialects — because suppressing that would also suppress the correction.`, 'r200', null, ['inline']),
       S('reply','History is append-only', () => `The stale receipt wasn\'t "done", so this redelivery was <b>claimed</b> and re-ACKed <code>202</code>; the new record_ids surface later via /continuity. Nothing was edited in place; the correction trains going forward. The founders accepted the cost in writing when the training window moved to storage's ingest clock (D18): the same lived moment can train twice, in two dialects — because suppressing that would also suppress the correction.`, 'r202', null, ['async']),
     ]},
@@ -1453,15 +1520,18 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
     const nowKey = idx >= 0 && idx < st.length ? st[idx].st : null;
     const nowChip = idx >= 0 && st[idx] ? st[idx].chip : '';
     const isFail = ['rerr','rdead'].includes(nowChip);
-    stationsEl.innerHTML = STATIONS.map(([key, label], i) => {
-      let cls = 'st-box';
-      if (key === nowKey) cls += (isFail ? ' fail now' : ' now');
-      else if (doneKeys.has(key)) cls += ' done';
-      const arrow = i < STATIONS.length-1 ? '<span class="st-arr">→</span>' : '';
-      return `<span class="station"><span class="${cls}">${label}</span>${arrow}</span>`;
+    stationsEl.innerHTML = LANES.map(([label, keys]) => {
+      const rows = keys.map((key, i) => {
+        let cls = 'st-box';
+        if (key === nowKey) cls += (isFail ? ' fail now' : ' now');
+        else if (doneKeys.has(key)) cls += ' done';
+        const down = i < keys.length - 1 ? '<div class="st-down">↓</div>' : '';
+        return `<div class="st-row"><span class="${cls}">${LABELS[key]}</span></div>${down}`;
+      }).join('');
+      return `<div class="lane-label">${label}</div>${rows}`;
     }).join('');
     const nowEl = stationsEl.querySelector('.st-box.now');
-    if (nowEl && nowEl.scrollIntoView) nowEl.scrollIntoView({block:'nearest', inline:'center', behavior: reduceMotion?'auto':'smooth'});
+    if (nowEl && nowEl.scrollIntoView) nowEl.scrollIntoView({block:'nearest', behavior: reduceMotion?'auto':'smooth'});
   }
   function render() {
     const st = steps(), m = MOD[selMod.value];

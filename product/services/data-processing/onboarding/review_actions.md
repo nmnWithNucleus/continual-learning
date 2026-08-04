@@ -7,15 +7,18 @@
 > CTO call 2026-07-30); every durable outcome lands in its proper home — code, the
 > worklog, the board, or the charter — and this file only tracks what is still open.
 
-**Last updated:** 2026-08-03 · the guide was brought under the teaching-view rules
-([D22](../../../DECISIONS.md)) and re-verified against the repo; that pass is executed
-and its outcomes live in the guide itself, same hosted URL.
+**Last updated:** 2026-08-04 · reader review round 1 (CTO, modules 00–05) executed and
+trimmed; the D22 compliance pass of 2026-08-03 likewise. Outcomes live in the guide
+itself, same hosted URL.
 
 ## Active
 
-- **Round 1 — CTO review of the whole guide:** pending. The guide has had an
-  adversarial fact-check against code and docs (build session, 2026-07-29) but no
-  human review round yet.
+- **Round 2 — CTO review of modules 06–15:** pending. Round 1 (modules 00–05,
+  2026-08-04) produced twenty-five clarity items — all executed: the C2 explorer now
+  shows a real nested record with honest full-length values, the life-of-a-chunk
+  chart became top-down lanes like recording's, and the mirror-trap, forward-only,
+  unaccept, dead-letter-order, kill-9 and dialect-freeze passages were rewritten to
+  be self-explanatory.
 
 - **Findings surfaced while building and fact-checking the guide, awaiting a DP
   service session to triage to the board.** These are repo defects the guide
