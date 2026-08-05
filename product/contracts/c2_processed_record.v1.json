@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nucleus.ai/contracts/c2_processed_record.v1.json",
+  "title": "C2 Processed record v1 (DP rebuild — one record per chunk, built from slots)",
+  "description": "The processed life-stream record data-processing writes to storage /context (POST /context/records), re-cut by the DP rebuild (plan: services/data-processing/docs/refactor_dp_service.md §2; D-R2 drafted 2026-08-05, awaiting founder ratification). EXACTLY ONE record per (chunk_id, pipeline_version) — Slot Law L2, schema-hard: the executor structurally emits one, a test asserts it (T-2), and this contract states it; adding a second record per chunk requires forking this contract to C2 v2. record_id = sha256(chunk_id NUL pipeline_version), NUL-joined, lowercase hex — no discriminator (L3; one-record-per-chunk is why dropping it is safe). content is a SLOTS MAP: one enabled producer per slot, written once, never edited (L5); a slot type's sub-schema is added to this file ADDITIVELY when its first producer ships, and an unknown slot name fails closed (additionalProperties:false at every level, deliberately — the contract edit IS the ceremony). The v0 concepts enrichments, discriminator and content.kind DO NOT EXIST here and must not be re-added; the DP charter §Slot Law names them as deleted. Reading a record is L11 honesty: stage named in pipeline_version + slot absent = attempted and failed (a hole); slot present with an empty value = an honest empty claim (OCR ran, the screen had no text); stage not in the dialect = never attempted — consumers never infer a negative from an absent slot under a dialect that did not attempt it. Storage-side timestamps are NOT carried here: storage assigns created_at (first landing of a record_id) and updated_at (bumped only when record_json byte-compares different; D-R5). t_start/t_end are the C1 span strings carried VERBATIM (the D-05 rule) and remain the sole ordering and range-query axis; the D17 civil-time fields ride source{} verbatim, unchanged. WIRE STATUS: v0 remains the running wire until the Stage F cutover (OD-1 beside-build); nothing emits v1 before then — this file exists now because contracts precede fan-out (ORG.md), so rebuild Stages C–E build and validate against it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract", "version", "record_id", "user_id", "modality", "source", "t_start", "t_end", "pipeline_version", "processed_at", "content"],
+  "properties": {
+    "contract": { "const": "C2" },
+    "version": { "const": "1" },
+    "record_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "minLength": 64,
+      "maxLength": 64,
+      "description": "sha256(chunk_id NUL pipeline_version), lowercase hex — the dedup/idempotency key for the blind /context upsert. NUL-joined so neither component can smuggle a separator into the other; exactly two components (L3), the discriminator is gone. Byte-identical across every (re)processing of the same chunk under the same pipeline_version, so a reprocess and a heal re-POST are idempotent upserts; a version bump forks a new record BESIDE the old (version-forward, L8 case 2). The length bounds restate the fixed-width property alongside the pattern, on the c10 window_id precedent: in Python validators `$` also matches just before a trailing newline, and a 64-char floor/ceiling closes that hole here."
+    },
+    "user_id": { "type": "string", "minLength": 1 },
+    "modality": {
+      "enum": ["audio", "image", "video", "text"],
+      "description": "ROOT-LEVEL in v1 (was source.modality in v0): a C1 chunk is strictly single-modality, so the record's modality is a fact about the record, not merely provenance. The enum mirrors C1's. The v1 stage set covers audio and video; image and text values become producible when their pipelines land (deferred by D15 — no producing surface exists), with their slot sub-schemas added additively at that point."
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["device_id", "stream_id", "chunk_id", "blob_ref"],
+      "properties": {
+        "device_id": { "type": "string", "minLength": 1 },
+        "stream_id": { "type": "string", "minLength": 1 },
+        "chunk_id": { "type": "string", "minLength": 1, "description": "The C1 chunk this record was processed from (provenance; one of record_id's two hash inputs)." },
+        "blob_ref": { "type": "string", "minLength": 1, "description": "The /raw ref carried forward from C1; the raw bytes remain the source of truth. Opaque — never parsed." },
+        "device_tz": { "type": "string", "minLength": 1, "description": "Optional-additive (D17). IANA timezone id of the capturing device at capture time, carried VERBATIM from the C1 envelope — data-processing performs no timezone logic whatsoever. IANA ids only, never abbreviations." },
+        "device_utc_offset_minutes": { "type": "integer", "minimum": -1080, "maximum": 1080, "description": "Optional-additive (D17). UTC offset in minutes the device believed at t_start, verbatim from C1; the independent witness against stale/wrong tzdata." },
+        "device_clock": { "enum": ["synced", "unsynced"], "description": "Optional-additive (D17). The device's own declaration of its clock discipline, verbatim from C1 — the flag that keeps skew detectable rather than corrected. The third member of the D17 trio the charter says rides source{} verbatim; v0's schema omitted it and the omission is not carried forward." },
+        "device_location": { "type": "object", "additionalProperties": false, "properties": { "lat": { "type": "number" }, "lon": { "type": "number" }, "accuracy_m": { "type": "number" } }, "description": "Optional-additive (D17). Carried verbatim from the C1 envelope when the device reported it." }
+      },
+      "description": "Provenance back to the raw chunk, VERBATIM from the C1 envelope minus modality (lifted to the record root). Transport-only C1 fields (sequence, codec, blob_sha256, blob_bytes) are not provenance and stay off the record, exactly as in v0. Forwarding provenance is not producing a signal: none of these fields needs a consumer-today justification (L10 does not gate them)."
+    },
+    "t_start": { "type": "string", "description": "Wall-clock span start: the C1 envelope's RFC3339 UTC string carried VERBATIM (the D-05 rule, ported into the v1 assembler) — never reparsed, reformatted or normalized. The time-spine axis storage indexes on." },
+    "t_end": { "type": "string", "description": "Wall-clock span end, the C1 string carried VERBATIM (D-05)." },
+    "pipeline_version": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9_]+\\.v[0-9]+-[a-z0-9_]+\\.v[0-9]+(\\.exp-[a-z0-9_]+)?(\\+[a-z0-9_]+\\.v[0-9]+-[a-z0-9_]+\\.v[0-9]+(\\.exp-[a-z0-9_]+)?)*$",
+      "description": "The version law (L4, D-R3): the `+`-joined SORTED list of every enabled stage's string <stage>.v<S>-<backend>.v<B>[.exp-<code>], resolved before any stage runs — it states the ATTEMPTED dialect (L11), never what succeeded. Plain string, never hashed. Stage version vS bumps on contract changes (needs, slot name/shape, emit semantics, budget); backend version vB bumps on implementation changes (model, weights, prompts, thresholds, any behavior); an in-code experiment surfaces its treatment as .exp-<code> or it is forbidden. No output-affecting env knob exists anywhere (CI determinism matrix, T-1). The regex pins segment grammar only — SORTEDNESS is not expressible here and is enforced by the composition test (T-3). Enforcing implementations must use fullmatch: this string is variable-width, so the fixed-length trap closure used on record_id is unavailable, and in Python `$` alone would admit a trailing newline."
+    },
+    "processed_at": { "type": "string", "description": "When data-processing produced this record, RFC3339 UTC (distinct from storage's created_at/updated_at)." },
+    "content": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slots"],
+      "properties": {
+        "slots": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The slots map, keyed by slot name (= the producing stage's declared slot name, defaulting to the stage name). One enabled producer per slot — a resolve-time hard error; no stage edits another stage's slot; every produced slot is emitted (L5). A slot ABSENT under a dialect that names its stage is a hole (attempted, failed — L7/L11); an empty slots map is legal and honest when every optional stage failed. Slot values are JSON text/structure under a byte budget declared in the stage file — exceeding it at assembly is a stage failure, never silent truncation. Binary artifacts never land inline: bytes go to blob storage and a ref-slot carries {blob_ref, meta} ($defs.ref_slot — named ref-slot properties are added here additively when their producers ship, e.g. persisted clipprep artifacts). Unknown slot names fail closed: adding a slot type is an additive edit to this file, made when its first producer ships. Arrays inside slots key their elements on a grid derived from the declared C1 span, never on model output, survivor ordinals or decoder frame indices (L12).",
+          "properties": {
+            "asr": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["version", "value"],
+              "properties": {
+                "version": { "$ref": "#/$defs/slot_version" },
+                "language": { "type": "string", "description": "Detected/pinned language, BCP-47 (e.g. 'en'). Optional." },
+                "value": { "type": "string", "description": "The full transcript text. Empty string = the honest empty claim: ASR ran and the chunk carried no speech (the VAD-gated silence case, L11)." },
+                "splits": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["t_start", "t_end", "value"],
+                    "properties": {
+                      "t_start": { "type": "string", "description": "Sub-span start, absolute RFC3339 UTC (chunk t_start + offset) — C10 buckets sub-spans by their own t_start." },
+                      "t_end": { "type": "string", "description": "Sub-span end, absolute RFC3339 UTC." },
+                      "value": { "type": "string" }
+                    }
+                  },
+                  "description": "Optional finer-grained ASR timing; the time-spine payload."
+                }
+              },
+              "description": "Produced by the asr stage (thin client over the whisper server)."
+            },
+            "diarization": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["version", "splits"],
+              "properties": {
+                "version": { "$ref": "#/$defs/slot_version" },
+                "splits": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["t_start", "t_end", "speaker"],
+                    "properties": {
+                      "t_start": { "type": "string", "description": "Turn start, absolute RFC3339 UTC." },
+                      "t_end": { "type": "string", "description": "Turn end, absolute RFC3339 UTC." },
+                      "speaker": { "type": "string", "description": "Anonymous within-chunk label ('speaker-0', …). Chunk-local by L1: no cross-chunk speaker state exists in DP." }
+                    }
+                  }
+                }
+              },
+              "description": "Produced by the diarize stage (thin client over the pyannote server). Speaker turns only — the speaker-aligned transcript is NOT written here (no stage edits another's slot): it is the separate transcript slot, from the speaker_align stage."
+            },
+            "transcript": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["version", "splits"],
+              "properties": {
+                "version": { "$ref": "#/$defs/slot_version" },
+                "splits": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["t_start", "t_end", "value", "speaker"],
+                    "properties": {
+                      "t_start": { "type": "string", "description": "Line start, absolute RFC3339 UTC — C10 v2 buckets each line by this, its own t_start." },
+                      "t_end": { "type": "string", "description": "Line end, absolute RFC3339 UTC." },
+                      "value": { "type": "string" },
+                      "speaker": { "type": ["string", "null"], "description": "The aligned diarization label; null where alignment found no turn." }
+                    }
+                  }
+                }
+              },
+              "description": "The speaker-aligned transcript — a DERIVED VIEW produced by the new speaker_align stage whose needs reference the asr and diarization slots (L5: derived views are new slots from ordinary stages). One witness on two channels with asr (the L11 provenance corollary): their agreement is not corroboration. C10 v2 routes THIS slot's splits[] into the day-log's speaker-bucketed transcript lines."
+            },
+            "acoustic": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["version", "values"],
+              "properties": {
+                "version": { "$ref": "#/$defs/slot_version" },
+                "values": { "type": "array", "items": { "type": "string" }, "description": "Acoustic-event tags ('keyboard typing', 'dog nearby'). Empty array = ran, nothing detected (honest empty claim)." },
+                "confidence": { "type": "number", "minimum": 0, "maximum": 1, "description": "Optional model confidence over the tag set." }
+              },
+              "description": "Produced by the acoustic stage (thin client over the ast server)."
+            },
+            "caption": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["version", "value"],
+              "properties": {
+                "version": { "$ref": "#/$defs/slot_version" },
+                "value": { "type": "string", "description": "The rendered dense caption for the chunk's span." }
+              },
+              "description": "Produced by the clipcap stage (one multi-image VLM call; absorbs render_caption and the D-11/D-12 caps at Stage C). May be grounded in the ocr slot's text (injected into the prompt, D-09) — one witness on two channels, never corroboration (L11 corollary)."
+            },
+            "ocr": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["version", "value"],
+              "properties": {
+                "version": { "$ref": "#/$defs/slot_version" },
+                "value": { "type": "string", "description": "Legible on-screen text, reading-ordered. Empty string = the honest empty claim: OCR ran and the screen carried no legible text (L11) — distinct from the slot being absent, which means the stage failed." }
+              },
+              "description": "Produced by the screentext stage (thin client over the ocr server). Region geometry stays internal to the backend (reading order + coarse role woven into the text), exactly as before the rebuild; bbox emission remains parked (E-5, no consumer)."
+            }
+          }
+        }
+      },
+      "description": "The record body: nothing but slots. The v0 companions (content.kind, content.text, enrichments, discriminator) are deleted concepts — see the DP charter §Slot Law dead-concepts list."
+    }
+  },
+  "$defs": {
+    "slot_version": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+\\.v[0-9]+-[a-z0-9_]+\\.v[0-9]+(\\.exp-[a-z0-9_]+)?$",
+      "description": "The producing stage's own dialect segment, exactly as it appears in pipeline_version — <stage>.v<S>-<backend>.v<B>[.exp-<code>]. Redundant with the dialect on purpose: it lets a consumer holding one slot name its producer without re-parsing the composed string."
+    },
+    "ref_slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "blob_ref"],
+      "properties": {
+        "version": { "$ref": "#/$defs/slot_version" },
+        "blob_ref": { "type": "string", "minLength": 1, "description": "Opaque ref into blob storage; the bytes never ride the record (L5)." },
+        "meta": { "type": "object", "description": "Small JSON descriptor of the referenced artifact (codec, dims, byte count…). Counted against the slot's byte budget; the referenced bytes are not." }
+      },
+      "description": "The pinned shape for binary-artifact slots (L5: bytes go to blob storage, the slot carries {blob_ref, meta}). No named ref-slot exists in the v1 slot set yet; when a producer ships one (e.g. a persisted clipprep artifact), its named property is added to content.slots additively, referencing this."
+    }
+  }
+}
