@@ -13,7 +13,8 @@
 > Read this first in any founders' session, then the aspect file you're working. Service-level state
 > lives in each service's own `HANDOFF.md` — this board links, it does not restate.
 
-**Stage: PROTOTYPE** (D19) · **Last updated:** 2026-07-27
+**Stage: PROTOTYPE** (D19) · **Last updated:** 2026-08-05 (escalation DP-A opened — the DP
+rebuild's Stage A sign-off ask; nothing else on this board moved)
 
 ---
 
@@ -142,9 +143,11 @@ Each thread carries its own reasoning and a newest-first worklog. The board does
 
 ## Escalations (open items needing a founders' decision)
 
-Opened 2026-07-24 by the data-processing screen-video design session (WS-VC). The build is done and
-integrated (2026-07-25), so these are cutover gates and founders' calls, not build blockers. Full
-write-ups, with the measured numbers behind each, in
+Two origins share this table. **DP-A** (opened 2026-08-05 by the DP rebuild) is a true blocker:
+rebuild Stages B–G wait on it. The **E-rows** were opened 2026-07-24 by the data-processing
+screen-video design session (WS-VC); that build is done and integrated (2026-07-25), so they are
+cutover gates and founders' calls, not build blockers — full write-ups, with the measured numbers
+behind each, in
 [services/data-processing/handoff/ws-video-clip.md](services/data-processing/handoff/ws-video-clip.md)
 §10.
 

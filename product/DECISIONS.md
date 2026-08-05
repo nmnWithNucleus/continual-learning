@@ -72,7 +72,7 @@ That is expected, and this register is built for it:
 | # | Decision | Date | Status | Lineage on ratification | Card |
 |---|---|---|---|---|---|
 | **D-R1** | The Slot Law replaces the record-emission law | 2026-08-05 | drafted | retires the WS-VC law (charter section, no D-number) | [↓](#d-r1--the-slot-law-replaces-the-record-emission-law) |
-| **D-R2** | C2 v1: one record per chunk, built from slots | 2026-08-05 | drafted | supersedes **D10** (shape clause) · **D16** (fan-out clause, restated) · **D19** (discriminator clause) | [↓](#d-r2--c2-v1-one-record-per-chunk-built-from-slots) |
+| **D-R2** | C2 v1: one record per chunk, built from slots | 2026-08-05 | drafted | supersedes **D10** (shape clause) · restates D16 (fan-out clause) · retires D19 (discriminator clause) | [↓](#d-r2--c2-v1-one-record-per-chunk-built-from-slots) |
 | **D-R3** | The version law: identity carried by code, never by config | 2026-08-05 | drafted | — | [↓](#d-r3--the-version-law) |
 | **D-R4** | Machinery/bureaucracy split: models become servers | 2026-08-05 | drafted | retires `INGEST_ISOLATION` · `DP_DIALECT_FREEZE` | [↓](#d-r4--the-machinerybureaucracy-split) |
 | **D-R5** | The heal ledger, and `created_at`/`updated_at` in storage | 2026-08-05 | drafted | joint row with storage | [↓](#d-r5--the-heal-ledger-and-created_atupdated_at) |

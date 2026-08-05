@@ -4,8 +4,8 @@
 > Read [CHARTER.md](CHARTER.md) first (mission/scope/interfaces), then this file — the
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
-**Status:** built · **765 tests** (+21 skipped) · *Last updated:* 2026-08-05 (rebuild Stage A
-paper cut on branch `dp-rebuild-v1`; the running service is untouched)
+**Status:** built · **788 tests** (+21 skipped, re-run 2026-08-05) · *Last updated:* 2026-08-05
+(rebuild Stage A paper cut on branch `dp-rebuild-v1`; the running service is untouched)
 
 **Where we are.** The service ingests C1 chunks and emits C2 records for every modality, behind a
 stage-graph pipeline where each processing step is a drop-in file. Audio is real end to end. Video

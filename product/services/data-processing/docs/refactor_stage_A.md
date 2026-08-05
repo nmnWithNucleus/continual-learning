@@ -1,6 +1,7 @@
 # DP Rebuild — Stage A worklog (Ratify & cut paper)
 
-**Stage:** A — Ratify & cut paper · **Status:** IN_PROGRESS · **Date:** 2026-08-05
+**Stage:** A — Ratify & cut paper · **Status:** BLOCKED — all WPs complete, awaiting founder
+sign-off (founders' board escalation **DP-A**) · **Date:** 2026-08-05
 **Branch:** `dp-rebuild-v1` · **Plan:** [refactor_dp_service.md](refactor_dp_service.md) §8 Stage A
 **Scope:** WP-A1 (D-rows D-R1…D-R6 · CHARTER §Slot Law · ARCHITECTURE C2/C10 cards),
 WP-A2 (`contracts/c2_processed_record.v1.json` · `contracts/c10_daylog.v2.json`, README
@@ -160,8 +161,47 @@ $ cd product/services/continuum       && .venv/bin/python -m pytest -q
 262 passed, 7 skipped in 13.47s
 ```
 
-(The DP board's "765 (+21)" count predates Stage A; 788 is main's current count, unchanged
-by this branch.)
+(The DP board's "765 (+21)" count predated Stage A; 788 is main's current count, unchanged
+by this branch. The board's stale figure was corrected in the review round below.)
+
+Adversarial review round (multi-agent: six reviewer dimensions — decisions / charter / C2
+pair / C10 pair / cross-doc / scope — each raw finding independently re-verified by a
+skeptic agent against the plan, the worklog and the house rules):
+
+```
+14 raw findings → 7 confirmed, 7 refuted
+```
+
+Confirmed and fixed before the final commit (all paper, zero runtime):
+
+- DECISIONS.md D-R2 index lineage cell used one verb for three fates; now reads
+  "supersedes D10 (shape clause) · restates D16 (fan-out clause) · retires D19
+  (discriminator clause)" per plan §7 — the superseded/RETIRED distinction is load-bearing
+  in the register's own vocabulary. The same cell's three bold spans also broke STYLE
+  rule 5; now one.
+- `c2_processed_record.v1.json` slots description had restated L12 without its
+  "keyframe-like structures" qualifier, turning it into a blanket rule the file's own
+  `splits[]` sub-schemas would break; qualifier restored with the splits distinction made
+  explicit. Validation re-run: 17 passed, 0 failed.
+- `product/HANDOFF.md` Last-updated stamp had not been bumped for the DP-A row (board
+  claimed 2026-07-27 currency while carrying a 2026-08-05 item); stamped.
+- `product/HANDOFF.md` §Escalations preamble claimed every row was WS-VC-opened and "not a
+  build blocker", both false for DP-A; preamble now separates the two origins.
+- DP board status line carried the stale "765 tests" figure through a rewrite of that very
+  line while the founders' board said 788 in two places; corrected to 788 (+21 skipped,
+  re-run 2026-08-05).
+
+Refuted (recorded so the next reader does not re-litigate them): the `drafted` status word
+(it is the plan's own vocabulary, quarantined outside the register's five-word table); the
+charter banner's "retired law" phrasing (attributive, directly under a "Drafted…awaiting
+ratification" opening); record-emission-law.md's header still naming the charter section it
+extracts (frozen transitional state, Stage G's to collapse); the continuum flag glossing C2
+v1 under a D-R5/D-R6 citation; `$defs.ref_slot.meta` being an open object (validation-inert
+until a named slot references it — tightening is the referencing producer's additive edit);
+`transcript.splits[].speaker` nullability (typed sub-schema elaboration is exactly Stage A's
+assigned work); and the stage worklog living in `docs/` beside the plan rather than in
+`handoff/worklog.md` (the timeline entry is owed when the item leaves the board, per that
+file's own header).
 
 ## Noticed for later stages
 
@@ -191,6 +231,21 @@ by this branch.)
 
 ## Exit criteria (§8 Stage A)
 
+§8 names one exit criterion; the table below splits it into what this session could complete
+and what only the founder can do. That remainder is why the status line reads BLOCKED, not
+DONE — sign-off is an act, not a work product.
+
 | Criterion | Status | Evidence |
 |---|---|---|
-| Founder sign-off on the plan doc + schemas | pending | — |
+| WP-A1: D-rows D-R1…D-R6 drafted into `product/DECISIONS.md` | done | commit `04a6828`; §Drafted section, six cards |
+| WP-A1: CHARTER §Slot Law written | done | commit `04a6828`; L1–L12 + dead-concepts, drafted banner |
+| WP-A1: ARCHITECTURE C2/C10 cards updated | done | commit `04a6828`; v1/v2 `designed`, running wire named |
+| WP-A2: `contracts/c2_processed_record.v1.json` | done | commit `b5f39c8`; 17/17 validation checks green (§Test evidence) |
+| WP-A2: `contracts/c10_daylog.v2.json` | done | commit `b5f39c8`; same run |
+| WP-A2: README contract-edit order respected | done | §Contracts first (`04a6828`) → `contracts/` → three canvases (`b5f39c8`) |
+| No runtime change | done | diff main…HEAD is `*.md`/`*.json` only; storage 310 · DP 788+21s · continuum 262+7s all green |
+| Adversarial review, findings resolved | done | 14 raw → 7 confirmed → all fixed (final commit); 7 refuted with reasons |
+| **Founder sign-off on the plan doc + schemas** | **pending — the blocker** | escalation **DP-A** on the founders' board, opened 2026-08-05 |
+
+On sign-off: ratify/renumber D-R1…D-R6 into the register, then Stage B may open. Nothing in
+Stages B–G is started.
