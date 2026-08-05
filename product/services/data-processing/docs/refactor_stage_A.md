@@ -21,11 +21,41 @@ contract-edit order respected). **Zero runtime change.**
 
 ## Work packages
 
-*(filled per WP as it lands; every file created / modified / deleted with one line of why)*
+### WP-A1 — D-rows, Slot Law, ARCHITECTURE cards
+
+| File | Action | Why |
+|---|---|---|
+| `product/DECISIONS.md` | modified | new "Drafted — awaiting ratification" section between the Stage note and the register: index table + six cards D-R1…D-R6 (plan §7) |
+| `product/services/data-processing/CHARTER.md` | modified | §Record-vs-mutation law replaced by §Slot Law (L1–L12 + dead-concepts list, plan §1); status line stamped, dated bullet added |
+| `product/ARCHITECTURE.md` | modified | C2 card restructured around the v1 shape (v0 named as the running wire); C10 card gains a v2 delta block; both gain a dated How-it-got-here entry; index rows + Last-updated stamped |
+| `product/HANDOFF.md` | modified | escalation row + card **DP-A** — the Stage A sign-off ask (the ORG escalation path, and the "note in HANDOFF.md" ARCHITECTURE requires for §Contracts changes) |
+
+### WP-A2 — contract schemas
+
+*(pending)*
 
 ## In-session decisions (plan ambiguities)
 
-*(each: the choice + the reasoning)*
+- **D-rows land as a separate `drafted` section, not register rows.** DECISIONS.md admits five
+  status words and founders-only rows; the plan (§7, a founders'-session artifact) instructs
+  drafting at Stage A. Resolution: a clearly-delimited "Drafted — awaiting ratification"
+  section above the register, statuses `drafted`, with a banner saying the rows bind nothing
+  until a founders' session ratifies and re-numbers them. Honors both "status must never
+  over-claim" and the plan's instruction.
+- **`D-R` ids kept verbatim.** The plan names them D-R1…D-R6; final D-numbers are the
+  founders' to assign at ratification. The drafted-section banner says so.
+- **CHARTER §Slot Law replaces §Record-vs-mutation law on the branch** rather than sitting
+  beside it: two live laws in one charter would contradict each other, the branch is itself
+  the pending-sign-off artifact, and the retired statement survives verbatim in
+  `docs/record-emission-law.md` until Stage G (D-R1's own watch-out). The section banner
+  states drafted/not-yet-executable status explicitly.
+- **ARCHITECTURE cards describe both worlds.** Versioning ceremony ("bump version, new
+  `*.vN.json`, edit the card") normally fires when a version ships; here paper leads build
+  (ORG "contracts before fan-out"). Cards mark v1/v2 `designed` and v0/v1 `built`-and-running
+  until Stage F, so no status over-claims.
+- **CHARTER §On C2 left untouched.** It describes the v0 wire, which is literally true today
+  (D10's shape clause is superseded only on ratification). The full charter rewrite is
+  Stage G's; noted below for that stage.
 
 ## Deviations from the plan
 

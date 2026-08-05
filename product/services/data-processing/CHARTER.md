@@ -20,10 +20,12 @@
 > Full posture + what changes at dev/prod: [ARCHITECTURE.md](../../ARCHITECTURE.md) §Stage.
 
 
-**Status:** chartered · **Last updated:** 2026-08-03 (field guide revised under the
-teaching-view rules, [D22](../../DECISIONS.md)) ·
+**Status:** chartered · **Last updated:** 2026-08-05 (§Slot Law drafted, DP rebuild Stage A) ·
 [D18](../../DECISIONS.md) / [D19](../../DECISIONS.md) / [D20](../../DECISIONS.md)
 
+- **2026-08-05** — §Slot Law drafted in place of §Record-vs-mutation law, on branch
+  `dp-rebuild-v1` (rebuild Stage A; D-R1…D-R6 awaiting ratification,
+  [../../DECISIONS.md](../../DECISIONS.md) §Drafted).
 - **2026-07-27** — C2 gains an additive-optional `discriminator`, surfaced so storage's day-log
   materialization can keep one dialect per record. The §Stage banner was added.
 - **2026-07-25** — the WS-VC screen-video clip path was ratified, and OQ10 / OQ13 / OQ14 rewritten.
@@ -140,54 +142,90 @@ reprocess is an upsert and not a duplicate.
 
 ---
 
-## Record-vs-mutation law (governance — when a signal earns a C2 record)
+## Slot Law (governance — the twelve laws of the rebuilt pipeline)
 
-> Ratified 2026-07-25 (WS-VC). Deep extract + reasoning: [handoff/ws-video-clip.md](handoff/ws-video-clip.md) §4
-> and [docs/record-emission-law.md](docs/record-emission-law.md). **It is executable**, not just
-> prose: `tests/test_emission_law.py` (the CI matrix) + `app/stagegraph/stage.py` (a registration-time
-> raise) are the source of truth; this section is its statement.
+> **Drafted 2026-08-05 at Stage A of the DP rebuild — awaiting founder ratification as
+> [D-R1](../../DECISIONS.md).** It replaces §Record-vs-mutation law, whose subject matter
+> (multi-record fan-out, in-place mutation) the rebuild deletes; the retired law's long-form
+> reasoning stays in [docs/record-emission-law.md](docs/record-emission-law.md) until Stage G
+> condenses it into the handoff. The law becomes executable at Stage C (test spine T-1…T-6);
+> until then this section is its statement. Design + migration plan:
+> [docs/refactor_dp_service.md](docs/refactor_dp_service.md).
 
-**The invariant.** A C2 record is **one independently-placeable, independently-labelable,
-independently-losable claim about a span of the user's life** — placement is `t_start` alone, labeling
-is `content.kind` alone, identity is `record_id = sha256(chunk_id ␀ pipeline_version [␀ discriminator])`
-(a blind `/context` upsert), loss is per-stage. Therefore: *a signal deserves a record iff it needs
-its own place, its own label, or its own failure. A signal that makes an existing record's declared
-_structure_ more precise is a mutation. A signal about _how_ a claim was obtained is an enrichment —
-or nothing.*
+- **L1 — Chunk purity.** A stage output is a pure function of this chunk's bytes plus code.
+  Cross-chunk work belongs to continuum. No cross-chunk state in DP, ever.
+- **L2 — One record per chunk, schema-hard.** Exactly one C2 record per
+  `(chunk_id, pipeline_version)`: the executor structurally emits one, a test asserts it, the
+  contract states it. Adding a second record per chunk requires forking the contract (C2 v2).
+- **L3 — Identity.** `record_id = sha256(chunk_id ␀ pipeline_version)` — NUL-joined, hex, a
+  blind `/context` upsert. No discriminator; L2 is why dropping it is safe.
+- **L4 — Version law.** `pipeline_version` is the `+`-joined *sorted* list of every enabled
+  stage's string `<stage>.v<S>-<backend>.v<B>[.exp-<code>]`, resolved before any stage runs.
+  Plain string, never hashed; it states the *attempted* dialect.
+  - Stage version `vS` bumps on contract changes: `needs`, slot name/shape, emit semantics,
+    budget. Backend version `vB` bumps on implementation changes: model, weights, prompts,
+    thresholds, any behavior.
+  - **No output-affecting env knobs exist.** Every env var is operational-only (endpoints,
+    replicas, timeouts, log levels). CI enforces this with a determinism matrix: fixed
+    version strings + fixed bytes ⇒ byte-identical record across the whole settings matrix.
+  - Experiments fork the dialect: an in-code A/B surfaces its treatment as `.exp-<code>` in
+    the string. Invisible-to-identity experimentation is forbidden.
+- **L5 — Slots.** `content.slots` is a map keyed by slot name. One enabled producer per slot,
+  a resolve-time hard error; no stage edits another stage's slot — a derived view (a
+  speaker-aligned transcript) is a *new slot* from an ordinary stage whose `needs` name the
+  inputs. Every slot is emitted into the record.
+  - Slot values are JSON text/structure only, each under a byte budget declared in the stage
+    file (`len(utf8(json(value)))`). Raising a budget is a stage-version bump; exceeding it
+    at assembly is a stage failure, never silent truncation.
+  - Binary artifacts ride refs: bytes go to blob storage, the slot carries
+    `{blob_ref, meta}`. Within a run the blackboard carries `{ref, bytes}` and the executor
+    frees `bytes` when the last consumer finishes. Re-derivable heavy data (deterministic
+    decode of `/raw` bytes) defaults to not-persisted.
+- **L6 — One POST.** The blackboard fills in memory; exactly one atomic `POST /context` per
+  completed graph attempt; ACK only after storage confirms (`dp_acked=1 ⇔ C2 durably
+  written`, unchanged). Partial-record writes to storage are forbidden.
+- **L7 — Required / optional.** Each stage declares `required: bool`. Required failure ⇒ no
+  record: the chunk attempt fails ⇒ worker retry (`INGEST_MAX_RETRIES`) ⇒ durable dead-letter
+  ⇒ visible in `/continuity.dead_lettered`, so recording's verdict reads `gaps`, never
+  falsely clean. Optional failure ⇒ the slot is absent (a *hole*), the downstream cone is
+  cancelled, statuses are recorded, the record ships.
+- **L8 — Done-ledger & healing.** The journal's done-row is
+  `chunk_id → {pipeline_version, record_id, stage_status{name→ok|failed|cancelled}, heal_attempts}`.
+  On (re)delivery: no row → process; version differs → version-forward reprocess, the new
+  record landing *beside* the old; version matches all-green → skip (200 + `record_id`);
+  version matches with holes and budget left → heal.
+  - A heal is a full graph re-run (the redelivery body carries the C1 envelope, so no stored
+    envelope is needed) re-POSTing the same `record_id`; the upsert replaces holey with
+    fuller. The same stage failing again ⇒ `heal_attempts++`; at budget ⇒ holes permanent,
+    row done-final, metric fires.
+  - Heal recompute policy is recompute-all now. The done-row schema includes a nullable
+    `cached_slots` column, specified and unpopulated, so run-only-the-failed-cone can be
+    added later without a schema break.
+- **L9 — Machinery / bureaucracy.** Every model (ASR, diarization, acoustic, OCR, any local
+  VLM) is a long-lived model-server process — replicated, GPU-pinned via supervisor manifest,
+  loaded once, health-checked, restart-on-crash. Stages are thin clients (prepare request →
+  call server/cloud → post-process into slot) with per-call timeouts and bounded transient
+  retries against other replicas; ffmpeg remains a self-isolating subprocess.
+  - *No model loads inside the DP process*, and no per-chunk child processes exist. The
+    supervisor lives in DP for now; `isolation.py` is deleted with condensed history at
+    Stage G.
+- **L10 — Consumer & budget rule.** A slot ships with a named consumer-today, or an explicit
+  `speculative` marker plus its byte budget. Every slot names its rough
+  chars-per-second-of-life cost. CI screams at unbudgeted or megabyte slots.
+- **L11 — Honesty.** Reading a record: stage name in `pipeline_version` + slot *absent* =
+  attempted and failed (a hole); slot *present with empty value* = honest empty claim (OCR
+  ran, the screen had no text); stage name *not in the dialect* = never attempted. Consumers
+  never infer a negative from an absent slot under a dialect that did not attempt it.
+  - Provenance corollary: a slot derived from another slot (OCR text injected into the
+    caption prompt) is one witness on two channels — agreement is not corroboration.
+- **L12 — Sub-array stability.** Arrays inside slots (keyframe-like structures) key their
+  elements on a grid derived from the declared C1 span — never on model output, survivor
+  ordinals, or decoder frame indices.
 
-**The decision procedure — five ordered tests, first match wins** (apply to any signal S from one C1 chunk):
-
-| Test | Question | If it fires |
-|---|---|---|
-| **T1 `DERIVABLE`** | Pure function of *this* chunk's bytes + config? | **No → not a DP record** (cross-chunk work is continuum's). |
-| **T2 `REACHABLE`** | Reaches a consumer that exists **today**? (`enrichments` is read nowhere yet) | **No → do not emit.** Store nothing you cannot spend; re-apply when a consumer lands. |
-| **T3 `SPINE`** | The modality's answer to "what happened in these bytes"? | `PRIMARY` unit(s); its fragment is the base dialect. |
-| **T4 `EDITS`** | Changes bytes a record already claims? | **Structure-fill → `MUTATE`** (declares `writes`, mandatory fragment). *String-change → `FORBIDDEN`*: refine inside the stage before assembly, or fork `pipeline_version`. |
-| **T5 `CHANNEL/SPAN`** | Owns a pinned `kind`/day-log line or an independently addressable span? | `NEW RECORD` with its own discriminator. |
-
-Fallthrough → **enrichment** (subject to T2) or **stage input**.
-
-**The five riders** (full text in the extract): **R1 fork** — a stage whose config can change bytes it
-doesn't emit must contribute a `version_fragment` (mechanised: a sidecar with non-empty `provides`
-must fork; a purely-additive sidecar must not). *R2 independence* — two records on the same second
-must each be usable without the other; a *grounded* pair (OCR injected into the caption) is one
-witness on two channels, not corroboration. *R3 dialect-honesty* — `pipeline_version` states the
-*attempted* dialect; absence is diagnosed by record-presence + a metric, never by the dialect string
-or a fabricated placeholder (cross-service: continuum must never infer "no on-screen text" from an
-absent OCR record). *R4 set-stability* — the record *set* is a pure function of `(bytes, settings)`,
-never of model output or stage outcome. *R5 budget* — every record class names its consumer-today
-and its chars-per-second-of-life budget.
-
-**Enforced in three layers** (deliberately not one, because settings don't exist at import):
-registration raise (structural R1) → CI matrix (the configuration half, across legacy/clip/every
-backend) → graph resolution (per-chunk config errors). One fixed exemption, named in both code and
-test: `video/keyframes` (legacy `vidproc-*-v0` reproduction); the test runs with the exemption
-emptied and asserts it is the *only* violation, so no second stage can slide under it silently.
-
-**Worked precedents** (audio, shipped): ASR = primary; diarization = mutate (`+diar-*`); translation +
-acoustic + injected-caption = additive records (no fragment). **Video (WS-VC):** clip caption = primary;
-OCR = its own `kind='ocr'` record whose text is *also* injected into the caption (one witness, two
-channels, R2 Corollary 2); bbox geometry = *not emitted* (T2 — no reader; parked as E-5).
+**Dead concepts, deleted with their subject matter:** primary/mutate/sidecar, `best_effort`
+policy machinery, discriminator, `writes`/`mutable_slots`, SlotView, mutate chain edges, the
+R1 fork rider + `R1_EXEMPT_SIDECARS`, T3/T5, `DP_DIALECT_FREEZE`, `INGEST_ISOLATION`,
+per-unit `assemble()`, the `enrichments` present-but-empty block, `ProcessedUnit` fan-out.
 
 ---
 

@@ -59,6 +59,158 @@ That is expected, and this register is built for it:
 
 ---
 
+## Drafted — awaiting ratification: the DP service rebuild (2026-08-05)
+
+> **These six rows are `drafted`, not `ratified`, and bind nothing yet.** They were cut at
+> Stage A of the data-processing rebuild, as the rebuild plan's §7 instructs
+> ([refactor_dp_service.md](services/data-processing/docs/refactor_dp_service.md) — design
+> consensus reached point-by-point at the founders' session of 2026-08-05). A founders'
+> session ratifies them into the register below, assigning final D-numbers; the `D-R`
+> ids are the plan's provisional handles. Until then the running service and every
+> ratified row stand unchanged.
+
+| # | Decision | Date | Status | Lineage on ratification | Card |
+|---|---|---|---|---|---|
+| **D-R1** | The Slot Law replaces the record-emission law | 2026-08-05 | drafted | retires the WS-VC law (charter section, no D-number) | [↓](#d-r1--the-slot-law-replaces-the-record-emission-law) |
+| **D-R2** | C2 v1: one record per chunk, built from slots | 2026-08-05 | drafted | supersedes **D10** (shape clause) · **D16** (fan-out clause, restated) · **D19** (discriminator clause) | [↓](#d-r2--c2-v1-one-record-per-chunk-built-from-slots) |
+| **D-R3** | The version law: identity carried by code, never by config | 2026-08-05 | drafted | — | [↓](#d-r3--the-version-law) |
+| **D-R4** | Machinery/bureaucracy split: models become servers | 2026-08-05 | drafted | retires `INGEST_ISOLATION` · `DP_DIALECT_FREEZE` | [↓](#d-r4--the-machinerybureaucracy-split) |
+| **D-R5** | The heal ledger, and `created_at`/`updated_at` in storage | 2026-08-05 | drafted | joint row with storage | [↓](#d-r5--the-heal-ledger-and-created_atupdated_at) |
+| **D-R6** | C10 v2 + whole-record retraction | 2026-08-05 | drafted | joint row with storage · **D20** parity bar re-baselined | [↓](#d-r6--c10-v2--whole-record-retraction) |
+
+### D-R1 — the Slot Law replaces the record-emission law
+
+> `drafted` 2026-08-05 · awaiting founder ratification · reasoning:
+> [rebuild plan](services/data-processing/docs/refactor_dp_service.md) §1
+> · recorded in [data-processing CHARTER](services/data-processing/CHARTER.md) §Slot Law
+
+**In one line.** Twelve laws whose invariants hold by construction replace the emission law's
+five ordered tests and five riders — because the capabilities that needed governing are deleted.
+
+**What was decided**
+
+- The Slot Law (L1–L12) goes into the DP charter as §Slot Law; that section is its one home,
+  cited from everywhere else and restated nowhere.
+- The WS-VC record-vs-mutation law and its riders retire by the same ceremony that ratified
+  them — a charter edit.
+- Dead with their subject matter: primary/mutate/sidecar kinds, the discriminator,
+  `writes`/`mutable_slots`, SlotView, the R1 fork rider and its exemption, `best_effort`
+  policy machinery.
+- The law is executable at Stage C (test spine T-1…T-6); until that lands the section is a
+  statement, and says so.
+
+**Watch out for**
+
+- `services/data-processing/docs/record-emission-law.md` keeps the retired law's long-form
+  reasoning until Stage G folds it into condensed history. Deleting it earlier orphans the
+  "why it existed" record.
+
+### D-R2 — C2 v1: one record per chunk, built from slots
+
+> `drafted` 2026-08-05 · awaiting founder ratification · reasoning:
+> [rebuild plan](services/data-processing/docs/refactor_dp_service.md) §2
+> · on ratification: supersedes **D10**'s C2-shape clause, retires **D19**'s discriminator
+> clause, restates **D16**'s fan-out clause
+> · recorded in [ARCHITECTURE.md](ARCHITECTURE.md) §Contracts C2 card;
+> [contracts/c2_processed_record.v1.json](contracts/c2_processed_record.v1.json)
+
+**In one line.** Exactly one C2 record per `(chunk_id, pipeline_version)`, its content a map of
+slots each written by exactly one stage — no discriminator, no `enrichments` block.
+
+**What was decided**
+
+- `record_id = sha256(chunk_id ␀ pipeline_version)` — NUL-joined, hex, blind upsert. No
+  discriminator, and one-record-per-chunk is why dropping it is safe.
+- `content.slots` is a map keyed by slot name; a slot is written by its one producing stage and
+  never edited. `modality` moves to the record root.
+- D16's fan-out clause is restated strengthened: exactly **one** derivable record id per chunk,
+  where the async reply had licensed a `record_ids[]` list.
+- v0 stays the wire until the Stage F cutover; v1 records are emitted only by the rebuilt
+  service, beside-built on `dp-rebuild-v1`.
+
+### D-R3 — the version law
+
+> `drafted` 2026-08-05 · awaiting founder ratification · reasoning:
+> [rebuild plan](services/data-processing/docs/refactor_dp_service.md) §1 L4
+> · recorded in [data-processing CHARTER](services/data-processing/CHARTER.md) §Slot Law L4
+
+**In one line.** `pipeline_version` is the sorted join of every enabled stage's
+`<stage>.v<S>-<backend>.v<B>` string, and no environment knob may ever move output bytes.
+
+**What was decided**
+
+- Stage version `vS` bumps on contract changes; backend version `vB` bumps on implementation
+  changes. The string is resolved before any stage runs and states the *attempted* dialect.
+- **No output-affecting env knobs exist.** Every env var is operational-only; CI enforces this
+  with a determinism matrix (fixed bytes + fixed versions ⇒ byte-identical record).
+- Experiments fork the dialect: an in-code A/B must surface its treatment as `.exp-<code>` in
+  the string. Invisible-to-identity experimentation is forbidden.
+
+### D-R4 — the machinery/bureaucracy split
+
+> `drafted` 2026-08-05 · awaiting founder ratification · reasoning:
+> [rebuild plan](services/data-processing/docs/refactor_dp_service.md) §1 L9 + §3
+> · recorded in [data-processing CHARTER](services/data-processing/CHARTER.md) §Slot Law L9
+
+**In one line.** Every model runs as a long-lived, replicated, health-checked server process;
+the DP service is a thin async orchestrator whose stages are clients.
+
+**What was decided**
+
+- whisper, pyannote, ast and ocr all move behind the server seam at Stage B, at once (OD-3) —
+  no half-migrated calling conventions.
+- **No model loads inside the DP process.** Stages become thin clients with per-call timeouts
+  and bounded transient retries against other replicas; ffmpeg stays a subprocess.
+- `isolation.py`, `INGEST_ISOLATION` and `DP_DIALECT_FREEZE` retire, with condensed history
+  written at Stage G. Per-chunk child processes end with them.
+
+### D-R5 — the heal ledger, and `created_at`/`updated_at`
+
+> `drafted` 2026-08-05 · awaiting founder ratification · **joint row with storage** ·
+> reasoning: [rebuild plan](services/data-processing/docs/refactor_dp_service.md) §1 L8 + §5.1
+> · recorded in [ARCHITECTURE.md](ARCHITECTURE.md) §Contracts C10 card (axis change);
+> [data-processing CHARTER](services/data-processing/CHARTER.md) §Slot Law L7/L8
+
+**In one line.** Failure handling heals instead of freezing holes — the journal's done-row
+learns per-stage status and a heal budget, and storage splits `ingest_time` into
+`created_at`/`updated_at`.
+
+**What was decided**
+
+- Done-row: `chunk_id → {pipeline_version, record_id, stage_status, heal_attempts}` (plus a
+  nullable `cached_slots` column, specified and unpopulated). Redelivery decides fresh /
+  version-forward / skip / heal from it.
+- A heal is a full graph re-run re-POSTing the same `record_id`; the upsert replaces holey
+  with fuller. At budget, holes go permanent and a metric fires.
+- Storage: `created_at` = first landing of a `record_id`; `updated_at` bumps only when
+  `record_json` byte-compares different, so no-op redeliveries never re-window a record.
+- Training-window membership and the day-log dedup axis move to `updated_at`. Healed records
+  flow into the next window — accepted double-training, the same class as version bumps.
+
+### D-R6 — C10 v2 + whole-record retraction
+
+> `drafted` 2026-08-05 · awaiting founder ratification · **joint row with storage** ·
+> reasoning: [rebuild plan](services/data-processing/docs/refactor_dp_service.md) §5.2–5.4
+> · recorded in [ARCHITECTURE.md](ARCHITECTURE.md) §Contracts C10 card;
+> [contracts/c10_daylog.v2.json](contracts/c10_daylog.v2.json)
+
+**In one line.** The day-log renderer walks `content.slots` instead of per-kind records, and
+E-2 retraction is redesigned as whole-record operations — simpler, and finally built (Stage E).
+
+**What was decided**
+
+- Renderer routing: `slots.caption` → Scene · `slots.ocr` → World text (OCR) ·
+  `slots.transcript` → speaker-bucketed lines via its `splits[]`.
+- Dedup key: latest `updated_at` per `(chunk_id)`, rowid tiebreak — one record per chunk makes
+  the old `(chunk_id, kind, discriminator)` key collapse to this.
+- `recipe_id` / `daylog_format_version` bump; continuum's stamp-refusal is the transition
+  safety net.
+- E-2 becomes whole-record operations: delete by `record_id` / `chunk_id` /
+  `pipeline_version`; manifest by `pipeline_version`. The kind-granular design retires unbuilt.
+- The D20 parity bar is re-baselined against the v2 renderer (Stage E, WP-E4).
+
+---
+
 ## Register
 
 | # | Decision | Date | Status | Lineage | Card |

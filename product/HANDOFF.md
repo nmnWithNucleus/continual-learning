@@ -150,6 +150,7 @@ write-ups, with the measured numbers behind each, in
 
 | # | Ask | Owner(s) | Blocks | Founders' call? |
 |---|---|---|---|---|
+| **DP-A** | Stage A sign-off of the DP rebuild: ratify D-R1…D-R6, plan + schemas | founders | rebuild Stages B–G | **yes** [↓](#dp-a--the-dp-rebuild-stage-a-sign-off) |
 | **E-3(b)** | A captioner VL endpoint distinct from the user-facing `:8000` | platform + inference | scale-up, not the build | **yes** [↓](#e-3b--a-captioner-vl-endpoint) |
 | **E-5** | The parked additive C2 edit — the ask is to *not* take it yet | founders → storage + data-processing | nothing | when triggered [↓](#e-5--the-parked-additive-c2-edit) |
 | **E-2** | A kind-aware retraction primitive; demoted by D18 | storage | nothing | service-level [↓](#e-2--the-retraction-primitive) |
@@ -159,6 +160,27 @@ write-ups, with the measured numbers behind each, in
 verified vLLM 0.24.0 defaults the image cap to 999 and clamps nothing at 768×480, so the
 multi-image call validates on the *unmodified* `serve_vllm.sh`; the flags are determinism pins, not
 a prerequisite.
+
+### DP-A — the DP rebuild Stage A sign-off
+
+> open 2026-08-05 · founders · blocks rebuild Stages B–G, nothing running
+
+**In one line.** The DP rebuild's paper is cut on branch `dp-rebuild-v1` — six D-rows drafted,
+the Slot Law written into the DP charter, C2 v1 + C10 v2 schemas landed — and Stage A exits
+only on founder sign-off.
+
+**The ask**
+
+- Ratify [D-R1…D-R6](DECISIONS.md) (the drafted section above the register) and sign off the
+  [rebuild plan](services/data-processing/docs/refactor_dp_service.md) as written, plus the two
+  schemas.
+- `main` and the running service are untouched (OD-1 beside-build); v0/v1 stay the wire until
+  the Stage F cutover.
+
+**Watch out for**
+
+- D-R6 redesigns **E-2** (kind-aware → whole-record retraction). The E-2 row below stands as-is
+  until ratification; on ratification its design moves, not its priority.
 
 ### E-3(b) — a captioner VL endpoint
 
