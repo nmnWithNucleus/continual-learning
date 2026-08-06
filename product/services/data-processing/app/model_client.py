@@ -169,6 +169,13 @@ class ModelClient:
             if resp.status_code == 200:
                 body = resp.json()
                 return body["result"]
+            if resp.status_code >= 500:
+                # A 5xx (incl. the framework's 503-warming) can be a respawned
+                # replica presenting itself over HTTP rather than as a transport
+                # error — whatever serves on this port next must re-verify its
+                # /health identity before it serves (cleanup round: the
+                # transport-only clearing missed this presentation).
+                replica.verified = False
             transient = True
             try:
                 body = resp.json()

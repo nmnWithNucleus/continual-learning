@@ -29,6 +29,7 @@ counted by the caller via ``ParseOutcome``.
 from __future__ import annotations
 
 import base64
+import dataclasses
 import logging
 from typing import Any
 
@@ -178,6 +179,10 @@ async def describe(
     reply = ((choice0.get("message") or {}).get("content") or "").strip()
 
     outcome = parse_clip(reply)  # raises EmptyReplyError (ValueError) on an empty reply
+    # Stamp the pack that rendered this prompt so the caller can label
+    # dp_video_parse_fallback_total{pack,step} truthfully (cleanup round: the
+    # inc previously carried only {step} and the labelled family never recorded).
+    outcome = dataclasses.replace(outcome, pack=spec.id)
     logger.info(
         "clip captioned chunk %s: pack=%s k=%d step=%s app=%r",
         chunk_id, spec.id, len(frames), outcome.step, outcome.desc.app,

@@ -59,6 +59,8 @@ class DiarizeStage(Stage):
     byte_budget = 8192       # real 17.8 s golden (10 turns) emits 1167 B; a
                              # busy 60 s chunk (~40 turns) stays ~4 KB
     server = "pyannote"
+    # L10: consumed in-run by speaker_align (the derived transcript slot).
+    consumer = "stage:speaker_align"
 
     async def run_async(self, ctx: StageContext) -> StageOutput:
         client = require_client(ctx, self)

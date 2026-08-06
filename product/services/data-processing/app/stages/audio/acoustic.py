@@ -71,6 +71,9 @@ class AcousticStage(Stage):
     required = False        # optional: a hole never blocks the record (L7)
     byte_budget = 2048      # <= 3 short labels + a float; goldens emit 44 B
     server = "ast"
+    # L10: no C10 v2 route exists for the acoustic slot yet — an honest
+    # speculative marker, not a fabricated consumer (Stage E owns the ruling).
+    consumer = "speculative:c10_ambient_route_unruled"
 
     async def run_async(self, ctx: StageContext) -> StageOutput:
         client = require_client(ctx, self)

@@ -39,6 +39,7 @@ def _stage_cls(**overrides):
         "stage_version": 1,
         "backend": Backend("fw", 1),
         "byte_budget": 65536,
+        "consumer": "speculative:test_fixture",
         "run_sync": lambda self, ctx: StageOutput(value={"value": "hi"}),
     }
     attrs.update(overrides)
@@ -118,6 +119,7 @@ def test_neither_run_method_is_registration_error(clean_reg):
     cls = type("NoRun", (Stage,), {
         "name": "x", "modality": "audio", "stage_version": 1,
         "backend": Backend("b", 1), "byte_budget": 10,
+        "consumer": "speculative:test_fixture",
     })
     with pytest.raises(StageRegistrationError, match="exactly one"):
         register_stage(cls)
@@ -198,3 +200,20 @@ def test_dead_concepts_are_gone_from_module(dead):
 ])
 def test_dead_attrs_are_gone_from_stage(dead_attr):
     assert not hasattr(Stage, dead_attr)
+
+
+@pytest.mark.parametrize("bad", ["", "heard", "daylog", "consumer:x", "daylog:"])
+def test_consumer_declaration_is_mandatory_with_grammar(clean_reg, bad):
+    """L10's ruled-in minimal form (cleanup round): a slot ships with a named
+    consumer-today or an explicit speculative marker — absence or a malformed
+    marker is a registration error."""
+    with pytest.raises(StageRegistrationError, match="consumer"):
+        register_stage(_stage_cls(consumer=bad))
+
+
+@pytest.mark.parametrize("good", ["daylog:heard", "stage:speaker_align",
+                                  "speculative:why not"])
+def test_consumer_grammar_accepts_the_three_prefixes(clean_reg, good):
+    register_stage(_stage_cls(consumer=good))
+    (s,) = stage_mod.stages_for("audio")
+    assert s.consumer == good

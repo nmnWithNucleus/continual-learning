@@ -83,6 +83,9 @@ class AsrStage(Stage):
     backend = Backend("fw", 1)
     needs = ()
     required = True          # no transcript claim -> no record (L7)
+    # L10: C10 v2's ruled Heard-lines fallback reads slots.asr when transcript
+    # holes; speaker_align consumes it in-run. ~15 chars/s of life.
+    consumer = "daylog:heard"
     byte_budget = 32768      # real 17.8 s golden emits 564 B; a dense 60 s chunk
                              # stays ~4 KB (text rides twice: value + splits)
     server = "whisper"

@@ -35,7 +35,7 @@ def _stage(name, *, slot=None, budget=2048, value=None, required=True, run=None)
     return type(f"S_{name}", (Stage,), {
         "name": name, "modality": "audio", "stage_version": 1,
         "backend": Backend("mock", 1), "slot": slot, "required": required,
-        "byte_budget": budget,
+        "byte_budget": budget, "consumer": "speculative:test_fixture",
         "run_sync": run or (lambda self, ctx: StageOutput(
             value=value if value is not None else {"value": name})),
     })()
@@ -61,6 +61,7 @@ def test_no_stage_can_edit_anothers_slot():
         type("S_edit", (Stage,), {
             "name": "edit", "modality": "audio", "stage_version": 1,
             "backend": Backend("mock", 1), "needs": ("asr",), "byte_budget": 2048,
+            "consumer": "speculative:test_fixture",
             "run_sync": lambda self, ctx: StageOutput(
                 value={"value": ctx.inputs["asr"].value["value"] + " (derived)"}),
         })(),
@@ -109,6 +110,7 @@ def test_bytes_ride_the_blackboard_not_the_record():
         type("S_cons", (Stage,), {
             "name": "cons", "modality": "audio", "stage_version": 1,
             "backend": Backend("mock", 1), "needs": ("prep",), "byte_budget": 2048,
+            "consumer": "speculative:test_fixture",
             "run_sync": lambda self, ctx: StageOutput(
                 value={"value": str(len(ctx.inputs["prep"].bytes))}),
         })(),

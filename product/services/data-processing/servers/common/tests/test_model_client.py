@@ -12,6 +12,7 @@ import socket
 import threading
 import time
 
+import httpx
 import pytest
 import uvicorn
 
@@ -291,3 +292,81 @@ def test_wrong_model_replica_is_never_silently_used():
     finally:
         for s in servers:
             s.stop()
+
+
+# ---------------------------------------------------------------------------
+# Cleanup round (2026-08-06): identity re-verification after HTTP-presented
+# respawns — a crash+respawn completing between calls presents as a 5xx (or a
+# 503-warming first contact), not as a transport error; verified must clear on
+# BOTH presentations so whatever serves on that port next re-verifies.
+# ---------------------------------------------------------------------------
+
+def _scripted_client(responses):
+    """A one-replica ModelClient whose wire is a MockTransport playing a script:
+    each /infer POST consumes the next scripted (status, body); /health always
+    answers ready with the expected identity, counting calls."""
+    client = ModelClient("echo", ["http://replica-1"],
+                         expected_identity={"model_name": "echo-model"},
+                         max_transient_retries=2)
+    health_calls = {"n": 0}
+    script = list(responses)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/health":
+            health_calls["n"] += 1
+            return httpx.Response(200, json={
+                "status": "ready", "server": "echo",
+                "identity": {"model_name": "echo-model"},
+            })
+        status, body = script.pop(0)
+        return httpx.Response(status, json=body)
+
+    client._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    return client, health_calls
+
+
+@pytest.mark.parametrize("status,body", [
+    (503, {"error": "not ready: warming", "transient": True}),
+    (500, {"error": "RuntimeError: CUDA context lost", "transient": True}),
+], ids=["warming-503", "crash-500"])
+def test_5xx_presentation_clears_verified_and_reverifies(status, body):
+    client, health_calls = _scripted_client([
+        (status, body),                      # attempt 1: the respawn presentation
+        (200, {"result": {"served_by": "post-respawn"}}),  # attempt 2, post-verify
+    ])
+    replica = client._replicas[0]
+    replica.verified = True                  # verified against the OLD process
+    result = run(client.infer({"input_b64": "", "codec": "x", "params": {}}))
+    assert result == {"served_by": "post-respawn"}
+    # The 5xx cleared verified, so the retry re-verified /health identity
+    # BEFORE the next serve — the L4 "never silently the wrong model" gate.
+    assert health_calls["n"] == 1
+    assert replica.verified is True
+    run(client.aclose())
+
+
+def test_transport_error_still_clears_verified():
+    """The original Stage C hardening's presentation, pinned alongside."""
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/health":
+            return httpx.Response(200, json={
+                "status": "ready", "server": "echo",
+                "identity": {"model_name": "echo-model"},
+            })
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise httpx.ConnectError("connection refused (respawning)")
+        return httpx.Response(200, json={"result": {"served_by": "b"}})
+
+    client = ModelClient("echo", ["http://replica-1"],
+                         expected_identity={"model_name": "echo-model"},
+                         max_transient_retries=2)
+    client._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    replica = client._replicas[0]
+    replica.verified = True
+    assert run(client.infer({"input_b64": "", "codec": "x", "params": {}})) \
+        == {"served_by": "b"}
+    assert replica.verified is True  # re-verified on the retry
+    run(client.aclose())

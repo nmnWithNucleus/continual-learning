@@ -137,7 +137,7 @@ def test_render_conf_and_minchars_gates_from_fixture():
                    regions=tuple(_region(r["text"], tuple(r["bbox"]), r["conf"]) for r in data["regions"]))
     # span=120 -> 720-char budget, so this test isolates the conf/min-chars/role gates
     # from the (separately tested) budget truncation.
-    line, n = _render([read], 120.0)
+    line, n, _tr = _render([read], 120.0)
     kept = [r for r in data["regions"] if r["keep"]]
     dropped = [r for r in data["regions"] if not r["keep"]]
     for r in kept:
@@ -153,7 +153,7 @@ def test_render_is_single_line_even_with_embedded_newlines():
     read = OcrRead(t_offset_s=0.0, regions=(
         _region("first line\nsecond line\tthird", bbox=(0.1, 0.4, 0.9, 0.45)),
     ))
-    line, _ = _render([read], 60.0)
+    line, _, _tr = _render([read], 60.0)
     assert "\n" not in line and "\r" not in line and "\t" not in line
     assert "first line second line third" in line
 
@@ -164,12 +164,12 @@ def test_render_within_chunk_dedup():
         OcrRead(t_offset_s=0.0, regions=(_region("Re: Q3 deck review with the team"),)),
         OcrRead(t_offset_s=5.0, regions=(_region("Re: Q3 deck review with the team"),)),
     ]
-    line, _ = _render(reads, 60.0)
+    line, _, _tr = _render(reads, 60.0)
     assert line.count("Re: Q3 deck review") == 1
 
 
 def test_render_empty_reads_is_empty_string():
-    line, n = _render([], 10.0)
+    line, n, _tr = _render([], 10.0)
     assert line == "" and n == 0
 
 
@@ -177,7 +177,7 @@ def test_render_redacts_and_counts_through_the_pipeline():
     read = OcrRead(t_offset_s=0.0, regions=(
         _region(f"key is {SECRET_CASES['sk_key']} keep private"),
     ))
-    line, n = _render([read], 60.0)
+    line, n, _tr = _render([read], 60.0)
     assert n == 1 and redact.REDACTED in line and SECRET_CASES["sk_key"] not in line
 
 
@@ -186,7 +186,7 @@ def test_render_truncates_on_word_boundary_at_budget():
     read = OcrRead(t_offset_s=0.0, regions=(
         _region("alpha bravo charlie delta echo foxtrot golf hotel india"),
     ))
-    line, _ = _render([read], 6.0)
+    line, _, _tr = _render([read], 6.0)
     assert len(line) <= 36
     assert not line.endswith(" ")
     # never a mid-word cut: the truncated text ends on a whole token.
@@ -200,7 +200,7 @@ def test_render_keeps_model_supplied_roles_and_coerces_off_vocab_ones():
         _region("Reply to Sarah here", bbox=(0.0, 0.0, 0.0, 0.0), role="compose"),
         _region("Meeting notes for Q3 review", bbox=(0.0, 0.0, 0.0, 0.0), role="body"),
     ))
-    line, _ = _render([read], 60.0)
+    line, _, _tr = _render([read], 60.0)
     assert "compose: Reply to Sarah here" in line
     assert "main: Meeting notes for Q3 review" in line
     assert "titlebar:" not in line

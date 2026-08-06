@@ -45,6 +45,7 @@ class MockAsrStage(Stage):
     stage_version = 1
     backend = Backend("mock", 1)
     byte_budget = 8192
+    consumer = "speculative:test_fixture"
 
     def run_sync(self, ctx) -> StageOutput:
         return StageOutput(value={

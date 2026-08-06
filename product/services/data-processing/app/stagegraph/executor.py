@@ -293,6 +293,9 @@ async def run_graph(
             clients=clients or {}, metrics=metrics,
         )
         t0 = perf_counter()
+        failure: Optional[BaseException] = None
+        out: Any = None
+        emitted: Optional[dict] = None
         try:
             if type(stage)._defines("run_async"):
                 out = await stage.run_async(ctx)
@@ -305,10 +308,26 @@ async def run_graph(
                 )
             emitted = _emit_slot(stage, out.value)
         except asyncio.CancelledError:
-            if not fut.done():
-                fut.cancel()
-            raise
+            # Two very different events reach here. TRUE external cancellation
+            # (a required sibling failed; the TaskGroup is tearing us down) is
+            # visible as a pending cancel request on this task — propagate it.
+            # A stage BODY raising CancelledError itself is a stage BUG: treated
+            # as cancellation it would vanish from statuses and let a record
+            # SHIP with its required slot silently missing (cleanup-round
+            # reproduced defect) — so it is a stage FAILURE like any other.
+            task = asyncio.current_task()
+            if task is not None and task.cancelling():
+                if not fut.done():
+                    fut.cancel()
+                raise
+            failure = RuntimeError(
+                f"{resolved.modality}/{stage.name}: stage body raised "
+                "CancelledError with no cancellation pending — a stage bug, "
+                "treated as a stage failure (never as external cancellation)"
+            )
         except Exception as exc:
+            failure = exc
+        if failure is not None:
             _observe(metrics, "dp_graph_stage_seconds", perf_counter() - t0,
                      {"modality": resolved.modality, "stage": stage.name})
             statuses[stage.name] = "failed"
@@ -318,9 +337,9 @@ async def run_graph(
             if stage.required:
                 if not fut.done():
                     fut.cancel()
-                raise  # TaskGroup cancels + awaits all siblings, then propagates
+                raise failure  # TaskGroup cancels + awaits siblings, then propagates
             logger.warning("optional stage %s/%s failed (hole): %s",
-                           resolved.modality, stage.name, exc)
+                           resolved.modality, stage.name, failure)
             fut.set_result(HOLE)
             _release_inputs(stage)
             return
@@ -354,5 +373,25 @@ async def run_graph(
         for out in blackboard.values():
             out.bytes = None
 
-    return GraphResult(slots=slots, statuses=statuses,
+    # Post-settle guard (cleanup round): the TaskGroup finishing WITHOUT a
+    # propagated failure must mean every resolved stage reached a terminal
+    # status and every required stage is 'ok'. Any other shape means a task
+    # died silently (e.g. a leaked cancellation the precise check above missed)
+    # — never ship a record over that.
+    missing = [s.name for s in resolved.stages if s.name not in statuses]
+    required_not_ok = [s.name for s in resolved.stages
+                       if s.required and statuses.get(s.name) != "ok"]
+    if missing or required_not_ok:
+        raise RuntimeError(
+            f"{resolved.modality}: graph settled incompletely — stages without a "
+            f"status: {missing}; required stages not ok: {required_not_ok} — "
+            "refusing to assemble a record over a silent death (L7)"
+        )
+
+    # Deterministic assembly order (cleanup round): slots/statuses were inserted
+    # in COMPLETION order, so wire bytes varied with replica latency — breaking
+    # §4's reprocess → byte-identical → upsert-no-op chain. Sorted keys make the
+    # serialized record a pure function of content again.
+    return GraphResult(slots={k: slots[k] for k in sorted(slots)},
+                       statuses={k: statuses[k] for k in sorted(statuses)},
                        pipeline_version=resolved.pipeline_version)

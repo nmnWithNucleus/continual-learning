@@ -153,6 +153,9 @@ class ScreentextStage(Stage):
     needs = ("clipprep",)
     required = False          # L7: failure = hole + cancelled caption cone, healed later
     server = "ocr"
+    # L10: C10 v2 routes slots.ocr to World text lines (D28); clipcap also
+    # consumes it in-run (D-09 injection).
+    consumer = "daylog:world_text"
     # L5/L10 budget: version key + JSON overhead + the digest text. The text is capped at
     # OCR_CHARS_PER_SEC × span (360 chars at the 60 s design max), so 2048 bytes holds
     # even at ~4 UTF-8 bytes/char. Cost: ~6 chars per second of life.
@@ -185,6 +188,16 @@ class ScreentextStage(Stage):
                 logger.warning("OCR read failed for chunk %s at t+%.2fs: %s",
                                chunk_id, t, exc)
 
+        # Selected times with ZERO matching frames = clipprep's ocr_times and
+        # frames disagree (a clipprep bug, or tolerance drift) — raising beats
+        # emitting value="" as a FALSE ran-and-empty claim over frames never read
+        # (cleanup round guard; L11 honesty).
+        if clip_frames.ocr_times and attempted == 0:
+            raise RuntimeError(
+                f"chunk {chunk_id}: {len(clip_frames.ocr_times)} OCR times selected "
+                "but no frame matched any of them — refusing a false empty claim"
+            )
+
         # >50% of a chunk's OCR frames erroring RAISES: optional stage -> a HOLE and a
         # cancelled caption cone (v0 dead-lettered instead; v1 heals via redrive, L8).
         if attempted and errors / attempted > _MAX_ERROR_FRACTION:
@@ -193,13 +206,29 @@ class ScreentextStage(Stage):
                 "refusing to write a corpus with the majority of on-screen text lost"
             )
 
-        text, n_redactions = assemble.render(
+        text, n_redactions, truncated = assemble.render(
             reads, ctx.span_seconds,
             min_conf=MIN_CONF, min_chars=MIN_CHARS,
             dedup_ratio=DEDUP_RATIO, chars_per_second=OCR_CHARS_PER_SEC,
         )
         if n_redactions:
             logger.info("chunk %s: %d OCR redactions", chunk_id, n_redactions)
+
+        # The stage-side observability the declarations promise (cleanup round:
+        # these families were declared/seeded but had no producer — the exact
+        # "lying zero" shape). Values are already computed above; metrics must
+        # never fail a chunk.
+        if ctx.metrics is not None:
+            try:
+                if errors:
+                    ctx.metrics.inc("dp_ocr_frame_errors_total", amount=float(errors))
+                if n_redactions:
+                    ctx.metrics.inc("dp_ocr_redactions_total",
+                                    amount=float(n_redactions))
+                if truncated:
+                    ctx.metrics.inc("dp_video_truncated_total", {"pass": "ocr"})
+            except Exception:
+                logger.exception("screentext metrics failed")
 
         # Ran -> the slot is ALWAYS emitted; "" is the honest empty claim (L11).
         return StageOutput(value={"value": text})

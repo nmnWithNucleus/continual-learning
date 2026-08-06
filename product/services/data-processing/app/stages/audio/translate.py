@@ -47,9 +47,14 @@ class TranslateStage(Stage):
     stage_version = 1
     backend = Backend("fw", 1)
     needs = ("asr",)
-    required = False
+    required = False  # DELIBERATE FLIP vs v0 (policy='required'): under L7/L8 a
+                      # translate outage should hole-and-heal, not dead-letter the
+                      # chunk. Revisit at the enable ceremony (registration + the
+                      # additive 'translation' contract slot land together).
     byte_budget = 32768     # same shape + scale as the asr slot
     server = "whisper"
+    # L10: unregistered today; a non-English dogfood would route it to Heard.
+    consumer = "speculative:non_english_dogfood"
 
     async def run_async(self, ctx: StageContext) -> StageOutput:
         asr_value = ctx.inputs["asr"].value or {}

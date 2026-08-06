@@ -44,7 +44,7 @@ def make_stage(name, *, needs=(), slot=None, required=True, budget=4096,
         "name": name, "modality": modality, "stage_version": version,
         "backend": backend or Backend("mock", 1), "needs": tuple(needs),
         "slot": slot, "required": required, "byte_budget": budget,
-        "server": server,
+        "server": server, "consumer": "speculative:test_fixture",
     }
     if run_async is not None:
         attrs["run_async"] = run_async
@@ -370,3 +370,63 @@ def test_bytes_freed_even_when_consumer_cone_is_cancelled():
     ])
     assert result.statuses == {"prep": "ok", "gate": "failed", "cons": "cancelled"}
     assert held["out"].bytes is None
+
+
+# ---------------------------------------------------------------------------
+# Cleanup round (2026-08-06): the two reproduced defects
+# ---------------------------------------------------------------------------
+
+def test_required_stage_leaking_cancellederror_fails_the_chunk():
+    """BLOCKER regression: a stage BODY raising asyncio.CancelledError must be a
+    stage failure, never mistaken for external cancellation — the leak let a
+    record SHIP with its required slot missing (journaled done, no retry)."""
+    def leak(self, ctx):
+        raise asyncio.CancelledError()
+
+    with pytest.raises(RuntimeError, match="CancelledError"):
+        execute([make_stage("asr", run=leak), make_stage("acoustic")])
+
+
+def test_optional_stage_leaking_cancellederror_is_a_failed_hole():
+    """The optional variant: the leak previously dropped the stage from statuses
+    entirely. It must read as an ordinary failure — 'failed' status, slot hole,
+    downstream cone cancelled, statuses COMPLETE for every resolved stage."""
+    def leak(self, ctx):
+        raise asyncio.CancelledError()
+
+    result = execute([
+        make_stage("asr"),
+        make_stage("opt", required=False, run=leak),
+        make_stage("dep", required=False, needs=("opt",)),
+    ])
+    assert result.statuses == {"asr": "ok", "opt": "failed", "dep": "cancelled"}
+    assert set(result.slots) == {"asr"}
+
+
+def test_wire_bytes_do_not_depend_on_completion_order():
+    """Reproduced defect: slots/statuses were inserted in completion order, so
+    record bytes varied with replica latency — falsifying §4's reprocess →
+    byte-identical → upsert-no-op chain (and, at Stage E, causing spurious
+    updated_at re-windows). Adversarial completion order must not move a byte."""
+    import json as _json
+    from app.pipeline import build_c2
+
+    def delayed(delay):
+        async def run_async(self, ctx):
+            await asyncio.sleep(delay)
+            return StageOutput(value={"value": self.name})
+        return run_async
+
+    def run_with(delays):
+        stages = [make_stage(n, run_async=delayed(d)) for n, d in delays]
+        resolved = resolve("audio", stages)
+        result = asyncio.run(run_graph(resolved, c1=C1, blob=b"",
+                                       span_seconds=5.0, clients={}))
+        record = build_c2(C1, result.slots, resolved.pipeline_version)
+        return (_json.dumps(record, ensure_ascii=False, separators=(",", ":")),
+                list(result.statuses))
+
+    bytes_a, statuses_a = run_with([("alpha", 0.08), ("beta", 0.01)])
+    bytes_b, statuses_b = run_with([("alpha", 0.01), ("beta", 0.08)])
+    assert bytes_a == bytes_b
+    assert statuses_a == statuses_b == sorted(statuses_a)

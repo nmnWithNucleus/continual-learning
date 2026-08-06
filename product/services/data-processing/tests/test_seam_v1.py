@@ -24,6 +24,7 @@ class MockAsrStage(Stage):
     stage_version = 1
     backend = Backend("mock", 1)
     byte_budget = 4096
+    consumer = "speculative:test_fixture"
 
     def run_sync(self, ctx):
         # A client-level fake: canned output, deliberately DISTINCT from any
@@ -41,6 +42,7 @@ class MockAcousticStage(Stage):
     backend = Backend("mock", 1)
     required = False
     byte_budget = 1024
+    consumer = "speculative:test_fixture"
 
     def run_sync(self, ctx):
         return StageOutput(value={"values": ["mock-tag"], "confidence": 0.5})

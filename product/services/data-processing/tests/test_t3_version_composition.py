@@ -36,6 +36,7 @@ def _stage(name, *, slot=None, vS=1, backend=("mock", 1), needs=(),
         "name": name, "modality": "audio", "stage_version": vS,
         "backend": Backend(*backend), "slot": slot, "needs": tuple(needs),
         "required": required, "byte_budget": 2048,
+        "consumer": "speculative:test_fixture",
         "run_sync": lambda self, ctx: StageOutput(
             value=value if value is not None else {"value": name}),
     })()
@@ -109,26 +110,31 @@ EXPECTED_CONTRACTS: dict[str, dict[str, dict]] = {
     # its version segment changing is the red this test exists for.
     "audio": {
         "acoustic": {"segment": "acoustic.v1-ast.v1", "slot": "acoustic",
-                     "needs": (), "required": False, "byte_budget": 2048},
+                     "needs": (), "required": False, "byte_budget": 2048,
+                     "consumer": "speculative:c10_ambient_route_unruled"},
         "asr": {"segment": "asr.v1-fw.v1", "slot": "asr",
-                "needs": (), "required": True, "byte_budget": 32768},
+                "needs": (), "required": True, "byte_budget": 32768,
+                "consumer": "daylog:heard"},
         "diarize": {"segment": "diarize.v1-pyannote.v1", "slot": "diarization",
-                    "needs": (), "required": False, "byte_budget": 8192},
+                    "needs": (), "required": False, "byte_budget": 8192,
+                    "consumer": "stage:speaker_align"},
         "speaker_align": {"segment": "speaker_align.v1-builtin.v1",
                           "slot": "transcript", "needs": ("asr", "diarize"),
-                          "required": False, "byte_budget": 49152},
+                          "required": False, "byte_budget": 49152,
+                          "consumer": "daylog:heard"},
     },
     "video": {
         "clipcap": {"segment": "clipcap.v1-vlm.v1", "slot": "caption",
                     "needs": ("clipprep", "screentext"), "required": False,
-                    "byte_budget": 4096},
+                    "byte_budget": 4096, "consumer": "daylog:scene"},
         # clipprep emits no record slot (value=None); byte_budget=1 is the
         # structurally-inert minimum the registry requires.
         "clipprep": {"segment": "clipprep.v1-ffmpeg.v1", "slot": "clipprep",
-                     "needs": (), "required": True, "byte_budget": 1},
+                     "needs": (), "required": True, "byte_budget": 1,
+                     "consumer": "stage:screentext+clipcap"},
         "screentext": {"segment": "screentext.v1-ppocr.v1", "slot": "ocr",
                        "needs": ("clipprep",), "required": False,
-                       "byte_budget": 2048},
+                       "byte_budget": 2048, "consumer": "daylog:world_text"},
     },
 }
 
@@ -142,6 +148,7 @@ def test_registered_contract_surface_matches_snapshot(modality):
         s.name: {
             "segment": s.segment, "slot": s.slot_name, "needs": tuple(s.needs),
             "required": s.required, "byte_budget": s.byte_budget,
+            "consumer": s.consumer,
         }
         for s in stages
     }

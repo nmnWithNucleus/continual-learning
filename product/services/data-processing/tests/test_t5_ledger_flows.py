@@ -89,6 +89,7 @@ class _OptionalBoom(Stage):
     backend = Backend("mock", 1)
     required = False
     byte_budget = 1024
+    consumer = "speculative:test_fixture"
 
     def run_sync(self, ctx):
         raise RuntimeError("optional stage down")

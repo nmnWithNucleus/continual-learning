@@ -54,6 +54,8 @@ class InjectedCaptionStage(Stage):
     byte_budget = 16384     # ~12 five-second windows x ~200-char descriptions
                             # in a 60 s chunk stays well under 4 KB
     server = ""             # no model: the index file is the backend
+    # L10: the dogfood day-log renders injected descriptions as Scene lines.
+    consumer = "daylog:scene"
 
     def __init__(self, index_path: str, *, backend: Optional[Backend] = None,
                  experiment: Optional[str] = None) -> None:

@@ -122,13 +122,14 @@ class EmptyReplyError(ValueError):
 @dataclass(frozen=True)
 class ParseOutcome:
     """What the ladder returns: the recovered ``ClipDesc``, the rung that produced
-    it, and whether that rung was a fallback (anything but ``clean``). The caller
-    turns ``step`` into ``dp_video_parse_fallback_total{pack,step}`` — the ladder
-    stays pure."""
+    it, and whether that rung was a fallback (anything but ``clean``). ``pack`` is
+    stamped by the CALLER that knows which pack rendered the prompt (the ladder
+    stays pure); the pair feeds ``dp_video_parse_fallback_total{pack,step}``."""
 
     desc: ClipDesc
     step: str
     fallback: bool
+    pack: str = ""
 
 
 # --- cleaning / coercion helpers ---------------------------------------------

@@ -58,6 +58,9 @@ class FakeOcrClient:
         self.fail_at = fail_at or set()
         self.calls: list[dict] = []
 
+    async def aclose(self) -> None:  # the app's client-shutdown path calls this
+        pass
+
     async def infer(self, payload: dict) -> dict:
         i = len(self.calls)
         self.calls.append(payload)
@@ -198,3 +201,36 @@ def test_normalize_bbox_divides_pixels_and_passes_through_normalized():
     assert _normalize_bbox([0.1, 0.2, 0.3, 0.4], 1280, 800) == (0.1, 0.2, 0.3, 0.4)
     # Garbage degrades to the zero sentinel, never a crash.
     assert _normalize_bbox(["x"], 1280, 800) == (0.0, 0.0, 0.0, 0.0)
+
+
+# ---------------------------------------------------------------------------
+# Cleanup round: the wired stage-side families record real values (they were
+# declared/seeded with no producer — the lying-zero shape).
+# ---------------------------------------------------------------------------
+
+def test_stage_metrics_record_errors_redactions_truncation(monkeypatch):
+    from dataclasses import replace as dc_replace
+
+    from app.metrics import Metrics
+    from app.stages.video import screentext as screentext_mod
+
+    metrics = Metrics()
+    metrics.declare_counter("dp_ocr_frame_errors_total", "absorbed per-frame errors")
+    metrics.declare_counter("dp_ocr_redactions_total", "redacted spans")
+    metrics.declare_counter("dp_video_truncated_total", "budget truncations", ["pass"])
+
+    # Deterministic render outcome: 2 redactions + a truncation, regardless of
+    # what the (faked) OCR returned.
+    monkeypatch.setattr(screentext_mod.assemble, "render",
+                        lambda *a, **kw: ("digest", 2, True))
+    clip = ClipFrames(frames=_frames(3, step=2.0), ocr_times=(0.0, 2.0, 4.0),
+                      idle=False, span_s=60.0)
+    client = FakeOcrClient(fail_at={1})  # exactly one absorbed frame error
+    ctx = dc_replace(_ctx(clip, client, 60.0), metrics=metrics)
+    out = _run(ScreentextStage(), ctx)
+    assert out.value == {"value": "digest"}
+
+    rendered = metrics.render()
+    assert "dp_ocr_frame_errors_total 1" in rendered, rendered
+    assert "dp_ocr_redactions_total 2" in rendered, rendered
+    assert 'dp_video_truncated_total{pass="ocr"} 1' in rendered, rendered

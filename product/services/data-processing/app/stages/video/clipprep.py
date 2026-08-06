@@ -70,6 +70,8 @@ class ClipPrepStage(Stage):
     needs = ()
     required = True
     server = ""               # ffmpeg is a subprocess, not a model server (L9)
+    # L10: no record slot; the transient frames feed both downstream stages.
+    consumer = "stage:screentext+clipcap"
     byte_budget = 1           # emits NO slot (value=None); the budget is structurally inert
 
     def run_sync(self, ctx: StageContext) -> StageOutput:

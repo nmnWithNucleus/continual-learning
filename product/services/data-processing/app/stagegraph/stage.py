@@ -21,9 +21,17 @@ A stage is ONE disjoint file under ``app/stages/<modality>/`` decorated with
   * ``required`` (L7): a required stage's failure fails the chunk attempt (no
     record — worker retry then dead-letter); an optional stage's failure leaves its
     slot a hole, cancels its downstream cone, and the record ships.
-  * ``byte_budget`` (L5): the ceiling on ``len(utf8(json(slot value)))`` at
-    assembly. Raising it is a stage-version bump; exceeding it is a stage failure,
-    never truncation. Declared here, in the stage file, so review sees it.
+  * ``byte_budget`` (L5): the ceiling on the emitted slot's serialized UTF-8
+    JSON bytes at assembly — the measure includes the executor-stamped
+    ``version`` key, i.e. exactly the bytes the record carries for the slot.
+    Raising it is a stage-version bump; exceeding it is a stage failure, never
+    truncation. Declared here, in the stage file, so review sees it.
+  * ``consumer`` (L10, ruled in at the Stage C cleanup round): every slot ships
+    with a named consumer-today or an explicit speculative marker —
+    ``"daylog:<line>"`` (a C10 renderer route), ``"stage:<name>"`` (a downstream
+    stage consumes it in-run), or ``"speculative:<why>"``. Mandatory at
+    registration; declaration-only (no runtime behavior); pinned by the T-3
+    snapshot. Rough chars-per-second-of-life costs stay docstring-grade.
   * Exactly one of ``run_sync`` (executed in a worker thread — blocking work can
     never freeze the event loop by accident) or ``run_async`` (await-native IO:
     the thin-client path, freeing threadpool tokens). Both receive ``StageContext``
@@ -115,6 +123,7 @@ class Stage:
     slot: Optional[str] = None             # record slot name; default = name
     required: bool = True                  # L7 failure policy
     byte_budget: int = 0                   # L5 ceiling on the emitted slot's bytes
+    consumer: str = ""                     # L10: daylog:<line> | stage:<name> | speculative:<why>
     server: str = ""                       # operational: which client pool run() uses
     experiment: str = ""                   # non-empty -> .exp-<code> on the segment
 
@@ -195,6 +204,13 @@ def validate_stage(stage: Stage) -> None:
             f"byte_budget must be a positive int (got {stage.byte_budget!r}) — every "
             "slot ships under a byte budget declared in the stage file (L5/L10)"
         )
+    if not isinstance(stage.consumer, str) or not re.fullmatch(
+            r"(daylog|stage|speculative):.+", stage.consumer):
+        raise _bad(
+            f"consumer must be 'daylog:<line>' | 'stage:<name>' | "
+            f"'speculative:<why>' (got {stage.consumer!r}) — a slot ships with a "
+            "named consumer-today or an explicit speculative marker (L10)"
+        )
     if not isinstance(stage.needs, tuple):
         raise _bad(f"needs must be a tuple of stage names (got {type(stage.needs).__name__})")
     if stage.name in stage.needs:
@@ -245,7 +261,6 @@ def _discover() -> None:
 
     for mod in pkgutil.walk_packages(stages.__path__, stages.__name__ + "."):
         importlib.import_module(mod.name)
-    _discovered = True
     # Post-discovery: every declared need must reference a registered stage.
     # (Explicit stage sets — mock dialects — are re-checked at resolve time.)
     for modality, by_name in _REGISTRY.items():
@@ -255,6 +270,9 @@ def _discover() -> None:
                     raise StageRegistrationError(
                         f"{modality}/{stage.name}: needs unknown stage {need!r}"
                     )
+    # Flipped only AFTER the needs check: a failed discovery must not leave a
+    # half-validated registry marked done (cleanup round).
+    _discovered = True
 
 
 def stages_for(modality: str) -> list[Stage]:

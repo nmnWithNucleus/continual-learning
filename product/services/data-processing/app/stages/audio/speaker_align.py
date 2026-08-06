@@ -63,6 +63,8 @@ class SpeakerAlignStage(Stage):
     byte_budget = 49152          # asr's splits + a speaker per split; the real
                                  # golden emits 371 B — wide margin at 60 s
     server = ""                  # pure CPU: no client pool
+    # L10: C10 v2 routes speech lines from slots.transcript.splits (D28).
+    consumer = "daylog:heard"
 
     def run_sync(self, ctx: StageContext) -> StageOutput:
         asr_value = ctx.inputs["asr"].value or {}

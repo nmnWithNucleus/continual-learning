@@ -30,7 +30,7 @@ def _stage(name, *, value=None, required=False, run=None, slot=None):
     return type(f"S_{name}", (Stage,), {
         "name": name, "modality": "audio", "stage_version": 1,
         "backend": Backend("mock", 1), "slot": slot, "required": required,
-        "byte_budget": 2048,
+        "byte_budget": 2048, "consumer": "speculative:test_fixture",
         "run_sync": run or (lambda self, ctx: StageOutput(value=value)),
     })()
 
@@ -109,19 +109,13 @@ def test_cancelled_cone_reads_as_holes_too():
     the dialect states the ATTEMPTED graph) and produced nothing: a hole, by the
     same read. The statuses ledger (Stage D) will additionally record
     failed-vs-cancelled; the record alone honestly says 'no slot'."""
-    record = _record([
-        _stage("asr", value={"value": "w"}, required=True),
-        _stage("gate", run=_boom),
-        _stage("dep", value={"value": "never"}, slot="dep_slot"),
-    ])
-    # give dep a need on gate
     stages = [
         _stage("asr", value={"value": "w"}, required=True),
         _stage("gate", run=_boom),
         type("S_dep", (Stage,), {
             "name": "dep", "modality": "audio", "stage_version": 1,
             "backend": Backend("mock", 1), "needs": ("gate",), "required": False,
-            "byte_budget": 2048,
+            "byte_budget": 2048, "consumer": "speculative:test_fixture",
             "run_sync": lambda self, ctx: StageOutput(value={"value": "never"}),
         })(),
     ]

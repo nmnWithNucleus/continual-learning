@@ -68,6 +68,9 @@ CAPTION_RATE = 16                      # D-11: caption chars/second-of-life (of 
 # The aggregate prompt-pack digest this backend version was shipped against. Computed
 # by app/vision/prompts at import from the on-disk pack; `python -m app.vision.prompts`
 # prints the current value. EDITING A PACK => recompute, update this pin AND bump vB.
+# EXPECTED CHURN: the digest covers the whole pack dir INCLUDING the legacy
+# per-frame-v0 pack; its Stage-G removal will move this digest — that bump is
+# planned demolition, not drift (re-pin + vB bump there).
 PACK_DIGEST_PIN = "565066a0"
 
 if prompts.PACK_DIGEST != PACK_DIGEST_PIN:
@@ -80,10 +83,28 @@ if prompts.PACK_DIGEST != PACK_DIGEST_PIN:
     )
 
 
-def render_caption(desc: ClipDesc, span_seconds: float) -> str:
+_warned_timeout: set[str] = set()
+
+
+def _vlm_timeout_s() -> float:
+    """VLM_TIMEOUT_S with the house warn-and-default posture for operational
+    enum/number knobs: an unparsable value falls back LOUDLY (once per value),
+    never crashes the chunk (a typo'd timeout must not fail ingestion)."""
+    raw = os.getenv("VLM_TIMEOUT_S", "120")
+    try:
+        return float(raw)
+    except ValueError:
+        if raw not in _warned_timeout:
+            _warned_timeout.add(raw)
+            logger.warning("VLM_TIMEOUT_S=%r is not a number — using 120", raw)
+        return 120.0
+
+
+def render_caption(desc: ClipDesc, span_seconds: float) -> tuple[str, bool]:
     """The single-line, budgeted caption string (D-10 / D-11 / D-12), absorbed from the
-    retired vision/emit.py. Pure and deterministic: identical ``(desc, span)`` →
-    identical text on every worker."""
+    retired vision/emit.py, plus whether the D-11 cap actually truncated it (the
+    ``dp_video_truncated_total{pass="caption"}`` signal). Pure and deterministic:
+    identical ``(desc, span)`` → identical result on every worker."""
     app = desc.app.strip()
     activity = desc.activity.strip()
     description = desc.description.strip()
@@ -106,7 +127,8 @@ def render_caption(desc: ClipDesc, span_seconds: float) -> str:
 
     # D-11: truncate to the per-record char budget on a sentence boundary (word-boundary
     # fallback inside truncate_sentence). cap == 0 → "" (a valid empty caption).
-    return truncate_sentence(text, caption_cap(span_seconds, CAPTION_RATE))
+    capped = truncate_sentence(text, caption_cap(span_seconds, CAPTION_RATE))
+    return capped, capped != text
 
 
 @register_stage
@@ -119,6 +141,8 @@ class ClipcapStage(Stage):
     needs = ("clipprep", "screentext")
     required = False          # L7: failure = caption hole; record ships; heal redrives
     server = ""               # external OpenAI-compatible endpoint, not a fleet server
+    # L10: C10 v2 routes slots.caption to Scene lines (D28). ~16 chars/s cap.
+    consumer = "daylog:scene"
     # L5/L10 budget: version key + JSON overhead + the caption. The text is capped at
     # CAPTION_RATE × span (960 chars at the 60 s design max), so 4096 bytes holds even
     # at ~4 UTF-8 bytes/char. Cost: ~16 chars per second of life.
@@ -138,13 +162,22 @@ class ClipcapStage(Stage):
             # operational wire (output-inert, read fresh per call):
             url=os.getenv("VLM_URL", "http://127.0.0.1:8000").rstrip("/"),
             api_key=os.getenv("VLM_API_KEY", ""),
-            timeout_s=float(os.getenv("VLM_TIMEOUT_S", "120")),
+            timeout_s=_vlm_timeout_s(),
         )
         if outcome.fallback and ctx.metrics is not None:
             try:
+                # Both labels, per the declaration — pack is stamped by describe()
+                # (cleanup round: {step}-only inc'd into a {pack,step} family and
+                # the KeyError was swallowed; the series could never record).
                 ctx.metrics.inc("dp_video_parse_fallback_total",
-                                {"step": outcome.step})
+                                {"pack": outcome.pack, "step": outcome.step})
             except Exception:  # metrics must never fail a chunk
-                pass
+                logger.exception("parse-fallback metric failed")
 
-        return StageOutput(value={"value": render_caption(outcome.desc, ctx.span_seconds)})
+        caption, truncated = render_caption(outcome.desc, ctx.span_seconds)
+        if truncated and ctx.metrics is not None:
+            try:
+                ctx.metrics.inc("dp_video_truncated_total", {"pass": "caption"})
+            except Exception:
+                logger.exception("truncated metric failed")
+        return StageOutput(value={"value": caption})

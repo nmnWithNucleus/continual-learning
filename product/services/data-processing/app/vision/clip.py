@@ -77,7 +77,7 @@ class ClipDecodeError(RuntimeError):
 class FrameCountError(RuntimeError):
     """Pass B produced fewer frames than requested — a requested frame index the stream
     does not contain (measured ``-frame_pts`` guard, defect #24). ALWAYS raised (any
-    backend): a silent drop mis-assigns pixels, timestamps and discriminators. Distinct
+    backend): a silent drop mis-assigns pixels and frame timestamps. Distinct
     from ``ClipDecodeError`` so the stage never masks it with the synthetic fallback."""
 
 

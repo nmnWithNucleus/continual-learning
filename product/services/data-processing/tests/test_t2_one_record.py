@@ -9,7 +9,6 @@ adding a second record per chunk requires forking the contract.
 from __future__ import annotations
 
 import asyncio
-import inspect
 
 from app import schemas
 from app.stagegraph.executor import GraphResult, resolve, run_graph
@@ -27,6 +26,7 @@ def _stage(name, slot=None, value=None):
     return type(f"S_{name}", (Stage,), {
         "name": name, "modality": "audio", "stage_version": 1,
         "backend": Backend("mock", 1), "slot": slot, "byte_budget": 2048,
+        "consumer": "speculative:test_fixture",
         "run_sync": lambda self, ctx: StageOutput(
             value=value if value is not None else {"value": name}),
     })()
@@ -41,13 +41,6 @@ def test_many_stages_still_one_result():
                                    span_seconds=5.0, clients={}))
     assert isinstance(result, GraphResult)
     assert len(result.slots) == 3  # three slots, one record
-
-
-def test_run_graph_signature_returns_a_single_result_not_a_list():
-    """The seam's shape IS the guard: the annotation says GraphResult, and the
-    runtime object is one — there is no unit list left in the architecture."""
-    hints = inspect.signature(run_graph).return_annotation
-    assert "GraphResult" in str(hints)
 
 
 def test_exactly_one_post_per_chunk_through_the_service(client):

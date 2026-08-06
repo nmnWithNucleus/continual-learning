@@ -149,7 +149,7 @@ def breaker_for(key: str, *, threshold: int = 5, cooldown_s: float = 30.0,
     """The shared breaker for ``key`` (e.g. a VLM / OCR base URL). Constructed once, with
     the first caller's params; later callers get the SAME instance so breaker state is
     shared across every worker thread. Keyed by endpoint so a captioner outage never
-    trips the OCR sidecar's breaker and vice-versa."""
+    trips the ocr server's breaker and vice-versa."""
     with _registry_lock:
         breaker = _breakers.get(key)
         if breaker is None:

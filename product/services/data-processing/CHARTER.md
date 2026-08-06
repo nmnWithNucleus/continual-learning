@@ -181,8 +181,10 @@ reprocess is an upsert and not a duplicate.
   - A derived view (a speaker-aligned transcript) is a *new slot* from an ordinary stage whose
     `needs` name the inputs.
   - Slot values are JSON text/structure only, each under a byte budget declared in the stage
-    file (`len(utf8(json(value)))`). Raising a budget is a stage-version bump; exceeding it
-    at assembly is a stage failure, never silent truncation.
+    file (`len(utf8(json(value)))`). The measured bytes are the slot as EMITTED — including
+    the executor-stamped `version` key, i.e. exactly what the record carries. Raising a
+    budget is a stage-version bump; exceeding it at assembly is a stage failure, never
+    silent truncation.
   - Binary artifacts ride refs: bytes go to blob storage, the slot carries
     `{blob_ref, meta}`. Within a run the blackboard carries `{ref, bytes}` and the executor
     frees `bytes` when the last consumer finishes. Re-derivable heavy data (deterministic

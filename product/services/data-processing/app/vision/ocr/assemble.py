@@ -118,11 +118,12 @@ def render(
     min_chars: int,
     dedup_ratio: float,
     chars_per_second: float,
-) -> tuple[str, int]:
+) -> tuple[str, int, bool]:
     """Run D-07 steps 2-6 over the chunk's ``OcrRead``s and return
-    ``(single_line_text, n_redactions)``. Empty string when nothing legible survives —
-    the caller still emits its slot (with ``value == ""``), so slot PRESENCE, not
-    absence, is the coverage signal (L11: the honest empty claim)."""
+    ``(single_line_text, n_redactions, truncated)``. Empty string when nothing
+    legible survives — the caller still emits its slot (with ``value == ""``), so
+    slot PRESENCE, not absence, is the coverage signal (L11: the honest empty
+    claim). ``truncated`` = the budget cap actually cut the line."""
     # Deterministic: process reads in time order, regions in reading order.
     items: list[tuple[float, str, str]] = []  # (t_offset_s, role, text)
     n_redactions = 0
@@ -157,10 +158,12 @@ def render(
                 continue
         kept.append(item)
 
-    # (6) single-line render + budget truncation on a word boundary.
-    line = " · ".join(
+    # (6) single-line render + budget truncation on a word boundary. The third
+    # return says whether the cap actually truncated (the
+    # dp_video_truncated_total{pass="ocr"} signal — cleanup round).
+    full = " · ".join(
         f"+{int(round(t))}s {role}: {text}" for t, role, text in kept
     )
-    line = _normalize_text(line)  # belt-and-braces: no newline can survive
-    line = truncate_word(line, ocr_cap(span_seconds, chars_per_second))
-    return line, n_redactions
+    full = _normalize_text(full)  # belt-and-braces: no newline can survive
+    line = truncate_word(full, ocr_cap(span_seconds, chars_per_second))
+    return line, n_redactions, line != full

@@ -1,10 +1,10 @@
 """data-processing service HTTP surface (FastAPI, :8085) — MODALITY-AGNOSTIC core.
 
 POST /ingest  — body = a pushed C1 raw-stream envelope. Validate C1 -> dedup on
-                chunk_id -> pull the blob by ref from storage -> dispatch to the
-                Processor registered for envelope.modality -> for EACH ProcessedUnit
-                it returns, assemble a C2 record and POST it to storage /context ->
-                return {ok, record_ids:[...]}. This is the C1 push receiver.
+                chunk_id -> pull the blob by ref from storage -> run the modality's
+                stage graph -> assemble the ONE C2 v1 record from its slots ->
+                ONE atomic POST to storage /context -> return
+                {ok, record_ids:[<the one id>]}. This is the C1 push receiver.
 
                 Two processing modes (INGEST_ASYNC, FROZEN once at startup):
                   * INLINE (default): process inside the request, return
@@ -16,7 +16,7 @@ POST /ingest  — body = a pushed C1 raw-stream envelope. Validate C1 -> dedup o
                     in-flight redelivery re-ACKs 202; a full queue is 503 backpressure.
                 Deterministic C1/modality rejections (400/422/501) resolve
                 SYNCHRONOUSLY in BOTH modes — never deferred into a silent dead-letter.
-GET  /health  — liveness + effective ASR backend + ingest mode.
+GET  /health  — liveness + per-modality resolved dialects + ingest mode.
 GET  /metrics — Prometheus text exposition (D9 observability; METRICS_ENABLED).
 GET  /continuity              — per-stream break/dup report (ContinuityTracker),
                 the check behind "zero silent loss": recording's gap report
@@ -114,13 +114,6 @@ def _build_model_clients(manifest_path: Path) -> dict[str, ModelClient]:
 # an OCR digest 0-~1300, the whole-block budget caps ~1320 @60s — so bucket edges span
 # short caption → full-budget OCR.
 _CHAR_BUCKETS: tuple[float, ...] = (0, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096)
-# Per-chunk frame-delta peak (0..255): edges pinned to the design's class thresholds —
-# the deterministic floor (2), IDLE ceiling (8), LAYOUT floor (40) — so the histogram
-# directly validates the idle assumption from day one (design D-04 / D-07).
-_DELTA_BUCKETS: tuple[float, ...] = (2, 4, 8, 16, 24, 40, 64, 128, 255)
-# OCR read events selected per chunk — a small integer distribution (cap is
-# VIDEO_OCR_MAX_EVENTS, default 3).
-_OCR_EVENT_BUCKETS: tuple[float, ...] = (0, 1, 2, 3, 4, 6, 8, 12)
 
 
 def _dp_route_template(path: str) -> str:
@@ -197,33 +190,19 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
         "dp_video_truncated_total",
         "Outputs truncated at the char/token budget, by pass (caption | ocr).", ["pass"],
     )
-    metrics.declare_histogram(
-        "dp_video_delta_peak",
-        "Per-chunk frame-delta peak cell value (0..255) — validates the idle assumption.",
-        buckets=_DELTA_BUCKETS,
-    )
-    metrics.declare_histogram(
-        "dp_video_ocr_events", "OCR read events selected per chunk.",
-        buckets=_OCR_EVENT_BUCKETS,
-    )
-    metrics.declare_counter(
-        "dp_caption_ungrounded_quote_total",
-        "Caption named-string spans absent from the chunk's OCR text (the grounding "
-        "safety counter, D-09). NOTE: WS-H owns the scorer + the widening to all named "
-        ">=4-char strings — coordinate the name there before it forks.",
-    )
     metrics.declare_counter(
         "dp_ocr_redactions_total", "OCR spans deterministically redacted as secrets (D-07).",
-    )
-    metrics.declare_counter(
-        "dp_video_scenario_mismatch_total",
-        "device_id prefix disagreed with the configured VIDEO_SCENARIO (D-13).",
-        ["expected", "seen"],
     )
     metrics.declare_counter(
         "dp_ocr_frame_errors_total",
         "Per-frame OCR errors absorbed (>50% of a chunk's frames erroring raises).",
     )
+    # (Cleanup round: the declared-but-producerless families are gone —
+    # dp_video_delta_peak, dp_video_ocr_events, dp_video_scenario_mismatch_total
+    # (their v0 producers died with the legacy graph / the VIDEO_SCENARIO knob)
+    # and dp_caption_ungrounded_quote_total (WS-H's scorer owns it; re-declare
+    # WITH the producer). A declared series with no producer is the same lying
+    # zero that killed dp_partial_write_total.)
 
     # Seed the PARENT-side counters to zero for every registered stage's slot, so
     # a scrape before any traffic already shows the series (a missing series reads
@@ -241,15 +220,13 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
             metrics.inc("dp_empty_output_total",
                         {"modality": modality, "kind": slot_name}, amount=0.0)
 
-    # The UNLABELLED stage-side counters carry a single series each — no label values to
-    # guess — so they too can be shown at zero from t=0 (WS-F EXIT: "all new counters
-    # visible on /metrics at zero before any traffic"; a declared-but-never-inc'd counter
-    # renders NOTHING in this registry). The LABELLED stage-side families
-    # (parse_fallback{pack,step}, truncated{pass}, scenario_mismatch{expected,seen})
-    # genuinely cannot be pre-seeded and surface on their first real emit; the histograms
-    # (content_chars, delta_peak, ocr_events) render only once observed, by construction.
-    for name in ("dp_caption_ungrounded_quote_total", "dp_ocr_redactions_total",
-                 "dp_ocr_frame_errors_total"):
+    # The UNLABELLED stage-side counters carry a single series each — no label
+    # values to guess — so they can be shown at zero from t=0 (a declared-but-
+    # never-inc'd counter renders NOTHING in this registry; both now have real
+    # producers in the screentext stage). The LABELLED families
+    # (parse_fallback{pack,step}, truncated{pass}) surface on their first real
+    # emit; the content_chars histogram renders only once observed.
+    for name in ("dp_ocr_redactions_total", "dp_ocr_frame_errors_total"):
         metrics.inc(name, amount=0.0)
 
     # ---- Pull-time gauges: live state owned by the queue + continuity tracker ------
@@ -367,8 +344,9 @@ def _assert_not_offline_eval() -> None:
 
 
 def create_app() -> FastAPI:
-    """App factory. Reads env at call time so tests can point STORAGE_URL / flip
-    ASR_BACKEND before construction and inject a mock storage transport after."""
+    """App factory. Reads env at call time so tests can point STORAGE_URL at a
+    stub before construction and inject a mock storage transport after (backend
+    selection is code — there is no backend env to flip)."""
     _assert_not_offline_eval()
     settings = get_settings()
 

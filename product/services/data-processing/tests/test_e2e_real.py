@@ -6,9 +6,10 @@ in-process, no socket, structurally incapable of reaching a real service).
 
 Gated on DP_E2E=1: this spins real model servers on GPUs 2-7 (manifest ports
 8121-8152) and takes minutes. Drill discipline: v0 :8085 healthy before and
-after, nothing left listening, fleet GPU usage released (measured as before/
-after deltas per GPU — GPU 7 hosts a foreign eval job whose usage is not ours
-to zero).
+after, nothing left listening, and fleet GPU usage RELEASED — measured as
+per-GPU before/after deltas (post-teardown usage must return to within a small
+tolerance of the pre-drill snapshot per GPU), never as absolute zero: foreign
+jobs may legitimately share these GPUs and their usage is not ours to zero.
 
 The client-path-reproduces-goldens check: the record's audio slots must equal
 EXACTLY the slot dicts the golden-fed fake clients produce through the same
@@ -36,7 +37,7 @@ from tests.fake_storage import FakeStorage
 from tests.test_audio_stages import (
     ASR_SLOT_REAL,
     DIARIZATION_SLOT_REAL,
-    GOLDEN_TAGS_REAL,
+    TRANSCRIPT_SLOT_REAL,
     C1_REAL,
 )
 
@@ -76,11 +77,29 @@ def _v0_health() -> int:
     return httpx.get("http://127.0.0.1:8085/health", timeout=5).status_code
 
 
+def _gpu_used_mib() -> dict[int, int]:
+    """Per-GPU memory.used snapshot (MiB). Empty dict if nvidia-smi is absent
+    (the delta check then degrades to a no-op rather than failing the drill)."""
+    try:
+        out = subprocess.run(
+            ["nvidia-smi", "--query-gpu=index,memory.used",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=15, check=True).stdout
+    except Exception:
+        return {}
+    used: dict[int, int] = {}
+    for line in out.strip().splitlines():
+        idx, mib = line.split(",")
+        used[int(idx)] = int(mib)
+    return used
+
+
 @pytest.fixture(scope="module")
 def fleet():
     assert _v0_health() == 200, "v0 not healthy before the drill"
     ports = _manifest_ports()
     assert not any(_listening(p) for p in ports), "fleet ports already in use"
+    gpu_before = _gpu_used_mib()
 
     proc = subprocess.Popen(
         [str(_SERVICE / ".venv" / "bin" / "python"), "-m", "app.supervisor",
@@ -108,6 +127,18 @@ def fleet():
         while time.time() < deadline and any(_listening(p) for p in ports):
             time.sleep(1)
         assert not any(_listening(p) for p in ports), "fleet ports still listening"
+        # Per-GPU delta: whatever the fleet allocated must be released. A small
+        # tolerance absorbs driver jitter; a FOREIGN job growing concurrently
+        # would surface here and deserves a human look, not a silent pass.
+        gpu_after = _gpu_used_mib()
+        if gpu_before and gpu_after:
+            leaks = {i: (gpu_before.get(i, 0), used)
+                     for i, used in gpu_after.items()
+                     if used > gpu_before.get(i, 0) + 256}
+            assert not leaks, (
+                f"per-GPU memory not released after teardown "
+                f"(before, after) MiB: {leaks}"
+            )
         assert _v0_health() == 200, "v0 unhealthy after the drill"
 
 
@@ -162,9 +193,8 @@ def test_audio_chunk_end_to_end(fleet, real_app):
     assert slots["diarization"] == DIARIZATION_SLOT_REAL
     # Acoustic: the real golden folds to the empty claim (speech-only clip).
     assert slots["acoustic"] == {"version": "acoustic.v1-ast.v1", "values": []}
-    # The derived transcript exists and is speaker-aligned over the asr splits.
-    assert slots["transcript"]["version"] == "speaker_align.v1-builtin.v1"
-    assert len(slots["transcript"]["splits"]) == len(ASR_SLOT_REAL["splits"])
+    # The derived transcript, byte-exact against its golden-fed pin too.
+    assert slots["transcript"] == TRANSCRIPT_SLOT_REAL
 
 
 def test_video_chunk_end_to_end(fleet, real_app):

@@ -254,25 +254,60 @@ def _desc(app="Mail", activity="reading an email", description="A thread is open
 
 
 def test_render_lead_and_description():
-    assert render_caption(_desc(), 60.0) == "Mail — reading an email. A thread is open."
+    assert render_caption(_desc(), 60.0)[0] == "Mail — reading an email. A thread is open."
 
 
 def test_render_degrades_without_dangling_separators():
     # D-10: no dangling " — ", no leading ". " when fields are empty.
-    assert render_caption(_desc(app="", activity=""), 60.0) == "A thread is open."
-    assert render_caption(_desc(activity=""), 60.0) == "Mail. A thread is open."
-    assert render_caption(_desc(app=""), 60.0) == "reading an email. A thread is open."
+    assert render_caption(_desc(app="", activity=""), 60.0)[0] == "A thread is open."
+    assert render_caption(_desc(activity=""), 60.0)[0] == "Mail. A thread is open."
+    assert render_caption(_desc(app=""), 60.0)[0] == "reading an email. A thread is open."
 
 
 def test_render_is_single_line(monkeypatch):
     d = _desc(description="line one\nline two\n\nline three")
-    out = render_caption(d, 60.0)
+    out, _ = render_caption(d, 60.0)
     assert "\n" not in out and "  " not in out      # D-12
 
 
 def test_render_truncates_at_the_span_budget_on_a_sentence():
     # cap = 16 * span. At span=2 -> 32 chars.
     d = _desc(description="First sentence here. Second sentence that will not fit at all.")
-    out = render_caption(d, 2.0)
+    out, _ = render_caption(d, 2.0)
     assert len(out) <= 32
     assert out.endswith(".")                        # sentence boundary, not mid-word
+
+
+# ---------------------------------------------------------------------------
+# Cleanup round: the parse-fallback family must ACTUALLY record — with the real
+# Metrics registry under main.py's exact declaration (the {pack,step} label set
+# whose mismatch previously KeyError'd into a swallowed except, so the series
+# could never exist).
+# ---------------------------------------------------------------------------
+
+def test_parse_fallback_increments_the_real_family(monkeypatch):
+    from dataclasses import replace as dc_replace
+
+    from app.metrics import Metrics
+
+    metrics = Metrics()
+    metrics.declare_counter(
+        "dp_video_parse_fallback_total",
+        "Clip / OCR reply parse-ladder fallbacks, by pack and ladder step.",
+        ["pack", "step"],
+    )
+    metrics.declare_counter(
+        "dp_video_truncated_total",
+        "Outputs truncated at the char/token budget, by pass (caption | ocr).",
+        ["pass"],
+    )
+    # A non-JSON reply forces a ladder fallback rung.
+    _fake_endpoint(monkeypatch, raw_content="Sure! The user is reading mail.")
+    ctx = dc_replace(_ctx(_clip()), metrics=metrics)
+    out = asyncio.run(ClipcapStage().run_async(ctx))
+    assert out.value["value"]  # a caption still rendered (the ladder recovered)
+
+    rendered = metrics.render()
+    assert 'dp_video_parse_fallback_total{pack="screen-clip-v1",step=' in rendered, (
+        f"parse fallback did not record with both labels:\n{rendered}"
+    )
