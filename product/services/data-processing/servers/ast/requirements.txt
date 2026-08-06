@@ -1,0 +1,12 @@
+# servers/ast — AST AudioSet tagger venv. Fully pinned (versions are identity, L4).
+# Web-stack pins mirror servers/common so the framework runs on the fleet's proven versions.
+# transformers pin: resolved + verified against torch 2.8.0 and the pinned model revision
+# in this venv (see tests/fixtures/PROVENANCE.md).
+torch==2.8.0
+transformers==5.14.1
+fastapi==0.139.0
+uvicorn==0.51.0
+pydantic==2.13.4
+httpx==0.28.1
+pytest==9.1.1
+-e ../common

@@ -135,6 +135,37 @@ $ cd servers/whisper && CUDA_VISIBLE_DEVICES=4 ./.venv/bin/python -m pytest test
 6 passed, 1 warning in 5.72s
 ```
 
+## WP-B4 — servers/ast (acoustic tagging behind the seam)
+
+Built by a parallel subagent inside the WP boundaries (only `servers/ast/` touched);
+verified independently by the orchestrating session (test re-run below).
+
+| File | Action | Why |
+|---|---|---|
+| `servers/ast/requirements.txt` | created | torch==2.8.0 (+cu128) + **transformers==5.14.1** (pip-resolved latest, verified against the pinned model before pinning) + framework stack + `-e ../common`; torchaudio NOT needed (transformers 5.x computes AST fbank via its numpy spectrogram path) |
+| `servers/ast/server.py` | created | `AstBackend`: MIT/ast-finetuned-audioset-10-10-0.4593 @ `f826b80d…` pinned in code, cuda fail-loud; raw container bytes → `ffmpeg_read`; returns RAW descending-score tags (`top_k` param, default 20) — caption folding stays client-side (Stage C) |
+| `servers/ast/README.md` | created | setup, identity, determinism verdict |
+| `servers/ast/tests/{conftest.py,test_server.py}` | created | 5 tests: health identity (manifest subset + shape), golden exact, top-label sanity, garbage→422, param strictness |
+| `servers/ast/tests/fixtures/{golden_tags.json,PROVENANCE.md}` | created | golden + provenance (identity verbatim, run hashes, escalation-only tolerance policy) |
+
+In-session decisions (agent's, endorsed): pipeline `ValueError` (malformed audio) →
+deterministic 422, CUDA/OOM falls through to framework 500-transient; `codec` advisory
+(ffmpeg sniffs — v0 parity); `top_k` per-call instead of at construction (equivalent,
+parameterizable); ffmpeg version captured at load into identity (it does the
+demux/resample — genuinely part of identity). Golden's top tags are honest: "Speech"
+0.663, then "Speech synthesizer" 0.279 — correct, the fixture IS synthesized speech.
+
+**Determinism: bit-stable.** 4 fresh-process runs — 3 on GPU 6, 1 on GPU 7 — canonical
+result sha256 identical on all four. Exact compare; PROVENANCE.md prescribes a measured
+per-label tolerance only if jitter ever appears (re-ratify, don't loosen silently).
+
+Test evidence (agent run, then re-run independently by the orchestrator):
+
+```
+$ cd servers/ast && CUDA_VISIBLE_DEVICES=6 ./.venv/bin/python -m pytest tests/ -q
+5 passed, 2 warnings in 22.24s
+```
+
 ## WP-B5 — servers/ocr (PP-OCR relocated into the framework)
 
 Built by a parallel subagent inside the WP boundaries (only `servers/ocr/` touched);

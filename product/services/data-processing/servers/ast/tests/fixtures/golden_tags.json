@@ -1,0 +1,84 @@
+{
+  "tags": [
+    {
+      "label": "Speech",
+      "score": 0.6633811593055725
+    },
+    {
+      "label": "Speech synthesizer",
+      "score": 0.27887842059135437
+    },
+    {
+      "label": "Narration, monologue",
+      "score": 0.01497785747051239
+    },
+    {
+      "label": "Male speech, man speaking",
+      "score": 0.006335166282951832
+    },
+    {
+      "label": "Tick-tock",
+      "score": 0.0023642745800316334
+    },
+    {
+      "label": "Conversation",
+      "score": 0.0023379281628876925
+    },
+    {
+      "label": "Tick",
+      "score": 0.002213485771790147
+    },
+    {
+      "label": "Female speech, woman speaking",
+      "score": 0.0018491349183022976
+    },
+    {
+      "label": "Radio",
+      "score": 0.0018263147212564945
+    },
+    {
+      "label": "Spray",
+      "score": 0.0016946591204032302
+    },
+    {
+      "label": "Television",
+      "score": 0.0016119569772854447
+    },
+    {
+      "label": "Sound effect",
+      "score": 0.0013823425397276878
+    },
+    {
+      "label": "Single-lens reflex camera",
+      "score": 0.0011076879454776645
+    },
+    {
+      "label": "Oink",
+      "score": 0.0007499292260035872
+    },
+    {
+      "label": "Quack",
+      "score": 0.0006361043779179454
+    },
+    {
+      "label": "Telephone",
+      "score": 0.0005943040014244616
+    },
+    {
+      "label": "Slap, smack",
+      "score": 0.0005481494590640068
+    },
+    {
+      "label": "Beep, bleep",
+      "score": 0.0004282738664187491
+    },
+    {
+      "label": "Whoop",
+      "score": 0.0003806076420005411
+    },
+    {
+      "label": "Animal",
+      "score": 0.0003422988811507821
+    }
+  ]
+}
