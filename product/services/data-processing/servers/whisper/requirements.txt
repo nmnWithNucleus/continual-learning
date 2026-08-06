@@ -1,0 +1,23 @@
+# servers/whisper — fully pinned (L4: versions are identity; no floating deps).
+# Validated DP-venv model stack:
+faster-whisper==1.2.1
+ctranslate2==4.8.1
+av==18.0.0
+
+# ctranslate2 GPU runtime needs cuBLAS + cuDNN 9 for CUDA 12 (driver 580.159 is
+# CUDA 13-capable and runs CUDA-12 userspace fine). server.py preloads these
+# .so's with RTLD_GLOBAL so no LD_LIBRARY_PATH is required.
+nvidia-cublas-cu12==12.9.2.10
+nvidia-cudnn-cu12==9.24.0.43
+
+# Server framework stack:
+fastapi==0.139.0
+uvicorn==0.51.0
+pydantic==2.13.4
+
+# Tests:
+httpx==0.28.1
+pytest==9.1.1
+
+# Shared model-server framework (HTTP skeleton, wire schemas, runner):
+-e ../common

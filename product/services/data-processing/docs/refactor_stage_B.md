@@ -103,6 +103,38 @@ real framework servers and include kill→respawn, crash-loop backoff, load-fail
 fail-loud, GPU-pin env, and log-file checks. The warning is starlette's TestClient
 deprecation shim, pre-existing upstream.)
 
+## WP-B2 — servers/whisper (faster-whisper behind the seam)
+
+Built by a parallel subagent inside the WP boundaries (only `servers/whisper/`
+touched); verified independently by the orchestrating session (test re-run below).
+
+| File | Action | Why |
+|---|---|---|
+| `servers/whisper/requirements.txt` | created | validated ASR stack (faster-whisper 1.2.1 / ctranslate2 4.8.1 / av 18.0.0) + nvidia-cublas-cu12 12.9.2.10 + nvidia-cudnn-cu12 9.24.0.43 (ctranslate2 GPU needs cuBLAS/cuDNN 9) + framework stack + `-e ../common` |
+| `servers/whisper/server.py` | created | `WhisperBackend`: pinned Systran/faster-whisper-large-v3 @ `edaa852e…` (snapshot path via huggingface_hub so the revision pin is airtight), cuda/float16, fail-loud if CUDA absent; v0 decode semantics kept (BytesIO→av, vad min_silence 500 ms, chunk-relative segments); serves `task=transcribe|translate` from ONE loaded model (v0 translate parity) |
+| `servers/whisper/README.md` | created | setup, identity, determinism verdict |
+| `servers/whisper/tests/test_server.py` | created | 6 tests: warming-503→ready-200, identity (manifest subset + shape), golden exact, translate smoke, garbage→422, unknown-param→422 |
+| `servers/whisper/tests/fixtures/{golden_transcribe.json,PROVENANCE.md}` | created | golden + provenance (identity verbatim, run hashes, no-tolerance policy) |
+
+In-session decisions (agent's, endorsed): nvidia libs preloaded via ctypes RTLD_GLOBAL
+from the venv before any CUDA import (no LD_LIBRARY_PATH games); `av.FFmpegError`/
+`ValueError` → deterministic 422, `RuntimeError` → transient 503 (ctranslate2 surfaces
+CUDA faults as RuntimeError); translate result language hardcoded `en` (v0 design
+point — detected language is the SOURCE); beam_size rejects bools; params fail loud on
+unknowns. Golden output transcribes both synthesized sentences verbatim.
+
+**Determinism: bit-stable.** 4 fresh-process runs — 3 on GPU 4, 1 on GPU 5 (replica
+equivalence) — canonical sha256 identical in all 4, zero delta in text/language/segment
+floats. Exact compare, zero tolerance. Measured VRAM ≈ 3.2 GB/replica (under the plan's
+~5 GB estimate).
+
+Test evidence (agent run, then re-run independently by the orchestrator):
+
+```
+$ cd servers/whisper && CUDA_VISIBLE_DEVICES=4 ./.venv/bin/python -m pytest tests/ -q
+6 passed, 1 warning in 5.72s
+```
+
 ## WP-B5 — servers/ocr (PP-OCR relocated into the framework)
 
 Built by a parallel subagent inside the WP boundaries (only `servers/ocr/` touched);
