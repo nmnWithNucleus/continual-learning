@@ -459,6 +459,10 @@ are the DP_E2E-gated real-fleet drills).
 - **Housekeeping**: `tests/__init__.py` and `tests/fixtures` inherited entries
   (`audio.blob`, `image.*`, `text.*`, `video.c1.json`'s 47-byte stub) are v0
   artifacts some deleted suites used; sweep at Stage G.
+- **Stage D (added 2026-08-06)** — the server-call / per-replica counter family is
+  assigned to Stage D's WP-D3 by this file's own cleanup round (§C Metrics, "Owner
+  assigned"); recorded in this list too so a Stage D reader scanning only "Noticed"
+  finds the assignment.
 
 ## 2026-08-06 — Cleanup round (independent 8-lens review + founder ruling)
 
@@ -687,3 +691,31 @@ failed against the shipped model_client (`2 failed`, shown by stash-revert)
 before theirs. The T-1 canary proves the matrix red-path by construction.
 Suite delta across the round: 494+3 → 525+3 (+32 new tests, −1 deleted
 annotation test). Status stays **DONE**; Stage D not started.
+
+## 2026-08-06 — Stage D WP-D0 corrections (inherited nits from Stage C's verification)
+
+> cleanup · applied on `dp-rebuild-v1` in Stage D's WP-D0 commit (worklog:
+> [refactor_stage_D.md](refactor_stage_D.md)) · everything above stands as written;
+> quote-and-correct only.
+
+- **"all three real-stage matrices" (§B item 5) over-claimed.** Only two of T-1's three
+  matrices run real stage classes (audio, video); the first is the mock-registry matrix,
+  which makes no outbound calls at all. True claim: BOTH real-stage matrices assert the
+  recorded `/infer` payloads (and captured VLM request bytes) identical across every cell.
+- **"matrix-proven inert" for `VLM_URL`/`VLM_API_KEY`/`VLM_TIMEOUT_S` (§E knob table) was
+  false.** No `ENV_MATRIX` cell varies them; their guarantee is the operational-allowlist
+  test plus the endpoint being wiring-only — allowlisted, not matrix-varied. Same defect,
+  two more sites: the WP-C5 table's "test-proven output-inert" gloss above, and the
+  allowlist comment in `test_t1_determinism.py` itself (corrected in code in the WP-D0
+  commit).
+- **The "31 fields" count (WP-C5 knob summary + §E) was wrong.** v0's frozen
+  `VisionSettings` dataclass has **49** fields (`git show main:…/app/vision/config.py`,
+  the dataclass body). The §E enumeration covers 46 of them, plus `VIDEO_CLIP_PROMPT` —
+  a prompt-pack env knob read by the pack resolver, never a `VisionSettings` field. The
+  three uncovered fields get their disposition here: `VIDEO_OCR_URL`, `VIDEO_OCR_TIMEOUT`,
+  `VIDEO_OCR_THREADS` (v0's OCR-sidecar wiring, all operational-only in v0's own
+  classification) → subsumed by the L9 seam — replica endpoints come from
+  `servers/manifest.json`, the per-call timeout is the manifest's `client_timeout_s`
+  (wired at WP-C3), and the CPU thread count is a server-code pin (4, in
+  `servers/ocr/server.py`). None survives as an env knob; zero `VIDEO_*` reads in `app/`
+  (the §E claim stands).

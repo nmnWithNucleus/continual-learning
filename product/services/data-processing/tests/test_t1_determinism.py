@@ -367,7 +367,9 @@ OPERATIONAL_ENV_ALLOWLIST = {
     # schemas.py — contract-dir override for tests/CI (operational: points at
     # the same frozen files; content identity is the schema $id's)
     "CONTRACTS_DIR",
-    # clipcap — the OpenAI-compatible endpoint wiring (output-inert, matrix-proven)
+    # clipcap — the OpenAI-compatible endpoint wiring (operational; allowlisted
+    # here, NOT matrix-varied — no ENV_MATRIX cell moves them, so their guarantee
+    # is this allowlist + the endpoint being wiring-only, not a matrix proof)
     "VLM_URL", "VLM_API_KEY", "VLM_TIMEOUT_S",
 }
 

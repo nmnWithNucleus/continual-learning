@@ -307,7 +307,7 @@ async def run_graph(
                     f"StageOutput, got {type(out).__name__}"
                 )
             emitted = _emit_slot(stage, out.value)
-        except asyncio.CancelledError:
+        except asyncio.CancelledError as exc:
             # Two very different events reach here. TRUE external cancellation
             # (a required sibling failed; the TaskGroup is tearing us down) is
             # visible as a pending cancel request on this task — propagate it.
@@ -325,6 +325,9 @@ async def run_graph(
                 "CancelledError with no cancellation pending — a stage bug, "
                 "treated as a stage failure (never as external cancellation)"
             )
+            # Chained `from` the body's CancelledError so the traceback names
+            # the actual raise site, not just this synthesized wrapper.
+            failure.__cause__ = exc
         except Exception as exc:
             failure = exc
         if failure is not None:

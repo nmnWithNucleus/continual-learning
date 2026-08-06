@@ -21,9 +21,12 @@
 
 
 **Status:** chartered · **Last updated:** 2026-08-06 (§Slot Law ratified,
-[D23](../../DECISIONS.md)) ·
+[D23](../../DECISIONS.md); L5 emphasis nit) ·
 [D18](../../DECISIONS.md) / [D19](../../DECISIONS.md) / [D20](../../DECISIONS.md)
 
+- **2026-08-06** — §Slot Law L5's as-emitted budget clause: the all-caps emphasis replaced
+  with STYLE-rule-5-compliant italics (rebuild Stage D WP-D0 nit; wording only, no rule
+  change).
 - **2026-08-06** — the Slot Law ratified ([D23](../../DECISIONS.md)); the rebuild's contract
   rows D24–D28 ratified with it. Rebuild Stage A is complete.
 - **2026-08-05** — §Slot Law drafted in place of §Record-vs-mutation law, on branch
@@ -181,7 +184,7 @@ reprocess is an upsert and not a duplicate.
   - A derived view (a speaker-aligned transcript) is a *new slot* from an ordinary stage whose
     `needs` name the inputs.
   - Slot values are JSON text/structure only, each under a byte budget declared in the stage
-    file (`len(utf8(json(value)))`). The measured bytes are the slot as EMITTED — including
+    file (`len(utf8(json(value)))`). The measured bytes are the slot as *emitted* — including
     the executor-stamped `version` key, i.e. exactly what the record carries. Raising a
     budget is a stage-version bump; exceeding it at assembly is a stage failure, never
     silent truncation.

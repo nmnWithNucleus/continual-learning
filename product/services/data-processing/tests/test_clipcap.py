@@ -273,9 +273,14 @@ def test_render_is_single_line(monkeypatch):
 def test_render_truncates_at_the_span_budget_on_a_sentence():
     # cap = 16 * span. At span=2 -> 32 chars.
     d = _desc(description="First sentence here. Second sentence that will not fit at all.")
-    out, _ = render_caption(d, 2.0)
+    out, truncated = render_caption(d, 2.0)
     assert len(out) <= 32
     assert out.endswith(".")                        # sentence boundary, not mid-word
+    assert truncated is True                        # the flag the metric rides on
+    # And the flag is honest in the other direction: an under-cap caption is
+    # NOT flagged (the metric must count truncations, not renders).
+    out2, truncated2 = render_caption(_desc(description="Short."), 60.0)
+    assert truncated2 is False and out2.endswith("Short.")
 
 
 # ---------------------------------------------------------------------------
@@ -311,3 +316,27 @@ def test_parse_fallback_increments_the_real_family(monkeypatch):
     assert 'dp_video_parse_fallback_total{pack="screen-clip-v1",step=' in rendered, (
         f"parse fallback did not record with both labels:\n{rendered}"
     )
+
+
+def test_caption_truncation_increments_the_real_family(monkeypatch):
+    """Stage D WP-D0 (inherited nit): the {pass="caption"} series had no test —
+    dp_video_truncated_total was proven recording only for {pass="ocr"}. Drive
+    the REAL stage through a span small enough that the canned reply overflows
+    the caption cap (16 chars/s -> 32 at span 2) and assert the series renders
+    under main.py's exact declaration."""
+    from dataclasses import replace as dc_replace
+
+    from app.metrics import Metrics
+
+    metrics = Metrics()
+    metrics.declare_counter(
+        "dp_video_truncated_total",
+        "Outputs truncated at the char/token budget, by pass (caption | ocr).",
+        ["pass"],
+    )
+    _fake_endpoint(monkeypatch)  # CANNED_REPLY's description is 79 chars > 32
+    ctx = dc_replace(_ctx(_clip(span=2.0), span=2.0), metrics=metrics)
+    out = asyncio.run(ClipcapStage().run_async(ctx))
+    assert out.value["value"]                       # a (truncated) caption shipped
+    assert len(out.value["value"]) <= 32
+    assert 'dp_video_truncated_total{pass="caption"} 1' in metrics.render()

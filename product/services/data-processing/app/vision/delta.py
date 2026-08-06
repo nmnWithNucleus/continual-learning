@@ -153,8 +153,9 @@ def select_ocr_frames(
     ``idle`` is true iff no change event fired all chunk (the floor read may still fire).
 
     ``Delta.cells`` are the SINGLE-delta ``(peak, spread)`` (the calibration vectors);
-    ``Delta.accum`` is the per-delta accumulated peak (the anchor trace, for
-    ``dp_video_delta_peak`` + ``calibrate_delta``). Everything is a pure function of the
+    ``Delta.accum`` is the per-delta accumulated peak (the anchor trace, consumed by
+    ``scripts/calibrate_delta.py``; its former metric consumer ``dp_video_delta_peak``
+    was deleted in the Stage C cleanup). Everything is a pure function of the
     inputs, so two runs are byte-identical.
     """
     if len(times) != len(maps):
