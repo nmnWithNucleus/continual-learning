@@ -64,7 +64,6 @@ Dead concepts, deleted with their subject matter: primary/mutate/sidecar, `best_
   "t_start": "2026-07-19T17:04:10Z",          // C1 span strings carried VERBATIM (D-05 rule)
   "t_end":   "2026-07-19T17:04:22Z",
   "pipeline_version": "acoustic.v1-ast.v1+asr.v2-fw.v3+diarize.v1-pyannote.v1+speaker_align.v1-builtin.v1",
-  "processed_at": "2026-07-19T17:04:31Z",
   "content": {
     "slots": {
       "asr":          { "version": "asr.v2-fw.v3", "language": "en", "value": "...", "splits": [ { "t_start": "...", "t_end": "...", "value": "..." } ] },
@@ -116,12 +115,16 @@ Video chunk example slots: `caption` (from `clipcap`), `ocr` (from `screentext`;
 | after POST, before mark_processed | redelivery reprocesses fully → byte-identical output → upsert no-op → converges; epoch fencing stops zombie writers |
 | model server crash | contained to server; client retries other replicas |
 
+The byte-identical claim holds by construction: no wall-clock field exists inside the record
+(`processed_at` dropped, ruled 2026-08-06 — it broke the §5.1 byte-compare and T-1), so a full
+reprocess under fixed versions is byte-identical per T-1.
+
 ---
 
 ## 5. Storage-side changes (joint-ratification set)
 
 1. **`ingest_time` → `created_at` + `updated_at`.** `created_at` = first landing of a `record_id` (old semantics). `updated_at` = last time `record_json` **actually changed** — the upsert byte-compares and bumps `updated_at` only on real change (no-op redeliveries must not re-window records). Training-window membership and the day-log dedup axis move to `updated_at`. Healed records therefore flow into the next window (accepted double-training, same class as version bumps — the correction wins).
-2. **Day-log (C10 v2).** Renderer walks `content.slots` instead of per-kind records. Dedup key: latest `updated_at` per `(chunk_id)`, rowid tiebreak. Line routing: `slots.caption` → Scene, `slots.ocr` → World text (OCR), `slots.transcript` → speaker-bucketed transcript lines via `splits[]`. `recipe_id`/`daylog_format_version` bump; continuum's stamp-refusal is the transition safety net.
+2. **Day-log (C10 v2).** Renderer walks `content.slots` instead of per-kind records. Dedup key: latest `updated_at` per `(chunk_id)`, rowid tiebreak. Line routing: `slots.caption` → Scene, `slots.ocr` → World text (OCR), `slots.transcript` → speaker-bucketed transcript lines via `splits[]`. Speech lines render from `slots.transcript`; when absent, from `slots.asr` (speakers unlabeled; ruled 2026-08-06). `recipe_id`/`daylog_format_version` bump; continuum's stamp-refusal is the transition safety net.
 3. **E-2 retraction** redesigned as whole-record operations (delete by `record_id` / `chunk_id` / `pipeline_version`; manifest by `pipeline_version`) — simpler than the kind-granular design, and finally built (§8 Stage E).
 4. D20 parity bar re-baselined against the v2 renderer.
 
@@ -143,7 +146,7 @@ Video chunk example slots: `caption` (from `clipcap`), `ocr` (from `screentext`;
 ## 7. Decision-register work (append-only; drafted at Stage A, ratified by founder)
 
 - **D-R1** Ratify the Slot Law (§1 L1–L12); retire the WS-VC emission law + riders (charter edit, same ceremony that ratified it).
-- **D-R2** C2 v1 (§2) supersedes D10's shape clause; D19's discriminator clause retired; D16's fan-out clause restated (exactly one derivable id per chunk — strengthened).
+- **D-R2** C2 v1 (§2) supersedes D10's shape clause; D19's discriminator clause retired; D16's fan-out clause restated (exactly one derivable id per chunk — strengthened); partially supersedes D8 (shipped two-record shape; its one-liner — specialist OCR feeding the caption — survives).
 - **D-R3** Version law (L4): no-knobs discipline, stage/backend split, experiments-fork-the-dialect.
 - **D-R4** Machinery/bureaucracy split (L9); `isolation.py` + `INGEST_ISOLATION` + `DP_DIALECT_FREEZE` retired with condensed history.
 - **D-R5** Heal ledger (L8) + storage `created_at`/`updated_at` (§5.1) — joint row with storage.

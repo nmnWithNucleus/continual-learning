@@ -112,8 +112,10 @@ belong to `recording`.
 ##### On C2
 
 `record_id` is deterministic on `(chunk_id, pipeline_version, within-chunk discriminator)` —
-matching this file's own §Record ids line and the schema, which have both carried the discriminator
-since v0. The record also carries source provenance, `content{kind,text,segments}`, a
+matching the v0 schema
+([../../contracts/c2_processed_record.v0.json](../../contracts/c2_processed_record.v0.json)) and
+the retired law's identity line ([docs/record-emission-law.md](docs/record-emission-law.md)),
+which have both carried the discriminator since v0. The record also carries source provenance, `content{kind,text,segments}`, a
 present-but-empty `enrichments`, the raw ref, `pipeline_version` and `processed_at`.
 
 Indirect consumers (no direct contract with us): `continuum` reads /context + /sessions via
@@ -170,10 +172,11 @@ reprocess is an upsert and not a duplicate.
     version strings + fixed bytes ⇒ byte-identical record across the whole settings matrix.
   - Experiments fork the dialect: an in-code A/B surfaces its treatment as `.exp-<code>` in
     the string. Invisible-to-identity experimentation is forbidden.
-- **L5 — Slots.** `content.slots` is a map keyed by slot name. One enabled producer per slot,
-  a resolve-time hard error; no stage edits another stage's slot — a derived view (a
-  speaker-aligned transcript) is a *new slot* from an ordinary stage whose `needs` name the
-  inputs. Every slot is emitted into the record.
+- **L5 — Slots.** `content.slots` is a map keyed by slot name: one enabled producer per slot
+  (a resolve-time hard error), no stage edits another stage's slot, and every produced slot is
+  emitted into the record.
+  - A derived view (a speaker-aligned transcript) is a *new slot* from an ordinary stage whose
+    `needs` name the inputs.
   - Slot values are JSON text/structure only, each under a byte budget declared in the stage
     file (`len(utf8(json(value)))`). Raising a budget is a stage-version bump; exceeding it
     at assembly is a stage failure, never silent truncation.
@@ -184,11 +187,13 @@ reprocess is an upsert and not a duplicate.
 - **L6 — One POST.** The blackboard fills in memory; exactly one atomic `POST /context` per
   completed graph attempt; ACK only after storage confirms (`dp_acked=1 ⇔ C2 durably
   written`, unchanged). Partial-record writes to storage are forbidden.
-- **L7 — Required / optional.** Each stage declares `required: bool`. Required failure ⇒ no
-  record: the chunk attempt fails ⇒ worker retry (`INGEST_MAX_RETRIES`) ⇒ durable dead-letter
-  ⇒ visible in `/continuity.dead_lettered`, so recording's verdict reads `gaps`, never
-  falsely clean. Optional failure ⇒ the slot is absent (a *hole*), the downstream cone is
-  cancelled, statuses are recorded, the record ships.
+- **L7 — Required / optional.** Each stage declares `required: bool`, and the two failure
+  paths differ by construction.
+  - Required failure ⇒ no record: the chunk attempt fails ⇒ worker retry
+    (`INGEST_MAX_RETRIES`) ⇒ durable dead-letter ⇒ visible in `/continuity.dead_lettered`, so
+    recording's verdict reads `gaps`, never falsely clean.
+  - Optional failure ⇒ the slot is absent (a *hole*), the downstream cone is cancelled,
+    statuses are recorded, the record ships.
 - **L8 — Done-ledger & healing.** The journal's done-row is
   `chunk_id → {pipeline_version, record_id, stage_status{name→ok|failed|cancelled}, heal_attempts}`.
   On (re)delivery: no row → process; version differs → version-forward reprocess, the new
@@ -203,9 +208,10 @@ reprocess is an upsert and not a duplicate.
     added later without a schema break.
 - **L9 — Machinery / bureaucracy.** Every model (ASR, diarization, acoustic, OCR, any local
   VLM) is a long-lived model-server process — replicated, GPU-pinned via supervisor manifest,
-  loaded once, health-checked, restart-on-crash. Stages are thin clients (prepare request →
-  call server/cloud → post-process into slot) with per-call timeouts and bounded transient
-  retries against other replicas; ffmpeg remains a self-isolating subprocess.
+  loaded once, health-checked, restart-on-crash.
+  - Stages are thin clients (prepare request → call server/cloud → post-process into slot)
+    with per-call timeouts and bounded transient retries against other replicas; ffmpeg
+    remains a self-isolating subprocess.
   - *No model loads inside the DP process*, and no per-chunk child processes exist. The
     supervisor lives in DP for now; `isolation.py` is deleted with condensed history at
     Stage G.

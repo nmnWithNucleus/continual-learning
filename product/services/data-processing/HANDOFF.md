@@ -33,7 +33,7 @@ Detail per workstream is in the index below; finished work is in
 | V | **Real video pipeline** (M3): ffmpeg keyframes → caption, per-keyframe timing, OCR weave | `built`, reviewed; real Qwen3-VL-8B E2E; superseded for screen ([↓](#ws-v--superseded-for-screen-content)) | [ws-video-pipeline](handoff/ws-video-pipeline.md) | video-pipeline lead |
 | AO | **Async `/ingest`** (M7-early) + D9 `/metrics` and dashboard (M8) + node-7 audio smoke | `built`, reviewed; DP 98 green; recording seam updated | [ws-async-observability](handoff/ws-async-observability.md) | async-observability lead |
 | SG | **DP v1**: the durable ingest journal + the stage-graph pipeline | `built`, reviewed; DP 127 green; real backends re-validated on node-7 | [ws-dp-stage-graph](handoff/ws-dp-stage-graph.md) | async-observability lead (v1) |
-| VC | **Screen-video clip path** behind `VIDEO_PIPELINE=clip` ([↓](#ws-vc--the-screen-video-clip-path)) | `built` + integrated; 8 workstreams merged to `svc/video-clip`; DP suite 765 (+21 skip) | [ws-video-clip](handoff/ws-video-clip.md) | WS-VC lead + 8 build sessions |
+| VC | **Screen-video clip path** behind `VIDEO_PIPELINE=clip` ([↓](#ws-vc--the-screen-video-clip-path)) | `built` + integrated; 8 workstreams merged to `svc/video-clip`; DP suite 765 (+21 skip) at the 2026-07-25 merge | [ws-video-clip](handoff/ws-video-clip.md) | WS-VC lead + 8 build sessions |
 | P3 | **Phase-3 dogfood support** (continuum-led): `app/stages/audio/injected_caption.py`, off unless `INJECT_CAPTION_BACKEND=index` | landed via continuum's Phase-3 build (`388ae32`); DP default byte-identical | [ws-phase3-dogfood](../continuum/handoff/ws-phase3-dogfood.md) | continuum Phase-3 session |
 | H | **Hardening**: findings #3/#6/#7 closed, plus `INGEST_ISOLATION=subprocess` ([↓](#ws-h--hardening)) | `built`, workflow-reviewed; DP 163 green; merged to `main` (`5350f7a`) 2026-07-21 | [ws-dp-hardening](handoff/ws-dp-hardening.md) | DP hardening session |
 
@@ -169,16 +169,18 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
   - Suite unregressed at 38.
 
 ## Next
-- **The service is being rebuilt beside itself — Stage A paper is cut and awaiting sign-off**
-  (2026-08-05, branch `dp-rebuild-v1`, founders' board ask **DP-A**). C2 v1 (one record per
-  chunk, slots) and the charter §Slot Law are drafted as D-R1…D-R6
+- **The service is being rebuilt beside itself** — Stage A paper is cut and awaiting sign-off
+  (2026-08-05, branch `dp-rebuild-v1`, founders' board ask DP-A; cleanup round applied
+  2026-08-06).
+- C2 v1 (one record per chunk, slots) and the charter §Slot Law are drafted as D-R1…D-R6
   ([../../DECISIONS.md](../../DECISIONS.md) §Drafted); everything below describes the running
-  service, which stays the wire until the rebuild's Stage F cutover. Plan + stage worklogs:
-  [docs/refactor_dp_service.md](docs/refactor_dp_service.md) ·
+  service, the wire until the rebuild's Stage F cutover.
+- Plan + stage worklogs: [docs/refactor_dp_service.md](docs/refactor_dp_service.md) ·
   [docs/refactor_stage_A.md](docs/refactor_stage_A.md).
 - **The screen-video clip path (WS-VC) is BUILT and integrated** (2026-07-25) —
   [handoff/ws-video-clip.md](handoff/ws-video-clip.md).
-- All 8 workstreams landed and merged to `svc/video-clip`; DP suite *765* (+21 skip).
+- All 8 workstreams landed and merged to `svc/video-clip`; DP suite *765* (+21 skip) at the
+  2026-07-25 merge.
 - Shape: behind `VIDEO_PIPELINE=clip`, a video chunk yields *exactly 2 C2 records* (`caption` +
   `ocr`, fixed discriminators, C1 span verbatim) instead of 4–8 per-keyframe records —
   `clipprep(5)` → `screentext(15)` → `clipcap(20)`. The default (`keyframe`) stays byte-identical

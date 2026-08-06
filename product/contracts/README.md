@@ -21,8 +21,9 @@ is push/at-least-once, dedup on `chunk_id`, gaps via `(stream_id, sequence)`.
 - Ten contracts are materialized across **fourteen files**: C3/C9/C4/C6 (serve loop) + C1/C2 (learn
   loop) + *C12* (user profile, D18) + *C10 v1* (*two* files — the day-log fetch and the
   training-window ledger row, see below) + *C13* (recipe registry, *two* files, see below) + *C14*
-  (reservoir ledger), the last four landed 2026-07-27 with the storage build slice; plus the two
-  DP-rebuild targets drafted 2026-08-05 — *C2 v1* and *C10 day-log v2* (see below).
+  (reservoir ledger). The last four landed 2026-07-27 with the storage build slice.
+- The two DP-rebuild targets (*C2 v1* and *C10 day-log v2*) landed 2026-08-05, drafted at rebuild
+  Stage A (see below).
 - C5/C7/C8/C11 get schema files when their slices start.
 
 | File | Contract | Body |

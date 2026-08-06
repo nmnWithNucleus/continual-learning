@@ -88,16 +88,17 @@ here changes before then:
   training-window axis and the day-log dedup key move to `updated_at`.
 - **D-R6** — the day-log renderer walks C2 v1 `content.slots`
   ([../../contracts/c10_daylog.v2.json](../../contracts/c10_daylog.v2.json)); dedup collapses to
-  latest `updated_at` per `(chunk_id)`; **E-2 is redesigned whole-record** (delete by
-  `record_id` / `chunk_id` / `pipeline_version`, manifest by `pipeline_version`) — §Next item 1's
-  kind-aware shape retires on ratification, its priority intact. D20's parity bar re-baselines
-  against the v2 renderer (WP-E4).
+  latest `updated_at` per `(chunk_id)`. D20's parity bar re-baselines against the v2 renderer
+  (WP-E4).
+- E-2 is redesigned whole-record (delete by `record_id` / `chunk_id` / `pipeline_version`;
+  manifest by `pipeline_version`): §Next item 1's kind-aware shape retires on ratification, its
+  priority intact.
 
 ## Next
 
 | # | Item | Why it's open |
 |---|---|---|
-| 1 | **E-2 — the kind-aware retraction primitive** (`DELETE /context/records?…&kind=`), *cascading to the day-log and the reservoir*. | Each of those is a *second copy of user content*, so a retraction that clears `/context` and leaves a day-log standing has deleted nothing. Today a **re-wipe is the only way to retract rows** — the cutover hit this directly. CHARTER M5. *Design supersession drafted: §Incoming D-R6* |
+| 1 | **E-2 — the kind-aware retraction primitive** (`DELETE /context/records?…&kind=`), *cascading to the day-log and the reservoir*. | Each of those is a *second copy of user content*, so a retraction that clears `/context` and leaves a day-log standing has deleted nothing. Today a **re-wipe is the only way to retract rows** — the cutover hit this directly. CHARTER M5 |
 | 2 | **C5 registration → the model-directory build** (M3). Three constraints, and they are not documentation: a *three*-value status enum (or `record_gate_failure()` has nowhere to land); *nullable* `adapter_dir` + `base_model_hash` (gate-failed rows carry NULLs); C6 eligibility as a *log replay*, not "latest row wins". | The last would otherwise serve a gate-failed candidate — the exact ungated swap the gate exists to prevent. Waits on the C5 shape pin (deferred by [D19](../../DECISIONS.md)) |
 | 3 | **D9 observability** — `/metrics` (request rate/latency/errors + query latency, rows read/written, DB size) + our Grafana dashboard JSON. | Platform's shared backbone is the blocker; emission is ours. CHARTER M7 |
 | 4 | **Retention mechanism** ([D19](../../DECISIONS.md)) — a versioned per-store retention document, every store `keep_forever`, read and surfaced on `/metrics`, *no sweeper*. Rules mark *eligibility*; a separate explicit sweep acts and writes a manifest. | So a bad config edit can produce a wrong report, never silent data loss |

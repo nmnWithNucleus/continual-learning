@@ -33,7 +33,8 @@ rebuild's Stage A sign-off ask; nothing else on this board moved)
   `services/inference/serve_vllm.sh` when needed.
 - **Learn fleet is up on node-7** (storage 8083 · recording 8084 · data-processing 8085);
   `INGEST_ASYNC` and `INGEST_ISOLATION` stay off by default.
-- **Nothing is blocking.** Every item in §Next is a follow-up, not a gate.
+- **One thing is blocking: DP-A.** The DP rebuild's Stages B–G wait on the Stage A sign-off
+  (§Escalations); every other open item is a follow-up, not a gate.
 
 ---
 
@@ -168,8 +169,8 @@ a prerequisite.
 
 > open 2026-08-05 · founders · blocks rebuild Stages B–G, nothing running
 
-**In one line.** The DP rebuild's paper is cut on branch `dp-rebuild-v1` — six D-rows drafted,
-the Slot Law written into the DP charter, C2 v1 + C10 v2 schemas landed — and Stage A exits
+**In one line.** The DP rebuild's paper is cut on branch `dp-rebuild-v1` (six D-rows drafted,
+the Slot Law written into the DP charter, C2 v1 + C10 v2 schemas landed), and Stage A exits
 only on founder sign-off.
 
 **The ask**
@@ -184,6 +185,13 @@ only on founder sign-off.
 
 - D-R6 redesigns **E-2** (kind-aware → whole-record retraction). The E-2 row below stands as-is
   until ratification; on ratification its design moves, not its priority.
+
+**How it got here**
+
+- **2026-08-06 — cleanup round applied.** An independent review's confirmed findings plus four
+  founder rulings (`processed_at` dropped from C2 v1; the Heard-lines `asr` fallback ruled in;
+  `device_clock` stays; empty `slots` stays legal) are folded into the paper. Validation and
+  all three suites re-run green; the paper is ready to ratify as amended.
 
 ### E-3(b) — a captioner VL endpoint
 

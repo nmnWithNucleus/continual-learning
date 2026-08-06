@@ -75,10 +75,10 @@ changed)
 - **the DP rebuild (drafted 2026-08-05, awaiting ratification)** — C2 v1 (slots) and C10 day-log
   v2 (slot-walk renderer, `(chunk_id)`/`updated_at` dedup) are cut on branch `dp-rebuild-v1`
   ([../../contracts/c10_daylog.v2.json](../../contracts/c10_daylog.v2.json); D-R5/D-R6 in
-  [../../DECISIONS.md](../../DECISIONS.md) §Drafted). Nothing to build here yet: at the cutover
-  (rebuild Stage F) `daylog_format_version`/`recipe_id` bump and our already-built stamp-refusal
-  is the transition safety net. Healed records land in the *next* window (accepted
-  double-training, same class as a version bump).
+  [../../DECISIONS.md](../../DECISIONS.md) §Drafted).
+- Nothing to build here yet: at the cutover (rebuild Stage F) `daylog_format_version`/`recipe_id`
+  bump and our already-built stamp-refusal is the transition safety net. Healed records land in
+  the *next* window (accepted double-training, same class as a version bump).
 - **storage** — the day-log, the training-window ledger, the `window_id` minter and C12/C13/C14 are
   *theirs and built* ([D18](../../DECISIONS.md)). Open on their side: *E-2*, the kind-aware
   retraction primitive, which must cascade to the day-log and the reservoir — redesigned

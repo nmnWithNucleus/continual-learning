@@ -261,7 +261,7 @@ still emits is its schema plus §How it got here.
 {contract:"C2", version:"1", record_id, user_id, modality,
  source:{device_id, stream_id, chunk_id, blob_ref,
          device_tz?, device_utc_offset_minutes?, device_clock?, device_location?},
- t_start, t_end, pipeline_version, processed_at,
+ t_start, t_end, pipeline_version,
  content:{slots:{<slot_name>:{version, …per-slot fields…}, …}}}
 ```
 
@@ -276,13 +276,16 @@ still emits is its schema plus §How it got here.
   edited. A slot type's sub-schema is added to the contract *additively* when its first producer
   ships; an unknown slot name fails closed.
 - `modality` sits at the record root — C1 chunks are strictly single-modality. `source{}` is
-  provenance carried **verbatim** from the C1 envelope (minus `modality`); data-processing still
-  performs no timezone or clock logic whatsoever (D17 unchanged).
+  provenance carried **verbatim** from the C1 envelope (minus `modality` and the transport
+  fields — see the schema's `source` description); data-processing still performs no timezone
+  or clock logic whatsoever (D17 unchanged).
 - `t_start`/`t_end` are the C1 span strings carried verbatim, UTC-canonical, and remain the sole
   ordering and range-query axis. Sub-slot `splits[]` carry absolute RFC3339 times for C10's
   sub-span bucketing.
-- Storage-side timestamps are **not** in C2. Storage assigns `created_at`/`updated_at`
-  ([D-R5](DECISIONS.md); `ingest_time` under the running v0).
+- Storage-side timestamps are **not** in C2, and no DP wall-clock is either: storage assigns
+  `created_at`/`updated_at` ([D-R5](DECISIONS.md); `ingest_time` under the running v0), and
+  `processed_at` was dropped (ruled 2026-08-06) because a wall-clock field inside the record
+  breaks the byte-compare and T-1. Processing latency is a `/metrics` matter.
 - Reading a record is Slot Law L11: stage in the dialect + slot absent = attempted and failed;
   slot present with empty value = honest empty claim; stage not in the dialect = never attempted.
 - **v0 remains the wire today.** The running service emits v0 until the Stage F cutover (OD-1
@@ -308,13 +311,14 @@ still emits is its schema plus §How it got here.
   mirrors are cut at Stage C (`schemas.py` rewrite: one change, four parts).
 - A record whose chunk carried no zone simply omits those fields. Absence is normal, not an error.
 - `enrichments` and `discriminator` **do not exist in v1**, and neither does `content.kind`. Do
-  not re-add them additively; the DP charter §Slot Law names them as deleted concepts.
+  not re-add them additively; the first two are named on the charter §Slot Law dead-concepts
+  list, and `content.kind` died with the per-kind record model it labeled.
 - At cutover, v0 records are wiped and re-collected, never migrated (OD-2, the D19 license);
   `/raw` is kept — bytes are sacred.
 
 **How it got here**
 
-- **2026-08-05 — D-R2 (drafted): the rebuild re-cut — one record per chunk, built from slots.**
+- **2026-08-05 — D-R2 (drafted): the rebuild re-cut to one record per chunk, built from slots.**
   - **Was** — one chunk could fan out to several records (video keyframes, an `ocr` beside a
     `caption`, an original beside its translation), told apart by a discriminator, with in-place
     mutation governed by the emission law.
@@ -578,28 +582,28 @@ Day-log body:
 - `home_tz` in the body records **the fallback zone actually used**, so a wrong-timezone adapter is
   falsifiable after the fact instead of invisible.
 
-**v2 — drafted 2026-08-05** (rebuild Stage A, [D-R6](DECISIONS.md) with [D-R5](DECISIONS.md);
-awaiting ratification; built at Stage E). The deltas against the v1 rules above, everything
-else standing:
-
-- The renderer walks C2 v1 `content.slots` instead of per-kind records: `slots.caption` →
-  Scene · `slots.ocr` → World text (OCR) · `slots.transcript` → speaker-bucketed transcript
-  lines via its `splits[]`.
-- The dedup key collapses to latest `updated_at` per `(chunk_id)`, rowid tiebreak — one record
-  per chunk retires the `(chunk_id, content.kind, discriminator)` key, and `updated_at`
-  replaces `ingest_time` as the axis.
-- Storage splits `ingest_time` into `created_at` (first landing of a `record_id`) and
-  `updated_at`, bumped only when `record_json` byte-compares different — so a no-op redelivery
-  never re-windows a record, while a heal flows into the next window (accepted
-  double-training, the same class as a version bump).
-- Training-window membership moves with the axis: the window is `[last_trained_t, now−δ)` on
-  `updated_at`.
-- `daylog_format_version` and `recipe_id` bump; continuum's stamp-refusal is the transition
-  safety net.
-- E-2 retraction is redesigned as whole-record operations — delete by `record_id` /
-  `chunk_id` / `pipeline_version`, manifest by `pipeline_version` — and finally built, at
-  Stage E.
-- The D20 parity bar is re-baselined against the v2 renderer (Stage E, WP-E4).
+- The **v2 deltas** (`designed`; [D-R6](DECISIONS.md) with [D-R5](DECISIONS.md) drafted —
+  awaiting ratification; built at Stage E) against the rules above, everything else standing:
+  - The renderer walks C2 v1 `content.slots` instead of per-kind records: `slots.caption` →
+    Scene · `slots.ocr` → World text (OCR) · `slots.transcript` → speaker-bucketed transcript
+    lines via its `splits[]`.
+  - Speech lines render from `slots.transcript`; when that slot is absent they fall back to
+    `slots.asr`, speakers unlabeled (ruled 2026-08-06).
+  - The dedup key collapses to latest `updated_at` per `(chunk_id)`, rowid tiebreak — one record
+    per chunk retires the `(chunk_id, content.kind, discriminator)` key, and `updated_at`
+    replaces `ingest_time` as the axis.
+  - Storage splits `ingest_time` into `created_at` (first landing of a `record_id`) and
+    `updated_at`, bumped only when `record_json` byte-compares different — so a no-op redelivery
+    never re-windows a record, while a heal flows into the next window (accepted
+    double-training, the same class as a version bump).
+  - Training-window membership moves with the axis: the window is `[last_trained_t, now−δ)` on
+    `updated_at`.
+  - `daylog_format_version` and `recipe_id` bump; continuum's stamp-refusal is the transition
+    safety net.
+  - E-2 retraction is redesigned as whole-record operations (delete by `record_id` /
+    `chunk_id` / `pipeline_version`; manifest by `pipeline_version`) and finally built, at
+    Stage E.
+  - The D20 parity bar is re-baselined against the v2 renderer (Stage E, WP-E4).
 
 **Why it's this way**
 

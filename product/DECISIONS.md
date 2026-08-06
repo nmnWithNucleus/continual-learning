@@ -72,9 +72,9 @@ That is expected, and this register is built for it:
 | # | Decision | Date | Status | Lineage on ratification | Card |
 |---|---|---|---|---|---|
 | **D-R1** | The Slot Law replaces the record-emission law | 2026-08-05 | drafted | retires the WS-VC law (charter section, no D-number) | [↓](#d-r1--the-slot-law-replaces-the-record-emission-law) |
-| **D-R2** | C2 v1: one record per chunk, built from slots | 2026-08-05 | drafted | supersedes **D10** (shape clause) · restates D16 (fan-out clause) · retires D19 (discriminator clause) | [↓](#d-r2--c2-v1-one-record-per-chunk-built-from-slots) |
+| **D-R2** | C2 v1: one record per chunk, built from slots | 2026-08-05 | drafted | supersedes **D10** (shape clause) · partially supersedes D8 (two-record shape) · restates D16 (fan-out clause) · retires D19 (discriminator clause) | [↓](#d-r2--c2-v1-one-record-per-chunk-built-from-slots) |
 | **D-R3** | The version law: identity carried by code, never by config | 2026-08-05 | drafted | — | [↓](#d-r3--the-version-law) |
-| **D-R4** | Machinery/bureaucracy split: models become servers | 2026-08-05 | drafted | retires `INGEST_ISOLATION` · `DP_DIALECT_FREEZE` | [↓](#d-r4--the-machinerybureaucracy-split) |
+| **D-R4** | Machinery/bureaucracy split: models become servers | 2026-08-05 | drafted | retires `isolation.py` · `INGEST_ISOLATION` · `DP_DIALECT_FREEZE` | [↓](#d-r4--the-machinerybureaucracy-split) |
 | **D-R5** | The heal ledger, and `created_at`/`updated_at` in storage | 2026-08-05 | drafted | joint row with storage | [↓](#d-r5--the-heal-ledger-and-created_atupdated_at) |
 | **D-R6** | C10 v2 + whole-record retraction | 2026-08-05 | drafted | joint row with storage · **D20** parity bar re-baselined | [↓](#d-r6--c10-v2--whole-record-retraction) |
 
@@ -109,8 +109,9 @@ five ordered tests and five riders — because the capabilities that needed gove
 
 > `drafted` 2026-08-05 · awaiting founder ratification · reasoning:
 > [rebuild plan](services/data-processing/docs/refactor_dp_service.md) §2
-> · on ratification: supersedes **D10**'s C2-shape clause, retires **D19**'s discriminator
-> clause, restates **D16**'s fan-out clause
+> · on ratification: supersedes **D10**'s C2-shape clause, partially supersedes **D8**'s
+> shipped two-record shape (its specialist-OCR-feeds-the-caption one-liner survives),
+> retires D19's discriminator clause, restates D16's fan-out clause
 > · recorded in [ARCHITECTURE.md](ARCHITECTURE.md) §Contracts C2 card;
 > [contracts/c2_processed_record.v1.json](contracts/c2_processed_record.v1.json)
 
@@ -122,7 +123,14 @@ slots each written by exactly one stage — no discriminator, no `enrichments` b
 - `record_id = sha256(chunk_id ␀ pipeline_version)` — NUL-joined, hex, blind upsert. No
   discriminator, and one-record-per-chunk is why dropping it is safe.
 - `content.slots` is a map keyed by slot name; a slot is written by its one producing stage and
-  never edited. `modality` moves to the record root.
+  never edited.
+- `modality` moves to the record root, because a C1 chunk is strictly single-modality.
+- `source{}` carries the D17 trio (`device_clock`, `device_tz`, `device_utc_offset_minutes`)
+  verbatim, exactly as the charter's D17 rules state; v0's schema omitted `device_clock`, a
+  drift v1 closes (ruled 2026-08-06: it stays).
+- No `processed_at` (ruled 2026-08-06): a wall-clock field inside the record breaks the §5.1
+  byte-compare (every reprocess would re-window) and makes T-1 unpassable. Processing latency
+  moves to DP `/metrics`.
 - D16's fan-out clause is restated strengthened: exactly **one** derivable record id per chunk,
   where the async reply had licensed a `record_ids[]` list.
 - v0 stays the wire until the Stage F cutover; v1 records are emitted only by the rebuilt
@@ -141,8 +149,8 @@ slots each written by exactly one stage — no discriminator, no `enrichments` b
 
 - Stage version `vS` bumps on contract changes; backend version `vB` bumps on implementation
   changes. The string is resolved before any stage runs and states the *attempted* dialect.
-- **No output-affecting env knobs exist.** Every env var is operational-only; CI enforces this
-  with a determinism matrix (fixed bytes + fixed versions ⇒ byte-identical record).
+- Env knobs may never move output bytes: the no-knobs discipline, stated in full at the DP
+  charter §Slot Law L4 and executable as the T-1 determinism matrix.
 - Experiments fork the dialect: an in-code A/B must surface its treatment as `.exp-<code>` in
   the string. Invisible-to-identity experimentation is forbidden.
 
@@ -159,8 +167,8 @@ the DP service is a thin async orchestrator whose stages are clients.
 
 - whisper, pyannote, ast and ocr all move behind the server seam at Stage B, at once (OD-3) —
   no half-migrated calling conventions.
-- **No model loads inside the DP process.** Stages become thin clients with per-call timeouts
-  and bounded transient retries against other replicas; ffmpeg stays a subprocess.
+- The DP process stops hosting models altogether: stages become thin clients over the server
+  seam, per the split stated in full at the DP charter §Slot Law L9; ffmpeg stays a subprocess.
 - `isolation.py`, `INGEST_ISOLATION` and `DP_DIALECT_FREEZE` retire, with condensed history
   written at Stage G. Per-chunk child processes end with them.
 
@@ -201,6 +209,8 @@ E-2 retraction is redesigned as whole-record operations — simpler, and finally
 
 - Renderer routing: `slots.caption` → Scene · `slots.ocr` → World text (OCR) ·
   `slots.transcript` → speaker-bucketed lines via its `splits[]`.
+- Speech lines render from `slots.transcript`; when that slot is absent they fall back to
+  `slots.asr`, speakers unlabeled (ruled 2026-08-06; Stage E builds it).
 - Dedup key: latest `updated_at` per `(chunk_id)`, rowid tiebreak — one record per chunk makes
   the old `(chunk_id, kind, discriminator)` key collapse to this.
 - `recipe_id` / `daylog_format_version` bump; continuum's stamp-refusal is the transition
