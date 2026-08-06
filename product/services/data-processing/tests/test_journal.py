@@ -152,14 +152,14 @@ def test_redrive_cap_is_per_processing_attempt_not_per_restart(tmp_path):
     # Simulate 5 restarts where ONLY 'poison' is ever dequeued+attempted (it crashes the
     # service each time); 'innocent' sits in the backlog, never dequeued.
     for i in range(5):
-        rows = j.pending_for_redrive(2, f"t{i}")           # cap=2
+        rows, _ = j.pending_for_redrive(2, f"t{i}")        # cap=2
         got = {r["c1"]["chunk_id"] for r in rows}
         j.note_redrive_attempt("poison", f"t{i}")          # only poison attempted
         if "poison" not in got:                            # poison already dead-lettered
             break
 
     # poison exceeded 2 attempts -> dead-lettered; innocent (0 attempts) stays alive.
-    survivors = {r["c1"]["chunk_id"] for r in j.pending_for_redrive(2, "tN")}
+    survivors = {r["c1"]["chunk_id"] for r in j.pending_for_redrive(2, "tN")[0]}
     assert "innocent" in survivors                          # never falsely dead-lettered
     assert "poison" not in survivors
     counts = j.counts()
@@ -167,7 +167,7 @@ def test_redrive_cap_is_per_processing_attempt_not_per_restart(tmp_path):
 
     # A redelivery re-arms poison with a fresh budget (accept resets redrive_attempts).
     j.accept(poison, "tR")
-    assert "poison" in {r["c1"]["chunk_id"] for r in j.pending_for_redrive(2, "tR2")}
+    assert "poison" in {r["c1"]["chunk_id"] for r in j.pending_for_redrive(2, "tR2")[0]}
 
 
 def test_processed_record_ids_pipeline_version_check(tmp_path):
@@ -182,6 +182,234 @@ def test_processed_record_ids_pipeline_version_check(tmp_path):
     assert j.processed_record_ids("j-pv", lambda m: "asr-mock-v0") == ["old-id"]
     assert j.processed_record_ids("j-pv", lambda m: "asr-fw-v1") is None   # dialect moved
     assert j.processed_record_ids("j-pv", lambda m: None) == ["old-id"]    # can't judge
+
+
+# ---- Ledger v2 (Stage D, L8/D27): done-row extension + heal bookkeeping --------
+
+def test_done_row_returns_ledger_v2_fields(tmp_path):
+    """The extended done-row: statuses verbatim (failed vs cancelled DISTINCT),
+    heal budget fields, and the specified-but-unpopulated cached_slots seat."""
+    j = Journal(tmp_path / "dp.db")
+    fs = FakeStorage()
+    c1 = _c1(fs, chunk_id="d-row", stream_id="s-d", sequence=0)
+    statuses = {"asr": "ok", "acoustic": "failed", "speaker_align": "cancelled"}
+    j.mark_processed(c1, ["rid-1"], "pv-1", "t0", statuses=statuses)
+
+    row = j.done_row("d-row")
+    assert row["record_ids"] == ["rid-1"]
+    assert row["pipeline_version"] == "pv-1"
+    assert row["modality"] == "audio"
+    assert row["stage_status"] == statuses          # the L8 map, verbatim
+    assert row["heal_attempts"] == 0
+    assert row["done_final"] is False
+    assert row["cached_slots"] is None              # schema seat only (L8), no logic
+    assert row["superseded_pv"] is None
+    assert j.done_row("missing") is None
+
+
+def test_mark_processed_without_statuses_is_a_legacy_row(tmp_path):
+    """Pre-D-shaped calls still work; the row reads with NULL statuses and benign
+    defaults (a legacy row carries no hole evidence — classification must skip)."""
+    j = Journal(tmp_path / "dp.db")
+    fs = FakeStorage()
+    c1 = _c1(fs, chunk_id="d-legacy", stream_id="s-d", sequence=1)
+    j.mark_processed(c1, ["rid"], "pv-1", "t0")
+    row = j.done_row("d-legacy")
+    assert row["stage_status"] is None
+    assert row["heal_attempts"] == 0 and row["done_final"] is False
+
+
+def test_heal_marks_increment_only_while_holes_remain(tmp_path):
+    """A completed heal that still leaves holes increments the budget; a fully
+    green heal clears to skip-state WITHOUT an increment (the counter counts this
+    chunk's own non-green heals, never deliveries)."""
+    j = Journal(tmp_path / "dp.db")
+    fs = FakeStorage()
+    c1 = _c1(fs, chunk_id="d-heal", stream_id="s-d", sequence=2)
+    holey = {"asr": "ok", "acoustic": "failed"}
+    j.mark_processed(c1, ["rid"], "pv-1", "t0", statuses=holey)      # fresh holey ship
+
+    st = j.mark_processed(c1, ["rid"], "pv-1", "t1", statuses=holey, heal=True)
+    assert st["heal_attempts"] == 1 and st["done_final"] is False
+    assert st["newly_final"] is False
+
+    green = {"asr": "ok", "acoustic": "ok"}
+    st = j.mark_processed(c1, ["rid"], "pv-1", "t2", statuses=green, heal=True)
+    assert st["heal_attempts"] == 1                  # green heal: no increment
+    assert st["done_final"] is False
+    assert j.done_row("d-heal")["stage_status"] == green
+
+
+def test_heal_budget_exhaustion_finalizes_once(tmp_path):
+    """At HEAL_MAX_ATTEMPTS with holes still present the row goes done_final —
+    newly_final is True exactly once (the metric-firing edge)."""
+    from app.journal import HEAL_MAX_ATTEMPTS
+
+    j = Journal(tmp_path / "dp.db")
+    fs = FakeStorage()
+    c1 = _c1(fs, chunk_id="d-exh", stream_id="s-d", sequence=3)
+    holey = {"asr": "ok", "acoustic": "failed"}
+    j.mark_processed(c1, ["rid"], "pv-1", "t0", statuses=holey)
+
+    finals = []
+    for i in range(HEAL_MAX_ATTEMPTS + 1):
+        st = j.mark_processed(c1, ["rid"], "pv-1", f"t{i}", statuses=holey, heal=True)
+        finals.append((st["heal_attempts"], st["done_final"], st["newly_final"]))
+    assert finals[HEAL_MAX_ATTEMPTS - 1] == (HEAL_MAX_ATTEMPTS, True, True)
+    assert finals[HEAL_MAX_ATTEMPTS] == (HEAL_MAX_ATTEMPTS + 1, True, False)
+    assert all(not f[1] for f in finals[: HEAL_MAX_ATTEMPTS - 1])
+
+
+def test_heal_failed_increments_never_regresses_and_finalizes_at_budget(tmp_path):
+    """A heal whose re-run FAILED (even a required stage — fleet down): the chunk
+    keeps its record and done-row untouched except the budget; at budget the row
+    finalizes. A heal never dead-letters a chunk that has a durable record."""
+    from app.journal import HEAL_MAX_ATTEMPTS
+
+    j = Journal(tmp_path / "dp.db")
+    fs = FakeStorage()
+    c1 = _c1(fs, chunk_id="d-hf", stream_id="s-d", sequence=4)
+    holey = {"asr": "ok", "acoustic": "failed"}
+    j.mark_processed(c1, ["rid"], "pv-1", "t0", statuses=holey)
+
+    # A heal claim on the async path re-accepts (pending row) before the run.
+    epoch, _ = j.accept(c1, "t1")
+    st = j.heal_failed("d-hf", "t2", epoch)
+    assert st["heal_attempts"] == 1 and st["newly_final"] is False
+    assert j.pending_accepted() == []               # pending cleared, NOT dead_letter
+    assert j.counts() == {"pending": 0, "dead_letter": 0, "processed": 1}
+    row = j.done_row("d-hf")                        # done never regresses
+    assert row["record_ids"] == ["rid"] and row["stage_status"] == holey
+
+    for _ in range(HEAL_MAX_ATTEMPTS - 2):
+        st = j.heal_failed("d-hf", "t3")
+    st = j.heal_failed("d-hf", "t4")
+    assert st["heal_attempts"] == HEAL_MAX_ATTEMPTS
+    assert st["done_final"] is True and st["newly_final"] is True
+    assert j.heal_failed("d-hf", "t5")["newly_final"] is False   # fires once
+
+    assert j.heal_failed("never-processed", "t6") is None        # no row -> no-op
+
+
+def test_heal_failed_pending_delete_is_epoch_guarded_but_truth_is_not(tmp_path):
+    """Same posture as mark_processed: the budget increment is TRUE regardless of
+    which delivery's worker ran the failed heal; only the pending delete is
+    epoch-guarded so a stale worker cannot clobber a fresh redelivery's row."""
+    j = Journal(tmp_path / "dp.db")
+    fs = FakeStorage()
+    c1 = _c1(fs, chunk_id="d-ep", stream_id="s-d", sequence=5)
+    j.mark_processed(c1, ["rid"], "pv-1", "t0",
+                     statuses={"asr": "ok", "acoustic": "failed"})
+    epoch0, _ = j.accept(c1, "t1")
+    epoch1, _ = j.accept(c1, "t2")                  # redelivery re-accepts
+
+    st = j.heal_failed("d-ep", "t3", epoch0)        # stale worker finishes late
+    assert st["heal_attempts"] == 1                 # truth recorded
+    assert [c["chunk_id"] for c in j.pending_accepted()] == ["d-ep"]  # row survives
+    j.heal_failed("d-ep", "t4", epoch1)             # current epoch clears it
+    assert j.pending_accepted() == []
+
+
+def test_version_forward_records_superseded_pv_and_resets_budget(tmp_path):
+    """L8 case 2: the done-row is keyed per chunk_id — the latest attempt wins,
+    the superseded dialect is recorded in the row, and the heal budget is the NEW
+    version's own (reset)."""
+    j = Journal(tmp_path / "dp.db")
+    fs = FakeStorage()
+    c1 = _c1(fs, chunk_id="d-vf", stream_id="s-d", sequence=6)
+    holey = {"asr": "ok", "acoustic": "failed"}
+    j.mark_processed(c1, ["rid-1"], "pv-1", "t0", statuses=holey)
+    j.mark_processed(c1, ["rid-1"], "pv-1", "t1", statuses=holey, heal=True)
+    assert j.done_row("d-vf")["heal_attempts"] == 1
+
+    j.mark_processed(c1, ["rid-2"], "pv-2", "t2", statuses=holey)
+    row = j.done_row("d-vf")
+    assert row["record_ids"] == ["rid-2"] and row["pipeline_version"] == "pv-2"
+    assert row["superseded_pv"] == "pv-1"
+    assert row["heal_attempts"] == 0 and row["done_final"] is False
+
+    j.mark_processed(c1, ["rid-3"], "pv-3", "t3", statuses=holey)
+    assert j.done_row("d-vf")["superseded_pv"] == "pv-2"   # latest supersession only
+
+
+def test_pre_stage_d_journal_migrates_in_place(tmp_path):
+    """Schema evolution ruling: pre-D rows MIGRATE (ALTER TABLE, additive) rather
+    than recreate — var/ is disposable pre-cutover, but dropping processed rows
+    would un-SEE intact history at rehydration and fabricate gaps."""
+    import sqlite3
+
+    db = tmp_path / "dp.db"
+    conn = sqlite3.connect(db)
+    conn.executescript("""
+        CREATE TABLE pending (
+          chunk_id TEXT PRIMARY KEY, c1_json TEXT NOT NULL,
+          state TEXT NOT NULL DEFAULT 'accepted', epoch INTEGER NOT NULL DEFAULT 0,
+          attempts INTEGER NOT NULL DEFAULT 0, redrive_attempts INTEGER NOT NULL DEFAULT 0,
+          last_error TEXT, accepted_at TEXT NOT NULL, updated_at TEXT NOT NULL
+        );
+        CREATE TABLE processed (
+          chunk_id TEXT PRIMARY KEY, stream_id TEXT NOT NULL, sequence INTEGER NOT NULL,
+          user_id TEXT NOT NULL, device_id TEXT NOT NULL, modality TEXT NOT NULL,
+          record_ids TEXT NOT NULL, pipeline_version TEXT NOT NULL, processed_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_processed_stream ON processed (stream_id, sequence);
+    """)
+    conn.execute(
+        "INSERT INTO processed VALUES ('old-1','s-old',0,'u','d','audio',"
+        "'[\"rid-old\"]','asr-fw-v1','t0')")
+    conn.execute(
+        "INSERT INTO pending (chunk_id, c1_json, accepted_at, updated_at)"
+        " VALUES ('old-2', '{\"chunk_id\":\"old-2\",\"stream_id\":\"s-old\","
+        "\"sequence\":1,\"user_id\":\"u\",\"device_id\":\"d\",\"modality\":\"audio\"}',"
+        " 't1', 't1')")
+    conn.commit()
+    conn.close()
+
+    j = Journal(db)
+    row = j.done_row("old-1")                       # migrated read: v2 defaults
+    assert row["record_ids"] == ["rid-old"]
+    assert row["stage_status"] is None and row["heal_attempts"] == 0
+    assert row["done_final"] is False and row["cached_slots"] is None
+    assert j.processed_record_ids("old-1") == ["rid-old"]
+    assert j.counts() == {"pending": 1, "dead_letter": 0, "processed": 1}
+    re = j.rehydration()
+    assert re["s-old"]["processed"][0][:2] == (0, "old-1")
+    assert re["s-old"]["accepted"][0][:2] == (1, "old-2")
+    # And the migrated DB accepts v2 writes.
+    fs = FakeStorage()
+    c1 = _c1(fs, chunk_id="new-1", stream_id="s-old", sequence=2)
+    j.mark_processed(c1, ["rid-new"], "pv-1", "t2", statuses={"asr": "ok"})
+    assert j.done_row("new-1")["stage_status"] == {"asr": "ok"}
+
+
+def test_redrive_cap_finalizes_durable_record_chunks_never_dead_letters(tmp_path):
+    """Heal containment at the crash-loop cap: a pending chunk that HAS a durable
+    record (a crash-looping heal) is FINALIZED — pending cleared, done_final set,
+    reported to the caller — never flipped to dead_letter (recording must not read
+    a chunk with a durable record as a gap). A record-less poison chunk still
+    dead-letters exactly as before."""
+    j = Journal(tmp_path / "dp.db")
+    fs = FakeStorage()
+    healing = _c1(fs, chunk_id="heal-loop", stream_id="s", sequence=0)
+    poison = _c1(fs, chunk_id="poison", stream_id="s", sequence=1)
+    j.mark_processed(healing, ["rid"], "pv-1", "t0",
+                     statuses={"asr": "ok", "acoustic": "failed"})
+    j.accept(healing, "t1")                          # heal claim crash-looping
+    j.accept(poison, "t1")                           # record-less poison
+    for i in range(3):                               # both attempted past cap=2
+        j.note_redrive_attempt("heal-loop", f"t{i}")
+        j.note_redrive_attempt("poison", f"t{i}")
+
+    rows, finalized = j.pending_for_redrive(2, "tN")
+    assert rows == []                                # neither survives the cap
+    assert [f["chunk_id"] for f in finalized] == ["heal-loop"]
+    assert j.counts() == {"pending": 0, "dead_letter": 1, "processed": 1}
+    row = j.done_row("heal-loop")
+    assert row["done_final"] is True                 # holes permanent, visible
+    assert row["record_ids"] == ["rid"]              # done never regressed
+    # newly_final reported so the caller can fire the permanent-holes metric once.
+    assert finalized[0]["newly_final"] is True
+    assert finalized[0]["stage_status"] == {"asr": "ok", "acoustic": "failed"}
 
 
 # ---- Restart drills (two apps over one var dir) --------------------------------

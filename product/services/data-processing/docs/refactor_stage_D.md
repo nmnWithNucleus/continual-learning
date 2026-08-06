@@ -49,3 +49,49 @@ Stage C's cleanup) — the nit was the missing TEST, and both new assertions pin
 that now exists (one first-run failure was mine, not the code's: the under-cap assertion
 forgot `render_caption` prefixes app/activity; fixed to `endswith`).
 
+## WP-D1 — journal done-row extension (ledger v2)
+
+| File | Action | Why |
+|---|---|---|
+| `app/journal.py` | extended | `processed` gains `stage_status` (JSON, the L8 map verbatim — failed vs cancelled distinct), `heal_attempts`, `done_final`, `cached_slots` (SPECIFIED AND UNPOPULATED — the run-only-the-failed-cone seat, schema only), `superseded_pv`; `HEAL_MAX_ATTEMPTS = 3` code pin; `_migrate` (additive ALTER TABLE for pre-D DBs); `mark_processed` grows `statuses=`/`heal=` and returns the budget state `{heal_attempts, done_final, newly_final}` with all heal/vf arithmetic in its one transaction; NEW `heal_failed` (increment + finalize-at-budget + epoch-guarded pending clear, truth unguarded); NEW `done_row` (the claim tree's single lookup); `processed_record_ids` reimplemented over `done_row` (one lookup path); `pending_for_redrive` returns `(rows, finalized)` — over-cap chunks WITH a durable record are FINALIZED (pending cleared, `done_final` set), never dead-lettered |
+| `app/ingest_core.py` | edited (2 lines) | `process_chunk` persists `result.statuses` into the done-row — the `GraphResult.statuses` dropped-at-the-seam carry closed |
+| `app/main.py` | edited (lifespan) | unpacks the new tuple; force-finalized chunks logged loudly (WP-D3 wires the permanent-holes metric at this site) |
+| `tests/test_journal.py` | extended (TDD) | 9 new tests: done-row v2 fields; legacy NULL-statuses row; heal increments only while holes remain (green heal: no increment); budget exhaustion finalizes with `newly_final` exactly once; `heal_failed` never regresses done + finalizes at budget + no-row → None; epoch-guarded pending clear with unguarded truth; version-forward `superseded_pv` + budget reset (latest supersession only); pre-D in-place migration; redrive-cap containment (durable-record chunk finalized, record-less poison still dead-letters) |
+
+In-session decisions (the brief's explicit your-call items, logged):
+
+- **Done-row keying: per `(chunk_id)`, latest attempt wins, superseded dialect recorded
+  in the row** (`superseded_pv`, latest supersession only — the full lineage lives in
+  storage's records and git history; a `(chunk_id, pv)` key would grow the ledger per
+  deploy and buy nothing the claim tree reads). L8's own text says the new record lands
+  beside the old IN STORAGE; the ledger is a claim tree input, not an archive.
+- **Schema evolution: migrate (additive ALTER TABLE), not recreate.** `var/` is
+  disposable pre-cutover, but dropping `processed` rows would un-SEE intact history at
+  continuity rehydration — fabricated gaps, the exact lie the journal exists to prevent.
+  A pre-D row reads `stage_status` NULL = no hole evidence = green (skip) when the
+  dialect matches; any v0-dialect row version-forwards anyway.
+- **Ledger `heal_attempts` counts non-green heals only** (a fully green heal clears to
+  skip-state without an increment; a failed re-run and a still-holey re-run both count).
+  The WP-D3 metric `dp_heal_attempts_total` counts ATTEMPTS (every heal re-run) — the
+  two deliberately differ; the ledger column is the budget, the metric is the rate.
+- **Crash-loop cap × heal containment**: `pending_for_redrive`'s over-cap flip now
+  splits on "does a durable record exist" — a crash-looping heal claim force-finalizes
+  (holes permanent, visible, budget spent) instead of dead-lettering a chunk whose
+  record exists. A record-less poison chunk dead-letters exactly as before. This is the
+  containment rule "a heal never dead-letters a chunk that has a durable record"
+  applied to the one code path that could violate it.
+- **`heal_failed`'s increment is deliberately not epoch-guarded** (only the pending
+  delete is): a failed heal truly ran regardless of which delivery's worker ran it —
+  the same truth-is-unguarded posture `mark_processed`'s INSERT already has.
+
+DEVIATION (packaging, loud): the brief's WP-D1 bullet includes the dedup claim tree;
+plan §8 puts the claim tree in WP-D2 beside the seam wiring. Followed §8 — the tree and
+its routing are one seam and land together in WP-D2, keeping every WP commit green
+(dedup.py is untouched by this commit and the old trichotomy still runs against the
+extended journal via the kept `processed_record_ids`). Substance unchanged.
+
+Evidence: TDD red first — `pytest tests/test_journal.py -q` → `10 failed, 12 passed`
+against the shipped journal (TypeError on `statuses=`, ImportError `HEAL_MAX_ATTEMPTS`,
+AttributeError `done_row`, tuple-unpack on `pending_for_redrive`); after implementation
+→ `22 passed`. Full DP suite → `535 passed, 3 skipped`.
+

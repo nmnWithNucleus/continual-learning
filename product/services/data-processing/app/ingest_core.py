@@ -198,8 +198,11 @@ async def process_chunk(
 
     record_ids = [record_id]
     if journal is not None:
+        # Ledger v2 (L8): the executor's per-stage statuses ride the done-row
+        # verbatim (failed vs cancelled distinct) — the claim tree's evidence.
         await run_in_threadpool(
-            journal.mark_processed, c1, record_ids, pipeline_version, now_iso(), epoch
+            journal.mark_processed, c1, record_ids, pipeline_version, now_iso(), epoch,
+            statuses=result.statuses,
         )
     dedup.put(chunk_id, record_ids)
     return record_ids

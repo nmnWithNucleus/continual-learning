@@ -422,9 +422,19 @@ def create_app() -> FastAPI:
 
         redrive_rows: list = []
         if app.state.ingest_async:
-            redrive_rows = await _tp(
+            redrive_rows, finalized = await _tp(
                 journal.pending_for_redrive, settings.redrive_max_attempts, now_iso()
             )
+            for f in finalized:
+                # Heal containment at the crash-loop cap (L8): a chunk WITH a durable
+                # record is finalized (holes permanent), never dead-lettered — its
+                # record must not read as a gap. Loud: this is budget force-spent.
+                # (WP-D3 wires the permanent-holes metric at this site.)
+                logger.error(
+                    "crash-loop cap: chunk %s has a durable record — finalized with "
+                    "permanent holes (stage_status=%s) instead of dead-letter",
+                    f["chunk_id"], f["stage_status"],
+                )
         app.state.continuity.rehydrate(await _tp(journal.rehydration))
         redrive_task: asyncio.Task | None = None
         if app.state.ingest_async:
