@@ -82,35 +82,38 @@ def _instant(raw: str) -> datetime:
     return datetime.fromisoformat(raw.replace("Z", "+00:00"))
 
 
-def _land(store: Store, user_id: str, ingest_time: str, **kwargs) -> dict:
-    """Land a C2 record and force its storage-assigned ingest_time.
+def _land(store: Store, user_id: str, updated_at: str, **kwargs) -> dict:
+    """Land a C2 record and force its storage-assigned `updated_at` (+ `created_at`).
 
-    ingest_time is minted by storage at write and is deliberately not a C2 field, so a test
-    that needs deterministic window membership sets it on the column directly — the same
-    'reach into the columns' idiom tests/test_civil_time.py and tests/test_windows.py use.
+    Both stamps are minted by storage at write and are deliberately not C2 fields, so a
+    test that needs deterministic window membership sets them on the columns directly —
+    the same 'reach into the columns' idiom tests/test_civil_time.py and
+    tests/test_windows.py use.
     """
     record = make_c2(user_id=user_id, **kwargs)
     store.put_context(record)
     with store._connect() as conn:
         conn.execute(
-            "UPDATE context_records SET ingest_time = ? WHERE record_id = ?",
-            (ingest_time, record["record_id"]),
+            "UPDATE context_records SET created_at = ?, updated_at = ? "
+            "WHERE record_id = ?",
+            (updated_at, updated_at, record["record_id"]),
         )
         conn.commit()
     return record
 
 
 def _backdate(store: Store, *, hours: int = 1) -> str:
-    """Push every landed record's ingest_time into the past, and return the new value.
+    """Push every landed record's stamps into the past, and return the new value.
 
-    ingest_time is minted at write and is not a C2 field, so a record landed over HTTP is
-    always ingested `now` — while a window's end is `now - delta`, which would sit BELOW
-    its own start and refuse to open. Backdating is what lets these tests exercise the real
-    routes against the real clock instead of injecting time everywhere.
+    The stamps are minted at write and are not C2 fields, so a record landed just now
+    always carries `now` — while a window's end is `now - delta`, which would sit BELOW
+    its own start and refuse to open. Backdating is what lets these tests exercise the
+    real routes against the real clock instead of injecting time everywhere.
     """
     stamp = _stamp(datetime.now(UTC) - timedelta(hours=hours))
     with store._connect() as conn:
-        conn.execute("UPDATE context_records SET ingest_time = ?", (stamp,))
+        conn.execute("UPDATE context_records SET created_at = ?, updated_at = ?",
+                     (stamp, stamp))
         conn.commit()
     return stamp
 
@@ -129,18 +132,35 @@ def _caption(t_start: str, text: str, *, device_tz: str | None = None,
 
 
 def _undiarized(t_start: str, text: str, **kwargs) -> dict:
-    """A transcript record with no sub-spans — the parent-chunk ASR path."""
-    record = make_c2(t_start=t_start, t_end=t_start, text=text, **kwargs)
-    del record["content"]["segments"]
+    """A v0 transcript record with no sub-spans — the parent-chunk ASR path.
+
+    v0-shaped CONTENT on the store level: the v0 renderer under test here reads
+    content.kind/text until WP-E2 rewrites it to slots, and store-level writes do not
+    schema-gate. These builders die with the v2 renderer rewrite."""
+    record = make_c2(t_start=t_start, t_end=t_start, **kwargs)
+    record["content"] = {"kind": "transcript", "text": text, "language": "en"}
     return record
 
 
-def _rows(*records_with_ingest) -> list[dict]:
-    """Build the store's ingest-range row shape by hand: (record, ingest_time, seq)."""
+def _rows(*records_with_stamp) -> list[dict]:
+    """Build the store's window-range row shape by hand: (record, updated_at, seq)."""
     return [
-        {"seq": seq, "ingest_time": ingest, "record": rec}
-        for seq, (rec, ingest) in enumerate(records_with_ingest, start=1)
+        {"seq": seq, "updated_at": stamp, "record": rec}
+        for seq, (rec, stamp) in enumerate(records_with_stamp, start=1)
     ]
+
+
+def _land_v0(store: Store, record: dict, stamp: str) -> dict:
+    """Land a prebuilt (v0-content) record and force its stamps to `stamp`."""
+    store.put_context(record)
+    with store._connect() as conn:
+        conn.execute(
+            "UPDATE context_records SET created_at = ?, updated_at = ? "
+            "WHERE record_id = ?",
+            (stamp, stamp, record["record_id"]),
+        )
+        conn.commit()
+    return record
 
 
 def _build(records, *, window_id="w20260724T040000Z", user_id="u1", home_tz="UTC", **kw):
@@ -152,18 +172,22 @@ def _build(records, *, window_id="w20260724T040000Z", user_id="u1", home_tz="UTC
 # PART 1 — the three CHANGED rules
 # =====================================================================================
 
-# --- change 1: membership is by ingest_time, not t_start -----------------------------
+# --- change 1: membership is by updated_at (D27; was ingest_time), not t_start -------
 
 
-def test_membership_is_by_ingest_time_not_event_time(store):
-    """THE watermark rule. A chunk captured Tuesday and uploaded Friday belongs to
-    FRIDAY's window — and renders in a block anchored "On [Tuesday]". Late data cannot be
-    lost because on an ingest-time watermark late data does not exist."""
+def test_membership_is_by_updated_at_not_event_time(store):
+    """THE watermark rule, on D27's axis. A chunk captured Tuesday and uploaded Friday
+    belongs to FRIDAY's window — and renders in a block anchored "On [Tuesday]". Late
+    data cannot be lost because on a storage-clock watermark late data does not exist."""
     store.put_profile("u1", "UTC")
     tuesday = "2026-07-21T09:00:00Z"
     # Captured Tuesday, uploaded Friday.
-    _land(store, "u1", "2026-07-24T02:00:00Z",
-          **{"t_start": tuesday, "t_end": tuesday})
+    record = _caption(tuesday, "a tuesday memory", chunk_id="chunk-tue", user_id="u1")
+    store.put_context(record)
+    with store._connect() as conn:
+        conn.execute("UPDATE context_records SET created_at = ?, updated_at = ?",
+                     ("2026-07-24T02:00:00Z", "2026-07-24T02:00:00Z"))
+        conn.commit()
     window = store.open_training_window("u1", now=datetime(2026, 7, 24, 4, 0, 0, tzinfo=UTC))
 
     body = materialize_daylog(store, "u1", window["window_id"])
@@ -187,19 +211,19 @@ def test_membership_is_by_ingest_time_not_event_time(store):
     assert lead > timedelta(days=1), lead
 
 
-def test_a_record_ingested_outside_the_window_is_excluded_even_if_its_event_time_is_inside(store):
+def test_a_record_updated_outside_the_window_is_excluded_even_if_its_event_time_is_inside(store):
     """The mirror image, and the one an event-time filter would get wrong: an event time
     that sits comfortably inside the window's clock range buys nothing if the record
     landed after `t_end`."""
     store.put_profile("u1", "UTC")
-    _land(store, "u1", "2026-07-24T02:00:00Z",
-          t_start="2026-07-24T02:30:00Z", t_end="2026-07-24T02:30:00Z",
-          text="inside the window on both axes")
+    inside = _undiarized("2026-07-24T02:30:00Z", "inside the window on both axes",
+                         user_id="u1", chunk_id="chunk-in")
+    _land_v0(store, inside, "2026-07-24T02:00:00Z")
     window = store.open_training_window("u1", now=datetime(2026, 7, 24, 4, 0, 0, tzinfo=UTC))
     # Lands AFTER the window closed, but with an event time inside its range.
-    _land(store, "u1", "2026-07-24T05:00:00Z",
-          t_start="2026-07-24T02:31:00Z", t_end="2026-07-24T02:31:00Z",
-          text="late arriving straggler")
+    late = _undiarized("2026-07-24T02:31:00Z", "late arriving straggler",
+                       user_id="u1", chunk_id="chunk-late")
+    _land_v0(store, late, "2026-07-24T05:00:00Z")
 
     body = materialize_daylog(store, "u1", window["window_id"])
     rendered = " ".join(b["text"] for b in body["blocks"])
@@ -276,12 +300,12 @@ def test_seg_id_is_the_ordinal_not_the_epoch_bucket_index():
     ]
 
 
-# --- change 3: one dialect per record, latest ingest_time wins -----------------------
+# --- change 3: one dialect per record, latest updated_at wins (D27 axis) -------------
 
 
-def test_one_dialect_per_record_latest_ingest_time_wins():
+def test_one_dialect_per_record_latest_updated_at_wins():
     """The cutover double-count fix. Two renderings of ONE chunk under two pipeline
-    versions: only the latest-INGESTED survives. Keyed on ingest_time and not on
+    versions: only the latest-updated survives. Keyed on the storage stamp and not on
     pipeline_version because pipeline_version is a COMPOSED string (a mutate stage's
     enabledness is a version fragment) and therefore not orderable."""
     t = _iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp())
@@ -320,7 +344,8 @@ def test_the_dialect_key_is_discriminator_aware():
     kf0["record_id"], kf0["discriminator"] = "rec-kf0", "kf:0"
     kf1 = _caption(t, "a hallway", chunk_id="chunk-A")
     kf1["record_id"], kf1["discriminator"] = "rec-kf1", "kf:1"
-    assert schemas.validate_c2(kf0) == [] and schemas.validate_c2(kf1) == []
+    # (No schema assertion: these are v0-world fixtures the v1-only gate rejects;
+    # the selection rule under test is the v0 renderer's, alive until WP-E2.)
 
     kept = select_dialects(_rows((kf0, "2026-07-24T01:00:00Z"),
                                  (kf1, "2026-07-24T01:00:00Z")))
@@ -348,9 +373,10 @@ def test_absent_and_empty_discriminator_are_the_same_key():
 
 
 def test_the_dialect_tiebreak_is_deterministic_within_one_second():
-    """ingest_time is minted at SECOND granularity, so a whole data-processing flush lands
-    inside one value and "latest wins" would otherwise be decided by dict ordering. rowid
-    is the tiebreak — the same stable one every ordered read in this service uses."""
+    """updated_at is minted at SECOND granularity, so a whole data-processing flush —
+    or two consecutive heals — lands inside one value and "latest wins" would otherwise
+    be decided by dict ordering. rowid is the tiebreak, and it is LOAD-BEARING (the D27
+    upsert keeps rowids stable across re-POSTs for exactly this reason)."""
     t = _iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp())
     first = _caption(t, "first of the flush", chunk_id="chunk-A", pipeline_version="v1")
     second = _caption(t, "second of the flush", chunk_id="chunk-A", pipeline_version="v2")
@@ -359,8 +385,8 @@ def test_the_dialect_tiebreak_is_deterministic_within_one_second():
     assert [r["record"]["content"]["text"] for r in kept] == ["second of the flush"]
     # ...and it does not depend on which order they were handed in.
     reordered = [
-        {"seq": 2, "ingest_time": same_second, "record": second},
-        {"seq": 1, "ingest_time": same_second, "record": first},
+        {"seq": 2, "updated_at": same_second, "record": second},
+        {"seq": 1, "updated_at": same_second, "record": first},
     ]
     assert [r["record"]["content"]["text"] for r in select_dialects(reordered)] == \
         ["second of the flush"]
@@ -376,12 +402,8 @@ def test_a_reprocess_that_survives_selection_renders_once_end_to_end(store):
                    user_id="u1")
     new = _caption(t, "a red front door", chunk_id="chunk-A", pipeline_version="cap-v2",
                    user_id="u1")
-    for record, ingest in ((old, "2026-07-24T02:05:00Z"), (new, "2026-07-24T02:06:00Z")):
-        store.put_context(record)
-        with store._connect() as conn:
-            conn.execute("UPDATE context_records SET ingest_time = ? WHERE record_id = ?",
-                         (ingest, record["record_id"]))
-            conn.commit()
+    for record, stamp in ((old, "2026-07-24T02:05:00Z"), (new, "2026-07-24T02:06:00Z")):
+        _land_v0(store, record, stamp)
     window = store.open_training_window("u1", now=datetime(2026, 7, 24, 4, 0, 0, tzinfo=UTC))
 
     body = materialize_daylog(store, "u1", window["window_id"])
@@ -413,13 +435,13 @@ def test_diarized_subspans_land_in_their_own_buckets_by_their_own_t_start():
     """A 30 s VAD chunk spans three buckets and its speech must be anchored where it was
     actually said, not where the chunk began."""
     base = datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()
-    rec = make_c2(chunk_id="c1", t_start=_iso(base), t_end=_iso(base + 30),
-                  text="first second")
-    rec["content"]["segments"] = [
+    rec = make_c2(chunk_id="c1", t_start=_iso(base), t_end=_iso(base + 30))
+    rec["content"] = {"kind": "transcript", "text": "first second", "language": "en",
+                      "segments": [
         {"t_start": _iso(base), "t_end": _iso(base + 2), "text": "first", "speaker": "a"},
         {"t_start": _iso(base + 25), "t_end": _iso(base + 27), "text": "second",
          "speaker": "b"},
-    ]
+    ]}
     daylog = _build([rec])
     non_empty = [s for s in daylog.segments if not s.is_empty()]
     assert len(non_empty) == 2                      # bucket +0 and bucket +20
@@ -473,12 +495,13 @@ def test_the_anchor_line_and_labels_are_byte_exact():
 
 def test_a_diarized_speaker_is_named_in_the_heard_line():
     base = datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()
-    rec = make_c2(chunk_id="c1", t_start=_iso(base), t_end=_iso(base + 2), text="hi")
-    rec["content"]["segments"] = [
+    rec = make_c2(chunk_id="c1", t_start=_iso(base), t_end=_iso(base + 2))
+    rec["content"] = {"kind": "transcript", "text": "hi", "language": "en",
+                      "segments": [
         {"t_start": _iso(base), "t_end": _iso(base + 1), "text": "hi", "speaker": "ana"},
         {"t_start": _iso(base + 1), "t_end": _iso(base + 2), "text": "hey",
          "speaker": None},
-    ]
+    ]}
     block = _build([rec]).blocks[0]
     assert "Heard: ana: hi | hey" in block.text
 
@@ -579,7 +602,7 @@ def test_the_travel_case_survives_the_round_trip_through_http(client, store):
                                     (10 * 3600, "landed", "Asia/Tokyo", "c2")):
         record = _caption(_iso(base + offset), text, device_tz=tz, chunk_id=chunk,
                           user_id="u1")
-        assert client.post("/context/records", json=record).status_code == 200
+        store.put_context(record)   # store-level: v0-shaped content, v1-only HTTP gate
     _backdate(store)
     window = client.post("/training/windows", json={"user_id": "u1"}).json()
 
@@ -602,7 +625,7 @@ def _window_with_one_caption(client, store, user_id="u1", home_tz="UTC",
     store.put_profile(user_id, home_tz)
     record = _caption(_iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()), text,
                       user_id=user_id, chunk_id="chunk-A")
-    assert client.post("/context/records", json=record).status_code == 200
+    store.put_context(record)       # store-level: v0-shaped content, v1-only HTTP gate
     _backdate(store)
     return client.post("/training/windows", json={"user_id": user_id}).json()
 
@@ -618,7 +641,7 @@ def _window_with_captions(client, store, offsets, *, user_id="u1", home_tz="UTC"
     for i, offset in enumerate(offsets):
         record = _caption(_iso(base + offset), f"caption {i:02d}",
                           user_id=user_id, chunk_id=f"chunk-{i:02d}")
-        assert client.post("/context/records", json=record).status_code == 200
+        store.put_context(record)
     _backdate(store)
     return client.post("/training/windows", json={"user_id": user_id}).json()
 
@@ -661,9 +684,10 @@ def test_an_empty_window_is_an_empty_daylog_not_an_error(client, store):
     closes with skipped_no_data, which deliberately does NOT advance the watermark."""
     store.put_profile("u1", "UTC")
     old = _caption("2026-07-01T12:00:00Z", "ancient", chunk_id="chunk-old", user_id="u1")
-    assert client.post("/context/records", json=old).status_code == 200
+    store.put_context(old)
     with store._connect() as conn:
-        conn.execute("UPDATE context_records SET ingest_time = '2026-07-01T12:00:00Z'")
+        conn.execute("UPDATE context_records SET created_at = '2026-07-01T12:00:00Z', "
+                     "updated_at = '2026-07-01T12:00:00Z'")
         conn.commit()
     window = store.open_training_window("u1", now=datetime(2026, 7, 2, 0, 0, 0, tzinfo=UTC))
     # Force the window's floor past the only record so the range is genuinely empty.
@@ -691,24 +715,46 @@ def test_the_daylog_is_materialized_once_and_cached(client, store):
     assert second == first
 
 
-def test_the_cache_is_invalidated_when_a_record_inside_the_window_is_rewritten(client, store):
-    """The one hole a cache over an upsert has: a SAME-VERSION reprocess rewrites a
-    record's text in place while deliberately preserving its ingest_time, so it stays
-    inside a window that may already have been rendered and served."""
-    window = _window_with_one_caption(client, store, text="a blurry doorway")
-    params = {"user_id": "u1", "window_id": window["window_id"]}
-    before = client.get("/training/daylog", params=params).json()
+def test_a_byte_different_reprocess_dissolves_out_of_the_rendered_window(store):
+    """D27 + R2, end to end at the store level: a same-version reprocess that changes
+    bytes BUMPS updated_at, so the record LEAVES the already-rendered window —
+    put_context drops the affected caches (both windows), the re-materialized old
+    window excludes the record (it dissolves out, D18), and the NEXT window picks it
+    up. Trained bodies are history, not edited."""
+    store.put_profile("u1", "UTC")
+    t = "2026-07-24T02:00:00Z"
+    first = _caption(t, "a blurry doorway", chunk_id="chunk-A", user_id="u1")
+    store.put_context(first)
+    with store._connect() as conn:   # place it deterministically inside window A
+        conn.execute("UPDATE context_records SET created_at = ?, updated_at = ?",
+                     ("2026-07-24T02:00:00Z", "2026-07-24T02:00:00Z"))
+        conn.commit()
+    window_a = store.open_training_window(
+        "u1", now=datetime(2026, 7, 24, 4, 0, 0, tzinfo=UTC))
+    before = materialize_daylog(store, "u1", window_a["window_id"])
     assert "a blurry doorway" in before["blocks"][0]["text"]
 
-    # Same record_id (deterministic on chunk_id + pipeline_version), same version, better
-    # text — an in-place correction, which is the upsert branch of put_context.
-    fixed = _caption(_iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()),
-                     "a red front door", chunk_id="chunk-A", user_id="u1")
-    assert client.post("/context/records", json=fixed).status_code == 200
+    # Same record_id (deterministic on chunk_id + pipeline_version), same version,
+    # better text — the byte-different branch of the D27 upsert. The bump lands at the
+    # real clock; pin it inside the NEXT window's range for determinism.
+    fixed = _caption(t, "a red front door", chunk_id="chunk-A", user_id="u1")
+    store.put_context(fixed)
+    with store._connect() as conn:
+        conn.execute("UPDATE context_records SET updated_at = ? WHERE record_id = ?",
+                     ("2026-07-24T05:00:00Z", fixed["record_id"]))
+        conn.commit()
 
-    after = client.get("/training/daylog", params=params).json()
-    assert "a red front door" in after["blocks"][0]["text"]
-    assert after["content_fingerprint"] != before["content_fingerprint"]
+    again = materialize_daylog(store, "u1", window_a["window_id"])
+    assert again["blocks"] == []     # cache dropped AND the record dissolved out
+    assert again["content_fingerprint"] != before["content_fingerprint"]
+
+    store.close_training_window("u1", window_a["window_id"], "published")
+    window_b = store.open_training_window(
+        "u1", now=datetime(2026, 7, 24, 6, 1, 0, tzinfo=UTC))
+    body = materialize_daylog(store, "u1", window_b["window_id"])
+    rendered = " ".join(b["text"] for b in body["blocks"])
+    assert "a red front door" in rendered
+    assert "a blurry doorway" not in rendered
 
 
 def test_a_corrected_home_tz_re_materializes_rather_than_serving_the_typo_forever(
@@ -918,7 +964,7 @@ def test_a_user_without_a_profile_is_refused_loudly(client, store):
     system, so substituting one would anchor a whole night to the wrong local date and
     nothing downstream could tell."""
     record = _caption(_iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()), "hi")
-    assert client.post("/context/records", json=record).status_code == 200
+    store.put_context(record)
     _backdate(store)
     window = client.post("/training/windows", json={"user_id": "user-1"}).json()
 
@@ -982,4 +1028,4 @@ def test_the_day_log_table_appears_on_a_preexisting_db(tmp_path):
             "SELECT name FROM sqlite_master WHERE type = 'index'")}
     assert "day_logs" in tables
     assert "idx_day_logs_user_range" in indexes
-    assert "idx_context_user_ingest" in indexes
+    assert "idx_context_user_updated" in indexes

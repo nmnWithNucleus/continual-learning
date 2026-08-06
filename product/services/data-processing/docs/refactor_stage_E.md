@@ -60,7 +60,7 @@ imported a half-rewritten `app/`.
 | Action | Detail |
 |---|---|
 | venv | worktree `storage/.venv` → symlink to this tree's `storage/.venv` (same interpreter; the venv only supplies packages and is gitignored) |
-| exclude | `.git/info/exclude` gains `.venv` (the repo's `.venv/` pattern matches directories only, so the symlink would read untracked); machine-local, not a repo change |
+| exclude | `.git/info/exclude` gains `.venv` (the repo's `.venv/` pattern matches directories only, so a symlink reads untracked); machine-local, not a repo change |
 | pins | `learn.env` += the five `STORAGE_*` values above (dated comment); else `run.sh` re-derives them from the worktree `$HERE`, moving data |
 | restart | one tight window: `kill -TERM 3356393` → port free → `bash run_learn.sh --skip-install` |
 
@@ -118,3 +118,55 @@ as a *new additive file* the live service never asks for. Inventory item for Sta
 `product/scripts/style_check.py` pre-fails repo-wide against its ratchet (known since
 the Stage D review round; re-baselining is the founder's call). Touched-lines rule
 honoured: these six edits only shrink findings (−7 net) and boil no ocean.
+
+## WP-E1 — `db.py` `created_at`/`updated_at` + the C2-v1-only surface (D27, R1, R3)
+
+| File | Action | Why |
+|---|---|---|
+| `app/db.py` | edited | `context_records` splits `ingest_time` → `created_at` + `updated_at` (schema, module header); NEW `_migrate_context_v2` — rename + backfilled add + index swap, run *before* `_SCHEMA` (an index on a migration-added column cannot be created late); `put_context` rewritten: the byte-compare *is* the upsert (`ON CONFLICT DO UPDATE … WHERE record_json <> excluded`, one atomic statement, rowid-stable), R2 both-window cache invalidation on change, nothing on a no-op; docstring rewritten — the "stays inside a rendered window" rationale is the premise D27 deletes; `list_context_by_ingest` → `list_context_by_updated`; `earliest_ingest_time` → `earliest_updated_at`; the window floor and ledger prose move to the new axis |
+| `app/schemas.py` | edited | `C2_ID` → `c2_processed_record.v1.json` (R1: the branch validates v1 *exclusively*); `validate_c2` gains the contract-demanded fullmatch on `pipeline_version` + every slot `version`, patterns read *from the loaded schema* (Python's `$` admits a trailing newline; `record_id` is closed by its 64-char bounds instead) |
+| `app/models.py` | edited | the v0 C2 mirror (kind/text, enrichments, discriminator, `processed_at`, `source.modality`) replaced by the v1 mirror: six typed slot models, strict everywhere, root modality, D17 trio incl. `device_clock`; restated from the contract, never imported from DP (the `ids.py` precedent) |
+| `app/daylog.py` | edited (mechanical) | the *axis* moves at E1, the *renderer* at E2: `select_dialects` keys latest `updated_at` (rowid tiebreak now noted as load-bearing); the store read renamed; v0 kind/discriminator selection logic untouched until WP-E2 |
+| `app/main.py` | edited (docstring) | the day-log line names the `updated_at` axis; the C2 route blurb stays shape-identical |
+| `scripts/daylog_parity_diff.py` | edited (mechanical) | stamp forcing moves to the split columns; P1 pinned to the **v0** schema explicitly (the fixtures are the v0-world inputs both proof renderers consume) with a dated note — WP-E4 re-cuts the whole proof over v1 |
+| `tests/conftest.py` | rewritten (C2 half) | `make_c2` builds C2 **v1** (slots map, root modality, 64-hex L3 `record_id` — NUL-joined exactly as DP derives it); slot builders (`slot_asr`/`slot_transcript`/`slot_caption`/`slot_ocr`/`slot_acoustic`) shared with the later WPs |
+| `tests/test_created_updated.py` | NEW (TDD) | 12 tests: first landing mints `created_at == updated_at`; byte-identical re-POST leaves the row *completely* untouched (stamps, rowid, json — the heal no-op and §4 crash-replay inputs); byte-different bumps `updated_at`, preserves `created_at` + rowid; R3 slot-*regressing* re-POST replaces unconditionally; hole-migrated re-POST (byte-different-but-not-fuller) replaces; stamp keeps the `_TS_FMT` spelling; R2 both-window invalidation + no-op invalidates nothing + per-user; migration rename/backfill/index-swap + idempotence |
+| `tests/test_context.py` | rewritten (8 → 18) | v1 round-trip/upsert/ordering/isolation kept in v1 terms; NEW pins: the v0 shape rejected wholesale *and* per-concept, empty slots map legal, empty-string slot values land verbatim (L11), unknown slot fails closed, `record_id` 64-hex bounds, `pipeline_version` + slot-version grammar incl. the trailing-newline 422, mirror↔schema agreement, D17 trio verbatim |
+| `tests/test_windows.py` | edited | `_land` forces both stamps; rule 4 and the floor read the `updated_at` axis; migration test covers the D27 rename; index assertions on `idx_context_user_updated` |
+| `tests/test_daylog.py` | edited (mechanical) | axis + fixture plumbing only (the v2 rewrite is WP-E2): store-level writes for the v0-content fixtures (the HTTP gate is v1-only), `_land_v0` helper, and ONE replaced test — the "rewritten record re-renders in place" cache test is the premise D27 deletes; its successor proves the record *dissolves out* of the rendered window and re-enters the next (R2, deterministic ledger clock) |
+| `tests/test_discriminator.py` | **deleted** (11 tests) | its whole subject — the v0 within-chunk `discriminator` — is on the charter's dead-concepts list (D24); v1 carries no such field and the v1-only gate rejects it, so every test either loses its subject or duplicates the new v0-rejection pins in `test_context.py`. Nothing ported |
+
+In-session decisions:
+
+- **Packaging: E1 moves the axis, E2 rewrites the renderer.** Every ledger/read/dedup
+  site speaks `updated_at` from this commit; the v0 renderer keeps rendering v0-shaped
+  content at the *store* level until WP-E2 lands the slot-walk. Each WP commit stays
+  green and no dual-version ingest/render support is built (R1) — the HTTP surface is
+  v1-only from this commit on.
+- **Migration is rename + backfilled add, not rebuild.** `ingest_time`'s data is
+  already `created_at`'s truth (first landing, preserved across reprocess), so RENAME
+  keeps history verbatim; `updated_at` backfills equal — the landing is the last change
+  the old world could know about. Runs before `_SCHEMA` (index ordering); the added
+  column is nullable on a migrated DB (`ALTER … ADD` cannot carry NOT NULL), documented
+  where it happens. OD-2 wipes `/context` at cutover regardless.
+- **The byte-compare is the upsert itself** — `DO UPDATE … WHERE record_json <>
+  excluded.record_json`: a filtered-out update touches nothing (stamps, rowid, bytes),
+  atomically, with change-detection off `total_changes`. The compare runs over
+  storage's canonical serialization, which DP's byte-identical wire bytes reproduce
+  exactly (T-1's sorted assembly).
+- **`updated_at` stays second-granularity** (the brief's either/or): `_TS_FMT` is the
+  one spelling of every storage-minted stamp and the lexicographic-order discipline
+  hangs off it. The rowid tiebreak is therefore documented as LOAD-BEARING at the mint
+  site and the dedup site, and the within-one-second tie is pinned by test.
+- **R2 lives in `put_context`**: on change, invalidate the windows containing the
+  *previous* `updated_at` and the new one; on a byte-identical no-op, nothing — an
+  unchanged record cannot go stale, which is the honest successor of the old
+  single-window invalidation comment.
+
+Evidence: TDD red first — `pytest tests/test_context.py tests/test_created_updated.py
+tests/test_windows.py -q` → `86 failed, 16 passed` against the shipped app (v0 `C2_ID`
+pin, no `created_at` columns, no `earliest_updated_at`); after implementation the same
+three files → `108 passed`. Full storage suite → `321 passed` (was 310: −11
+discriminator, +10 context, +12 created_updated; daylog/windows/civil counts
+unchanged). The parity proof re-runs green over the split columns (31 checks; P1
+explicitly v0 until the WP-E4 re-cut).

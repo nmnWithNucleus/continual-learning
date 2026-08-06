@@ -273,15 +273,16 @@ def dialect_key(record: dict[str, Any]) -> tuple[str, str, str]:
 
 
 def select_dialects(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Keep one record per ``(chunk_id, kind, discriminator)`` — the latest-ingested.
+    """Keep one record per ``(chunk_id, kind, discriminator)`` — latest ``updated_at``
+    wins (D27 moved the axis; the v0 kind/discriminator key dies with the v2 renderer
+    at WP-E2).
 
-    ``rows`` are the store's ingest-range rows: ``{"seq", "ingest_time", "record"}``.
-    ``seq`` (the sqlite rowid) is the TIEBREAK and it is not optional: ``ingest_time`` is
-    minted at second granularity, so a whole data-processing flush lands inside one second
-    and "latest wins" would otherwise be decided by dict iteration order. rowid is the
-    same stable tiebreak every other ordered read in this service uses, and it is
-    monotone in landing order for the rows that matter (a reprocess upsert keeps its
-    original rowid, but it also keeps its original ingest_time, so it does not race).
+    ``rows`` are the store's window-range rows: ``{"seq", "updated_at", "record"}``.
+    ``seq`` (the sqlite rowid) is the TIEBREAK and it is not optional: ``updated_at`` is
+    minted at second granularity, so a whole data-processing flush — or two consecutive
+    heals — lands inside one second and "latest wins" would otherwise be decided by
+    dict iteration order. rowid is the same stable tiebreak every other ordered read in
+    this service uses, and the D27 upsert keeps it stable across re-POSTs on purpose.
 
     Input order is PRESERVED for the survivors — the caller hands rows in event-time order
     and the renderer's within-bucket list order depends on it.
@@ -290,8 +291,8 @@ def select_dialects(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for row in rows:
         key = dialect_key(row["record"])
         current = winner.get(key)
-        if current is None or (row["ingest_time"], row["seq"]) > (
-            current["ingest_time"], current["seq"]
+        if current is None or (row["updated_at"], row["seq"]) > (
+            current["updated_at"], current["seq"]
         ):
             winner[key] = row
     kept = {row["seq"] for row in winner.values()}
@@ -600,7 +601,7 @@ def materialize_daylog(
     # Resolved HERE and not above the cache check, on the same terms as the profile: the
     # registry is required to BUILD, not to SERVE.
     segment_seconds, block_segments = recipe_segmentation(recipe_id)
-    rows = store.list_context_by_ingest(user_id, window["t_start"], window["t_end"])
+    rows = store.list_context_by_updated(user_id, window["t_start"], window["t_end"])
     kept = select_dialects(rows)
     daylog = build_daylog(
         [row["record"] for row in kept],

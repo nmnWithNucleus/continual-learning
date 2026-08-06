@@ -30,11 +30,11 @@ Learn-loop (D18) — the per-user profile (C12) + the training-window ledger (C1
   POST /training/windows/{window_id}/close  -> {user_id, outcome} -> consolidate. The
        watermark advances IFF outcome == "published". user_id is required because
        window_id is a PER-USER token — addressing is always (user_id, window_id).
-  GET  /training/daylog?user_id=&window_id=  -> the C10 v1 day-log for that window:
-       segment rows + rendered scene blocks over every C2 record whose INGEST_TIME fell
-       in the window. Materialized on demand and cached. 409 if the user has no C12
-       profile (no fallback zone => not schedulable, an alert rather than a silent
-       UTC render).
+  GET  /training/daylog?user_id=&window_id=  -> the C10 day-log for that window:
+       segment rows + rendered scene blocks over every C2 record whose UPDATED_AT fell
+       in the window (the D27 axis). Materialized on demand and cached. 409 if the user
+       has no C12 profile (no fallback zone => not schedulable, an alert rather than a
+       silent UTC render).
 
 Learn-loop (D18) — the recipe registry (C13) + the training reservoir (C14):
   GET  /recipes/{recipe_id}            -> the versioned training recipe, VERBATIM.

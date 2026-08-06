@@ -10,15 +10,19 @@ Metadata tables (SQLite):
     ``chunk_id`` (the C1 dedup key). Holds the minted opaque ``blob_ref``, integrity fields
     (``sha256``/``bytes``) and provenance; the bytes themselves live on disk under the raw
     store dir at the path ``blob_ref`` names. Idempotent on ``chunk_id``.
-  - ``context_records``: the ``/context`` store (C2). One row per processed record, keyed by
-    ``record_id`` (deterministic on ``(chunk_id, pipeline_version)`` upstream, so a reprocess
-    is an idempotent upsert here). Indexed on ``(user_id, t_start)`` — the wall-clock time
-    spine every reader leans on — AND on ``(user_id, ingest_time)`` (D18), because the two
-    are different axes with different jobs: event time is the CONTENT axis (recall, day-log
-    bucketing, deletion ranges) and ingest time is the COMPLETENESS axis, the only one on
-    which "everything I had" is a guarantee, so it is what the training window watermarks on.
-    Full C2 stored verbatim as JSON; ``ingest_time`` is the storage-assigned audit axis
-    (distinct from C2's ``processed_at``), preserved across reprocess upserts.
+  - ``context_records``: the ``/context`` store (C2 v1). One row per processed record, keyed
+    by ``record_id`` (deterministic on ``(chunk_id, pipeline_version)`` upstream, so a
+    reprocess is an idempotent upsert here). Indexed on ``(user_id, t_start)`` — the
+    wall-clock time spine every reader leans on — AND on ``(user_id, updated_at)`` (D18's
+    completeness index, moved to the D27 axis), because the two are different axes with
+    different jobs: event time is the CONTENT axis (recall, day-log bucketing, deletion
+    ranges) and the storage-assigned stamps are the COMPLETENESS axis, the only one on
+    which "everything I had" is a guarantee, so it is what the training window watermarks
+    on. Full C2 stored verbatim as JSON. D27 split the old ``ingest_time`` in two:
+    ``created_at`` = the FIRST landing of a record_id (preserved across every re-POST);
+    ``updated_at`` = the last time ``record_json`` actually CHANGED — ``put_context``
+    byte-compares and bumps only on real change, so a no-op redelivery never re-windows
+    a record while a byte-different heal flows into the next window.
   - ``user_profiles``: the per-user C12 profile — POLICY the system reads to decide its own
     behaviour for this user (today: ``home_tz``). Written ONLY by an explicit profile write;
     storage never seeds or infers it. Absent row == 404 == this user is not schedulable.
@@ -29,8 +33,8 @@ Metadata tables (SQLite):
     construction rather than by bookkeeping.
   - ``day_logs``: the materialized C10 day-log per ``(user_id, window_id)`` — a DERIVED
     VIEW over ``context_records``, built on demand at fetch and cached. Rebuildable from
-    C2 at any time, and invalidated automatically when a record inside its ingest range is
-    rewritten (see ``Store.put_context``).
+    C2 at any time, and invalidated automatically when a change touches its
+    ``updated_at`` range — BOTH windows of a moved record (see ``Store.put_context``).
 
 Blob bytes (dev store): a local directory tree under ``STORAGE_RAW_DIR`` (default
 ``app/raw_store`` beside this module). ``blob_ref`` is an opaque, storage-minted, hex-sharded
@@ -99,7 +103,13 @@ CREATE TABLE IF NOT EXISTS context_records (
     t_end            TEXT,
     chunk_id         TEXT,
     pipeline_version TEXT,
-    ingest_time      TEXT NOT NULL,
+    -- D27: the old `ingest_time` split in two. created_at = first landing of the
+    -- record_id, preserved across every re-POST (the old preserved-across-reprocess
+    -- semantics, under its honest name); updated_at = the last time record_json
+    -- actually CHANGED (put_context byte-compares; a no-op redelivery moves
+    -- neither). Training-window membership and the day-log dedup axis: updated_at.
+    created_at       TEXT NOT NULL,
+    updated_at       TEXT NOT NULL,
     -- D17 civil-time context, promoted out of record_json so a civil-time query
     -- ("the user's local Tuesday 09:00-17:00") is a column read, not a JSON scan.
     -- t_start stays canonical UTC and the ONLY ordering/range axis; these are
@@ -110,12 +120,12 @@ CREATE TABLE IF NOT EXISTS context_records (
     record_json      TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_context_user_tstart ON context_records (user_id, t_start);
--- D18: the COMPLETENESS axis gets its own index. Training-window membership is by
--- ingest_time, so the nightly `[last_trained_t, now-delta)` read must be a single
+-- D18's COMPLETENESS-axis index, on D27's axis. Training-window membership is by
+-- updated_at, so the nightly `[last_trained_t, now-delta)` read must be a single
 -- index-range scan. Event time (t_start) keeps its index above and stays the CONTENT
--- axis; the asymmetry (training windows are ingest-time, retraction ranges are
+-- axis; the asymmetry (training windows are updated_at, retraction ranges are
 -- event-time) is deliberate — see CHARTER § The time index.
-CREATE INDEX IF NOT EXISTS idx_context_user_ingest ON context_records (user_id, ingest_time);
+CREATE INDEX IF NOT EXISTS idx_context_user_updated ON context_records (user_id, updated_at);
 
 -- D18 / C12: the per-user profile. POLICY the SYSTEM reads to decide its own behaviour
 -- for this user (scheduling, fallbacks) — never user-facing identity or presentation,
@@ -171,9 +181,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_training_windows_open
 -- reach it: a retraction that clears /context and leaves a day-log standing has deleted
 -- nothing. Built on demand at fetch (no scheduler in this service) and keyed
 -- (user_id, window_id), the same per-user addressing every window surface uses.
---   t_start/t_end   : the WINDOW's ingest-time bounds, duplicated out of body_json so a
---                     reprocess landing inside a materialized range can invalidate this
---                     row with one indexed DELETE on the write path.
+--   t_start/t_end   : the WINDOW's updated_at-axis bounds (D27), duplicated out of
+--                     body_json so a change touching a materialized range can
+--                     invalidate this row with one indexed DELETE on the write path.
 --   daylog_format_version / recipe_id / home_tz : the three RENDER INPUTS this body was
 --                     rendered under. A fetch whose current values differ re-materializes
 --                     instead of serving an old dialect out of cache — home_tz included,
@@ -326,8 +336,35 @@ class Store:
 
     def init_schema(self) -> None:
         with self._connect() as conn:
+            # The D27 rename runs BEFORE _SCHEMA: _SCHEMA's updated_at index cannot be
+            # created while the column does not exist on a pre-E table, and an index is
+            # the one thing the additive column ladder cannot deliver late.
+            self._migrate_context_v2(conn)
             conn.executescript(_SCHEMA)
             self._migrate(conn)
+
+    @staticmethod
+    def _migrate_context_v2(conn: sqlite3.Connection) -> None:
+        """The D27 split, for DBs created before it (no-op on fresh and migrated DBs).
+
+        ``ingest_time`` is RENAMED to ``created_at``: the stored data is already
+        correct under the new name — first landing, preserved across reprocess — so a
+        rename keeps history verbatim. ``updated_at`` is added backfilled equal to it:
+        the landing is the last change the old world could know about. (The added
+        column is nullable on a migrated DB — ``ALTER ... ADD`` cannot carry NOT NULL
+        without a constant default; ``put_context`` always writes it.) The old ingest
+        index goes — no query orders by ``created_at`` — and ``_SCHEMA`` then builds
+        the ``updated_at`` one. The OD-2 cutover wipes ``/context`` anyway; this keeps
+        every pre-E DB file openable without a special case.
+        """
+        cols = {row["name"] for row in conn.execute("PRAGMA table_info(context_records)")}
+        if "ingest_time" in cols and "created_at" not in cols:
+            conn.execute(
+                "ALTER TABLE context_records RENAME COLUMN ingest_time TO created_at")
+            conn.execute("ALTER TABLE context_records ADD COLUMN updated_at TEXT")
+            conn.execute("UPDATE context_records SET updated_at = created_at")
+            conn.execute("DROP INDEX IF EXISTS idx_context_user_ingest")
+        conn.commit()
 
     @staticmethod
     def _migrate(conn: sqlite3.Connection) -> None:
@@ -513,38 +550,68 @@ class Store:
     # --- /context store (C2) ----------------------------------------------------
 
     def put_context(self, record: dict[str, Any]) -> str:
-        """Persist a C2 processed record. Idempotent upsert on record_id (a reprocess under
-        the same pipeline_version overwrites in place — no dup row). ``ingest_time`` (the
-        storage-assigned audit axis) is set on first landing and preserved across reprocess.
-        Returns record_id.
+        """Persist a C2 processed record. Idempotent upsert on record_id; blind replace.
+        Returns record_id (the reply contract is ``{ok, record_id}`` at the surface).
 
-        Also INVALIDATES any materialized day-log whose ingest range contains this
-        record's ``ingest_time``. This is not housekeeping, it is the one hole a cache over
-        an upsert has: a same-version reprocess rewrites a record's text in place while
-        deliberately NOT moving ``ingest_time``, so the record stays inside a window that
-        may already have been rendered and served. A forward-only ``pipeline_version``
-        bump does not hit this path at all (it mints a new record_id, hence a fresh
-        ``ingest_time``, hence the NEXT window) — which is exactly why the stale case is
-        easy to miss. The day-log is derived, so dropping the row is a complete fix; the
-        next fetch rebuilds it.
+        D27 (§5.1): ``created_at`` is set on the FIRST landing of a ``record_id`` and
+        preserved forever after (it inherits the old ingest_time's semantics);
+        ``updated_at`` bumps ONLY when the incoming ``record_json`` byte-compares
+        different from the stored row. A byte-identical re-POST — DP's post-POST crash
+        replay and the still-holey heal — answers with the row COMPLETELY untouched:
+        same ``updated_at``, same ``created_at``, same rowid. The compare runs over
+        storage's canonical serialization of the posted body, which DP's byte-identical
+        wire bytes reproduce exactly (T-1's sorted assembly). Mechanically the compare
+        IS the upsert: ``ON CONFLICT DO UPDATE ... WHERE record_json <> excluded`` is
+        one atomic statement, and a filtered-out update touches nothing.
+
+        BLIND REPLACE, never fuller-wins (founder ruling R3): on any byte difference
+        the row is replaced unconditionally — a heal during another server's outage can
+        legitimately REGRESS a previously-green slot; DP's ledger carries hole truth,
+        and convergence, not monotonicity, is the guarantee. The upsert style stays
+        ``ON CONFLICT DO UPDATE`` (rowid-stable), never ``INSERT OR REPLACE``: the
+        day-log dedup tiebreak is rowid, and REPLACE churns rowids.
+
+        ``updated_at`` is second-granularity (``_TS_FMT`` is the one spelling of every
+        storage-minted stamp), so consecutive heals inside one second are real ties —
+        which makes the rowid tiebreak in the day-log dedup LOAD-BEARING, not
+        decorative.
+
+        Also INVALIDATES the materialized day-log caches a change touches — BOTH
+        windows of an ``updated_at`` move (founder ruling R2): the window holding the
+        row's previous stamp, and the one receiving the new stamp. The re-materialized
+        old window then EXCLUDES the moved record — it dissolves out, exactly the D18
+        watermark philosophy (dissolve late data rather than handle it); trained bodies
+        are history, not edited, and the recipe/format stamps plus continuum's
+        stamp-refusal remain the integrity net. A byte-identical re-POST invalidates
+        nothing: an unchanged record cannot go stale.
         """
         record_id = record["record_id"]
         source = record.get("source") or {}
+        record_json = json.dumps(record, ensure_ascii=False, separators=(",", ":"))
+        now = _utc_now()
         with self._connect() as conn:
+            prior = conn.execute(
+                "SELECT updated_at FROM context_records WHERE record_id = ?",
+                (record_id,),
+            ).fetchone()
+            before = conn.total_changes
             conn.execute(
                 "INSERT INTO context_records "
                 "(record_id, user_id, t_start, t_end, chunk_id, pipeline_version, "
-                " ingest_time, device_tz, device_utc_offset_minutes, record_json) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                " created_at, updated_at, device_tz, device_utc_offset_minutes, "
+                " record_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT(record_id) DO UPDATE SET "
                 "  user_id=excluded.user_id, "
                 "  t_start=excluded.t_start, "
                 "  t_end=excluded.t_end, "
                 "  chunk_id=excluded.chunk_id, "
                 "  pipeline_version=excluded.pipeline_version, "
+                "  updated_at=excluded.updated_at, "
                 "  device_tz=excluded.device_tz, "
                 "  device_utc_offset_minutes=excluded.device_utc_offset_minutes, "
-                "  record_json=excluded.record_json",
+                "  record_json=excluded.record_json "
+                "WHERE context_records.record_json <> excluded.record_json",
                 (
                     record_id,
                     record["user_id"],
@@ -552,23 +619,27 @@ class Store:
                     record.get("t_end"),
                     source.get("chunk_id"),
                     record.get("pipeline_version"),
-                    _utc_now(),
+                    now,   # created_at — first landing only; never in the update set
+                    now,   # updated_at — applied only when the bytes differ
                     # Promoted from source{} for civil-time querying. record_json
                     # remains the verbatim C2 — these columns are a projection of
                     # it, never an edit to it.
                     source.get("device_tz"),
                     source.get("device_utc_offset_minutes"),
-                    json.dumps(record, ensure_ascii=False, separators=(",", ":")),
+                    record_json,
                 ),
             )
-            landed = conn.execute(
-                "SELECT ingest_time FROM context_records WHERE record_id = ?",
-                (record_id,),
-            ).fetchone()["ingest_time"]
-            conn.execute(
-                "DELETE FROM day_logs WHERE user_id = ? AND t_start <= ? AND t_end > ?",
-                (record["user_id"], landed, landed),
-            )
+            changed = conn.total_changes > before
+            if changed:
+                stamps = {now}
+                if prior is not None and prior["updated_at"]:
+                    stamps.add(prior["updated_at"])
+                for stamp in sorted(stamps):
+                    conn.execute(
+                        "DELETE FROM day_logs "
+                        "WHERE user_id = ? AND t_start <= ? AND t_end > ?",
+                        (record["user_id"], stamp, stamp),
+                    )
             conn.commit()
         return record_id
 
@@ -610,39 +681,41 @@ class Store:
             rows = conn.execute(sql, params).fetchall()
         return [json.loads(r["record_json"]) for r in rows]
 
-    def list_context_by_ingest(
+    def list_context_by_updated(
         self, user_id: str, from_ts: str, to_ts: str
     ) -> list[dict[str, Any]]:
-        """C2 records for one user on the INGEST axis — training-window membership.
+        """C2 records for one user on the UPDATED_AT axis — training-window membership
+        (D27 moved the axis off the old ``ingest_time``; the shape of the read did not
+        change).
 
         This is a different read from ``list_context``, not a parameterization of it, and
         the asymmetry is deliberate rather than an oversight to be tidied away: training
-        windows are INGEST-time (the completeness axis — the only one on which "everything
-        I had" is a guarantee) while retraction ranges are EVENT-time (a deletion is about
-        a lived period). Overloading one endpoint with an axis flag would make it possible
-        to ask the wrong question by typo.
+        windows are on the storage-clock axis (the completeness axis — the only one on
+        which "everything I had" is a guarantee) while retraction ranges are EVENT-time
+        (a deletion is about a lived period). Overloading one endpoint with an axis flag
+        would make it possible to ask the wrong question by typo.
 
-        Half-open ``[from_ts, to_ts)`` on ``ingest_time``, served by
-        ``idx_context_user_ingest``. Rows come back in EVENT-time order
+        Half-open ``[from_ts, to_ts)`` on ``updated_at``, served by
+        ``idx_context_user_updated``. Rows come back in EVENT-time order
         (``t_start ASC, rowid ASC``) because that is the order the renderer needs — a
-        block's caption/heard/world-text lines read chronologically — and it matches what
-        ``list_context`` hands continuum's local path today.
+        block's caption/heard/world-text lines read chronologically.
 
-        Each row is ``{"seq", "ingest_time", "record"}``. ``seq`` is the sqlite rowid and
-        rides along because "latest ingest_time wins" needs a tiebreak: ``ingest_time`` is
-        second-granularity, so a whole data-processing flush shares one value.
+        Each row is ``{"seq", "updated_at", "record"}``. ``seq`` is the sqlite rowid and
+        rides along because "latest updated_at wins" needs a tiebreak: ``updated_at`` is
+        second-granularity, so a whole data-processing flush — or two consecutive heals —
+        shares one value. The tiebreak is LOAD-BEARING (see ``put_context``).
         """
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT rowid AS seq, ingest_time, record_json FROM context_records "
-                "WHERE user_id = ? AND ingest_time >= ? AND ingest_time < ? "
+                "SELECT rowid AS seq, updated_at, record_json FROM context_records "
+                "WHERE user_id = ? AND updated_at >= ? AND updated_at < ? "
                 "ORDER BY t_start ASC, rowid ASC",
                 (user_id, from_ts, to_ts),
             ).fetchall()
         return [
             {
                 "seq": r["seq"],
-                "ingest_time": r["ingest_time"],
+                "updated_at": r["updated_at"],
                 "record": json.loads(r["record_json"]),
             }
             for r in rows
@@ -771,16 +844,16 @@ class Store:
             ).fetchone()
         return row["watermark"] if row else None
 
-    def earliest_ingest_time(self, user_id: str) -> Optional[str]:
-        """The user's first-ever ingest instant — the floor of a never-trained user's
-        first window. None if they have no records at all."""
+    def earliest_updated_at(self, user_id: str) -> Optional[str]:
+        """The user's earliest ``updated_at`` — the floor of a never-trained user's
+        first window (the window axis, D27). None if they have no records at all."""
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT MIN(ingest_time) AS first_ingest FROM context_records "
+                "SELECT MIN(updated_at) AS first_updated FROM context_records "
                 "WHERE user_id = ?",
                 (user_id,),
             ).fetchone()
-        return row["first_ingest"] if row else None
+        return row["first_updated"] if row else None
 
     def get_window(self, user_id: str, window_id: str) -> Optional[dict[str, Any]]:
         """Random-access by ``(user_id, window_id)`` — the same addressing the day-log
@@ -842,7 +915,7 @@ class Store:
 
         A new window runs ``[t_start, t_end)`` where ``t_start`` is the user's
         ``last_trained_t`` — or, for a never-trained user, their earliest
-        ``ingest_time`` — and ``t_end`` is ``now - delta`` truncated to the second (so
+        ``updated_at`` — and ``t_end`` is ``now - delta`` truncated to the second (so
         it agrees exactly with the minted id).
 
         Refuses (``WindowRefused``) when the user has no ingest history at all, and
@@ -883,10 +956,10 @@ class Store:
             t_start = watermark
             if t_start is None:
                 t_start = conn.execute(
-                    "SELECT MIN(ingest_time) AS first_ingest FROM context_records "
+                    "SELECT MIN(updated_at) AS first_updated FROM context_records "
                     "WHERE user_id = ?",
                     (user_id,),
-                ).fetchone()["first_ingest"]
+                ).fetchone()["first_updated"]
             if t_start is None:
                 raise WindowRefused(
                     {

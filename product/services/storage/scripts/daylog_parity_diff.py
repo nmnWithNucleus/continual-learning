@@ -277,7 +277,7 @@ def fixture_records() -> list[dict[str, Any]]:
     """A fixed 27-record day, in event-time order.
 
     Ordered by (t_start, insertion) because that is the order storage's
-    `list_context_by_ingest` hands the renderer, and the within-bucket list order decides
+    `list_context_by_updated` hands the renderer, and the within-bucket list order decides
     the joined block text. Precondition P2 proves the two paths really did get this order.
 
     Coverage, by construction:
@@ -379,10 +379,12 @@ def fixture_records() -> list[dict[str, Any]]:
 def render_storage(records: list[dict[str, Any]], workdir: Path) -> tuple[dict[str, Any], Store, dict[str, Any]]:
     """Render through storage's REAL path: Store -> materialize_daylog -> the C10 body.
 
-    Not `build_daylog` in isolation: the point of M9 is the artifact the service serves, so
-    the ingest-axis range read, the dialect selection and the body assembly are all inside
-    the proof. `ingest_time` is storage-assigned at write, so the script forces it on the
-    column afterwards — the same idiom tests/test_daylog.py and tests/test_windows.py use.
+    Not `build_daylog` in isolation: the point of M9 is the artifact the service serves,
+    so the window-axis range read, the dialect selection and the body assembly are all
+    inside the proof. The stamps (`created_at`/`updated_at` — D27 split the old
+    `ingest_time`) are storage-assigned at write, so the script forces them on the
+    columns afterwards — the same idiom tests/test_daylog.py and tests/test_windows.py
+    use.
     """
     store = Store(path=str(workdir / "parity.db"), raw_root=str(workdir / "raw"))
     store.put_profile(USER_ID, HOME_TZ)
@@ -391,8 +393,9 @@ def render_storage(records: list[dict[str, Any]], workdir: Path) -> tuple[dict[s
         stamp = (INGEST_BASE + timedelta(seconds=i)).strftime(_TS_FMT)
         with store._connect() as conn:
             conn.execute(
-                "UPDATE context_records SET ingest_time = ? WHERE record_id = ?",
-                (stamp, record["record_id"]),
+                "UPDATE context_records SET created_at = ?, updated_at = ? "
+                "WHERE record_id = ?",
+                (stamp, stamp, record["record_id"]),
             )
             conn.commit()
     # delta forced to 0 so t_end is exactly WINDOW_NOW and the whole body is deterministic.
@@ -744,7 +747,7 @@ def run(verbose: bool = False) -> ProofResult:
         # continuum's event-time origin. Continuum renders once per origin.
         renders = {o.name: render_continuum(records, window["window_id"], o)
                    for o in ORIGINS}
-        landed = store.list_context_by_ingest(USER_ID, window["t_start"], window["t_end"])
+        landed = store.list_context_by_updated(USER_ID, window["t_start"], window["t_end"])
 
     s_segments = storage_body["segments"]
     s_blocks = storage_body["blocks"]
@@ -756,7 +759,7 @@ def run(verbose: bool = False) -> ProofResult:
     rep.say(f"  right  {RIGHT}")
     rep.say(f"  fixture              {len(records)} C2 records, one user, one window")
     rep.say(f"  window_id            {window['window_id']}")
-    rep.say(f"  storage window       [{window['t_start']}, {window['t_end']})  on ingest_time")
+    rep.say(f"  storage window       [{window['t_start']}, {window['t_end']})  on updated_at (D27)")
     for origin in ORIGINS:
         rep.say(f"  continuum window     [{origin.start.strftime(_TS_FMT)}, "
                 f"{origin.end.strftime(_TS_FMT)})  on event t_start   "
@@ -770,9 +773,16 @@ def run(verbose: bool = False) -> ProofResult:
     rep.head("PRECONDITIONS (fixture-level) — the divergences this proof neutralises")
     rep.say("  P3 and P6 are ORIGIN-dependent and appear once per origin, below.")
 
+    # v0 EXPLICITLY: the fixtures are v0-world records — the shape BOTH renderers under
+    # this proof consume. The service's own validate_c2 became v1-only at rebuild
+    # Stage E (WP-E1, ruling R1); this proof is re-cut over v1 fixtures against the v2
+    # renderer at WP-E4, and until then P1 checks the fixtures against the schema they
+    # actually claim.
     schema_errors = [{"record_id": r["record_id"], **e}
-                     for r in records for e in schemas.validate_c2(r)]
-    rep.check("P", "P1  every fixture record is schema-valid C2",
+                     for r in records
+                     for e in schemas.errors(
+                         "https://nucleus.ai/contracts/c2_processed_record.v0.json", r)]
+    rep.check("P", "P1  every fixture record is schema-valid C2 (v0 — the renderers' input)",
               not schema_errors, _jlines(schema_errors))
 
     fixture_ids = [r["record_id"] for r in records]

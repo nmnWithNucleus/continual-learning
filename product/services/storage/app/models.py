@@ -16,7 +16,6 @@ Surface = Literal["computer", "extension", "mobile", "wearable"]
 Modality = Literal["text", "speech", "image", "video"]
 # C1/C2 capture modalities differ from C3's ("audio" vs "speech"); keep them distinct.
 CaptureModality = Literal["audio", "image", "video", "text"]
-ContentKind = Literal["transcript", "caption", "ocr", "text"]
 
 
 class _Strict(BaseModel):
@@ -74,25 +73,105 @@ class ResolveResponse(_Strict):
     adapter_path: str | None
 
 
-# --- C2 processed record (learn-loop /context) ---------------------------------
+# --- C2 v1 processed record (learn-loop /context; DP rebuild, D24) ---------------
+#
+# The branch mirrors C2 **v1** exclusively (founder ruling R1, 2026-08-06): one record
+# per chunk, content is a slots map, and the v0 concepts — content.kind/text,
+# enrichments, discriminator, source.modality, processed_at — do not exist here. The
+# frozen `c2_processed_record.v1.json` stays the authoritative gate; this mirror is the
+# second, independent check, restated from the contract (services do not import each
+# other's code, so DP's own mirror is not imported — the ids.py precedent).
+
+# The producing stage's dialect segment (`<stage>.v<S>-<backend>.v<B>[.exp-<code>]`)
+# and the `+`-joined sorted composition. Anchored and rust-regex-matched by pydantic,
+# where `$` is end-of-haystack — so the mirror also rejects the trailing-newline shape
+# `validate_c2`'s fullmatch closes at the schema gate.
+SLOT_VERSION_PATTERN = r"^[a-z0-9_]+\.v[0-9]+-[a-z0-9_]+\.v[0-9]+(\.exp-[a-z0-9_]+)?$"
+PIPELINE_VERSION_PATTERN = (
+    r"^[a-z0-9_]+\.v[0-9]+-[a-z0-9_]+\.v[0-9]+(\.exp-[a-z0-9_]+)?"
+    r"(\+[a-z0-9_]+\.v[0-9]+-[a-z0-9_]+\.v[0-9]+(\.exp-[a-z0-9_]+)?)*$"
+)
 
 
-class Segment(_Strict):
-    """One finer-grained ASR-timed span inside a C2 content block."""
-
+class AsrSplit(_Strict):
     t_start: str
     t_end: str
-    text: str
-    # Diarization label: required-nullable (always null in v0, so the key never
-    # appears/disappears when diarization lands). Present, may be null.
+    value: str
+
+
+class AsrSlot(_Strict):
+    """`value` == "" is the honest empty claim (ASR ran, VAD found no speech — L11)."""
+
+    version: str = Field(pattern=SLOT_VERSION_PATTERN)
+    language: str | None = None
+    value: str
+    splits: list[AsrSplit] | None = None
+
+
+class DiarizationSplit(_Strict):
+    t_start: str
+    t_end: str
+    speaker: str
+
+
+class DiarizationSlot(_Strict):
+    version: str = Field(pattern=SLOT_VERSION_PATTERN)
+    splits: list[DiarizationSplit]
+
+
+class TranscriptSplit(_Strict):
+    t_start: str
+    t_end: str
+    value: str
+    # Required-nullable: the key is always present, null where alignment found no turn.
     speaker: str | None
 
 
-class Content(_Strict):
-    kind: ContentKind
-    text: str
-    language: str | None = None  # optional (BCP-47)
-    segments: list[Segment] | None = None  # optional (present in v0 ASR)
+class TranscriptSlot(_Strict):
+    """The speaker-aligned transcript — C10 v2 routes THIS slot's splits into the
+    day-log's speech lines, each bucketed by its own t_start."""
+
+    version: str = Field(pattern=SLOT_VERSION_PATTERN)
+    splits: list[TranscriptSplit]
+
+
+class AcousticSlot(_Strict):
+    """`values: []` is ran-and-nothing-detected, an honest empty claim."""
+
+    version: str = Field(pattern=SLOT_VERSION_PATTERN)
+    values: list[str]
+    confidence: float | None = Field(default=None, ge=0, le=1)
+
+
+class CaptionSlot(_Strict):
+    version: str = Field(pattern=SLOT_VERSION_PATTERN)
+    value: str
+
+
+class OcrSlot(_Strict):
+    """`value` == "" is ran-and-empty (screen had no legible text), distinct from the
+    slot being absent, which is a hole (the stage failed) — L11."""
+
+    version: str = Field(pattern=SLOT_VERSION_PATTERN)
+    value: str
+
+
+class SlotsV1(_Strict):
+    """The six pinned slot types. An unknown slot name fails closed (extra="forbid" ==
+    the contract's additionalProperties:false); an EMPTY map is legal — the
+    all-optional-failure record under L7. New slot types land here additively when
+    their first producer ships, moving with the contract edit."""
+
+    asr: AsrSlot | None = None
+    diarization: DiarizationSlot | None = None
+    transcript: TranscriptSlot | None = None
+    acoustic: AcousticSlot | None = None
+    caption: CaptionSlot | None = None
+    ocr: OcrSlot | None = None
+
+
+class ContentV1(_Strict):
+    slots: SlotsV1
 
 
 class DeviceLocation(_Strict):
@@ -104,54 +183,44 @@ class DeviceLocation(_Strict):
 
 
 class Source(_Strict):
-    """Provenance back to the raw chunk in /raw."""
+    """Provenance back to the raw chunk in /raw — verbatim from C1 minus modality,
+    which is root-level in v1 (a C1 chunk is strictly single-modality, so the record's
+    modality is a fact about the record, not merely provenance)."""
 
     device_id: str = Field(min_length=1)
     stream_id: str = Field(min_length=1)
     chunk_id: str = Field(min_length=1)
     blob_ref: str = Field(min_length=1)
-    modality: CaptureModality
-    # D17 civil-time context, carried verbatim from C1 by data-processing. This
-    # model is _Strict (extra="forbid") and is checked as a MIRROR of the frozen
-    # C2 JSON Schema — an additive schema field that isn't declared here would be
-    # accepted by the schema gate and then rejected here, so the two must move
-    # together. NULL/absent = the device didn't report one.
+    # The D17 civil-time trio, carried verbatim from C1 by data-processing —
+    # device_clock included (the v0 schema omitted it; v1 closes the gap). This model
+    # is _Strict and is checked as a MIRROR of the frozen schema: an additive schema
+    # field not declared here passes the schema gate and is then rejected here, so the
+    # two must move together. NULL/absent = the device didn't report one.
     device_tz: str | None = Field(default=None, min_length=1)
     device_utc_offset_minutes: int | None = Field(default=None, ge=-1080, le=1080)
+    device_clock: Literal["synced", "unsynced"] | None = None
     device_location: DeviceLocation | None = None
 
 
-class Enrichments(_Strict):
-    """Present-but-empty in v0 (mirrors C4's empty trace arrays); shape stays stable."""
-
-    speakers: list[Any]
-    faces: list[Any]
-    places: list[Any]
-    objects: list[Any]
-
-
 class ProcessedRecord(_Strict):
-    """C2 processed record v0 — the unit persisted in ``/context``."""
+    """C2 processed record v1 — the unit persisted in ``/context``.
+
+    ``record_id`` = sha256(chunk_id NUL pipeline_version), 64 lowercase hex; the length
+    bounds close the trailing-newline trap alongside the pattern (the c10 ``window_id``
+    precedent). Storage-side timestamps (``created_at``/``updated_at``) are NOT in C2 —
+    storage assigns them (D27).
+    """
 
     contract: Literal["C2"]
-    version: Literal["0"]
-    record_id: str = Field(min_length=1)
+    version: Literal["1"]
+    record_id: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$")
     user_id: str = Field(min_length=1)
+    modality: CaptureModality
     source: Source
     t_start: str
     t_end: str
-    content: Content
-    enrichments: Enrichments
-    pipeline_version: str
-    # The within-chunk discriminator, surfaced 2026-07-27 (D18 follow-through):
-    # which of a chunk's several records this is (a video keyframe index, an ocr
-    # record beside its caption, a translation beside its original). Absent in the
-    # 1:1 case. Same _Strict rule as Source's D17 fields — an additive C2 field not
-    # declared here passes the schema gate and is then rejected by this mirror,
-    # which surfaces as a 500 on POST /context/records, so the two move together.
-    # C10's day-log materialization groups on (chunk_id, content.kind, this).
-    discriminator: str | None = Field(default=None, max_length=128)
-    processed_at: str
+    content: ContentV1
+    pipeline_version: str = Field(min_length=1, pattern=PIPELINE_VERSION_PATTERN)
 
 
 # --- C12 per-user profile (D18) -------------------------------------------------

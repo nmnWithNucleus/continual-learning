@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -20,7 +21,11 @@ from referencing import Registry, Resource
 # product/services/storage/app/schemas.py -> parents[3] == product/
 _DEFAULT_CONTRACTS_DIR = Path(__file__).resolve().parents[3] / "contracts"
 
-C2_ID = "https://nucleus.ai/contracts/c2_processed_record.v0.json"
+# C2 is v1 (the DP rebuild, D24): the branch validates v1 EXCLUSIVELY (founder ruling
+# R1, 2026-08-06). The v0 file stays in contracts/ — it is the running wire on the live
+# worktree service until the Stage F cutover, and the OD-2 wipe means no stored v0
+# record survives into this code's world.
+C2_ID = "https://nucleus.ai/contracts/c2_processed_record.v1.json"
 C3_ID = "https://nucleus.ai/contracts/c3_userprompt.v0.json"
 C4_ID = "https://nucleus.ai/contracts/c4_turn_record.v0.json"
 C6_ID = "https://nucleus.ai/contracts/c6_resolve.v0.json"
@@ -82,7 +87,37 @@ def errors(schema_id: str, payload: Any) -> list[dict[str, str]]:
 
 
 def validate_c2(payload: Any) -> list[dict[str, str]]:
-    return errors(C2_ID, payload)
+    """C2 v1, plus the fullmatch the contract itself demands of enforcing
+    implementations.
+
+    ``pipeline_version`` and each slot's ``version`` are variable-width, so the
+    fixed-length trap closure used on ``record_id`` (and on ``window_id``) is
+    unavailable — and in the Python validator these schemas are enforced by, ``$``
+    also matches just before a trailing newline, so the schema's ``pattern`` alone
+    would admit ``"asr.v1-mock.v1\\n"``. The patterns are read from the loaded schema
+    (the source of truth), never restated here; the fullmatch runs only on a payload
+    the schema already accepted, so the shape reads below cannot miss.
+    """
+    out = errors(C2_ID, payload)
+    if out:
+        return out
+    _registry, schemas_by_id = _load()
+    schema = schemas_by_id[C2_ID]
+    pv_pattern = schema["properties"]["pipeline_version"]["pattern"]
+    if not re.fullmatch(pv_pattern, payload["pipeline_version"]):
+        out.append({
+            "path": "pipeline_version",
+            "message": "must fullmatch the contract pattern (Python's `$` admits a "
+                       "trailing newline; the contract requires fullmatch)",
+        })
+    slot_pattern = schema["$defs"]["slot_version"]["pattern"]
+    for name, slot in payload["content"]["slots"].items():
+        if not re.fullmatch(slot_pattern, slot["version"]):
+            out.append({
+                "path": f"content/slots/{name}/version",
+                "message": "must fullmatch the contract slot_version pattern",
+            })
+    return out
 
 
 def validate_c4(payload: Any) -> list[dict[str, str]]:
