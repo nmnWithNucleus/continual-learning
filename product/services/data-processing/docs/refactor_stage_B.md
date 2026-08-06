@@ -1,6 +1,6 @@
 # DP Rebuild — Stage B worklog (Machinery)
 
-**Stage:** B — Machinery · **Status:** IN_PROGRESS · *Dated:* 2026-08-06
+**Stage:** B — Machinery · **Status:** DONE 2026-08-06 · *Dated:* 2026-08-06
 **Branch:** `dp-rebuild-v1` · **Plan:** [refactor_dp_service.md](refactor_dp_service.md) §8 Stage B
 **Scope:** WP-B1 (servers/common framework · `app/supervisor.py` · `app/model_client.py`),
 WP-B2…B5 (whisper / pyannote / ast / ocr behind the server seam). The running v0 service
@@ -240,6 +240,72 @@ $ cd servers/ocr && CUDA_VISIBLE_DEVICES= ./.venv/bin/python -m pytest tests/ -q
 8 passed, 1 warning in 2.61s
 ```
 
+## Integration drill (the §8 exit run, on node-7 under the supervisor)
+
+`servers/drill_stage_b.py` (committed with this worklog) drives the REAL manifest —
+real ports 8121–8152, real GPUs 2–7 — through four phases: supervisor spawn → identity
+verification via `app/model_client.py` → golden smoke through the ModelClient →
+kill-one-replica per server. Run 2026-08-06:
+
+```
+$ ./.venv/bin/python servers/drill_stage_b.py    # exit code 0
+"identity":     ok — all 8 replicas subset-match their manifest expected_identity
+"golden_smoke": ok — whisper 0.59s · pyannote 0.70s · ast 0.38s · ocr 0.45s,
+                all compare "exact", problem: null
+"kill_one_replica": ok for all four —
+  whisper:  killed 3756333, retry during outage 0.59s ok, respawned, restarts=1
+  pyannote: killed 3756337, retry during outage 1.09s ok, respawned, restarts=1
+  ast:      killed 3756341, retry during outage 0.40s ok, respawned, restarts=1
+  ocr:      killed 3756345, retry during outage 0.48s ok, respawned, restarts=1
+"ok": true
+```
+
+Post-drill teardown verified: zero fleet ports listening, all 8 GPUs back to 0 MiB,
+v0 `/health` still 200. Replica logs under `servers/logs/` (gitignored).
+
+## Golden-output provenance (consolidated; per-server detail in each `tests/fixtures/PROVENANCE.md`)
+
+| Server | Input (sha256 prefix) | Params | Model + weights | Frameworks | Determinism (all fresh-process, full wire path) |
+|---|---|---|---|---|---|
+| whisper | `speech_two_speakers.webm` (`a2e29465`) | task=transcribe, beam 1, lang en, vad on | faster-whisper-large-v3 @ `edaa852e`, cuda/fp16 | faster-whisper 1.2.1 · ctranslate2 4.8.1 · av 18.0.0 | **bit-stable** — 4 runs, GPUs 4+5, exact compare |
+| pyannote | same clip | span_seconds=6.496 | speaker-diarization-3.1 @ `84fd2591` (segm `e66f3d3b`, embed `837717dd`), cuda | pyannote.audio 3.3.2 · torch 2.8.0+cu128 · ffmpeg 7.1 | **bit-stable** — 4 runs, GPUs 2+3, exact compare |
+| ast | same clip | top_k=20 | ast-finetuned-audioset @ `f826b80d`, cuda | transformers 5.14.1 · torch 2.8.0+cu128 · ffmpeg 7.1 | **bit-stable** — 4 runs, GPUs 6+7, exact compare |
+| ocr | `screen_planning_notes.jpg` (`18803e4b`) | none | PP-OCRv4 det `d2a7720d…`/rec `48fc40f2…`, cpu, 4 threads | onnxruntime 1.27.0 · rapidocr 1.4.4 | **bit-stable** — 4 runs, CPU, exact compare |
+
+Inputs are committed synthesized binaries (piper-TTS speech, pillow screenshot —
+`INPUT_PROVENANCE.md` beside each); no captured user data is committed. Tolerance
+policy everywhere: exact, zero tolerance — future drift is an identity change to
+re-ratify, never a tolerance to widen. This is the baseline Stage C's T-1 matrix
+builds on.
+
+## Old-suites proof (nothing running changed)
+
+`git diff --name-status main...HEAD -- app/` shows exactly two ADDED files
+(`model_client.py`, `supervisor.py`), zero modifications. All three service suites
+re-run 2026-08-06 after the last code commit, counts identical to the Stage A baseline:
+
+```
+$ cd product/services/storage         && ./.venv/bin/python -m pytest -q
+310 passed, 1 warning in 14.77s
+$ cd product/services/data-processing && ASR_BACKEND=mock ./.venv/bin/python -m pytest -q
+788 passed, 21 skipped, 1 warning in 67.97s (0:01:07)
+$ cd product/services/continuum       && ./.venv/bin/python -m pytest -q
+262 passed, 7 skipped in 11.69s
+```
+
+Live v0 checked before and after every fleet operation: `GET :8085/health` → 200.
+
+## Exit criteria (§8 Stage B)
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| All four servers pass health + golden-output smoke on node-7 | done | per-server suites green in their own venvs (whisper 6 · pyannote 5 · ast 5 · ocr 8) AND the drill's golden_smoke phase, exact-compare, under the supervisor |
+| …under the supervisor | done | drill phases spawn_ready + identity + golden_smoke, exit 0 |
+| Kill-one-replica drill: supervisor restarts it, client retries succeed | done | drill kill_one_replica phase: 4/4 servers, retry-during-outage ok, respawn ok |
+| Old service suites green and untouched | done | 310 · 788+21s · 262+7s — identical to the Stage A baseline; suites' files untouched |
+| Zero modifications to existing app/ files | done | `git diff --name-status main...HEAD -- app/` → 2 added files only |
+| One commit per WP, worklog in same commit | done | `3b70b68` B1 · `0e296f0` B2 · `9cd9394` B3 · `77b6bad` B4 · `d7315b4` B5 · final commit (this edit + drill script) |
+
 ## Noticed for later stages
 
 - **Stage C** — `app.state.vlm_pool` is read but never set (`ingest_core.py:150`); the
@@ -257,3 +323,18 @@ $ cd servers/ocr && CUDA_VISIBLE_DEVICES= ./.venv/bin/python -m pytest tests/ -q
   `identity.weights.det_sha256/rec_sha256` and the `/infer` envelope. Its
   `_normalize_bbox` pass-through heuristic stays valid (server returns pixel coords).
   The old 48 MB body cap has no framework equivalent — decide there if wanted.
+- **Stage C (pyannote identity)** — only `pipeline_revision` is manifest-pinned; the
+  segmentation/embedding sub-models resolve at `main` at load and land in pyannote's
+  OWN cache (`~/.cache/torch/pyannote`, env `PYANNOTE_CACHE`), not the HF hub cache.
+  Identity reports the measured commits, so an upstream bump surfaces as an identity
+  mismatch at connect — consider pinning all three in the manifest once T-1 exists.
+- **Stage C (ast)** — transformers 5.x computes AST features via its numpy fbank path;
+  adding torchaudio to that venv later could shift features and the golden — re-measure
+  if it ever lands.
+- **Stage F (deploy)** — `platform/deploy/run_learn.sh` has no restart-on-crash and no
+  OCR row; cutover must wire the supervisor into the deploy story (main.py owns it from
+  Stage C, but the deploy table + env passthrough happen at F). The fleet's HF_TOKEN
+  passthrough is ambient today; deploy should own it explicitly.
+- **Stage G** — when `sidecars/ocr` is demolished, the stray live sidecar on :8097
+  (running from a deleted worktree) needs an owner to stop it; it is not this repo's
+  process to kill.
