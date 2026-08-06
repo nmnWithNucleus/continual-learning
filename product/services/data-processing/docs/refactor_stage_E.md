@@ -208,3 +208,44 @@ WP-E1 renderer — `40 failed, 18 passed` (v1 fixtures render nothing through th
 kind loop; the 18 that pass are grid/zone/HTTP-failure tests with no slot content at
 stake) — then `58 passed` restored. Full suite at this commit: `334 passed, 4 failed`
 (the four = the old parity proof, disclosed above).
+
+## WP-E4 — the D20 parity re-baseline (run out of order, before WP-E3, to close the
+## one-commit red window WP-E2 disclosed)
+
+| File | Action | Why |
+|---|---|---|
+| `scripts/daylog_parity_diff.py` | re-cut | the differential now feeds each side ITS OWN SHAPE of the SAME content: continuum's untouched v0 reference renderer over the 27 v0 originals, storage's v2 slot-walk over `fixture_records_v1()` — 24 hand-built v1 equivalents (each caption/ocr pair on one chunk folds into ONE record per L2; transcripts → `asr` slots; the diarized one → a `transcript` slot with splits + its unrendered asr witness; chunk-a3 carries the full video dialect with ocr *absent* — an honest hole that must render as absence). N4 joins the neutralised divergences; P1 validates both shapes against their own schemas (v1 through the service's fullmatch gate); P2 proves the 1:1 (chunk_id, t_start) pairing *and* the landed order; P4 uses the D28 dedup key; P5 gates against `c10_daylog.v2.json` |
+| `scripts/daylog_parity_diff.out.txt` | regenerated | the committed baseline record D20's card expects: `PASS — all 31 binding checks hold (8 preconditions, 15 tier A byte-identical, 8 tier B proven-equivalent), over 2 window origins: grid-aligned, misaligned` |
+| `tests/test_daylog_parity.py` | edited (header) | the re-baseline note; the check-id set and counts are UNCHANGED, so the tripwire's pins (`P1–P6`/`A1–A8`/`B1–B4`, 31 checks, both origins, one genuinely off-grid) carry over intact |
+| `product/DECISIONS.md` D20 · storage `CHARTER.md` M9 | stamped | status-line-only re-baseline records (the Stage A back-edit precedent; decision text untouched), D28 noted on both — the joint-row follow-through |
+
+What tier A now proves, said precisely: re-cutting the record shape (v0 per-kind pairs
+→ v1 slot maps) *and* the renderer around it changed NOTHING the trainer can see —
+block text, ordering, ids, anchors, quality and segment payloads byte-identical to the
+untouched reference, over a grid-aligned *and* a misaligned window origin. That is
+D20's "the block text is contract" sentence made executable across the rebuild, and it
+is why the c10 v2 contract could say "the v2 re-baseline is the differential proof
+re-run, not a label change".
+
+Hand-posted exit-criterion demo (a REAL socketed instance on a scratch port/DB, three
+hand-written v1 records over `POST /context/records`, `delta=0`, then the fetch):
+
+```
+POST /context/records ×3 → {"ok":true,"record_id":"0c3b1bab…"} / "d640d270…" / "b4a466a6…"
+POST /training/windows → w20260806T212514Z
+GET  /training/daylog  → contract C10 version 2 · daylog_format_version 2 ·
+                         recipe_id consolidation-v2.0 · home_tz America/New_York
+block b0000:
+  On 2026-08-06, around 14:00–14:00 local time:
+  Scene: a whiteboard covered in storage diagrams
+  Heard: speaker-0: the byte compare is the upsert | and convergence is the guarantee | ship the worklog with the commit
+  World text (OCR): STAGE E — STORAGE V2
+```
+
+— the aligned speaker named, the null-speaker split and the asr-fallback record both
+unlabeled, caption and ocr routed, the anchor in the profile zone (18:00Z → 14:00
+New York). Scratch instance torn down after; live fleet 200/200/200.
+
+Evidence: proof re-run → exit 0, all 31 checks green (report committed);
+`tests/test_daylog_parity.py` → `8 passed`; full storage suite → `338 passed` (the
+WP-E2 red window closed).

@@ -429,6 +429,7 @@ pipeline.
 
 ### M9 — the day-log parity bar
 > `built` 2026-07-27 · [D18](../../DECISIONS.md) · bar narrowed by [D20](../../DECISIONS.md), then widened by F4
+> · re-baselined 2026-08-06 against the v2 slot-walk renderer over C2 v1 records ([D28](../../DECISIONS.md), rebuild Stage E WP-E4)
 
 **In one line.** Storage mints windows idempotently over the `ingest_time` watermark, materializes
 day-logs, and serves fetch-by-`(user, window_id)` plus enumeration and close.

@@ -6,6 +6,13 @@ agree. This module runs that same proof in-process so **a future change to eithe
 trips the bar in the suite**, not only when someone remembers to run the script by hand. The
 script is the readable artifact (M9 requires its output be committed); this is the tripwire.
 
+RE-BASELINED 2026-08-06 (D28, rebuild Stage E WP-E4): storage's side is now the C10 v2
+SLOT-WALK over hand-built C2 v1 records, while continuum's untouched reference renderer
+keeps consuming the v0 originals — the same content in each side's own shape, paired
+1:1 by construction and PROVEN paired at P2 (the script's N4). Tier A byte-identity
+across that renderer swap is D20's "the block text is contract" made executable for the
+rebuild. The check-id set and counts below are unchanged by the re-baseline.
+
 The bar asserted here is CHARTER M9's, NARROWED 2026-07-27 (D20), and the three tiers are
 kept apart on purpose:
 

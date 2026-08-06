@@ -105,6 +105,31 @@ two renderers that both produced NOTHING would score a perfectly green report. P
 fixture's rendered shape so that cannot happen. It is not paranoia: it is the only check in
 the file that fails when both sides break the same way. It runs ONCE PER ORIGIN, because an
 origin that rendered nothing would otherwise buy a free green half of the report.
+
+--------------------------------------------------------------------------------------
+RE-BASELINED 2026-08-06 (D28, rebuild Stage E WP-E4): THE v2 RENDERER OVER v1 RECORDS
+--------------------------------------------------------------------------------------
+Storage's renderer is now the C10 v2 SLOT-WALK over C2 v1 records (one record per chunk,
+content is a slots map); continuum's reference renderer still consumes v0 per-kind
+records and is deliberately untouched (nothing continuum runs changes before the Stage F
+cutover). The differential therefore feeds each side ITS OWN SHAPE of the SAME CONTENT:
+
+  left   continuum/LocalDayLogClient   over `fixture_records()`      — the v0 originals
+  right  storage/materialize_daylog    over `fixture_records_v1()`   — hand-built v1
+         equivalents, derived record-by-record (each v0 caption/ocr PAIR on one chunk
+         folds into ONE v1 record carrying both slots, per Slot Law L2; transcripts
+         become asr slots, diarized transcripts become transcript slots with splits)
+
+What tier A then proves is exactly D20's sentence made executable across the rebuild:
+the block TEXT is contract — re-cutting the record shape and the renderer around it
+changed nothing the trainer can see, byte for byte, over both window origins. A fourth
+neutralised divergence joins N1–N3:
+
+  (N4) THE RECORD SHAPE — v0 pairs vs v1 slot-merges, by construction. Neutralised by
+       deriving the v1 fixtures from the v0 fixtures 1:1 by (chunk_id, t_start) and
+       PROVING the pairing at P2 rather than assuming it. One deliberate extra: v1
+       chunk-a3 carries the full video dialect with its ocr slot ABSENT — an honest
+       HOLE, which must render as absence (L11) exactly like v0's never-attempted ocr.
 """
 from __future__ import annotations
 
@@ -370,6 +395,144 @@ def fixture_records() -> list[dict[str, Any]]:
                         f"line {i:02d} of the long evening stretch",
                         pipeline_version="asr-mock-v0", modality="audio",
                         device_tz=TOKYO, device_offset_minutes=540))
+    return recs
+
+
+# --- the v1 equivalents (the v2 renderer's input; D28 re-baseline) -------------------
+
+_AUDIO_PV = "asr.v1-mock.v1"
+_ALIGNED_PV = "asr.v1-mock.v1+diarize.v1-mock.v1+speaker_align.v1-mock.v1"
+_VIDEO_PV = "clipcap.v1-mock.v1+clipprep.v1-mock.v1+screentext.v1-mock.v1"
+
+
+def _c2v1(chunk_id: str, t_start: str, t_end: str, slots: dict[str, Any], *,
+          pipeline_version: str, modality: str,
+          device_tz: Optional[str] = None,
+          device_offset_minutes: Optional[int] = None) -> dict[str, Any]:
+    """A hand-built C2 v1 record — L3 identity (sha256, NUL-joined, 64 hex), root
+    modality, source without modality, content = the slots map. Schema-validity is
+    PROVEN at P1, not assumed."""
+    source: dict[str, Any] = {
+        "device_id": "dev-bodycam-1" if modality == "video" else "dev-mic-1",
+        "stream_id": "stream-01",
+        "chunk_id": chunk_id,
+        "blob_ref": f"ab/cd/{chunk_id}",
+    }
+    if device_tz is not None:
+        source["device_tz"] = device_tz
+        source["device_utc_offset_minutes"] = device_offset_minutes
+    return {
+        "contract": "C2",
+        "version": "1",
+        "record_id": hashlib.sha256(
+            f"{chunk_id}\x00{pipeline_version}".encode("utf-8")).hexdigest(),
+        "user_id": USER_ID,
+        "modality": modality,
+        "source": source,
+        "t_start": t_start,
+        "t_end": t_end,
+        "pipeline_version": pipeline_version,
+        "content": {"slots": slots},
+    }
+
+
+def _cap_slot(text: str) -> dict[str, Any]:
+    return {"version": "clipcap.v1-mock.v1", "value": text}
+
+
+def _ocr_slot(text: str) -> dict[str, Any]:
+    return {"version": "screentext.v1-mock.v1", "value": text}
+
+
+def _asr_slot(text: str) -> dict[str, Any]:
+    return {"version": "asr.v1-mock.v1", "language": "en", "value": text}
+
+
+def fixture_records_v1() -> list[dict[str, Any]]:
+    """`fixture_records()`, re-cut as C2 v1 — the SAME content in the v1 shape, derived
+    record-by-record (N4) and proven paired at P2:
+
+      * each caption/ocr PAIR on one chunk (a1, b1, c1) folds into ONE v1 record
+        carrying both slots — Slot Law L2, one record per chunk;
+      * plain transcripts become `asr` slots (no splits: one line at the record's own
+        t_start, exactly the v0 no-segments path);
+      * the diarized transcript (a4) becomes a `transcript` slot with splits — same
+        sub-span times, values and speakers (incl. the null one) — plus its parent
+        `asr` witness, which the renderer must NOT render on top (one witness, one
+        voice);
+      * chunk-a3 carries the FULL video dialect with its ocr slot absent — an honest
+        hole that must render as absence, exactly like v0's never-attempted ocr.
+
+    24 records (27 v0 minus the three folded ocr rows), event-time order preserved.
+    """
+    recs: list[dict[str, Any]] = []
+
+    # --- block A: Europe/Paris ------------------------------------------------------
+    recs.append(_c2v1("chunk-a1", _ts(9, 0, 3), _ts(9, 0, 3),
+                      {"caption": _cap_slot("a sunlit kitchen counter with a cafetière"),
+                       "ocr": _ocr_slot("CAFÉ · 250 g")},
+                      pipeline_version=_VIDEO_PV, modality="video",
+                      device_tz=PARIS, device_offset_minutes=120))
+    recs.append(_c2v1("chunk-a2", _ts(9, 0, 5), _ts(9, 0, 9),
+                      {"asr": _asr_slot("morning — the kettle is on")},
+                      pipeline_version=_AUDIO_PV, modality="audio",
+                      device_tz=PARIS, device_offset_minutes=120))
+    recs.append(_c2v1("chunk-a3", _ts(9, 0, 12), _ts(9, 0, 12),
+                      {"caption": _cap_slot("steam rising from a kettle")},   # ocr: HOLE
+                      pipeline_version=_VIDEO_PV, modality="video",
+                      device_tz=PARIS, device_offset_minutes=120))
+    recs.append(_c2v1("chunk-a4", _ts(9, 0, 20), _ts(9, 0, 55),
+                      {"asr": _asr_slot(
+                          "did you sleep alright not really the street was loud"),
+                       "transcript": {
+                           "version": "speaker_align.v1-mock.v1",
+                           "splits": [
+                               {"t_start": _ts(9, 0, 22), "t_end": _ts(9, 0, 27),
+                                "value": "did you sleep alright", "speaker": "amélie"},
+                               {"t_start": _ts(9, 0, 51), "t_end": _ts(9, 0, 55),
+                                "value": "not really, the street was loud",
+                                "speaker": None},
+                           ]}},
+                      pipeline_version=_ALIGNED_PV, modality="audio",
+                      device_tz=PARIS, device_offset_minutes=120))
+
+    # --- block B: Asia/Tokyo --------------------------------------------------------
+    recs.append(_c2v1("chunk-b1", _ts(9, 12, 4), _ts(9, 12, 4),
+                      {"caption": _cap_slot("a crowded train platform under sodium lights"),
+                       "ocr": _ocr_slot("次は品川 · SHINAGAWA")},
+                      pipeline_version=_VIDEO_PV, modality="video",
+                      device_tz=TOKYO, device_offset_minutes=540))
+    recs.append(_c2v1("chunk-b2", _ts(9, 12, 15), _ts(9, 12, 19),
+                      {"asr": _asr_slot("the next one is the local, not the rapid")},
+                      pipeline_version=_AUDIO_PV, modality="audio",
+                      device_tz=TOKYO, device_offset_minutes=540))
+    recs.append(_c2v1("chunk-b3", _ts(9, 12, 55), _ts(9, 12, 59),
+                      {"asr": _asr_slot("we should have taken the earlier one")},
+                      pipeline_version=_AUDIO_PV, modality="audio",
+                      device_tz=TOKYO, device_offset_minutes=540))
+
+    # --- block C: no device_tz -> home_tz fallback ----------------------------------
+    recs.append(_c2v1("chunk-c1", _ts(9, 35, 2), _ts(9, 35, 2),
+                      {"caption": _cap_slot("a desk lamp and an open notebook"),
+                       "ocr": _ocr_slot("TODO: call the bank")},
+                      pipeline_version=_VIDEO_PV, modality="video"))
+    recs.append(_c2v1("chunk-c2", _ts(9, 35, 14), _ts(9, 35, 18),
+                      {"asr": _asr_slot("   remember to call the bank at four   ")},
+                      pipeline_version=_AUDIO_PV, modality="audio"))
+    recs.append(_c2v1("chunk-c3", _ts(9, 36, 4), _ts(9, 36, 8),
+                      {"asr": _asr_slot("the notebook says four o'clock")},
+                      pipeline_version=_AUDIO_PV, modality="audio"))
+
+    # --- block D: the 14-segment stretch --------------------------------------------
+    stretch_start = datetime(2026, 7, 21, 23, 40, 3, tzinfo=UTC)
+    for i in range(14):
+        begin = stretch_start + timedelta(seconds=10 * i)
+        recs.append(_c2v1(f"chunk-d{i:02d}",
+                          begin.strftime(_TS_FMT),
+                          (begin + timedelta(seconds=4)).strftime(_TS_FMT),
+                          {"asr": _asr_slot(f"line {i:02d} of the long evening stretch")},
+                          pipeline_version=_AUDIO_PV, modality="audio",
+                          device_tz=TOKYO, device_offset_minutes=540))
     return recs
 
 
@@ -739,12 +902,14 @@ def _origin_checks(rep: Report, origin: Origin, continuum_out: dict[str, Any],
 
 def run(verbose: bool = False) -> ProofResult:
     rep = Report()
-    records = fixture_records()
+    records = fixture_records()             # v0 — the reference renderer's input
+    records_v1 = fixture_records_v1()       # v1 — the v2 slot-walk renderer's input
 
     with tempfile.TemporaryDirectory(prefix="daylog-parity-") as tmp:
-        storage_body, store, window = render_storage(records, Path(tmp))
-        # Storage renders ONCE: its window is on the INGEST axis and knows nothing about
-        # continuum's event-time origin. Continuum renders once per origin.
+        storage_body, store, window = render_storage(records_v1, Path(tmp))
+        # Storage renders ONCE: its window is on the updated_at axis and knows nothing
+        # about continuum's event-time origin. Continuum renders once per origin, over
+        # the v0 originals — its reference renderer is untouched until cutover.
         renders = {o.name: render_continuum(records, window["window_id"], o)
                    for o in ORIGINS}
         landed = store.list_context_by_updated(USER_ID, window["t_start"], window["t_end"])
@@ -753,11 +918,11 @@ def run(verbose: bool = False) -> ProofResult:
     s_blocks = storage_body["blocks"]
 
     rep.say("day-log differential proof — storage CHARTER M9 (bar NARROWED 2026-07-27, D20;")
-    rep.say("extended to a MISALIGNED window origin 2026-07-27, F4)")
+    rep.say("extended to a MISALIGNED window origin 2026-07-27, F4; RE-BASELINED 2026-08-06")
+    rep.say("against the v2 slot-walk renderer over hand-built C2 v1 records — D28, Stage E)")
     rep.say("=" * 86)
-    rep.say(f"  left   {LEFT}")
-    rep.say(f"  right  {RIGHT}")
-    rep.say(f"  fixture              {len(records)} C2 records, one user, one window")
+    rep.say(f"  left   {LEFT}  over {len(records)} v0 records")
+    rep.say(f"  right  {RIGHT}  over {len(records_v1)} v1 equivalents (N4)")
     rep.say(f"  window_id            {window['window_id']}")
     rep.say(f"  storage window       [{window['t_start']}, {window['t_end']})  on updated_at (D27)")
     for origin in ORIGINS:
@@ -773,32 +938,43 @@ def run(verbose: bool = False) -> ProofResult:
     rep.head("PRECONDITIONS (fixture-level) — the divergences this proof neutralises")
     rep.say("  P3 and P6 are ORIGIN-dependent and appear once per origin, below.")
 
-    # v0 EXPLICITLY: the fixtures are v0-world records — the shape BOTH renderers under
-    # this proof consume. The service's own validate_c2 became v1-only at rebuild
-    # Stage E (WP-E1, ruling R1); this proof is re-cut over v1 fixtures against the v2
-    # renderer at WP-E4, and until then P1 checks the fixtures against the schema they
-    # actually claim.
-    schema_errors = [{"record_id": r["record_id"], **e}
-                     for r in records
-                     for e in schemas.errors(
-                         "https://nucleus.ai/contracts/c2_processed_record.v0.json", r)]
-    rep.check("P", "P1  every fixture record is schema-valid C2 (v0 — the renderers' input)",
-              not schema_errors, _jlines(schema_errors))
+    # BOTH shapes, each against its own schema: the v0 originals against the v0 file
+    # (the reference renderer's input), the v1 equivalents against the service's own
+    # v1-only gate (validate_c2, fullmatch closure included).
+    v0_errors = [{"record_id": r["record_id"], **e}
+                 for r in records
+                 for e in schemas.errors(
+                     "https://nucleus.ai/contracts/c2_processed_record.v0.json", r)]
+    v1_errors = [{"record_id": r["record_id"], **e}
+                 for r in records_v1 for e in schemas.validate_c2(r)]
+    rep.check("P", "P1  every fixture record is schema-valid C2 — v0 side against the v0 "
+              "file, v1 side against the service's v1 gate",
+              not v0_errors and not v1_errors,
+              _jlines({"v0": v0_errors, "v1": v1_errors}))
 
-    fixture_ids = [r["record_id"] for r in records]
+    v0_chunks: list[tuple[str, str]] = []
+    for r in records:
+        key = (r["source"]["chunk_id"], r["t_start"])
+        if key not in v0_chunks:
+            v0_chunks.append(key)
+    v1_chunks = [(r["source"]["chunk_id"], r["t_start"]) for r in records_v1]
+    fixture_ids = [r["record_id"] for r in records_v1]
     landed_ids = [row["record"]["record_id"] for row in landed]
-    rep.check("P", "P2  N1 neutralised: both paths saw the SAME records in the SAME order "
-              f"({len(fixture_ids)} records)",
-              fixture_ids == landed_ids, _udiff(fixture_ids, landed_ids))
+    rep.check("P", "P2  N1 + N4 neutralised: storage saw exactly the v1 fixtures in order "
+              f"({len(fixture_ids)} records), and the v1 set pairs 1:1 by "
+              f"(chunk_id, t_start) with the v0 set's {len(v0_chunks)} content chunks",
+              fixture_ids == landed_ids and v0_chunks == v1_chunks,
+              _udiff([repr(x) for x in v0_chunks], [repr(x) for x in v1_chunks])
+              + _udiff(fixture_ids, landed_ids))
 
-    keys = [dialect_key(r) for r in records]
+    keys = [dialect_key(r) for r in records_v1]
     dupes = sorted({repr(k) for k in keys if keys.count(k) > 1})
-    rep.check("P", "P4  N3 neutralised: every fixture record is its own dialect "
-              f"({len(set(keys))} distinct keys)",
+    rep.check("P", "P4  N3 neutralised: every v1 fixture is its own chunk under the D28 "
+              f"dedup key ({len(set(keys))} distinct keys)",
               not dupes, dupes)
 
     c10_errors = schemas.validate_c10(storage_body)
-    rep.check("P", "P5  storage's body validates against contracts/c10_daylog.v1.json",
+    rep.check("P", "P5  storage's body validates against contracts/c10_daylog.v2.json",
               not c10_errors, _jlines(c10_errors))
 
     # --- the bar, once per origin -----------------------------------------------------

@@ -311,7 +311,9 @@ one sanctioned exception to *one fact, one home*.
 ### D20 — the cutover exit bar
 
 > `ratified` 2026-07-27 · **BUILT** 2026-07-27 · parity bar re-baseline ruled by D28
-> (rebuild Stage E)
+> (rebuild Stage E) · re-baselined 2026-08-06 (Stage E WP-E4: the v2 slot-walk over
+> hand-built C2 v1 records vs the untouched v0 reference — 31 checks, both origins,
+> tier A byte-identical)
 > · **full reasoning:** [handoff/engineering.md](handoff/engineering.md#2026-07-27-overnight--the-d18-storage-expansion-is-built-the-seam-is-closed) §Worklog 2026-07-27
 > · recorded in [ARCHITECTURE.md](ARCHITECTURE.md) §Ownership splits *Day-log: representation vs.
 > content* + §Contracts *C10 card*; [storage CHARTER](services/storage/CHARTER.md) M9;
