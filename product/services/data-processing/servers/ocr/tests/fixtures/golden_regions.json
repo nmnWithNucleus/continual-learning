@@ -1,0 +1,75 @@
+{
+  "regions": [
+    {
+      "bbox": [
+        26.0,
+        15.0,
+        377.0,
+        45.0
+      ],
+      "conf": 0.9917,
+      "text": "QuarterlyPlanningNotes"
+    },
+    {
+      "bbox": [
+        38.0,
+        100.0,
+        511.0,
+        134.0
+      ],
+      "conf": 0.9869,
+      "text": "Action items for the data pipeline"
+    },
+    {
+      "bbox": [
+        39.0,
+        169.0,
+        481.0,
+        198.0
+      ],
+      "conf": 0.9859,
+      "text": "Review theingestbacklogbeforeFriday"
+    },
+    {
+      "bbox": [
+        39.0,
+        219.0,
+        413.0,
+        248.0
+      ],
+      "conf": 0.9898,
+      "text": "Ship the model server framework"
+    },
+    {
+      "bbox": [
+        58.0,
+        321.0,
+        391.0,
+        350.0
+      ],
+      "conf": 0.9405,
+      "text": "$python -m pytest tests/"
+    },
+    {
+      "bbox": [
+        58.0,
+        367.0,
+        301.0,
+        393.0
+      ],
+      "conf": 0.9923,
+      "text": "42passedin3.14s"
+    },
+    {
+      "bbox": [
+        38.0,
+        720.0,
+        274.0,
+        748.0
+      ],
+      "conf": 0.9947,
+      "text": "Saved2minutesago"
+    }
+  ]
+}
+

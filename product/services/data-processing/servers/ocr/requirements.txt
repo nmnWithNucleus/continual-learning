@@ -1,0 +1,46 @@
+# =============================================================================
+# servers/ocr -- PP-OCR model server (Stage B, WP-B5) dependencies.
+#
+# Installs into THIS server's own venv (servers/ocr/.venv) and never into the
+# shared DP venv: the PP-OCR stack (onnxruntime, opencv, shapely, pyclipper)
+# stays quarantined exactly as it was in the retiring sidecar (D-06).
+#
+# Engine pins are copied VERBATIM from the validated sidecar stack
+# (sidecars/ocr/requirements.txt, CPU, Python 3.12). onnxruntime is pinned
+# because its version is reported in /health identity and ORT is not
+# guaranteed bit-exact across releases/providers.
+#
+# Set up the venv:
+#   cd servers/ocr
+#   python3 -m venv .venv
+#   ./.venv/bin/pip install -r requirements.txt
+# =============================================================================
+
+# PP-OCR det+rec ONNX on CPU. Bundles the ch_PP-OCRv4 det/rec ONNX models the
+# server discovers at load (a model swap is a code change now, per L4 -- no
+# OCR_DET_MODEL/OCR_REC_MODEL env overrides in this deployment).
+rapidocr-onnxruntime==1.4.4
+
+# CPU ONNX Runtime. Version reported in identity.frameworks.
+onnxruntime==1.27.0
+
+# JPEG decode for /infer input_b64.
+pillow==12.3.0
+
+# Pulled in transitively by rapidocr-onnxruntime, pinned for reproducibility:
+numpy==2.5.1
+opencv-python==5.0.0.93
+shapely==2.1.2
+pyclipper==1.4.0
+PyYAML==6.0.3
+
+# Framework + serving stack (dp_servers_common's concrete pins live here --
+# each server owns its venv).
+fastapi==0.139.0
+uvicorn==0.51.0
+pydantic==2.13.4
+httpx==0.28.1
+pytest==9.1.1
+
+# The shared model-server framework (ModelBackend, wire schemas, runner).
+-e ../common

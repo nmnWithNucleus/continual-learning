@@ -67,7 +67,11 @@
       "health_fail_threshold": 3,
       "client_timeout_s": 30,
       "expected_identity": {
-        "model_name": "rapidocr-onnxruntime PP-OCRv4 det+rec"
+        "model_name": "rapidocr-onnxruntime PP-OCRv4 det+rec",
+        "weights": {
+          "det_sha256": "d2a7720d45a54257208b1e13e36a8479894cb74155a5efe29462512d42f49da9",
+          "rec_sha256": "48fc40f24f6d2a207a2b1091d3437eb3cc3eb6b676dc3ef9c37384005483683b"
+        }
       }
     }
   }

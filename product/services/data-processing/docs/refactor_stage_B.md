@@ -103,6 +103,40 @@ real framework servers and include kill→respawn, crash-loop backoff, load-fail
 fail-loud, GPU-pin env, and log-file checks. The warning is starlette's TestClient
 deprecation shim, pre-existing upstream.)
 
+## WP-B5 — servers/ocr (PP-OCR relocated into the framework)
+
+Built by a parallel subagent inside the WP boundaries (only `servers/ocr/` touched);
+verified independently by the orchestrating session (test re-run below).
+
+| File | Action | Why |
+|---|---|---|
+| `servers/ocr/requirements.txt` | created | sidecar's validated engine pins verbatim (rapidocr-onnxruntime 1.4.4 / onnxruntime 1.27.0 / pillow 12.3.0 / numpy 2.5.1 / opencv 5.0.0.93 / shapely 2.1.2 / pyclipper 1.4.0 / PyYAML 6.0.3) + framework stack + `-e ../common` |
+| `servers/ocr/server.py` | created | `OcrBackend`: PPOCREngine ported from `sidecars/ocr/app.py` — same RapidOCR kwargs (4 threads, cls off, cuda off), same model discovery, same decode posture (b64 `validate=True`, data-URI tolerated), det/rec sha256 in identity; sidecar env knobs became code pins (L4) |
+| `servers/ocr/README.md` | created | relation to the retiring sidecar, setup, identity, determinism verdict |
+| `servers/ocr/tests/test_server.py` | created | 8 tests: health identity (manifest subset-match, 64-hex shas), golden smoke, verbatim-text majority sanity, empty-image honesty (`regions: []`), bad-b64/garbage → 422, params/codec strictness |
+| `servers/ocr/tests/fixtures/{golden_regions.json,PROVENANCE.md}` | created | golden + provenance (identity verbatim, run hashes, policy) |
+| `servers/manifest.json` | edited (orchestrator) | ocr `expected_identity.weights` now pins det/rec sha256 (agent-flagged gap) |
+
+In-session decisions (agent's, endorsed): framework `infer_lock` replaces the sidecar's
+per-call lock; `params` strictly empty and `codec`, if present, must be `image/jpeg`
+(else 422 — behavior fails loud); rapidocr version in identity read from installed
+metadata, test pins 1.4.4; PIL decode failures → deterministic 422, unexpected engine
+crashes → framework 500-transient. Measured quirk recorded: PP-OCRv4 rec drops
+inter-word spaces on the title line (`"QuarterlyPlanningNotes"`) — golden pins the
+verbatim measured text; the known-lines sanity check compares whitespace-stripped.
+
+**Determinism: bit-stable.** 4 separate fresh CPU processes through the real wire path;
+canonical result sha256 identical in all 4; det/rec shas equal the sidecar README's
+(same bundled ch_PP-OCRv4 pair). Policy: exact compare, zero tolerance — a future
+mismatch means the stack changed and must be re-ratified, not tolerated.
+
+Test evidence (agent run, then re-run independently by the orchestrator):
+
+```
+$ cd servers/ocr && CUDA_VISIBLE_DEVICES= ./.venv/bin/python -m pytest tests/ -q
+8 passed, 1 warning in 2.61s
+```
+
 ## Noticed for later stages
 
 - **Stage C** — `app.state.vlm_pool` is read but never set (`ingest_core.py:150`); the
@@ -115,3 +149,8 @@ deprecation shim, pre-existing upstream.)
   are output-affecting env vars that die when the asr stage becomes a thin client; the
   whisper server pins large-v3/cuda/fp16 in code, a **deliberate dialect change from
   v0's base/cpu/int8** that Stage C must reflect in the stage's `vB`.
+- **Stage C (ocr rewire)** — `app/vision/ocr/ppocr.py` speaks the old sidecar wire
+  (`/ocr`, top-level `model_sha_det/rec`); the thin-client rewrite maps its pins onto
+  `identity.weights.det_sha256/rec_sha256` and the `/infer` envelope. Its
+  `_normalize_bbox` pass-through heuristic stays valid (server returns pixel coords).
+  The old 48 MB body cap has no framework equivalent — decide there if wanted.
