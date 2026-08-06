@@ -459,3 +459,231 @@ are the DP_E2E-gated real-fleet drills).
 - **Housekeeping**: `tests/__init__.py` and `tests/fixtures` inherited entries
   (`audio.blob`, `image.*`, `text.*`, `video.c1.json`'s 47-byte stub) are v0
   artifacts some deleted suites used; sweep at Stage G.
+
+## 2026-08-06 — Cleanup round (independent 8-lens review + founder ruling)
+
+> cleanup · applied on `dp-rebuild-v1`, two commits (fixes `4ad8372`, then this
+> worklog) · triggered by an independent 8-lens review that confirmed Stage C's
+> substance (including a live re-run of the e2e — it passed) and reproduced two
+> executor-level defects. Everything above this section stands as written;
+> corrections below amend, never rewrite. Golden rule honored: **no server
+> golden shifted**; and per the review's pin rule, **no C4/C5 unit pin dict
+> changed** under the sorting fix — every pinned-slot assertion is Python dict
+> equality (order-insensitive); the fix moved only the serialized wire-byte
+> ordering. That is the mechanical answer, not drift.
+
+### A — Executor correctness (both TDD: watched red against the shipped code)
+
+- **BLOCKER fixed — CancelledError leak.** A stage BODY raising
+  `asyncio.CancelledError` was treated as external cancellation: the TaskGroup
+  swallowed it, the stage vanished from `statuses`, and a record could SHIP with
+  its required slot silently missing (journaled done — no retry, no metric); the
+  optional variant dropped the stage from `statuses` entirely. Fix, both layers:
+  the body-except now distinguishes true external cancellation
+  (`asyncio.current_task().cancelling()` — a pending cancel request) from a
+  body-raised CancelledError, which becomes an ordinary stage FAILURE (required
+  ⇒ chunk fails, no record; optional ⇒ `failed` hole + cancelled cone, statuses
+  complete); and a post-settle guard after the TaskGroup refuses to assemble a
+  record unless every resolved stage has a terminal status and every required
+  stage is `ok`. Tests:
+  `test_required_stage_leaking_cancellederror_fails_the_chunk`,
+  `test_optional_stage_leaking_cancellederror_is_a_failed_hole` — both red
+  before the fix (3 failed), green after.
+- **Order-dependent record bytes fixed.** Slots and statuses were inserted in
+  COMPLETION order, so wire bytes varied with replica latency — falsifying §4's
+  "reprocess → byte-identical → upsert no-op" and, at Stage E, threatening
+  spurious `updated_at` re-windows. `GraphResult` assembly now sorts both key
+  sets. Negative test (`test_wire_bytes_do_not_depend_on_completion_order`):
+  adversarially flipped completion latencies ⇒ byte-identical serialized record
+  — red before, green after.
+
+### B — Spine hardening
+
+- **T-1 truth (item 3):** the worklog's cell counts were wrong (claimed 15/29;
+  the matrix then had 14 entries) and two cells were fictions —
+  `OCR_BACKEND` (v0's real name is `VIDEO_OCR_BACKEND`) and
+  `DP_OFFLINE_EVAL_PACKS` (never a knob). Both replaced with real killed knobs
+  (`VIDEO_OCR_BACKEND`, `VIDEO_SCENARIO` + `VIDEO_VLM_MODEL`,
+  `TRANSLATE_TARGET`, `DIARIZE_BACKEND`). The matrix is now **15 cells**
+  (baseline + 10 killed-knob + 4 operational).
+- **Third matrix (item 4):** the REAL video stage classes now run the same 15
+  cells — real ffmpeg clipprep over the committed fixture, fake OCR client
+  replaying the real golden, MockTransport VLM — service-level, byte-compared.
+- **Outbound-params hole closed (item 5):** all three real-stage matrices now
+  also assert the recorded `/infer` payloads (and captured VLM request bytes)
+  are identical across every cell. Canary added
+  (`test_matrix_goes_red_on_a_deliberate_violator`): a throwaway stage reading
+  env into its slot value AND its outbound params — both detectors fire (bytes
+  differ, payloads differ). The law fails on a violator; it is not decoration.
+- **New-knob guard (item 6):**
+  `test_env_reads_in_app_are_exactly_the_operational_allowlist` greps `app/`
+  for `os.getenv`/`os.environ` reads and asserts the hit set equals the
+  documented operational allowlist; bare `os.environ` use is licensed only in
+  the supervisor's child-env passthrough. **`CONTRACTS_DIR` disposition added**
+  (it had none anywhere): operational — a contract-directory override for
+  tests/CI pointing at the same frozen files; content identity rides the
+  schemas' `$id`s, so the knob cannot alter what validates.
+- **E2E (item 7):** `slots["transcript"]` now asserted byte-equal to
+  `TRANSCRIPT_SLOT_REAL` (the pin existed unused); the dead `GOLDEN_TAGS_REAL`
+  import removed; the fleet fixture now ACTUALLY measures per-GPU before/after
+  deltas (post-teardown usage must return to within tolerance of the pre-drill
+  snapshot per GPU — never absolute zero, since foreign jobs may share these
+  GPUs) and the docstring no longer names any specific GPU for the foreign job.
+- **model_client (item 8):** `verified` now clears on ANY 5xx presentation
+  (incl. 503-warming), not only transport errors — a crash+respawn completing
+  between calls, or a warming first contact, no longer skips identity
+  re-verification. Both presentations pinned
+  (`test_5xx_presentation_clears_verified_and_reverifies[warming-503|crash-500]`,
+  red without the fix: 2 failed), plus the original transport-error
+  presentation pinned alongside.
+
+### C — Metrics (the half-dead video surface)
+
+- **`dp_video_parse_fallback_total` can now record (item 9):** the pack id is
+  stamped into `ParseOutcome` by `vlm.describe` (the ladder stays pure) and
+  clipcap incs with BOTH declared labels; the swallow now logs. Test drives a
+  garbage VLM reply through the stage against the REAL `Metrics` registry under
+  main.py's exact declaration and asserts the
+  `{pack="screen-clip-v1",step=…}` series renders.
+- **Wired (item 10, values already computed):** `dp_video_truncated_total`
+  ({pass="caption"} from `render_caption`'s new truncated flag; {pass="ocr"}
+  from `assemble.render`'s), `dp_ocr_frame_errors_total` (absorbed-error count),
+  `dp_ocr_redactions_total` (redaction count) — all three proven recording by
+  test. **Deleted with dispositions:** `dp_video_delta_peak` +
+  `dp_video_ocr_events` (their v0 producers died with the legacy graph; the
+  delta trace is computed-and-discarded per the L10 no-consumer ruling),
+  `dp_video_scenario_mismatch_total` (its subject, the `VIDEO_SCENARIO` env
+  knob, is dead), `dp_caption_ungrounded_quote_total` (WS-H's scorer owns it —
+  re-declare WITH the producer; a declared series with no producer is the same
+  lying zero that killed `dp_partial_write_total`).
+- **Owner assigned:** server-call / per-replica counters (§9's "extend metrics"
+  verdict) belong to **Stage D** (WP-D3, beside the heal/hole counters it
+  already owes — one observability pass over the ledger + client seams).
+
+### D — Founder ruling applied: L10's consumer marker (item 11)
+
+`Stage.consumer` is now a MANDATORY declaration —
+`daylog:<line>` | `stage:<name>` | `speculative:<why>` — enforced at
+registration (grammar-checked), pinned per stage in the T-3 snapshot,
+declaration-only (no runtime behavior). Declared consumers:
+asr → `daylog:heard` (the ruled Heard-lines fallback); diarize →
+`stage:speaker_align`; speaker_align → `daylog:heard`; acoustic →
+`speculative:c10_ambient_route_unruled` (C10 v2 names no acoustic route — an
+honest marker, not a fabricated consumer; Stage E owns the ruling); screentext
+→ `daylog:world_text`; clipcap → `daylog:scene`; clipprep →
+`stage:screentext+clipcap` (no record slot; frames feed both in-run);
+unregistered: translate → `speculative:non_english_dogfood`, injected_caption
+→ `daylog:scene`. Chars-per-second costs stay docstring-grade as ruled.
+
+### E — Worklog corrections (quote-and-correct; the sections above stand as written)
+
+- **The dp.db claim was FALSE as a code claim.** WP-C0 above says v0 "runs
+  `ingest_mode: inline` and never created `dp.db`" and the learn.env comment
+  repeats "inline mode never created dp.db". The truth: v0's INLINE path DOES
+  journal — `main.py` passes `journal=request.app.state.journal` ("durable
+  receipt (both modes)") and `mark_processed` connects with `create=True`; the
+  repointed v0 created `/home/ubuntu/nmn/dp-v0-live/.../var/dp.db` (24 KB,
+  mtime 06:17) the moment it processed the two WP-C0 evidence chunks. The old
+  tree's `var/` was empty because the idle fleet processed ZERO chunks from it
+  in ~10 days — and PENDING rows (the recovery set) are async-only
+  (`journal.accept` is called only on the async path). The WP-C0 conclusion
+  (nothing to migrate; recording redrives anything in flight) was right; the
+  model behind it was wrong, and Stage D extends this journal — the model must
+  be right. (The stale learn.env comment is operational config, corrected in
+  place as an ops note, not a repo change.)
+- **WP-C5 table omissions/imprecisions:** `tests/test_video_graph_v1.py`
+  (NEW — the full registered-graph test carrying the RULED cone coupling:
+  OCR failure = `ocr` hole AND cancelled caption) was built and green in the
+  C5 commit but missing from the table above. `redact.py`, `delta.py`,
+  `parse.py`, `clip_types.py` were KEPT-unmodified (the table's "edited to
+  explicit-args" gloss over-claims for those four — only clip/budget/assemble/
+  prompts/vlm were edited). The WP-C4 table's `test_audio_injected_caption.py`
+  row says "created"; it REPLACED a deleted v0 suite of the same name.
+- **WP-C6 omissions:** the `app/dedup.py` + `app/main.py` stale-comment fixes
+  (three-component-id claim; isolation-era metric comments) rode the final
+  Stage C commit unlisted; `tests/test_t3_version_composition.py` landed in the
+  C5 commit (`bef7f07`), not the C6 commit its section implies.
+- **Suite-count reconciliation:** C5's "493 passed, 2 skipped" and the exit
+  table's "494 passed, 3 skipped" are both true at their timestamps: after C5's
+  run, the orchestrator added the T-3 video-snapshot param (+1 passed) and the
+  gated video e2e test (+1 skipped).
+- **The three §9 "disposition confirmations" are OVERTURNS** (licensed by §9's
+  own "verdicts to be confirmed line-by-line at execution" header, but named
+  wrong above): `frames.py` and `mode.py` carried KEEP verdicts and were
+  deleted with evidence; `version.py` carried REWRITE and was deleted because
+  its rewrite had already shipped as `stagegraph.stage.segment` +
+  `executor.resolve`.
+- **The "C5 agent report" citation is not a repo artifact.** The WP-C5 knob
+  table above says "the complete table is in the C5 agent report" — that report
+  exists only in the session transcript. The complete 31-field disposition
+  table is IN THIS FILE now: the WP-C5 section's summary plus these
+  specifics — `VIDEO_CLIP_SECONDS_PER_FRAME` 2.5, `VIDEO_CLIP_MAX_FRAMES` 12,
+  `VIDEO_CLIP_MIN_FRAMES` 2, `VIDEO_CLIP_FRAME_WIDTH` 768,
+  `VIDEO_OCR_FRAME_WIDTH` 1728, `VIDEO_ANALYSIS_PERIOD_S` 2.0,
+  `VIDEO_OCR_IDLE_PEAK` 8, `VIDEO_OCR_LAYOUT_PEAK` 40, `VIDEO_OCR_MAX_EVENTS`
+  3, `VIDEO_OCR_FLOOR_S` 120 → `clipprep.CLIP_SETTINGS` (v0 defaults verbatim);
+  `VIDEO_OCR_MIN_CONF` 0.60, `VIDEO_OCR_MIN_CHARS` 4, `VIDEO_OCR_DEDUP_RATIO`
+  0.92 → screentext pins; `VIDEO_CHARS_PER_SECOND` 22 /
+  `VIDEO_CAPTION_CHARS_SHARE` 16 → `clipcap.CAPTION_RATE=16` +
+  `screentext.OCR_CHARS_PER_SEC=6.0`; `VIDEO_VLM_MODEL` →
+  `MODEL="Qwen/Qwen3-VL-32B-Instruct"`; `VIDEO_SCENARIO` →
+  `SCENARIO="screen-mac"`; `VIDEO_CLIP_PROMPT`, `VIDEO_PROMPT_DIR` → dead
+  (identity = `PACK_DIGEST_PIN` + vB); `VIDEO_CLIP_MAX_TOKENS`,
+  `VIDEO_OCR_LAYOUT_SPREAD`, `VIDEO_PRIVACY_FILTER` → dead, INERT in v0
+  (orphan knobs; redaction pinned always-on, its v0 reality);
+  `VIDEO_PIXEL_THRESHOLD`, `VIDEO_DELTA_GRID` → already code constants in
+  `delta.py`; `VIDEO_OCR_MODEL_SHA_DET/_REC`, `VIDEO_OCR_EP` → manifest
+  `expected_identity` + server code; `VIDEO_OCR_BACKEND`, `VIDEO_BACKEND`,
+  `VIDEO_PIPELINE` → dead (backends are code); `VIDEO_OCR_MODEL`,
+  `VIDEO_OCR_MAX_TOKENS` 900, `VIDEO_OCR_API_KEY` → dead with `ocr/vlm.py`;
+  `VIDEO_OCR_STAMP` → dead, `rel` pinned; `VIDEO_VLM_STRUCTURED` → dead,
+  guided decoding pinned off; `VIDEO_MAX_PROMPT_IMAGES_CHECK` → dead
+  (`max_frames=12` bounds K); `VIDEO_VLM_URL/_API_KEY/_TIMEOUT` →
+  `VLM_URL`/`VLM_API_KEY`/`VLM_TIMEOUT_S` (operational, matrix-proven inert);
+  legacy keyframe knobs (`VIDEO_SCENE_THRESHOLD`, `KEYFRAME_INTERVAL_S`,
+  `MAX/MIN_KEYFRAMES`, `SAMPLE_FPS`, `FRAME_MAX_WIDTH`, `VLM_MAX_TOKENS`,
+  `OCR_RECORDS`) → dead with the legacy graph.
+- **main.py front matter corrected in code** (item 14): the docstring described
+  the v0 per-unit wire and `/health`'s "effective ASR backend"; the create_app
+  docstring told tests to "flip ASR_BACKEND". All rewritten to the v1 truth.
+
+### F — Quick nits (one pass)
+
+T-2's annotation string-match test deleted (the runtime single-`GraphResult`
+tests are the guard); T-6's dead first-record block removed; `stage.py` +
+CHARTER L5 now say explicitly that the budget measures the slot as EMITTED
+(including the stamped `version` key — identity-safe clarification, licensed);
+`_discover` flips `_discovered` only after the needs check (a failed discovery
+no longer leaves a half-validated registry marked done); `translate.py`
+documents the DELIBERATE required→optional flip vs v0 for the enable ceremony;
+`VLM_TIMEOUT_S` adopts the house warn-and-default posture (an unparsable value
+warns once and uses 120, never crashes a chunk); screentext gained the
+loud guard for selected-times-with-zero-matched-frames (raising beats a false
+ran-and-empty claim); the clipcap digest pin records the EXPECTED churn when
+Stage G removes the legacy per-frame-v0 pack (re-pin + vB bump there = planned
+demolition, not drift); stale "OCR sidecar's breaker" (circuit.py) and
+"discriminators" (clip.py) wording fixed.
+
+### Verification re-run (2026-08-06, after all fixes)
+
+```
+$ ./.venv/bin/python -m pytest -q                      # full DP suite
+525 passed, 3 skipped, 1 warning in 53.81s             # (3 = the DP_E2E gate)
+$ DP_E2E=1 ./.venv/bin/python -m pytest tests/test_e2e_real.py -v
+test_audio_chunk_end_to_end PASSED
+test_video_chunk_end_to_end PASSED
+test_audio_reprocess_is_byte_identical_through_the_real_fleet PASSED
+3 passed in 32.29s                                     # GPUs 0 MiB before+after,
+                                                       # fleet ports free, v0 200
+$ storage   pytest -q → 310 passed
+$ continuum pytest -q → 262 passed, 7 skipped
+$ servers/common pytest -q → 30 passed                 # incl. 3 new B8 tests
+```
+
+Red-then-green evidence for the reproduced defects: the two CancelledError
+tests + the completion-order test failed against the shipped executor
+(`3 failed, 27 deselected`) before the fix; the two B8 presentation tests
+failed against the shipped model_client (`2 failed`, shown by stash-revert)
+before theirs. The T-1 canary proves the matrix red-path by construction.
+Suite delta across the round: 494+3 → 525+3 (+32 new tests, −1 deleted
+annotation test). Status stays **DONE**; Stage D not started.
