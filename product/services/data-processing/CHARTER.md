@@ -25,8 +25,8 @@
 [D18](../../DECISIONS.md) / [D19](../../DECISIONS.md) / [D20](../../DECISIONS.md)
 
 - **2026-08-06** — §Slot Law L8's heal clause corrected to the built Stage D truth (close-out
-  ruling): the re-POST carries whatever the re-run produced — the ledger, not the record,
-  carries hole truth; convergence, not monotonicity, is the guarantee — and any non-green
+  ruling): the re-POST carries whatever the re-run produced; the ledger, not the record,
+  carries hole truth; convergence, not monotonicity, is the guarantee; any non-green
   completed heal charges the budget (was "replaces holey with fuller" / "same stage fails
   again").
 - **2026-08-06** — §Slot Law L5's as-emitted budget clause: the all-caps emphasis replaced
@@ -212,12 +212,13 @@ reprocess is an upsert and not a duplicate.
   On (re)delivery: no row → process; version differs → version-forward reprocess, the new
   record landing *beside* the old; version matches all-green → skip (200 + `record_id`);
   version matches with holes and budget left → heal.
-  - A heal is a full graph re-run (the redelivery body carries the C1 envelope, so no stored
-    envelope is needed) re-POSTing the same `record_id` — the re-POST carries whatever the
-    re-run produced: the ledger, not the record, carries hole truth, and convergence is the
-    guarantee, not monotonicity. Any non-green completed heal ⇒ `heal_attempts++` (a green
-    heal never charges; a failed re-run charges via the failure path); at budget ⇒ holes
-    permanent, row done-final, metric fires.
+  - A heal is a full graph re-run re-POSTing the same `record_id`; the redelivery body
+    carries the C1 envelope, so no stored envelope is needed.
+  - The re-POST carries whatever the re-run produced — the ledger, not the record,
+    carries hole truth, and convergence is the guarantee, not monotonicity.
+  - Any non-green completed heal ⇒ `heal_attempts++` (a green heal never charges; a
+    failed re-run charges via the failure path); at budget ⇒ holes permanent, row
+    done-final, metric fires.
   - Heal recompute policy is recompute-all now. The done-row schema includes a nullable
     `cached_slots` column, specified and unpopulated, so run-only-the-failed-cone can be
     added later without a schema break.

@@ -594,9 +594,10 @@ Day-log body:
     per chunk retires the `(chunk_id, content.kind, discriminator)` key, and `updated_at`
     replaces `ingest_time` as the axis.
   - Storage splits `ingest_time` into `created_at` (first landing of a `record_id`) and
-    `updated_at`, bumped only when `record_json` byte-compares different — so a no-op redelivery
-    never re-windows a record, while a heal that lands a byte-different record flows into the
-    next window (accepted double-training, the same class as a version bump).
+    `updated_at`, bumped only when `record_json` byte-compares different — a no-op
+    redelivery never re-windows a record.
+  - A heal that lands a byte-different record flows into the next window (accepted
+    double-training, the same class as a version bump).
   - Training-window membership moves with the axis: the window is `[last_trained_t, now−δ)` on
     `updated_at`.
   - `daylog_format_version` and `recipe_id` bump; continuum's stamp-refusal is the transition

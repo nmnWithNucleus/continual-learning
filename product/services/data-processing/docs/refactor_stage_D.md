@@ -463,3 +463,12 @@ Goldens and pins untouched: no server golden, no C4/C5 slot pin, no T-1 matrix c
 changed in this round (diff touches app/journal.py, app/dedup.py, four test files and
 paper only). Status stays **DONE**; Stage E not started.
 
+## 2026-08-06 — Stage E WP-E0 correction (inherited nit)
+
+> cleanup · applied on `dp-rebuild-v1` in Stage E's WP-E0 commit (worklog:
+> [refactor_stage_E.md](refactor_stage_E.md)) · append-only; everything above stands.
+
+- The close-out's "diff touches app/journal.py, app/dedup.py, four test files and paper
+  only" miscounted: commit `de5de9d` touches *three* test files (`test_dedup_claim.py`,
+  `test_heal_seam.py`, `test_journal.py`). The file list is otherwise accurate.
+

@@ -143,11 +143,11 @@ learns per-stage status and a heal budget, and storage splits `ingest_time` into
 
 **Watch out for**
 
-- "Replaces holey with fuller" reads as monotone; the built Stage D truth is not — a heal
-  re-POSTs whatever the full re-run produced, so a heal during a *different* server's outage
-  can regress a green slot until convergence. The ledger, not the record, carries hole truth;
-  convergence is the guarantee, not monotonicity (clause corrected in the charter and plan at
-  the Stage D close-out, 2026-08-06).
+- "Replaces holey with fuller" reads as monotone; the built truth is not — a heal re-POSTs
+  whatever the full re-run produced, so a heal during another server's outage can regress a
+  green slot until convergence. The ledger, not the record, carries hole truth; convergence
+  is the guarantee, not monotonicity (corrected in charter and plan, Stage D close-out
+  2026-08-06).
 - Budget exhaustion is not the only route to permanent holes: the crash-loop re-drive cap
   force-finalizes a durable-record chunk (done-final without the heal budget reaching its
   cap) rather than dead-letter a chunk whose record exists.
