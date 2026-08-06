@@ -338,3 +338,106 @@ Live v0 checked before and after every fleet operation: `GET :8085/health` → 2
 - **Stage G** — when `sidecars/ocr` is demolished, the stray live sidecar on :8097
   (running from a deleted worktree) needs an owner to stop it; it is not this repo's
   process to kill.
+
+## 2026-08-06 — Cleanup round (independent verification, 6 lenses)
+
+> cleanup · applied on `dp-rebuild-v1`, two commits (fixes `689fcd8`, then this worklog)
+> · triggered by an independent 6-lens verification that confirmed Stage B's substance
+> (including a full re-run of the drill: exit 0, clean teardown) and found the items
+> below. Everything above this section stands as written; corrections amend, never
+> rewrite. **Hard rule honored: no golden changed** — all four pre-existing goldens
+> re-verified byte-identical after every edit (hashes below).
+
+**Determinism hardening**
+
+- `servers/manifest.json` pyannote `expected_identity.weights` now asserts
+  `segmentation_revision` (`e66f3d3b…`) and `embedding_revision` (`837717dd…`) beside
+  the pipeline pin. Before this, the subset-match checked only `pipeline_revision`, so
+  an upstream sub-model push on a cold cache would have changed bytes and still passed
+  identity verification.
+- **Correction to WP-B3 and "Noticed" above:** the lines "equal to the manifest's
+  pre-resolved pin" and "an upstream bump surfaces as an identity mismatch at connect"
+  were inaccurate as committed — the manifest never pinned the sub-model revisions and
+  subset-matching ignored them; identity merely *reported* the measured commits. True
+  as of this round: all three revisions are asserted.
+- `servers/whisper/requirements.txt` pins its formerly floating transitives:
+  **onnxruntime==1.28.0** (executes the Silero VAD gate — output-affecting),
+  huggingface_hub==1.26.0, tokenizers==0.23.1 (all equal to what the venv already
+  ran — no reinstall, no behavior change). onnxruntime is now also reported in
+  whisper's `/health` `identity.frameworks`; dated note appended to whisper
+  PROVENANCE.md. This also closes the WP-B2 report's "hub is now 1.x as a transitive —
+  may want pinning" note, which never made it into "Noticed" above: recorded here, and
+  moot — the pin landed.
+- Torch wheel provenance: `servers/{pyannote,ast}/requirements.txt` now carry
+  `--extra-index-url https://download.pytorch.org/whl/cu128`, so a rebuild reproduces
+  torch **2.8.0+cu128** (the flavor the venvs verifiably hold) instead of whatever CUDA
+  build PyPI serves for the bare version; whisper's file documents that its stack is
+  torch-free and the index is not applicable there.
+
+**Supervisor hardening** (`app/supervisor.py` — still imported by nothing; v0 untouched)
+
+- SIGTERM/SIGINT handler in the CLI path: replicas run in their own sessions (so the
+  supervisor can `killpg` them), which meant plain `kill <supervisor>` orphaned the
+  whole fleet. The handler now drives `stop()`; the misleading "children die with it"
+  comment at `_spawn` is rewritten to state the real contract.
+- `_monitor` now enforces `startup_timeout_s` for replicas in state `starting`: a
+  crash-restart into a hung warmup (health 503 forever) was previously never recovered;
+  it is now killed and respawned at the deadline.
+- Both behaviors covered by new framework tests (`test_sigterm_reaps_all_replicas`
+  drives the real `python -m app.supervisor` CLI; `test_crash_restart_into_hung_warmup_
+  is_recycled` uses a new crash-then-hang knob in the fake server). TDD: both watched
+  red against the old code (orphaned replica; restarts stuck at 1), then green.
+
+**Baseline breadth — real-speech golden input** (the synthetic piper clip stays)
+
+- New committed fixture `speech_real_dialog.webm` (17.808 s, webm/opus 16 kHz mono,
+  sha256 `8b190553…ef00b24b`) in whisper/pyannote/ast fixture dirs: the Scrooge/nephew
+  "Bah! Humbug!" exchange from the LibriVox **group dramatic reading** of *A Christmas
+  Carol*, Stave 1 — real multi-speaker speech with natural turn-taking (narrator + two
+  character readers; solo-reader "dramatic" versions were rejected). Source URL,
+  public-domain license (CC PD mark 1.0), source-file sha256, exact ffmpeg cut and the
+  window-selection method are in each INPUT_PROVENANCE.md.
+- Goldens cut under the exact WP protocol — 4 fresh processes per server, 3 on the
+  primary GPU + 1 on the replica GPU, through the real wire path:
+  `golden_transcribe_real.json` `f5da3b6e…` (GPUs 4+5) · `golden_diarize_real.json`
+  `cc8cec79…` (GPUs 2+3; 10 turns, 3 speakers) · `golden_tags_real.json` `009e2c73…`
+  (GPUs 6+7). **All three bit-stable** — exact compare, zero tolerance, same policy.
+  Added as a second exact test in each suite and as second smokes in the drill.
+
+**Drill + inventory corrections**
+
+- **Correction to "Integration drill" above:** `drill_stage_b.py` did NOT check v0
+  `:8085` — that was session practice outside the script. The preferred fix landed:
+  the drill now records v0's health before the fleet starts and after teardown as a
+  scored `v0_untouched` phase.
+- The unused `ast_tags` tolerance branch in the drill is deleted (ast's PROVENANCE
+  prescribes exact compare; the branch misstated it). Comparison is exact-only.
+- `servers/manifest.json` `_comment` no longer lists 8091 (not a live port on this
+  node). `servers/.gitignore` is self-sufficient (`logs/`, `.venv/`, `__pycache__/`,
+  `.pytest_cache/`, `*.egg-info/`).
+- **VRAM correction to WP-B2:** whisper's measured peak is **4271 MiB** per replica,
+  not "≈ 3.2 GB" (still under the ~5 GB plan estimate; allocation table unchanged).
+- **File-coverage completions** (present in the WP commits, missing from the tables
+  above): the committed golden-input binaries (`speech_two_speakers.webm` ×3,
+  `screen_planning_notes.jpg`), the four `tests/fixtures/INPUT_PROVENANCE.md` files,
+  and `servers/common/dp_servers_common/__init__.py`.
+
+**Verification re-run (2026-08-06, after all edits)**
+
+```
+$ servers/common   ./.venv/bin/python -m pytest tests/ -q → 26 passed
+$ servers/whisper  CUDA_VISIBLE_DEVICES=4 …pytest -q     →  7 passed
+$ servers/pyannote CUDA_VISIBLE_DEVICES=2 …pytest -q     →  6 passed
+$ servers/ast      CUDA_VISIBLE_DEVICES=6 …pytest -q     →  6 passed
+$ servers/ocr      CUDA_VISIBLE_DEVICES=  …pytest -q     →  8 passed
+$ ./.venv/bin/python servers/drill_stage_b.py            → exit 0, "ok": true
+    spawn_ready 18.9s · identity 8/8 ok · golden_smoke 7/7 exact ok
+    (whisper 0.58/0.71s · pyannote 0.70/0.89s · ast 0.39/0.41s · ocr 0.44s)
+    kill_one_replica 4/4 (retries 0.22–0.50s, all respawned)
+    v0_untouched: before "200" → after "200"
+```
+
+Pre-existing goldens byte-identical after every change (sha256, re-verified against the
+pre-cleanup baseline): `golden_transcribe.json` `ccda989f…8d61376` ·
+`golden_diarize.json` `fef8b89c…f81a11b` · `golden_tags.json` `8905b4a1…0605022` ·
+`golden_regions.json` `1802f5e9…b2a52d6`. Status stays **DONE**; Stage C not started.
