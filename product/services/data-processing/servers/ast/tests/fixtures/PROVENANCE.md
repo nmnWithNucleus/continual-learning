@@ -60,3 +60,11 @@ loosening the exact compare blindly.
   (torchaudio not installed; not demanded by this stack). It emits a benign
   `audio_utils` UserWarning about one all-zero mel filter — cosmetic, deterministic,
   present on every run.
+
+## 2026-08-06 — cleanup round: second golden, real speech
+
+`golden_tags_real.json` (canonical sha256
+`009e2c731204286d6c9a4d108d480dedcaa976984c6a2963224b6ab0461bc654`) — input
+`speech_real_dialog.webm` (sha256 `8b190553…ef00b24b`, see INPUT_PROVENANCE.md),
+params {"top_k":20}, identity unchanged from above. **Bit-stable across 4
+fresh-process runs (3× GPU 6, 1× GPU 7)** — exact compare, zero tolerance.

@@ -118,6 +118,23 @@ def test_golden_smoke_speech_clip(client: TestClient) -> None:
     assert tags == golden
 
 
+def test_golden_smoke_real_dialog(client: TestClient) -> None:
+    """Second golden (cleanup round 2026-08-06): real multi-speaker speech
+    (LibriVox dramatic reading, see INPUT_PROVENANCE.md). Bit-stable across 4
+    fresh-process runs on GPUs 6 and 7 — exact compare, zero tolerance."""
+    audio = (FIXTURES / "speech_real_dialog.webm").read_bytes()
+    r = client.post("/infer", json={
+        "input_b64": base64.b64encode(audio).decode("ascii"),
+        "codec": "audio/webm",
+        "params": GOLDEN_PARAMS,
+    })
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is True
+    golden = json.loads((FIXTURES / "golden_tags_real.json").read_text())["tags"]
+    assert body["result"]["tags"] == golden
+
+
 def test_garbage_bytes_deterministic_422(client: TestClient) -> None:
     garbage = base64.b64encode(b"\x00\x01\x02 definitely not an audio container " * 64)
     r = client.post("/infer", json={

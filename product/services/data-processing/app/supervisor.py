@@ -71,6 +71,7 @@ class _Replica:
     consecutive_health_fails: int = 0
     backoff_index: int = 0
     ready_since: float | None = None
+    spawned_at: float | None = None
     last_error: str | None = None
     log_path: Path | None = None
     log_handle: object = field(default=None, repr=False)
@@ -147,11 +148,17 @@ class Supervisor:
             env=env,
             stdout=replica.log_handle,
             stderr=replica.log_handle,
-            start_new_session=True,  # own process group: children die with it
+            # Own session/process group so _kill can killpg the replica's whole
+            # tree without touching the supervisor. The flip side: replicas do
+            # NOT die with the supervisor on their own — the SIGTERM handler in
+            # _main (stop()) is what keeps plain `kill <supervisor>` from
+            # orphaning the fleet.
+            start_new_session=True,
         )
         replica.state = "starting"
         replica.consecutive_health_fails = 0
         replica.ready_since = None
+        replica.spawned_at = time.monotonic()
         logger.info("spawned %s pid=%s gpu=%s port=%s",
                     spec.name, replica.proc.pid, spec.gpu, spec.port)
 
@@ -233,6 +240,18 @@ class Supervisor:
                     replica,
                     f"health failed x{replica.consecutive_health_fails}: "
                     f"{replica.last_error}")
+            elif (replica.state == "starting"
+                    and replica.spawned_at is not None
+                    and time.monotonic() - replica.spawned_at
+                    > spec.startup_timeout_s):
+                # A (re)spawned replica that never goes ready — e.g. a hung
+                # warmup after a crash-restart — must be recycled at the
+                # startup deadline, not monitored in "starting" forever.
+                await self._kill(replica)
+                await self._restart(
+                    replica,
+                    f"warmup timeout after {spec.startup_timeout_s:.0f}s: "
+                    f"{replica.last_error}")
 
     async def _restart(self, replica: _Replica, why: str) -> None:
         spec = replica.spec
@@ -299,13 +318,32 @@ async def _main(argv: list[str]) -> int:
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(name)s %(levelname)s %(message)s")
     sup = Supervisor.from_file(args.manifest, base_dir=args.base_dir)
+
+    # Replicas run in their own sessions (see _spawn) and would survive this
+    # process dying — a graceful-stop signal handler is what makes plain
+    # `kill <supervisor>` take the fleet down with it.
+    stop_requested = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, stop_requested.set)
+
     await sup.start()
     try:
         await sup.wait_ready()
         print(json.dumps(sup.status(), indent=2), flush=True)
         if args.status_only:
             return 0
-        await sup.run()
+        run_task = asyncio.create_task(sup.run())
+        stop_task = asyncio.create_task(stop_requested.wait())
+        done, _pending = await asyncio.wait(
+            {run_task, stop_task}, return_when=asyncio.FIRST_COMPLETED)
+        if run_task in done:
+            run_task.result()  # surface unexpected monitor crashes
+        else:
+            run_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await run_task
+            logger.info("stop signal received; shutting the fleet down")
         return 0
     except TimeoutError as exc:
         print(f"supervisor: {exc}", file=sys.stderr, flush=True)

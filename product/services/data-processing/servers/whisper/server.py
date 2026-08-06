@@ -106,6 +106,9 @@ class WhisperBackend(ModelBackend):
                 "faster_whisper": pkg_version("faster-whisper"),
                 "ctranslate2": pkg_version("ctranslate2"),
                 "av": pkg_version("av"),
+                # onnxruntime executes the Silero VAD gate — output-affecting,
+                # so it is part of the dialect (cleanup round 2026-08-06).
+                "onnxruntime": pkg_version("onnxruntime"),
             },
             "device": DEVICE,
             "compute_type": COMPUTE_TYPE,

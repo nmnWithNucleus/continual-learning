@@ -113,6 +113,25 @@ def test_golden_smoke_two_speakers(client):
     assert result == golden
 
 
+def test_golden_smoke_real_dialog(client):
+    """Second golden (cleanup round 2026-08-06): real multi-speaker speech with
+    natural turn-taking (LibriVox dramatic reading, see INPUT_PROVENANCE.md) —
+    10 turns, 3 speakers. Bit-stable across 4 fresh-process runs on GPUs 2 and
+    3 — exact compare, zero tolerance."""
+    audio = (FIXTURES / "speech_real_dialog.webm").read_bytes()
+    resp = client.post("/infer", json={
+        "input_b64": base64.b64encode(audio).decode("ascii"),
+        "codec": "audio/webm",
+        "params": {"span_seconds": 17.808},
+    })
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["ok"] is True
+    golden = json.loads(
+        (FIXTURES / "golden_diarize_real.json").read_text(encoding="utf-8"))
+    assert body["result"] == golden
+
+
 def test_bad_input_is_deterministic_422(client):
     garbage = bytes(range(256)) * 4  # not any audio container; ffmpeg decode fails
     resp = client.post("/infer", json={

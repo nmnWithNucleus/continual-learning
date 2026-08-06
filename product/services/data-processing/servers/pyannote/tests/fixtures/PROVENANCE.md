@@ -72,3 +72,12 @@ Exact compare. `tests/test_server.py::test_golden_smoke_two_speakers` asserts
 `result == golden` with no tolerance. If a future stack bump introduces
 variance, re-run this study and replace the policy with a measured tolerance —
 do not loosen the compare speculatively.
+
+## 2026-08-06 — cleanup round: second golden, real speech
+
+`golden_diarize_real.json` (canonical sha256
+`cc8cec7949807aaa08f5a567feb1736814d66c06e441baac2a2bea2d006c5275`) — input
+`speech_real_dialog.webm` (sha256 `8b190553…ef00b24b`, see INPUT_PROVENANCE.md),
+params {"span_seconds":17.808}, identity unchanged from above. Output: 10 turns,
+3 speakers (narrator + two characters), real alternation. **Bit-stable across 4
+fresh-process runs (3× GPU 2, 1× GPU 3)** — exact compare, zero tolerance.

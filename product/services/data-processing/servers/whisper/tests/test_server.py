@@ -93,8 +93,22 @@ def test_identity_matches_manifest_and_shape(warm_client):
     assert identity["weights"] == {"revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478"}
     assert identity["device"] == "cuda"
     assert identity["compute_type"] == "float16"
-    for pkg in ("faster_whisper", "ctranslate2", "av"):
+    for pkg in ("faster_whisper", "ctranslate2", "av", "onnxruntime"):
         assert isinstance(identity["frameworks"][pkg], str) and identity["frameworks"][pkg]
+
+
+def test_golden_transcribe_real_dialog_exact(warm_client):
+    """Second golden (cleanup round 2026-08-06): real multi-speaker speech
+    (LibriVox dramatic reading, see INPUT_PROVENANCE.md). Bit-stable across 4
+    fresh-process runs on GPUs 4 and 5 — exact compare, zero tolerance."""
+    client, _ = warm_client
+    audio = (FIXTURES / "speech_real_dialog.webm").read_bytes()
+    resp = _infer(client, audio, GOLDEN_PARAMS)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["ok"] is True
+    golden = json.loads((FIXTURES / "golden_transcribe_real.json").read_text())
+    assert body["result"] == golden
 
 
 def test_golden_transcribe_exact(warm_client):

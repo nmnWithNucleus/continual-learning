@@ -27,6 +27,16 @@ class FakeBackend(ModelBackend):
             os._exit(9)
         if os.getenv("FAKE_LOAD_ERROR"):
             raise RuntimeError("injected load failure")
+        marker = os.getenv("FAKE_CRASH_THEN_HANG_MARKER")
+        if marker:
+            # First boot: crash. Every boot after (marker exists): hang in warmup
+            # forever — the crash-restart-into-hung-warmup scenario.
+            if not os.path.exists(marker):
+                open(marker, "w").close()
+                print("[fake-server] first boot: crashing (marker laid)", flush=True)
+                os._exit(9)
+            print("[fake-server] restart boot: hanging in warmup", flush=True)
+            time.sleep(3600)
         time.sleep(float(os.getenv("FAKE_LOAD_DELAY_S", "0")))
 
     def identity(self) -> dict:

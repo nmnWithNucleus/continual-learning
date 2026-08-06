@@ -7,6 +7,7 @@ the production manifest spawns model servers.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import signal
 import socket
@@ -182,6 +183,87 @@ def test_load_failure_exits_loud_and_wait_ready_times_out(tmp_path):
             with pytest.raises(TimeoutError):
                 await sup.wait_ready()
         finally:
+            await sup.stop()
+
+    run(go())
+
+
+def test_sigterm_reaps_all_replicas(tmp_path):
+    """`kill <supervisor>` must take the fleet down with it: replicas run in their
+    own sessions (so the supervisor can killpg them without dying itself), which
+    means ONLY an explicit SIGTERM handler stands between plain `kill` and a node
+    full of orphaned model servers."""
+    import subprocess
+
+    port = free_port()
+    m = manifest([{"port": port, "gpu": None}])
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(m))
+    service_root = TESTS_DIR.parents[2]
+
+    proc = subprocess.Popen(
+        [COMMON_VENV_PY, "-m", "app.supervisor",
+         "--manifest", str(manifest_path), "--base-dir", str(service_root)],
+        cwd=str(service_root),
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        deadline = time.monotonic() + 30
+        replica_pid = None
+        while time.monotonic() < deadline:
+            try:
+                resp = httpx.post(f"http://127.0.0.1:{port}/infer",
+                                  json={"params": {}}, timeout=2.0)
+                if resp.status_code == 200:
+                    replica_pid = resp.json()["result"]["pid"]
+                    break
+            except httpx.HTTPError:
+                pass
+            time.sleep(0.2)
+        assert replica_pid is not None, "fleet never came up under the CLI supervisor"
+
+        proc.send_signal(signal.SIGTERM)
+        assert proc.wait(timeout=20) is not None
+
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            try:
+                os.kill(replica_pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.1)
+        else:
+            os.kill(replica_pid, signal.SIGKILL)  # do not leak it beyond the test
+            raise AssertionError(f"replica {replica_pid} orphaned after SIGTERM")
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=10)
+
+
+def test_crash_restart_into_hung_warmup_is_recycled(tmp_path):
+    """A replica that crashes and then hangs in warmup on the restart (health 503
+    forever) must be killed and respawned when startup_timeout_s expires — not
+    monitored forever in 'starting'."""
+    port = free_port()
+    marker = tmp_path / "crashed-once.marker"
+    m = manifest([{"port": port, "gpu": None}],
+                 env={"FAKE_CRASH_THEN_HANG_MARKER": str(marker)})
+    m["servers"]["fake"]["startup_timeout_s"] = 2
+
+    async def go():
+        sup = Supervisor(m, base_dir=TESTS_DIR, log_dir=tmp_path)
+        monitor_task = None
+        try:
+            await sup.start()
+            monitor_task = asyncio.create_task(sup.run())
+            # restart #1 = the crash; restart #2 proves the hung warmup was
+            # detected at the deadline and recycled.
+            await wait_for(lambda: sup.status()["fake"][0]["restarts"] >= 2,
+                           timeout_s=30, what="warmup-timeout recycle")
+            assert sup.status()["fake"][0]["state"] != "ready"
+        finally:
+            if monitor_task:
+                monitor_task.cancel()
             await sup.stop()
 
     run(go())

@@ -1,4 +1,8 @@
 # servers/pyannote — fully pinned (L4: versions are behavior; nothing floats).
+# torch wheel provenance (cleanup round 2026-08-06): the running venv holds
+# torch 2.8.0+cu128; the explicit index below makes a rebuild reproduce the cu128
+# flavor instead of whatever CUDA build PyPI happens to serve for the bare version.
+--extra-index-url https://download.pytorch.org/whl/cu128
 # torch/torchaudio/pyannote trio validated together on this node 2026-07-19
 # (see app/audio/diarize/pyannote.py docstring — torch>=2.6 weights_only gotcha).
 torch==2.8.0
