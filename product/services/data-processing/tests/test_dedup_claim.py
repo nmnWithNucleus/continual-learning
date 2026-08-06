@@ -113,6 +113,34 @@ def test_stable_skips_are_cached_heals_are_not():
     assert calls2 == ["c2", "c2"]               # re-judged from the ledger each time
 
 
+def test_classify_ledger_read_runs_off_the_event_loop():
+    """Close-out round: the review-round fix moved the sqlite read off the loop;
+    this pins it (a docstring is not enforcement). The lookup must run on a
+    thread that is NOT the event-loop thread and has no running loop."""
+    import threading
+
+    seen: dict = {}
+
+    def lookup(cid):
+        seen["thread"] = threading.get_ident()
+        try:
+            asyncio.get_running_loop()
+            seen["on_loop"] = True
+        except RuntimeError:
+            seen["on_loop"] = False
+        return None
+
+    d = DedupStore(row_lookup=lookup)
+
+    async def go():
+        seen["loop_thread"] = threading.get_ident()
+        return await d.classify("c1", "pv-1")
+
+    assert asyncio.run(go()).verdict == "fresh"
+    assert seen["thread"] != seen["loop_thread"], "ledger read ran ON the loop thread"
+    assert seen["on_loop"] is False
+
+
 def test_put_green_caches_holey_ship_does_not():
     d = DedupStore(row_lookup=lambda cid: None)
     d.put("green-chunk", ["rg"])                # default green=True

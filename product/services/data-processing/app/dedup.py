@@ -84,6 +84,9 @@ class DedupStore:
                if self._row_lookup is not None else None)
         if row is None:
             return Claim("fresh")
+        # current_pv None is NONE-SAFETY only (close-out ruling: KEEP) — every
+        # app call site passes a freshly-resolved pv at HEAD; the branch keeps
+        # the old pv_for_modality can't-judge posture for any direct caller.
         if current_pv is not None and row["pipeline_version"] != current_pv:
             return Claim("version_forward", record_ids=row["record_ids"], row=row)
         statuses = row.get("stage_status")

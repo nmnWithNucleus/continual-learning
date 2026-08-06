@@ -419,10 +419,19 @@ class Journal:
         row finalizes (holes permanent). The pending row (an async heal claim) is
         cleared epoch-guarded; the increment itself is deliberately NOT epoch-guarded
         — the failed attempt truly ran (same posture as mark_processed's unguarded
-        INSERT). A heal never dead-letters a chunk that has a durable record. Returns
-        the new budget state (plus the untouched ``record_ids``/``stage_status`` for
-        the caller's 200 reply + metrics), or None when no done-row exists — then the
-        failure was never a heal and the caller's normal taxonomy owns it."""
+        INSERT). A heal never dead-letters a chunk that has a durable record.
+
+        Evidence-based, mirroring mark_processed (close-out round): a row whose
+        CURRENT statuses are all-green (a racing worker healed it green between
+        this attempt's claim and its failure report) is neither charged nor
+        finalized — there are no holes to budget or make permanent, and a stale
+        finalize here would land with ``newly_final`` only ever surfacing on the
+        holey rewrite, silently swallowing the permanent-holes metric. The
+        pending clear still runs (the delivery is over either way). Returns
+        the new budget state (plus the untouched ``record_ids``/``stage_status``
+        for the caller's 200 reply + metrics), or None when no done-row exists —
+        then the failure was never a heal and the caller's normal taxonomy owns
+        it."""
         conn = self._connect(create=False)
         if conn is None:
             return None
@@ -436,14 +445,21 @@ class Journal:
                 if prior is None:
                     conn.execute("COMMIT")
                     return None
-                attempts = prior["heal_attempts"] + 1
+                statuses = (json.loads(prior["stage_status"])
+                            if prior["stage_status"] else None)
+                green = statuses is None or all(v == "ok" for v in statuses.values())
                 was_final = bool(prior["done_final"])
-                final = was_final or attempts >= HEAL_MAX_ATTEMPTS
-                conn.execute(
-                    "UPDATE processed SET heal_attempts = ?, done_final = ?"
-                    " WHERE chunk_id = ?",
-                    (attempts, 1 if final else 0, chunk_id),
-                )
+                if green:
+                    attempts = prior["heal_attempts"]
+                    final = was_final
+                else:
+                    attempts = prior["heal_attempts"] + 1
+                    final = was_final or attempts >= HEAL_MAX_ATTEMPTS
+                    conn.execute(
+                        "UPDATE processed SET heal_attempts = ?, done_final = ?"
+                        " WHERE chunk_id = ?",
+                        (attempts, 1 if final else 0, chunk_id),
+                    )
                 # Same supersession rule as mark_processed: the chunk KEEPS a
                 # durable record, so any dead_letter row is contradicted.
                 conn.execute(
@@ -454,8 +470,7 @@ class Journal:
                 conn.execute("COMMIT")
                 return {
                     "record_ids": json.loads(prior["record_ids"]),
-                    "stage_status": (json.loads(prior["stage_status"])
-                                     if prior["stage_status"] else None),
+                    "stage_status": statuses,
                     "heal_attempts": attempts,
                     "done_final": final,
                     "newly_final": final and not was_final,

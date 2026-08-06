@@ -141,6 +141,17 @@ learns per-stage status and a heal budget, and storage splits `ingest_time` into
 - Training-window membership and the day-log dedup axis move to `updated_at`. Healed records
   flow into the next window — accepted double-training, the same class as version bumps.
 
+**Watch out for**
+
+- "Replaces holey with fuller" reads as monotone; the built Stage D truth is not — a heal
+  re-POSTs whatever the full re-run produced, so a heal during a *different* server's outage
+  can regress a green slot until convergence. The ledger, not the record, carries hole truth;
+  convergence is the guarantee, not monotonicity (clause corrected in the charter and plan at
+  the Stage D close-out, 2026-08-06).
+- Budget exhaustion is not the only route to permanent holes: the crash-loop re-drive cap
+  force-finalizes a durable-record chunk (done-final without the heal budget reaching its
+  cap) rather than dead-letter a chunk whose record exists.
+
 ### D26 — the machinery/bureaucracy split
 
 > `ratified` 2026-08-06 · retires `isolation.py` + `INGEST_ISOLATION` + `DP_DIALECT_FREEZE`

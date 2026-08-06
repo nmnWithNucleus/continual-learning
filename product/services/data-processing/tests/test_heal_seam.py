@@ -11,6 +11,7 @@ byte-identical throughout (202/200/503).
 """
 from __future__ import annotations
 
+import sqlite3
 import time
 
 import pytest
@@ -144,6 +145,43 @@ def test_inline_heal_exhaustion_finalizes_then_skips(client):
     assert after.status_code == 200 and after.json()["record_ids"] == [rid]
     assert len(fs.record_posts) == posts_before             # no POST
     assert len(fs.blob_gets) == gets_before                 # no blob pull
+
+
+def test_inline_heal_failure_with_failed_bookkeeping_still_answers_200(client,
+                                                                       monkeypatch):
+    """Close-out round: the containment write itself failing (heal's graph run
+    fails AND journal.heal_failed raises — lock past the busy timeout, disk
+    full) must still answer 200 + the existing record_id, with the budget
+    UNCHARGED and no dead-letter. The review round shipped this guard without a
+    test — an untested behavior change its own TDD framing claimed not to make."""
+    fs = client.fake_storage
+    c1 = make_c1(fs, chunk_id="seam-hf2")
+    _FlakyAcoustic.down = True
+    first = client.post("/ingest", json=c1)
+    (rid,) = first.json()["record_ids"]
+    j = client.app.state.journal
+
+    def boom(self, ctx):
+        raise RuntimeError("asr fleet down")
+
+    def journal_down(chunk_id, now, epoch=0):
+        raise sqlite3.OperationalError("database is locked")
+
+    with monkeypatch.context() as m:
+        m.setattr(MockAsrStage, "run_sync", boom)
+        m.setattr(j, "heal_failed", journal_down)
+        resp = client.post("/ingest", json=c1)          # heal + bookkeeping BOTH fail
+    assert resp.status_code == 200                      # containment holds
+    assert resp.json()["record_ids"] == [rid]
+    assert len(fs.record_posts) == 1                    # nothing new POSTed
+    row = j.done_row("seam-hf2")
+    assert row["heal_attempts"] == 0                    # budget uncharged
+    assert row["stage_status"]["acoustic"] == "failed"  # ledger untouched
+    assert j.counts()["dead_letter"] == 0               # never dead-letters
+    # The unchanged ledger re-judges: with the fleet back, the next redelivery heals.
+    _FlakyAcoustic.down = False
+    healed = client.post("/ingest", json=c1)
+    assert healed.status_code == 200 and len(fs.record_posts) == 2
 
 
 def test_inline_heal_repost_is_byte_identical_while_holes_persist(client):

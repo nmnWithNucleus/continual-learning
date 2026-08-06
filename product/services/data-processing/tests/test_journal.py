@@ -291,6 +291,36 @@ def test_heal_failed_increments_never_regresses_and_finalizes_at_budget(tmp_path
     assert j.heal_failed("never-processed", "t6") is None        # no row -> no-op
 
 
+def test_heal_failed_on_an_all_green_row_is_a_no_op(tmp_path):
+    """Close-out round: heal_failed mirrors mark_processed's evidence-based
+    arithmetic — a row with no hole evidence (all-green: a racing worker healed
+    it green first) is neither charged nor finalized by a stale failure report.
+    Without the guard, stale writers could finalize a row with newly_final only
+    ever False on the holey rewrite, silently swallowing the permanent-holes
+    metric. The pending clear (the delivery IS over) still runs."""
+    from app.journal import HEAL_MAX_ATTEMPTS
+
+    j = Journal(tmp_path / "dp.db")
+    fs = FakeStorage()
+    c1 = _c1(fs, chunk_id="j-green", stream_id="s-g", sequence=0)
+    j.mark_processed(c1, ["rid"], "pv-1", "t0",
+                     statuses={"asr": "ok", "acoustic": "ok"})
+    epoch, _ = j.accept(c1, "t1")                    # a stale heal claim's row
+
+    st = j.heal_failed("j-green", "t2", epoch)
+    assert st is not None
+    assert st["heal_attempts"] == 0                  # no charge without evidence
+    assert st["done_final"] is False and st["newly_final"] is False
+    row = j.done_row("j-green")
+    assert row["heal_attempts"] == 0 and row["done_final"] is False
+    assert j.pending_accepted() == []                # the claim's row still clears
+
+    # Repeated stale reports can never finalize a green row.
+    for i in range(HEAL_MAX_ATTEMPTS + 1):
+        st = j.heal_failed("j-green", f"t{3 + i}")
+    assert st["heal_attempts"] == 0 and st["done_final"] is False
+
+
 def test_heal_failed_pending_delete_is_epoch_guarded_but_truth_is_not(tmp_path):
     """Same posture as mark_processed: the budget increment is TRUE regardless of
     which delivery's worker ran the failed heal; only the pending delete is
