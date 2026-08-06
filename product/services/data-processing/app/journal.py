@@ -30,10 +30,13 @@ Two safety mechanisms shape every write (from the design review):
     worker was handed. A stale worker finishing AFTER a redelivery re-accepted the chunk
     can no longer clobber the fresh row — its write no-ops. (The processed INSERT itself is
     deliberately unguarded: if the C2s were written, the receipt is true regardless.)
-  * **Bounded re-drive.** ``pending_for_redrive`` durably increments ``redrive_attempts``
-    and flips over-cap rows to ``dead_letter`` inside one transaction — a poison chunk
-    whose processing crash-loops the service breaks the loop VISIBLY instead of forever.
-    An external redelivery (a conscious re-push) resets the counter.
+  * **Bounded re-drive.** ``redrive_attempts`` accrues per PROCESSING attempt
+    (``note_redrive_attempt``, charged at worker dispatch — never per restart);
+    ``pending_for_redrive`` resolves over-cap rows in one transaction — record-less
+    poison flips to ``dead_letter`` (visible loss), while a chunk WITH a durable
+    record is FINALIZED instead (heal containment, Stage D) — so a crash-looping
+    chunk breaks the loop VISIBLY instead of forever. An external redelivery (a
+    conscious re-push) resets the counter.
 
 Storage discipline mirrors recording's ledger (the proven pattern): SQLite in
 ``$DP_VAR_DIR/dp.db``, WAL, connection-per-call, ``BEGIN IMMEDIATE`` for multi-step ops.
@@ -377,8 +380,14 @@ class Journal:
                         superseded = prior["pipeline_version"]  # version-forward
                 done_final = holes and heal_attempts >= HEAL_MAX_ATTEMPTS
                 newly_final = done_final and not prior_final
+                # The epoch guard protects a FRESH accepted row from a stale
+                # worker; a dead_letter row is CONTRADICTED by this receipt (a
+                # C2 exists — the chunk must never read as terminally lost), so
+                # the receipt supersedes it regardless of epoch (review round:
+                # the stale-redrive-vs-live-worker interleaving).
                 conn.execute(
-                    "DELETE FROM pending WHERE chunk_id = ? AND epoch = ?",
+                    "DELETE FROM pending WHERE chunk_id = ?"
+                    " AND (epoch = ? OR state = 'dead_letter')",
                     (c1["chunk_id"], epoch),
                 )
                 conn.execute(
@@ -435,8 +444,11 @@ class Journal:
                     " WHERE chunk_id = ?",
                     (attempts, 1 if final else 0, chunk_id),
                 )
+                # Same supersession rule as mark_processed: the chunk KEEPS a
+                # durable record, so any dead_letter row is contradicted.
                 conn.execute(
-                    "DELETE FROM pending WHERE chunk_id = ? AND epoch = ?",
+                    "DELETE FROM pending WHERE chunk_id = ?"
+                    " AND (epoch = ? OR state = 'dead_letter')",
                     (chunk_id, epoch),
                 )
                 conn.execute("COMMIT")
@@ -451,6 +463,22 @@ class Journal:
             except BaseException:
                 conn.rollback()
                 raise
+
+    def clear_pending(self, chunk_id: str, epoch: int) -> None:
+        """The redrive loop's skip-reconcile (review round): a skip verdict is
+        proof the ledger says done under the current dialect, so the stale
+        pending row the re-drive was launched to resolve is cleared — guarded on
+        the SNAPSHOT epoch, so a row re-accepted by a live delivery since the
+        snapshot survives untouched (that delivery's worker owns it)."""
+        conn = self._connect(create=False)
+        if conn is None:
+            return
+        with closing(conn):
+            conn.execute(
+                "DELETE FROM pending WHERE chunk_id = ? AND epoch = ?"
+                " AND state = 'accepted'",
+                (chunk_id, epoch),
+            )
 
     def done_row(self, chunk_id: str) -> Optional[dict[str, Any]]:
         """The full extended done-row (L8): the claim tree decides fresh /

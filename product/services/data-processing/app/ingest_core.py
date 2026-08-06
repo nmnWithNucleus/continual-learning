@@ -283,11 +283,28 @@ async def heal_chunk(
     except asyncio.CancelledError:
         raise
     except Exception as exc:  # noqa: BLE001 — containment IS the contract here
+        # The containment bookkeeping itself must not break the containment
+        # (review round): if the journal write ALSO fails (lock contention past
+        # the busy timeout, disk full), the reply is still 200 + the existing
+        # record_id — the budget simply goes uncharged this delivery, and the
+        # next redelivery re-judges from the unchanged ledger. Note the
+        # conservative twin: a run whose POST landed but whose RECEIPT write
+        # failed routes here too and charges one attempt for a heal that healed
+        # storage — the ledger stays holey, the next redelivery re-heals to a
+        # byte-identical no-op, and the early charge only errs toward
+        # finalizing sooner under repeated journal failures.
         state = None
         if journal is not None:
-            state = await run_in_threadpool(
-                journal.heal_failed, c1["chunk_id"], now_iso(), epoch
-            )
+            try:
+                state = await run_in_threadpool(
+                    journal.heal_failed, c1["chunk_id"], now_iso(), epoch
+                )
+            except Exception:  # noqa: BLE001
+                logger.exception(
+                    "heal-failure bookkeeping itself failed for chunk %s — "
+                    "budget uncharged; the ledger is unchanged and the next "
+                    "redelivery re-judges it", c1["chunk_id"],
+                )
         logger.warning(
             "heal attempt failed for chunk %s (attempt %s/%d): %s — chunk keeps "
             "its durable record %s",

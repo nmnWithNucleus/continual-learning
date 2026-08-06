@@ -16,6 +16,11 @@ from app.dedup import Claim, DedupStore
 from app.journal import HEAL_MAX_ATTEMPTS
 
 
+def _classify(store, cid, pv):
+    """Sync wrapper: classify is async since the review round (threadpool read)."""
+    return asyncio.run(store.classify(cid, pv))
+
+
 def _row(pv="pv-1", statuses=None, attempts=0, final=False, ids=("r1",)):
     return {
         "chunk_id": "c1", "modality": "audio", "record_ids": list(ids),
@@ -29,7 +34,7 @@ def _row(pv="pv-1", statuses=None, attempts=0, final=False, ids=("r1",)):
 
 def test_no_row_is_fresh():
     d = DedupStore(row_lookup=lambda cid: None)
-    assert d.classify("c1", "pv-1") == Claim("fresh")
+    assert _classify(d, "c1", "pv-1") == Claim("fresh")
 
 
 def test_version_mismatch_is_version_forward_even_with_holes_or_final():
@@ -41,28 +46,28 @@ def test_version_mismatch_is_version_forward_even_with_holes_or_final():
         _row(pv="pv-OLD", statuses={"asr": "ok", "acoustic": "failed"}, final=True),
     ):
         d = DedupStore(row_lookup=lambda cid, r=row: r)
-        claim = d.classify("c1", "pv-1")
+        claim = _classify(d, "c1", "pv-1")
         assert claim.verdict == "version_forward"
         assert claim.row["pipeline_version"] == "pv-OLD"
 
 
 def test_all_green_is_skip():
     d = DedupStore(row_lookup=lambda cid: _row(statuses={"asr": "ok", "diarize": "ok"}))
-    claim = d.classify("c1", "pv-1")
+    claim = _classify(d, "c1", "pv-1")
     assert claim.verdict == "skip" and claim.record_ids == ["r1"]
 
 
 def test_legacy_null_statuses_is_skip():
     """A pre-D row carries no hole evidence — heals need evidence, so it skips."""
     d = DedupStore(row_lookup=lambda cid: _row(statuses=None))
-    assert d.classify("c1", "pv-1").verdict == "skip"
+    assert _classify(d, "c1", "pv-1").verdict == "skip"
 
 
 def test_holes_with_budget_is_heal():
     row = _row(statuses={"asr": "ok", "acoustic": "failed", "align": "cancelled"},
                attempts=HEAL_MAX_ATTEMPTS - 1)
     d = DedupStore(row_lookup=lambda cid: row)
-    claim = d.classify("c1", "pv-1")
+    claim = _classify(d, "c1", "pv-1")
     assert claim.verdict == "heal"
     assert claim.record_ids == ["r1"]           # the id the heal re-POSTs (L3)
     assert claim.row is row
@@ -73,7 +78,7 @@ def test_done_final_or_exhausted_budget_is_skip():
     for row in (_row(statuses=holey, final=True),
                 _row(statuses=holey, attempts=HEAL_MAX_ATTEMPTS)):
         d = DedupStore(row_lookup=lambda cid, r=row: r)
-        claim = d.classify("c1", "pv-1")
+        claim = _classify(d, "c1", "pv-1")
         assert claim.verdict == "skip" and claim.record_ids == ["r1"]
 
 
@@ -81,7 +86,7 @@ def test_unresolvable_current_pv_skips_the_version_check():
     """current_pv None (modality unresolvable) — can't judge, same posture as the
     old pv_for_modality None: the stored row is served."""
     d = DedupStore(row_lookup=lambda cid: _row(pv="pv-OLD", statuses={"a": "ok"}))
-    assert d.classify("c1", None).verdict == "skip"
+    assert _classify(d, "c1", None).verdict == "skip"
 
 
 def test_stable_skips_are_cached_heals_are_not():
@@ -92,8 +97,8 @@ def test_stable_skips_are_cached_heals_are_not():
         return _row(statuses={"asr": "ok"})
 
     d = DedupStore(row_lookup=lookup_green)
-    assert d.classify("c1", "pv-1").verdict == "skip"
-    assert d.classify("c1", "pv-1").verdict == "skip"
+    assert _classify(d, "c1", "pv-1").verdict == "skip"
+    assert _classify(d, "c1", "pv-1").verdict == "skip"
     assert calls == ["c1"]                      # second answer came from the cache
 
     calls2 = []
@@ -103,8 +108,8 @@ def test_stable_skips_are_cached_heals_are_not():
         return _row(statuses={"asr": "ok", "acoustic": "failed"})
 
     d2 = DedupStore(row_lookup=lookup_holey)
-    assert d2.classify("c2", "pv-1").verdict == "heal"
-    assert d2.classify("c2", "pv-1").verdict == "heal"
+    assert _classify(d2, "c2", "pv-1").verdict == "heal"
+    assert _classify(d2, "c2", "pv-1").verdict == "heal"
     assert calls2 == ["c2", "c2"]               # re-judged from the ledger each time
 
 

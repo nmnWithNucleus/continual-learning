@@ -151,7 +151,17 @@ class ModelClient:
         if resp.status_code != 200:
             raise httpx.TransportError(
                 f"{replica.url} not ready: /health {resp.status_code}")
-        identity = resp.json().get("identity", {})
+        try:
+            body = resp.json()
+            if not isinstance(body, dict):
+                raise ValueError(f"non-object /health body: {body!r:.80}")
+        except ValueError as exc:
+            # A 200 that isn't the framework's health envelope (a port squatter,
+            # a proxy mid-respawn): a transient replica presentation, not a
+            # crash — the caller's transport handling owns the retry.
+            raise httpx.TransportError(
+                f"{replica.url}: malformed /health body: {exc}")
+        identity = body.get("identity", {})
         problems = identity_matches(self.expected_identity, identity)
         if problems:
             self._inc("dp_server_identity_failures_total", {"server": self.server})
@@ -220,9 +230,24 @@ class ModelClient:
             self._observe("dp_server_call_seconds", perf_counter() - t0,
                           {"server": self.server})
             if resp.status_code == 200:
-                body = resp.json()
+                try:
+                    result = resp.json()["result"]
+                except (ValueError, KeyError, TypeError) as exc:
+                    # A 200 that is not the framework envelope (a proxy answering
+                    # for a dead replica, a half-up port): never this input's
+                    # fault — a transient presentation like any other, and
+                    # whatever serves on this port next must re-verify (review
+                    # round: this exit previously escaped uncounted, or counted
+                    # a false "ok").
+                    replica.verified = False
+                    self._inc("dp_server_call_transient_retries_total",
+                              {"server": self.server})
+                    last_error = (f"{replica.url}: malformed 200 /infer body: "
+                                  f"{type(exc).__name__}: {exc}")
+                    logger.warning("%s transient: %s", self.server, last_error)
+                    continue
                 self._outcome("ok")
-                return body["result"]
+                return result
             if resp.status_code >= 500:
                 # A 5xx (incl. the framework's 503-warming) can be a respawned
                 # replica presenting itself over HTTP rather than as a transport

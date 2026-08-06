@@ -422,7 +422,14 @@ def create_app() -> FastAPI:
             claim = await app.state.dedup.claim_for_async(
                 chunk_id, processor.pipeline_version()
             )
-            if claim.verdict in ("skip", "inflight"):  # done or already claimed
+            if claim.verdict == "skip":
+                # Review round: the skip verdict is proof the ledger says done —
+                # reconcile the stale pending row this re-drive was launched to
+                # resolve (epoch-guarded on the snapshot; a row a live delivery
+                # re-accepted since survives for that delivery's worker).
+                await _tp(app.state.journal.clear_pending, chunk_id, epoch)
+                continue
+            if claim.verdict == "inflight":  # a live delivery owns it
                 continue
             try:
                 await queue.submit_wait({
@@ -650,14 +657,14 @@ def create_app() -> FastAPI:
             return JSONResponse(content={"ok": True, "record_ids": claim.record_ids})
 
         # Fast path (no lock): a stable skip answers immediately (L8 case 3).
-        claim = dedup.classify(chunk_id, pipeline_version)
+        claim = await dedup.classify(chunk_id, pipeline_version)
         if claim.verdict == "skip":
             return _skip_response(claim)
 
         # Serialize concurrent redeliveries of the same in-flight chunk_id.
         lock = await dedup.lock_for(chunk_id)
         async with lock:
-            claim = dedup.classify(chunk_id, pipeline_version)  # re-judge under the lock
+            claim = await dedup.classify(chunk_id, pipeline_version)  # re-judge under the lock
             if claim.verdict == "skip":
                 return _skip_response(claim)
 

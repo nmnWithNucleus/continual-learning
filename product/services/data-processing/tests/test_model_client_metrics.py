@@ -135,3 +135,90 @@ def test_metrics_less_construction_stays_silent():
     c = ModelClient("mock", ["http://a"], {"model": "mock-model"})
     c._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     assert asyncio.run(c.infer({"input_b64": ""})) == {}
+
+
+# ---- Review round: every exit path counts exactly one outcome ------------------
+
+def test_malformed_200_body_is_transient_and_counted():
+    """A 200 that is not the framework envelope (a proxy answering for a dead
+    replica): transient presentation, retried, and the call's outcome is
+    ``unavailable`` when the budget exhausts — never an uncounted raw
+    JSONDecodeError, never a false ``ok``."""
+    metrics = Metrics()
+    _declare(metrics)
+
+    def handler(request):
+        return _health(request) or httpx.Response(
+            200, content=b"<html>bad gateway</html>", headers={"content-type": "text/html"})
+
+    c = _client(handler, metrics)
+    with pytest.raises(ModelUnavailableError):
+        asyncio.run(c.infer({"input_b64": ""}))
+    rendered = metrics.render()
+    assert 'dp_server_calls_total{server="mock",outcome="unavailable"} 1' in rendered
+    assert 'dp_server_calls_total{server="mock",outcome="ok"} 0' in rendered
+    assert 'dp_server_call_transient_retries_total{server="mock"} 3' in rendered
+
+
+def test_200_without_result_key_is_not_ok():
+    metrics = Metrics()
+    _declare(metrics)
+
+    def handler(request):
+        return _health(request) or httpx.Response(200, json={"unexpected": "shape"})
+
+    c = _client(handler, metrics)
+    with pytest.raises(ModelUnavailableError):
+        asyncio.run(c.infer({"input_b64": ""}))
+    rendered = metrics.render()
+    assert 'dp_server_calls_total{server="mock",outcome="ok"} 0' in rendered
+    assert 'dp_server_calls_total{server="mock",outcome="unavailable"} 1' in rendered
+
+
+def test_malformed_health_body_is_transient_not_a_crash():
+    """/health answering non-JSON (mid-respawn port squatter) is a transient
+    replica presentation — retried and counted, never an escaped ValueError."""
+    metrics = Metrics()
+    _declare(metrics)
+
+    def handler(request):
+        if request.url.path == "/health":
+            return httpx.Response(200, content=b"warming up",
+                                  headers={"content-type": "text/plain"})
+        return httpx.Response(200, json={"result": {}})
+
+    c = _client(handler, metrics)
+    with pytest.raises(ModelUnavailableError):
+        asyncio.run(c.infer({"input_b64": ""}))
+    assert ('dp_server_calls_total{server="mock",outcome="unavailable"} 1'
+            in metrics.render())
+
+
+def test_app_registry_wiring_renders_seeded_server_series(monkeypatch, tmp_path):
+    """Review round: the dp_server_* families must be provably wired through the
+    APP registry (a dropped ``metrics=`` in _build_model_clients, or a label
+    drift between declaration and client, would silently kill the family — the
+    0-increment-vs-missing-series trap). The seeded zeros are the tell: they
+    render at app construction iff the wiring AND the label sets are right."""
+    from tests.conftest import install_mock_audio_registry
+
+    install_mock_audio_registry(monkeypatch)
+    monkeypatch.setenv("STORAGE_URL", "http://storage.test")
+    monkeypatch.setenv("DP_VAR_DIR", str(tmp_path / "var"))
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    app = create_app()
+    assert app.state.model_clients, "manifest clients absent — wiring untestable"
+    with TestClient(app) as c:
+        rendered = c.get("/metrics").text
+    for server in app.state.model_clients:
+        for outcome in ("ok", "deterministic_error", "unavailable",
+                        "identity_mismatch"):
+            assert (f'dp_server_calls_total{{server="{server}",'
+                    f'outcome="{outcome}"}} 0') in rendered, (server, outcome)
+        assert (f'dp_server_call_transient_retries_total{{server="{server}"}} 0'
+                in rendered)
+        assert (f'dp_server_identity_failures_total{{server="{server}"}} 0'
+                in rendered)

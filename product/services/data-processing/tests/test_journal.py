@@ -382,6 +382,59 @@ def test_pre_stage_d_journal_migrates_in_place(tmp_path):
     assert j.done_row("new-1")["stage_status"] == {"asr": "ok"}
 
 
+def test_receipt_supersedes_a_dead_letter_pending_row_any_epoch(tmp_path):
+    """Review round (races lens): a durable receipt contradicts ANY dead_letter
+    pending row — a chunk with a C2 written must never read as terminally lost.
+    The epoch guard protects fresh ACCEPTED rows only; a dead_letter row is
+    cleared by the receipt regardless of epoch (the stale-redrive-vs-live-worker
+    interleaving: live attempt dead-letters at epoch N+1, the redrive job's
+    receipt lands with snapshot epoch N — the row must not survive)."""
+    j = Journal(tmp_path / "dp.db")
+    fs = FakeStorage()
+    c1 = _c1(fs, chunk_id="j-super", stream_id="s-x", sequence=0)
+    epoch0, _ = j.accept(c1, "t0")
+    epoch1, _ = j.accept(c1, "t1")                   # live redelivery re-accepts
+    j.mark_dead_letter("j-super", "storage outage", "t2", epoch1)
+    assert j.counts()["dead_letter"] == 1
+
+    # The stale-epoch worker's receipt still lands (unguarded truth) AND clears
+    # the contradicted dead_letter row.
+    j.mark_processed(c1, ["rid"], "pv-1", "t3", epoch0, statuses={"asr": "ok"})
+    assert j.counts() == {"pending": 0, "dead_letter": 0, "processed": 1}
+
+    # Same rule on the heal_failed path: the chunk keeps a durable record, so a
+    # coexisting dead_letter row is equally contradicted.
+    j.accept(c1, "t4")
+    e_new, _ = j.accept(c1, "t5")
+    j.mark_dead_letter("j-super", "outage again", "t6", e_new)
+    assert j.counts()["dead_letter"] == 1
+    j.heal_failed("j-super", "t7", epoch=0)          # stale epoch on purpose
+    assert j.counts()["dead_letter"] == 0
+
+    # The guard on ACCEPTED rows is untouched: a stale receipt still no-ops.
+    c2 = _c1(fs, chunk_id="j-super2", stream_id="s-x", sequence=1)
+    j.accept(c2, "t8")
+    e1, _ = j.accept(c2, "t9")
+    j.mark_processed(c2, ["rid2"], "pv-1", "t10", 0, statuses={"asr": "ok"})
+    assert [c["chunk_id"] for c in j.pending_accepted()] == ["j-super2"]
+
+
+def test_clear_pending_is_epoch_guarded(tmp_path):
+    """Review round: the redrive loop's skip-reconcile — a skip verdict is proof
+    the ledger says done, so the stale pending row it was launched to resolve is
+    cleared (guarded on the snapshot epoch: a row re-accepted since belongs to a
+    live delivery and survives)."""
+    j = Journal(tmp_path / "dp.db")
+    fs = FakeStorage()
+    c1 = _c1(fs, chunk_id="j-clear", stream_id="s-x", sequence=0)
+    epoch0, _ = j.accept(c1, "t0")
+    j.clear_pending("j-clear", epoch0 + 1)           # stale guard -> no-op
+    assert j.counts()["pending"] == 1
+    j.clear_pending("j-clear", epoch0)
+    assert j.counts()["pending"] == 0
+    j.clear_pending("never-there", 0)                # absent -> no-op, no error
+
+
 def test_redrive_cap_finalizes_durable_record_chunks_never_dead_letters(tmp_path):
     """Heal containment at the crash-loop cap: a pending chunk that HAS a durable
     record (a crash-looping heal) is FINALIZED — pending cleared, done_final set,

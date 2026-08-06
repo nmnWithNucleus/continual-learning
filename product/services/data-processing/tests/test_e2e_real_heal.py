@@ -195,6 +195,16 @@ def test_heal_drill_hole_then_heal_then_skip(heal_fleet, monkeypatch, tmp_path):
 
         # ---- Phase 4: redeliver again -> pure skip, ZERO server calls -------
         calls_before = _server_calls_snapshot(c)
+        # Review round: the snapshot must be provably LIVE, or the equality
+        # below is vacuously satisfiable by a dead family (metrics render
+        # nothing for a sample-less family; ModelClient swallows recording
+        # errors). Phases 1-2 made real whisper calls through this app.
+        assert calls_before, "dp_server_calls_total family absent — wiring dead"
+        assert any('server="whisper"' in line and 'outcome="ok"' in line
+                   and not line.rstrip().endswith(" 0")
+                   for line in calls_before), (
+            "no nonzero whisper ok count after real calls — family not recording:\n"
+            + "\n".join(calls_before))
         gets_before = len(fs1.blob_gets)
         resp3 = c.post("/ingest", json=c1)
         assert resp3.status_code == 200

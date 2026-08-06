@@ -206,7 +206,143 @@ def test_async_heal_claim_rides_the_queue(async_client):
     assert r3.json() == {"ok": True, "record_ids": [rid]}
 
 
-def test_async_heal_failure_no_dead_letter_no_retry_loop(async_client, monkeypatch):
+def test_async_heal_transient_blips_retry_within_one_delivery_then_heal_green(
+        monkeypatch, tmp_path):
+    """Review round (tests lens): the worker's transient-retry loop must serve
+    heal jobs too — a blip mid-heal retries WITHIN the delivery and a green
+    outcome charges nothing. (Every earlier heal test pinned retries=0, leaving
+    the retry x heal interplay unfalsifiable.)"""
+    install_mock_audio_registry(monkeypatch)
+    _FlakyAcoustic.down = False
+    stage_mod.register_stage(_FlakyAcoustic)
+    fs = FakeStorage()
+    monkeypatch.setenv("STORAGE_URL", "http://storage.test")
+    monkeypatch.setenv("DP_VAR_DIR", str(tmp_path / "var"))
+    monkeypatch.setenv("INGEST_ASYNC", "1")
+    monkeypatch.setenv("INGEST_WORKERS", "2")
+    monkeypatch.setenv("INGEST_MAX_RETRIES", "2")     # the retry loop is LIVE here
+    monkeypatch.setenv("INGEST_RETRY_BACKOFF", "0")
+    from app.main import create_app
+
+    app = create_app()
+    app.state.storage._transport = fs.transport()
+    with TestClient(app) as c:
+        j = app.state.journal
+        c1 = make_c1(fs, chunk_id="aseam-retry")
+        _FlakyAcoustic.down = True
+        c.post("/ingest", json=c1)
+        assert _wait(lambda: len(fs.record_posts) == 1)          # holey ship
+        rid = fs.record_posts[0]["record_id"]
+        _FlakyAcoustic.down = False
+
+        # asr fails transiently TWICE, then works: the ONE heal delivery must
+        # absorb both blips in its own retry loop and land green.
+        real_run = MockAsrStage.run_sync
+        blips = {"n": 0}
+
+        def flaky(self, ctx):
+            if blips["n"] < 2:
+                blips["n"] += 1
+                raise RuntimeError("asr transient blip")
+            return real_run(self, ctx)
+
+        with monkeypatch.context() as m:
+            m.setattr(MockAsrStage, "run_sync", flaky)
+            assert c.post("/ingest", json=c1).status_code == 202  # ONE heal claim
+            assert _wait(lambda: len(fs.record_posts) == 2)       # healed
+        assert blips["n"] == 2                                    # retried in-delivery
+        row = j.done_row("aseam-retry")
+        assert all(v == "ok" for v in row["stage_status"].values())
+        assert row["heal_attempts"] == 0                          # green: no charge
+        assert fs.record_posts[1]["record_id"] == rid
+
+
+def test_async_heal_retries_exhausted_charges_exactly_one_attempt(
+        monkeypatch, tmp_path):
+    """Review round: retries exhausted inside ONE heal delivery = ONE budget
+    charge (attempts count this chunk's own failed heals, never worker retries).
+    A charge-per-retry bug would burn HEAL_MAX_ATTEMPTS on a single delivery."""
+    install_mock_audio_registry(monkeypatch)
+    _FlakyAcoustic.down = False
+    stage_mod.register_stage(_FlakyAcoustic)
+    fs = FakeStorage()
+    monkeypatch.setenv("STORAGE_URL", "http://storage.test")
+    monkeypatch.setenv("DP_VAR_DIR", str(tmp_path / "var"))
+    monkeypatch.setenv("INGEST_ASYNC", "1")
+    monkeypatch.setenv("INGEST_WORKERS", "2")
+    monkeypatch.setenv("INGEST_MAX_RETRIES", "2")
+    monkeypatch.setenv("INGEST_RETRY_BACKOFF", "0")
+    from app.main import create_app
+
+    app = create_app()
+    app.state.storage._transport = fs.transport()
+    with TestClient(app) as c:
+        j = app.state.journal
+        c1 = make_c1(fs, chunk_id="aseam-charge")
+        _FlakyAcoustic.down = True
+        c.post("/ingest", json=c1)
+        assert _wait(lambda: len(fs.record_posts) == 1)
+        rid = fs.record_posts[0]["record_id"]
+
+        calls = {"n": 0}
+
+        def always_boom(self, ctx):
+            calls["n"] += 1
+            raise RuntimeError("asr fleet down")
+
+        with monkeypatch.context() as m:
+            m.setattr(MockAsrStage, "run_sync", always_boom)
+            assert c.post("/ingest", json=c1).status_code == 202
+            assert _wait(lambda: (j.done_row("aseam-charge") or {})
+                         .get("heal_attempts") == 1)
+        assert calls["n"] == 3                        # 1 + 2 retries, one delivery
+        row = j.done_row("aseam-charge")
+        assert row["heal_attempts"] == 1              # exactly ONE charge
+        assert row["record_ids"] == [rid]             # done never regressed
+        assert j.counts() == {"pending": 0, "dead_letter": 0, "processed": 1}
+
+
+def test_redrive_skip_verdict_clears_the_stale_pending_row(monkeypatch, tmp_path):
+    """Review round (sqlite/races lenses): a pending row orphaned by an
+    epoch-mismatched receipt (e.g. an inline replay under a flipped mode) must
+    not live forever — the redrive loop's skip verdict is proof the ledger says
+    done, and it now clears the row it was launched to resolve."""
+    install_mock_audio_registry(monkeypatch)
+    _FlakyAcoustic.down = False
+    stage_mod.register_stage(_FlakyAcoustic)
+    fs = FakeStorage()
+    monkeypatch.setenv("STORAGE_URL", "http://storage.test")
+    monkeypatch.setenv("DP_VAR_DIR", str(tmp_path / "var"))
+    monkeypatch.setenv("INGEST_ASYNC", "1")
+    monkeypatch.setenv("INGEST_WORKERS", "1")
+    monkeypatch.setenv("INGEST_RETRY_BACKOFF", "0")
+    from app.main import create_app
+    from app.stagegraph.processor import graph_processor
+
+    # Seed the orphan directly (the constructed interleaving: a green receipt
+    # that missed the pending row's epoch): green done-row under the CURRENT
+    # dialect + a surviving 'accepted' pending row at a higher epoch.
+    j = Journal(tmp_path / "var" / "dp.db")
+    c1 = make_c1(fs, chunk_id="orphan-1")
+    j.accept(c1, "t0")
+    epoch1, _ = j.accept(c1, "t1")                    # epoch 1 row survives...
+    pv = graph_processor("audio").pipeline_version()
+    j.mark_processed(c1, ["rid"], pv, "t2", epoch=0,  # ...an epoch-0 receipt
+                     statuses={"asr": "ok", "acoustic": "ok"})
+    assert j.counts()["pending"] == 1                 # the phantom exists
+
+    app = create_app()
+    app.state.storage._transport = fs.transport()
+    with TestClient(app):
+        assert _wait(lambda: j.counts()["pending"] == 0)   # redrive reconciled it
+    assert j.counts() == {"pending": 0, "dead_letter": 0, "processed": 1}
+    assert fs.record_posts == []                      # nothing reprocessed
+
+
+def test_async_heal_failure_no_dead_letter(async_client, monkeypatch):
+    # (Renamed in the review round: with this fixture's retries=0 the worker
+    # retry loop is not observable here — the retry x heal interplay is pinned
+    # by the two dedicated tests above.)
     fs = async_client.fake_storage
     c1 = make_c1(fs, chunk_id="aseam-hf")
     _FlakyAcoustic.down = True

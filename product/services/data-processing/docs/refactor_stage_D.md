@@ -1,6 +1,6 @@
 # DP Rebuild — Stage D worklog (Ledger v2)
 
-**Stage:** D — Ledger v2 · **Status:** IN PROGRESS · *Dated:* 2026-08-06
+**Stage:** D — Ledger v2 · **Status:** DONE 2026-08-06 · *Dated:* 2026-08-06
 **Branch:** `dp-rebuild-v1` · **Plan:** [refactor_dp_service.md](refactor_dp_service.md) §8 Stage D
 **Laws this stage:** §1 L7/L8 (ratified as D27) — the done-ledger, the four verdicts,
 heal budgets, heal containment. §4's crash table becomes fully executable in T-5.
@@ -189,4 +189,197 @@ redeliver again → 200 same ids, zero new POSTs, zero blob pulls, and the
 `dp_server_calls_total` snapshot UNCHANGED (zero server calls on skip). Teardown:
 no fleet port listening, per-GPU deltas clean (all 8 back to 0 MiB), v0 `:8085` → 200
 before and after (in-fixture asserts + post-run spot check).
+
+Re-run after the review round (the drill gained the snapshot-liveness assertions):
+`test_heal_drill_hole_then_heal_then_skip PASSED` in 49.25s — and the fixture's
+TEARDOWN check then errored exactly per its design ("a foreign job growing
+concurrently … deserves a human look, not a silent pass"): a foreign continuum eval
+(`cued_recall_eval.py`, parent pid 3847189 — the same foreign family Stage C's WP-C6
+documented) started mid-drill and holds ~10 GB on six GPUs. The human look:
+zero supervisor/server processes remain, zero fleet ports listening, v0 → 200; the
+fleet's own memory was fully released (the first run's all-zero teardown stands as
+the hygiene proof). Not re-run to green-wash — the foreign job is not ours to wait
+out, and the check fired correctly.
+
+## The §4 crash table, made executable (each row → its test)
+
+| §4 row | Outcome held | Test |
+|---|---|---|
+| before `journal.accept` | no ACK ever sent → recording retries; nothing lost | `test_async_ingest.py::test_failed_journal_accept_releases_claim` (accept raises → 500, claim released, redelivery fresh-processes) |
+| after accept, before processing | restart recovery re-enqueues from the journal | `test_journal.py::test_kill_recovery_startup_redrive` (+ `test_pending_backlog_larger_than_queue_all_recover`) |
+| mid-graph | attempt fails → worker retry budget → dead-letter; blackboard was a cache | `test_async_ingest.py::test_unexpected_processor_error_is_retried_not_dead_lettered` + `test_missing_blob_dead_letters_and_is_visible` + `test_t5_ledger_flows.py::test_poison_chunk_dead_letters_then_redelivery_rearms` |
+| after POST, before `mark_processed` | redelivery reprocesses fully → byte-identical → upsert no-op → converges | `test_t5_ledger_flows.py::test_crash_after_post_before_mark_redelivery_converges` |
+| — epoch fencing (same row) | a stale worker's terminal writes no-op | `test_journal.py::test_stale_worker_epoch_writes_no_op` + `test_heal_failed_pending_delete_is_epoch_guarded_but_truth_is_not` |
+| model server crash | contained to the server; client retries other replicas | Stage B drill `kill_one_replica` (4/4) + `model_client` 5xx re-verify tests (Stage C cleanup B8) + `test_model_client_metrics.py::test_transient_retries_then_unavailable` |
+
+## The redelivery matrix (§8 exit)
+
+| Verdict | Test |
+|---|---|
+| skip | `test_t5_ledger_flows.py::test_same_dialect_redelivery_skips` (+ skip asserts throughout `test_heal_seam.py`; blob never re-pulled) |
+| version-forward | `test_t5_ledger_flows.py::test_version_forward_reprocess_lands_beside` (beside in storage + ledger `superseded_pv`/budget-reset) |
+| heal | `test_heal_seam.py` (inline + async, same record_id, D16 bytes) + `test_t5_ledger_flows.py::test_healed_record_byte_identical_to_never_holed_run` + the e2e drill |
+| heal-exhaustion | `test_heal_seam.py::test_inline_heal_exhaustion_finalizes_then_skips` + `test_t5_ledger_flows.py::test_heal_exhaustion_fires_metrics_and_skips` |
+| poison | `test_t5_ledger_flows.py::test_poison_chunk_dead_letters_then_redelivery_rearms` (+ `test_journal.py::test_dead_letter_survives_restart`) |
+
+## Noticed for later stages
+
+- **Stage E — the `updated_at` byte-compare × heals (the §5.1 interaction, pinned
+  here for the storage build)**: a still-holey heal re-POSTs BYTE-IDENTICAL bytes —
+  `test_heal_seam.py::test_inline_heal_repost_is_byte_identical_while_holes_persist`
+  is the DP-side input to storage's no-op-must-not-re-window rule; a FILLING heal
+  changes bytes, so `updated_at` bumps and the healed record flows into the next
+  training window (the accepted double-training, D27). Stage E's byte-compare tests
+  should replay exactly these two heal shapes.
+- **Stage E — where the ledger exposes hole state if `/continuity` ever grows a
+  `holes` field**: `journal.done_row(chunk_id)` — `stage_status` (failed vs cancelled
+  distinct) + `done_final` is the whole truth; nothing else stores it. Note
+  `rehydration()` reads only stream/sequence columns today — a per-stream holes
+  aggregate would want either a new journal read or a `stage_status IS NOT NULL AND
+  done_final` scan; the row is keyed per chunk_id, so per-version hole history does
+  NOT exist DP-side (superseded_pv is single-depth; version lineage lives in storage
+  + E-3's manifest-by-pipeline_version).
+- **Stage F — the heal drill as a routine op**: the supervisor CLI has no per-server
+  filter; the e2e drill composes two supervisors over filtered manifests with
+  `--base-dir` (the manifests' server dirs are service-root-relative). If the cutover
+  heal drill (§8 Stage F drill 3) wants kill-one-server ergonomics, a supervisor
+  `--only <server>` flag is a small honest addition — operational, no dialect impact.
+- **Stage F — dashboards**: heal visibility rides `dp_heal_attempts_total` +
+  `dp_records_finalized_with_permanent_holes_total` + the `dp_server_*` family;
+  `dp_ingest_total{result}` kept its Stage C vocabulary (heal completions count as
+  `processed`). Panels are Stage F's.
+- **Stage F/G — e2e file ordering**: `test_e2e_real_heal.py` must keep sorting AFTER
+  `test_e2e_real.py` (its module-scoped fleet must tear down before the heal drill
+  claims the same ports); if the e2e files are ever reorganized, keep the ordering or
+  move both fleets to a session-scoped arrangement.
+- **Stage F — circuit.py ruling (Stage C carried "wire or retire at D/F")**: NOT
+  wired in Stage D, deliberately — the heal machinery changes its calculus (a
+  captioner outage now heals on redrive instead of dead-lettering, so the breaker's
+  one honest use — skipping decode work during a sustained outage — is a fleet-level
+  cost optimization, not a correctness need). Wire-or-retire lands with the deploy
+  story at Stage F; re-noted so the carry isn't lost.
+- **Stage G — `cached_slots`**: still SPECIFIED AND UNPOPULATED by design (the
+  run-only-the-failed-cone seat). If it is still unpopulated at demolition time,
+  leave it — it is D27's schema seat, not dead code.
+
+## Exit criteria (§8 Stage D + the session brief)
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| Redelivery matrix green: skip / version-forward / heal / heal-exhaustion / poison | done | matrix table above, every row a named green test; full suite run below |
+| Full T-5: heal byte-identity, exhaustion→done_final+metric+skip, §4 replay, version-forward beside, skip-never-re-pulls, statuses round-trip kill-9 | done | `test_t5_ledger_flows.py` → 9 passed; §4 checklist above, every row ticked with its test |
+| WP-D1 ledger v2: done-row extension + LOOKUP + migration + containment in journal | done | commit `d571765`; `test_journal.py` → 22 passed (9 new, red-first) |
+| WP-D2 seam: four verdicts routed, async heal-claims via the queue, D16 byte-identical | done | commit `3f027c8`; `test_dedup_claim.py` 15 + `test_heal_seam.py` 6 (red-first via stash-revert; +4 more seam tests in the review round → 10) |
+| WP-D3 metrics: heal/hole families + server-call family in model_client, wired into /metrics | done | commit `3d02f0e`; `test_model_client_metrics.py` 5 (red-first; +4 in the review round → 9, incl. the app-registry wiring proof) + metric asserts in T-5/heal-seam |
+| e2e heal drill, drill discipline, tail pasted | done | WP-D3 evidence above: hole → heal ≡ clean-fleet bytes → skip with zero server calls; v0 200 before/after, GPUs 0 MiB, ports free |
+| Full DP suite green (mock) | done | `570 passed, 4 skipped` after the review round (the 4 = the DP_E2E gates: 3 real-fleet e2e + the heal drill; 561+4 at the WP-D3 commit) |
+| storage + continuum suites untouched-green | done | storage → `310 passed`; continuum → `262 passed, 7 skipped`; no file of either service touched (`git diff --name-only 5f88fbb..HEAD` shows only data-processing paths) |
+| No new env knobs; allowlist test green unchanged (HEAL_MAX_ATTEMPTS is a code pin) | done | `test_env_reads_in_app_are_exactly_the_operational_allowlist` untouched (WP-D0's comment edit only) and green in every run |
+| v0 (worktree, :8085) + :8083/:8084/:8097 untouched; stray onboarding files uncommitted | done | v0 200 asserted in both drills; no commit touches the onboarding files |
+| One commit per WP, worklog in the same commit | done | `494e396` D0 · `d571765` D1 · `3f027c8` D2 · `3d02f0e` D3 · final commit (review round + this closing edit) |
+| Stage E not started | honored | zero storage-service changes; the two Stage E carries are in "Noticed" above |
+
+## 2026-08-06 — Adversarial review round (six lenses, skeptic-verified; fixes applied)
+
+> review · a 26-agent workflow over the full Stage D diff (`5f88fbb..3d02f0e`): six
+> reviewer lenses — L8-law conformance / journal-sqlite / seam concurrency / D16
+> wire + metrics / test honesty / worklog accuracy — each raw finding then attacked
+> by an independent skeptic against the actual code and the recorded rulings.
+> Arithmetic: 20 raw findings → **15 confirmed** (4 major · 7 minor · 4 nit; the
+> doc-count defect was found by four lenses, the dedup-count by two) → **9 distinct
+> defects**, all resolved in this round's commit. 5 refuted, recorded below.
+
+**Code fixes (each TDD where the behavior changed — watched red first):**
+
+- **Receipt supersedes dead-letter (major, races).** The redrive loop enqueues with
+  the STARTUP-SNAPSHOT epoch; a live redelivery racing it could dead-letter at a
+  newer epoch and the redrive job's stale-epoch receipt then left a permanent
+  `dead_letter` pending row beside a green done-row — a chunk with a durable record
+  reading as terminally lost, exactly what containment forbids. Fix in the ledger
+  itself: `mark_processed` and `heal_failed` now clear a `dead_letter` pending row
+  REGARDLESS of epoch (a receipt contradicts the dead-letter claim; the epoch guard
+  still protects fresh ACCEPTED rows). `test_receipt_supersedes_a_dead_letter_
+  pending_row_any_epoch` — red first.
+- **Redrive skip-reconcile (2 minors, sqlite + races — one defect).** A pending row
+  orphaned by an epoch-mismatched receipt (constructible via an inline replay under
+  a flipped `INGEST_ASYNC`) was rescanned forever: the redrive loop's skip verdict
+  now clears the row it was launched to resolve via new `journal.clear_pending`
+  (guarded on the snapshot epoch — a row a live delivery re-accepted survives).
+  `test_clear_pending_is_epoch_guarded` + `test_redrive_skip_verdict_clears_the_
+  stale_pending_row` — red first.
+- **`classify` off the event loop (major, races).** The claim tree's sqlite read ran
+  synchronously on the loop (up to the full 5 s busy timeout, stalling every
+  coroutine) while claiming its guard placement prevented exactly that. `classify`
+  is now async (threadpool read, like every other loop-side journal touch); the
+  guard's critical section still never awaits and re-checks before claiming, so the
+  claim atomicity the skeptic verified is preserved. Docstrings corrected.
+- **Inline heal containment hardened (minor, law).** `heal_chunk`'s own containment
+  write (`journal.heal_failed`) was unguarded — a graph failure PLUS a journal write
+  failure would have answered 500 for a chunk with a durable record. The bookkeeping
+  is now guarded: the reply is 200 + the existing id even if the budget write fails
+  (uncharged; the unchanged ledger re-judges next delivery). The conservative twin —
+  a receipt-write failure after a landed POST charges one attempt for a heal that
+  healed storage — is documented in code as deliberate (errs toward earlier
+  finalization only under repeated journal failures).
+- **model_client outcome-counting gaps (minor, wire).** A 200 with a non-envelope
+  body escaped as a raw `JSONDecodeError` with NO outcome counted; a 200 missing
+  `result` counted a false `ok` then raised `KeyError`; a malformed `/health` body
+  escaped `ValueError`. All three are now transient presentations (retried, counted,
+  `unavailable` at budget). Three new tests — red first.
+- **Heal × worker-retry falsifiability (major, tests).** Every async heal test
+  pinned `INGEST_MAX_RETRIES=0`, so the retry-loop-then-one-charge ruling was
+  untestable (mutation-verified by the reviewer: a charge-per-retry bug passed the
+  suite). Two new tests run with retries live: transient blips retry WITHIN one
+  heal delivery then land green (no charge); full exhaustion charges exactly ONE
+  attempt. These pin already-correct behavior (coverage fill, not a code fix); the
+  misleadingly-named `…_no_retry_loop` test renamed.
+- **dp_server_* wiring falsifiability (major, tests).** The e2e "zero server calls"
+  equality was vacuously satisfiable by a dead metric family (a sample-less family
+  renders nothing; the client swallows recording errors). The drill now asserts the
+  snapshot is non-empty with a nonzero whisper `ok` before comparing, and a new
+  mock-level test (`test_app_registry_wiring_renders_seeded_server_series`) proves
+  the seeded zeros render through the APP registry — declaration, wiring and label
+  sets all falsifiable without GPUs.
+- **journal.py header (nit, sqlite).** The module header still described the
+  pre-Stage-D `pending_for_redrive` (blanket dead-letter, in-method increment);
+  rewritten to the containment-split truth.
+
+**Worklog corrections (quote-and-correct; the committed sections above stand):**
+
+- WP-D2's "14 tests" and the exit-table's "test_dedup_claim.py 14" under-counted:
+  the file has **15** tests. The "+16 net: 14 rewritten dedup tests replacing 5,
+  +6 seam, +1 t5 edit" itemization was wrong twice over — the true sum is +10 dedup
+  (15 replacing 5) + 6 seam; the t5 edit modified one test and added none. Two
+  compensating errors reached the right total; corrected here.
+- WP-D3's evidence line "Full DP suite (mock) → 561 passed, 3 skipped" under-counted
+  the skips: **4** (WP-D3 itself added the fourth `DP_E2E` gate — the heal drill).
+  The exit table already said 4.
+- STYLE rule 5 (no ALL-CAPS): the WP-D0 commit fixed one CHARTER token "per rule 5"
+  while this worklog's own prose carries ~50 ALL-CAPS emphasis tokens — internally
+  inconsistent paper, confirmed as a nit. Disclosed, not rewritten: the register
+  matches every prior stage worklog (A: 31 checker findings, B/C similar), the
+  docs-style ratchet was already red at the Stage C tip (18 files) independent of
+  this stage, and re-baselining is the checker's own "--baseline if deliberate and
+  agreed" call — the founder's, not this session's. Stage D grew the red set by
+  exactly this file; flagged for that ruling.
+
+**Refuted (recorded so the next reader does not re-litigate):** the crash-loop-cap
+"invisible version-forward finalization" (the finalize path fires the metric via the
+lifespan and version-forward re-judges by pv first, so nothing is masked); "inline
+heals ignore ProcessingError.transient" (parity with the inline fresh path, recorded
+WP-D2 decision); "epoch fence vacuous across claim generations" (accept() bumps from
+the prior row — the fence is per-row-lineage by design); "failed inline heal counted
+as result=processed with zero writes" (the existing record IS the durable answer —
+the deduped/processed vocabulary was ruled in WP-D2); the `dp_heal_attempts_total`
+help-text-vs-async-charging mismatch (the help text says attempts, the seam counts
+one per delivered claim — the WP-D1/D3 decision distinguishes the metric from the
+ledger column explicitly).
+
+**Verification after all fixes:** review-fix tests red first (`6 failed` across
+journal/seam/model-client before the fixes; all green after); full DP suite →
+`570 passed, 4 skipped`; servers/common → `30 passed`; storage → `310 passed`;
+continuum → `262 passed, 7 skipped`; e2e heal drill RE-RUN green with the hardened
+liveness assertions (tail in WP-D3's evidence, re-verified this round).
+
+**Status: DONE.**
 

@@ -22,6 +22,7 @@ pinned in test_heal_seam.py; this file owns the LAW-level matrix.
 """
 from __future__ import annotations
 
+import asyncio
 import sqlite3
 import time
 
@@ -306,7 +307,7 @@ def test_statuses_roundtrip_failed_vs_cancelled_after_kill9(monkeypatch, tmp_pat
     app2.state.storage._transport = fs.transport()
     with TestClient(app2):
         pv = graph_processor("audio").pipeline_version()
-        claim = app2.state.dedup.classify("t5-rt", pv)
+    claim = asyncio.run(app2.state.dedup.classify("t5-rt", pv))
     assert claim.verdict == "heal"
     assert claim.row["stage_status"]["speaker_align"] == "cancelled"
 

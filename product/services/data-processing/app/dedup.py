@@ -18,8 +18,11 @@ a storage read:
 One-lock discipline, unchanged from the v0 store: INLINE serializes per-chunk on
 ``lock_for``; ASYNC classifies + claims atomically under the global guard
 (``claim_for_async``), so two concurrent redeliveries can never both claim. The
-ledger read happens OUTSIDE the guard (a blocking sqlite read must never freeze
-every ingest); the guard re-checks the in-memory state before claiming.
+ledger read runs in the THREADPOOL (``classify`` is async — a sqlite read,
+busy_timeout included, must never block the event loop) and always outside the
+guard; the guard's own critical section never awaits, and it re-checks the
+in-memory state before claiming, so the read's answer is advisory and the
+claim decision stays atomic.
 
 The in-memory ``_done`` map caches STABLE skip verdicts only (green, finalized, or
 budget-exhausted rows). A holey-but-healable chunk is deliberately never cached:
@@ -37,6 +40,8 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
+
+from starlette.concurrency import run_in_threadpool
 
 from .journal import HEAL_MAX_ATTEMPTS
 
@@ -65,14 +70,18 @@ class DedupStore:
         self._row_lookup = row_lookup
 
     # ------------------------------------------------------------ decision tree
-    def classify(self, chunk_id: str, current_pv: Optional[str]) -> Claim:
+    async def classify(self, chunk_id: str, current_pv: Optional[str]) -> Claim:
         """The L8 tree, cases 1-4 (case 5, in-flight, is the async guard's).
         ``current_pv`` None (modality unresolvable right now) skips the version
-        check — the stored row is served, the old pv_for_modality posture."""
+        check — the stored row is served, the old pv_for_modality posture. The
+        ledger read runs in the threadpool (review round: a synchronous sqlite
+        read — up to its full busy_timeout — on the event loop would stall every
+        coroutine, which no guard placement can prevent)."""
         ids = self._done.get(chunk_id)
         if ids is not None:
             return Claim("skip", record_ids=ids)
-        row = self._row_lookup(chunk_id) if self._row_lookup is not None else None
+        row = (await run_in_threadpool(self._row_lookup, chunk_id)
+               if self._row_lookup is not None else None)
         if row is None:
             return Claim("fresh")
         if current_pv is not None and row["pipeline_version"] != current_pv:
@@ -116,10 +125,12 @@ class DedupStore:
         via ``put`` (completion) or ``release_inflight`` (failure/cancel).
 
         The ledger read runs BEFORE the guard (idempotent; classify caches a
-        stable skip into ``_done`` so the in-guard re-check sees it). Two
-        concurrent redeliveries can never both come back claimed; a redelivery
-        arriving mid-heal re-ACKs 202 unchanged (L8 case 5)."""
-        claim = self.classify(chunk_id, current_pv)
+        stable skip into ``_done`` so the in-guard re-check sees it — the guard's
+        critical section itself never awaits, so classify-then-claim races
+        resolve at the re-check, exactly one winner). Two concurrent
+        redeliveries can never both come back claimed; a redelivery arriving
+        mid-heal re-ACKs 202 unchanged (L8 case 5)."""
+        claim = await self.classify(chunk_id, current_pv)
         async with self._guard:
             ids = self._done.get(chunk_id)
             if ids is not None:
