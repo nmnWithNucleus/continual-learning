@@ -212,3 +212,114 @@ In-session decisions:
 Evidence: `pytest tests/test_seam_v1.py tests/test_pipeline_v1.py
 tests/test_stage_registry.py tests/test_executor.py -q` → `116 passed`;
 storage suite re-run → `310 passed` (untouched).
+
+## WP-C4 / WP-C5 — parallel subagents (audio / video stages)
+
+Dispatched as parallel subagents after C1–C3 per the plan's ∥ marking, each
+confined to disjoint paths (audio: `app/stages/audio` + retiring `app/asr`,
+`app/audio`; video: `app/stages/video` + `app/vision`), orchestrator commits.
+Both briefs carried the settled registered-set rulings (recorded here BEFORE the
+agents ran):
+
+- **Registered audio set: asr (required) + diarize + acoustic + speaker_align
+  (optional).** `translate` and `injected_caption` are ported and tested as
+  classes but NOT registered: the ratified §2 example dialect excludes them, the
+  running v0 beta fleet has both off (`TRANSLATE_BACKEND`/`INJECT_CAPTION_*`
+  unset), and the C2 v1 contract carries no `translation`/`injected_caption`
+  slot — the contract's own rule adds a sub-schema "when its first producer
+  ships", which these have not. Registering either later = code change + the
+  additive contract edit, in one commit.
+- **Optionality follows the Heard-lines ruling**: the founder-ruled C10 v2
+  `asr` fallback exists precisely because `transcript` can be a hole, which
+  entails diarize/speaker_align being optional; an acoustic-tagger outage
+  likewise must not dead-letter audio (L8 heals instead).
+- **Registered video set: clipprep (required, no record slot — frames are
+  re-derivable transient bytes) + screentext (optional, slot `ocr`) + clipcap
+  (optional, slot `caption`, needs clipprep AND screentext).** The hard
+  clipcap→screentext need is D8's surviving one-liner (specialist OCR feeds the
+  caption, D-09); its cost is honest: an OCR failure holes BOTH `ocr` and
+  `caption` (cancelled cone) until heal — L7 exactly.
+- **clipcap's real backend is the v0 `vlm` client** (one multi-image call
+  against an OpenAI-compatible endpoint) — already thin (L9's "call
+  server/cloud"); `vertex` remains the documented raising stub.
+
+### WP-C4 — audio stages as thin clients + `speaker_align` (subagent; verified + committed by the orchestrator)
+
+| File | Action | Why |
+|---|---|---|
+| `app/stages/audio/asr.py` | NEW, registered | `asr.v1-fw.v1` required primary over `servers/whisper`; params pinned to the Stage B golden (task=transcribe, beam 1, language en, vad on); owns the shared `absolute_splits` (exact v0 `_absolute_segments` clamp+abs mapping, minus speaker) + `require_client` helpers |
+| `app/stages/audio/diarize.py` | NEW, registered | `diarize.v1-pyannote.v1` → slot `diarization`, optional; raw turns only, NO mutation of anything; labels re-derived first-onset as `speaker-N` |
+| `app/stages/audio/acoustic.py` | NEW, registered | `acoustic.v1-ast.v1`, optional; v0 caption-folding SELECTION ported client-side (speech-family drop list verbatim, `THRESHOLD = 0.1`, `TOP_K = 3`, `SERVER_TOP_K = 20` — the old `ACOUSTIC_*` env knobs as code pins); `values: []` IS the empty claim (v0's "Ambient background noise." fallback dropped — a fabricated string is a false positive); `confidence` = top selected score, omitted over empty values |
+| `app/stages/audio/speaker_align.py` | NEW, registered | `speaker_align.v1-builtin.v1` → slot `transcript`, optional, needs (asr, diarize); pure-CPU join porting v0 `assign.py` semantics (max-overlap, strictly-positive, lexicographic tie-break, `None` on no overlap, one split per asr split in order) |
+| `app/stages/audio/translate.py` | NEW, **not registered** | `translate.v1-fw.v1` → slot `translation`; no-call gates (empty text / detected==en) proven by a raises-if-called fake; result language hardcoded en (whisper task=translate is X→English only — the v0 `TRANSLATE_TARGET` pin); emits honest empty claims where v0 emitted no record |
+| `app/stages/audio/injected_caption.py` | NEW, **not registered** | `injected_caption.v1-index.v1`; index path is a constructor argument (fail-fast); verbatim index time strings, half-open bisect join, mtime/size parse cache — all v0 semantics |
+| `app/asr/` (4 files) · `app/audio/` (16 files) | **DELETED** | model code went server-side at Stage B; mapping/selection/join logic ported into the stage files above; every env knob dispositioned (table below) |
+| `tests/test_audio_stages.py`, `test_audio_translate.py`, `test_audio_injected_caption.py` | NEW (TDD, spec-first pins) | 52 tests: golden-fed fake clients pin the exact slot dicts (the WP-C6 real-fleet reference), envelopes, error paths (required asr re-raises `ModelCallError`; optional holes + cancelled cone), contract validation per stage, ≥4× budget-margin pin |
+| `tests/test_audio_acoustic.py`, `test_audio_diarization.py`, `test_audio_translation.py`, `test_processor_seam.py` | **DELETED** | v0 env-knob suites + the v0 fan-out seam suite (its subject died with `processing/`; seam coverage lives in `test_seam_v1.py`) |
+
+Knob dispositions (`app/audio/config.py` + v0 injected_caption): `DIARIZE_BACKEND`,
+`DIARIZE_SPEAKERS`, `TRANSLATE_BACKEND`, `ACOUSTIC_BACKEND`,
+`INJECT_CAPTION_BACKEND` — killed (backend selection is code; registration is the
+switch). `DIARIZE_MIN/MAX_SPEAKERS` — baked as "no clustering hints" (the fleet
+default; adding one is a vB bump). `TRANSLATE_TARGET` — baked as
+`TARGET_LANGUAGE = "en"`. `ACOUSTIC_TOP_K/THRESHOLD` — baked (3 / 0.1).
+`INJECT_CAPTION_INDEX` — constructor argument. `HF_TOKEN` — server-side
+operational auth since Stage B; the DP process no longer reads it.
+
+Agent decisions endorsed: speaker normalization re-derived client-side
+(first-onset over server turns — identical today, immune to server relabeling);
+both AST goldens honestly pin `values: []` (speech-only fixtures — the
+non-empty selection path is pinned with synthetic payloads);
+`enrichments.speakers` aggregation not ported (no C2 v1 home). Registered audio
+dialect pinned by test:
+`acoustic.v1-ast.v1+asr.v1-fw.v1+diarize.v1-pyannote.v1+speaker_align.v1-builtin.v1`.
+Noticed: split timestamps render in `abs_time`'s `+00:00` microsecond spelling
+(v0 behavior) while root spans stay verbatim — C10 v2 bucketing must accept both
+(Stage E); `scripts/smoke_audio_backends.py` imports the deleted packages —
+Stage G demolition item.
+
+Evidence (agent run, then re-run independently by the orchestrator):
+`pytest tests/test_audio_* tests/test_stage_registry.py tests/test_executor.py
+tests/test_seam_v1.py tests/test_pipeline_v1.py -q` → `168 passed`.
+
+## WP-C6 — groundwork laid while C4/C5 ran (orchestrator, disjoint paths)
+
+- **Kept core suites adapted to v1** (§6 keep list): `conftest.py` now installs a
+  mock-dialect audio registry via the overridable `mock_registry` fixture and
+  provides `FakeGraphProcessor` (sync-callable-in-threadpool, preserving the v0
+  blocking-gate test idioms); `test_journal.py`, `test_async_ingest.py`,
+  `test_ingest_fairness.py` fakes rebuilt on it (stub slot names must be real
+  contract slots now — the one-POST path schema-validates); `test_ingest_mock.py`
+  rewritten to the v1 record shape; `test_civil_time_passthrough.py` extended
+  with the v1-closed `device_clock` gap (+ absent-stays-absent);
+  `test_blob_integrity.py`/`test_metrics.py`/`test_continuity.py`/
+  `test_dedup_claim.py` pass unchanged on the mock registry. 195 tests green
+  across the core set.
+- **T-spine files landed** (mock-dialect halves): `test_t1_determinism.py` —
+  the env matrix includes every KILLED knob (ASR_*, isolation, freeze, VIDEO_*,
+  ACOUSTIC_*, TRANSLATE/INJECT) plus the surviving operational knobs, asserting
+  BYTE-identical POSTed record bytes (FakeStorage now captures the raw wire
+  bytes), plus the §4 reprocess-byte-identical claim; `test_t2_one_record.py`;
+  `test_t3_version_composition.py` — sortedness owned here, `.exp-` riding,
+  fullmatch grammar + trailing-newline trap, slot.version ≡ stage segment
+  end-to-end, and the real-registry contract-surface snapshot (fills in when
+  C4/C5 register); `test_t4_slot_law.py` — record-level slot law + the L12
+  statement held executable; `test_t5_ledger_flows.py` — the Stage C subset
+  (skip / version-forward-beside / required-no-record / optional-hole), full
+  heal flows explicitly deferred to Stage D; `test_t6_honesty.py` — the L11
+  read implemented as a consumer would (record + dialect alone), incl. the
+  cancelled-cone-reads-as-hole nuance. 40 passed + 1 pending-snapshot skip.
+- **Carried hardening: servers/common `/health` is now `async def`** (a sync
+  handler shared the threadpool with queued sync `/infer` calls — a busy
+  replica's backlog could starve its own liveness probe into a supervisor
+  kill); regression test added asserting the handler is loop-native; framework
+  suite 27 passed; `/infer` bytes untouched (goldens unaffected).
+- **e2e reconnaissance**: GPU 7 now hosts a foreign continuum eval job (pid
+  3847430, `holdout_text_control.py`, ~9.5 GB) — not this repo's process; the
+  ast replica shares GPU 7 with ample headroom, and the drill's teardown
+  assertion must use before/after fleet-owned deltas, not absolute 0 MiB.
+  Qwen3-VL-32B is not in the HF cache and the serve loop (vLLM :8000) cannot
+  co-run with the learn loop (shared storage :8083), so the video e2e's real
+  backends are clipprep(ffmpeg) + screentext(ocr server); clipcap's endpoint is
+  absent on this node — the caption holes honestly (v0's live video dialect was
+  mock; the real VLM endpoint is the serve-loop's, a Stage F deploy concern).
