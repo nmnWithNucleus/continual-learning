@@ -1,6 +1,6 @@
 # DP Rebuild — Stage C worklog (New stagegraph)
 
-**Stage:** C — New stagegraph · **Status:** IN PROGRESS · *Dated:* 2026-08-06
+**Stage:** C — New stagegraph · **Status:** DONE 2026-08-06 · *Dated:* 2026-08-06
 **Branch:** `dp-rebuild-v1` · **Plan:** [refactor_dp_service.md](refactor_dp_service.md) §8 Stage C
 **Scope:** WP-C0 (live-service pre-flight) · WP-C1 (`stagegraph/stage.py` rewrite) ·
 WP-C2 (`executor.py` rewrite) · WP-C3 (`pipeline.py` / `schemas.py` / `config.py`) ·
@@ -356,12 +356,106 @@ are the DP_E2E-gated real-fleet drills).
   replica's backlog could starve its own liveness probe into a supervisor
   kill); regression test added asserting the handler is loop-native; framework
   suite 27 passed; `/infer` bytes untouched (goldens unaffected).
-- **e2e reconnaissance**: GPU 7 now hosts a foreign continuum eval job (pid
-  3847430, `holdout_text_control.py`, ~9.5 GB) — not this repo's process; the
-  ast replica shares GPU 7 with ample headroom, and the drill's teardown
-  assertion must use before/after fleet-owned deltas, not absolute 0 MiB.
-  Qwen3-VL-32B is not in the HF cache and the serve loop (vLLM :8000) cannot
-  co-run with the learn loop (shared storage :8083), so the video e2e's real
-  backends are clipprep(ffmpeg) + screentext(ocr server); clipcap's endpoint is
-  absent on this node — the caption holes honestly (v0's live video dialect was
-  mock; the real VLM endpoint is the serve-loop's, a Stage F deploy concern).
+- **e2e reconnaissance**: GPU 7 hosted a foreign continuum eval job for part of
+  the stage (pid 3847430, `holdout_text_control.py`, ~9.5 GB) — not this repo's
+  process (it finished before the drill ran; all GPUs read 0 MiB at drill
+  start). Qwen3-VL-32B is not in the HF cache and the serve loop (vLLM :8000)
+  cannot co-run with the learn loop (shared storage :8083), so the video e2e's
+  real backends are clipprep(ffmpeg) + screentext(ocr server); clipcap's
+  endpoint is absent on this node — the caption holes honestly (v0's live video
+  dialect was mock; the real VLM endpoint is the serve-loop's, a Stage F deploy
+  concern).
+
+## WP-C6 — completion (T-spine finished, real-backend e2e, boot check)
+
+- **T-1 finished**: a second matrix runs the same 15 env cells over the REAL
+  audio stage classes (clean registry, golden-fed fake clients injected in place
+  of `app.state.model_clients`) — the stage code itself, the only code that
+  could cheat with `os.getenv`, is proven output-inert; wire bytes identical in
+  all 29 cells + both reprocess checks.
+- **T-3 finished**: the registration snapshot pins both modalities' full
+  contract surface (segment/slot/needs/required/byte_budget per stage); any
+  drift without a version bump is red.
+- **Real-backend e2e** (`tests/test_e2e_real.py`, gated `DP_E2E=1`): the fleet
+  comes up via `python -m app.supervisor --manifest servers/manifest.json`
+  (subprocess, own session), all 8 replicas health-gated; the DP app runs the
+  REAL registry with storage bound to the LOCAL STUB sink (MockTransport — no
+  socket, structurally incapable of reaching :8083). Run 2026-08-06:
+
+  ```
+  $ DP_E2E=1 ./.venv/bin/python -m pytest tests/test_e2e_real.py -v
+  test_audio_chunk_end_to_end PASSED
+  test_video_chunk_end_to_end PASSED
+  test_audio_reprocess_is_byte_identical_through_the_real_fleet PASSED
+  3 passed in 35.14s
+  ```
+
+  Audio: the Stage B real-speech fixture through the live whisper/pyannote/ast
+  replicas — the emitted record is schema+mirror valid and its `asr`,
+  `diarization`, `acoustic` slots equal BYTE-EXACTLY the golden-fed pins in
+  `test_audio_stages.py` (the client path reproduces the server goldens);
+  `transcript` present and aligned. Video: real ffmpeg + real ocr server over
+  the committed fixture — valid record, `ocr` slot present, `clipprep` slotless
+  by design, `caption` an honest hole (no VLM endpoint on this node, reasoning
+  above), and a second identical-bytes chunk produced an identical slots map.
+  Reprocess through the real fleet: byte-identical wire bytes. Drill
+  discipline held: v0 `:8085` 200 before and after (asserted in the fixture and
+  re-verified), zero fleet ports listening after teardown, all 8 GPUs back to
+  0 MiB.
+- **run.sh boots the rebuilt service**: fresh boot on a scratch port → `/health`
+  200 with both dialects resolved from code
+  (`{"audio": "acoustic.v1-ast.v1+asr.v1-fw.v1+diarize.v1-pyannote.v1+speaker_align.v1-builtin.v1",
+  "video": "clipcap.v1-vlm.v1+clipprep.v1-ffmpeg.v1+screentext.v1-ppocr.v1"}`);
+  run.sh itself rewritten (ASR_BACKEND gone; `DP_SUPERVISOR` passthrough
+  documented).
+
+## Exit criteria (§8 Stage C + the session brief)
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| Full v1 suite green with mock backends | done | `pytest -q` → **494 passed, 3 skipped** (the skips are the DP_E2E gate itself) — T-1…T-6, kept suites, stage suites, seam |
+| Full v1 suite green with real backends on this node | done | `DP_E2E=1` run above: 3/3 passed under the live fleet (manifest ports 8121–8152, GPUs 2–7) |
+| Audio + video e2e emit schema-valid C2 v1 records to the stub sink | done | both records validated against `contracts/c2_processed_record.v1.json` + the pydantic mirror; POSTed to the MockTransport stub only — live storage `:8083` untouched by construction |
+| Client path reproduces Stage B goldens | done | audio slots byte-equal the golden-fed pins; the OCR chain closes at the layers below (server-vs-golden in `servers/ocr/tests`, client-mapping-vs-golden in `test_screentext.py`) |
+| storage/continuum suites untouched-green | done | storage → `310 passed`; continuum → `262 passed, 7 skipped` — identical to the Stage A/B baselines; no file of either service touched |
+| v0 keeps running from its worktree all stage long | done | `:8085` → 200 at WP-C0 (before/after its single authorized restart), before/after the fleet drill, and at exit — same pid 3835816, cwd in `/home/ubuntu/nmn/dp-v0-live` |
+| run.sh boots the rebuilt service | done | boot check above |
+| One commit per WP, worklog in the same commit | done | `1589c0f` C0 · `a870c5e` C1 · `21fc411` C2 · `c97f26c` C3 · `da60443` C4 · `bef7f07` C5 · final commit (C6 + this closing edit) |
+| Stage D not started | honored | ledger semantics everywhere v0-shaped; touchpoints inventoried below |
+
+## Noticed for later stages
+
+- **Stage D — where the single-record emit sits**: `ingest_core.process_chunk`
+  is the one seam — graph → `pipeline.build_c2` → schema+mirror gate → ONE
+  `storage.post_record` → `journal.mark_processed(c1, [record_id], pv,
+  now_iso(), epoch)` → `dedup.put`. The ledger touchpoints to extend:
+  `journal.accept/unaccept/mark_processed/mark_dead_letter/processed_record_ids`
+  (v0 row shape; the version-compare lives in `processed_record_ids`'s callback)
+  and `DedupStore.claim_for_async`'s fresh/done/inflight trichotomy →
+  L8's five-way claim tree. `GraphResult.statuses` already speaks L8's
+  `ok|failed|cancelled` vocabulary and is currently dropped on the floor at the
+  seam — persisting it into the extended done-row is the natural WP-D1 move.
+  `test_t5_ledger_flows.py` holds the Stage C subset and names what Stage D owes
+  (heal, heal-budget exhaustion, crash-table replay).
+- **Stage D/F — circuit.py** is kept+tested but wired nowhere (v0 state); the
+  one honest use (skip decode work during a sustained captioner outage) sits
+  above the graph — wire or retire there.
+- **Stage E — C10 v2 bucketing** must accept two RFC3339 spellings: root spans
+  verbatim (usually `Z`) and split times in `abs_time`'s `+00:00` microsecond
+  form; ocr slot text uses chunk-relative `+Ns` stamps (pinned `rel`) — absolute
+  stamps would be a slot-shape (vS) change.
+- **Stage F — deploy**: clipcap needs `VLM_URL` (+`VLM_API_KEY`,
+  `VLM_TIMEOUT_S`) pointing at an endpoint actually serving
+  `Qwen/Qwen3-VL-32B-Instruct`; it is NOT under the manifest identity scheme —
+  the model-name pin is the only client-side check. Consider a startup
+  `/v1/models` probe or bringing the VLM under manifest identity at cutover.
+  `DP_SUPERVISOR=1` is how a deploy makes the service own the fleet; the deploy
+  table + env passthrough remain Stage F work (Stage B's note stands).
+- **Stage G — demolition list additions**: `scripts/smoke_audio_backends.py`
+  (imports the deleted `app.asr`/`app.audio`), `scripts/capture_chunkset.py` +
+  `scripts/oracle_gemini.py` (call the deleted `clip.build_vision_settings`),
+  the parked `scripts/prompt_ab.py` (rebuild checklist in its docstring), and
+  the stray `:8097` sidecar process (Stage B's note stands).
+- **Housekeeping**: `tests/__init__.py` and `tests/fixtures` inherited entries
+  (`audio.blob`, `image.*`, `text.*`, `video.c1.json`'s 47-byte stub) are v0
+  artifacts some deleted suites used; sweep at Stage G.

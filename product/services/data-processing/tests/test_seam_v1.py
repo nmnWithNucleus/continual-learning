@@ -50,7 +50,7 @@ MOCK_PV = "acoustic.v1-mock.v1+asr.v1-mock.v1"
 
 
 @pytest.fixture()
-def mock_audio_registry(monkeypatch):
+def mock_registry(monkeypatch):
     """A registry holding only the mock audio set; discovery disabled so real
     stage files (once they exist) cannot leak into the mock dialect."""
     monkeypatch.setattr(stage_mod, "_REGISTRY", {})
@@ -60,7 +60,7 @@ def mock_audio_registry(monkeypatch):
     return stage_mod._REGISTRY
 
 
-def test_ingest_emits_exactly_one_v1_record(mock_audio_registry, client):
+def test_ingest_emits_exactly_one_v1_record(mock_registry, client):
     fs = client.fake_storage
     c1 = make_c1(fs)
     resp = client.post("/ingest", json=c1)
@@ -90,7 +90,7 @@ def test_ingest_emits_exactly_one_v1_record(mock_audio_registry, client):
         assert dead not in record
 
 
-def test_redelivery_is_deduped_without_a_second_post(mock_audio_registry, client):
+def test_redelivery_is_deduped_without_a_second_post(mock_registry, client):
     fs = client.fake_storage
     c1 = make_c1(fs, chunk_id="chunk-dedup-1")
     first = client.post("/ingest", json=c1)
@@ -101,7 +101,7 @@ def test_redelivery_is_deduped_without_a_second_post(mock_audio_registry, client
     assert len(fs.record_posts) == 1  # the redelivery never re-POSTed
 
 
-def test_optional_failure_ships_record_with_hole(mock_audio_registry, client,
+def test_optional_failure_ships_record_with_hole(mock_registry, client,
                                                  monkeypatch):
     def boom(self, ctx):
         raise RuntimeError("acoustic down")

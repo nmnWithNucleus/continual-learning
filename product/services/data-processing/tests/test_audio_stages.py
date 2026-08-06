@@ -76,6 +76,9 @@ class FakeModelClient:
         self.error = error
         self.calls: list[dict] = []
 
+    async def aclose(self) -> None:  # the app's client-shutdown path calls this
+        pass
+
     async def infer(self, payload: dict) -> dict:
         self.calls.append(copy.deepcopy(payload))
         if self.error is not None:

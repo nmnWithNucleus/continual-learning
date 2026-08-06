@@ -163,15 +163,14 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
     )
 
     # ---- WS-VC screen-video observability (§8) --------------------------------------
-    # The metric NAMES + label sets are frozen by §8 so WS-B/C/D emit against them from
-    # day one; this is the single declaration site (as it already is for the graph-stage
-    # families above). Two tiers:
-    #   * PARENT-side — emitted by ingest_core's per-unit loop, where `metrics` is in
-    #     scope even under INGEST_ISOLATION=subprocess (finding #15). Seeded to zero
-    #     below so rate() is well-defined from process start (no missing-series gap).
-    #   * STAGE-side — emitted from inside the clip stages; blind under subprocess
-    #     isolation by design. Declared here so the families exist from t=0; the labelled
-    #     ones surface on first emit (their label values are the stages' to choose).
+    # The metric NAMES + label sets stay §8's; this is the single declaration
+    # site (as it already is for the graph-stage families above). Two tiers:
+    #   * PARENT-side — emitted by ingest_core's per-slot accounting on the one
+    #     durably-written record. Seeded to zero below so rate() is well-defined
+    #     from process start (no missing-series gap).
+    #   * STAGE-side — emitted from inside the clip stages via ctx.metrics.
+    #     Declared here so the families exist from t=0; the labelled ones
+    #     surface on first emit (their label values are the stages' to choose).
     metrics.declare_counter(
         "dp_units_total", "C2 units durably written, by modality + content kind.",
         ["modality", "kind"],
@@ -245,9 +244,7 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
     # The UNLABELLED stage-side counters carry a single series each — no label values to
     # guess — so they too can be shown at zero from t=0 (WS-F EXIT: "all new counters
     # visible on /metrics at zero before any traffic"; a declared-but-never-inc'd counter
-    # renders NOTHING in this registry). Under INGEST_ISOLATION=subprocess the real
-    # increments happen in the child and are blind here, so the parent-side value stays
-    # 0 — documented, and still the honest parent view. The LABELLED stage-side families
+    # renders NOTHING in this registry). The LABELLED stage-side families
     # (parse_fallback{pack,step}, truncated{pass}, scenario_mismatch{expected,seen})
     # genuinely cannot be pre-seeded and surface on their first real emit; the histograms
     # (content_chars, delta_peak, ocr_events) render only once observed, by construction.

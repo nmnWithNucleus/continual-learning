@@ -181,3 +181,26 @@ def test_infer_calls_are_serialized_one_at_a_time():
     elapsed = time.monotonic() - t0
     assert results == [200, 200]
     assert elapsed >= 0.55, f"calls overlapped: {elapsed:.2f}s"
+
+
+def test_health_handler_is_loop_native():
+    """Stage C hardening: /health must be async (starve-proof) — a sync handler
+    shares the threadpool with queued sync /infer calls, so a busy replica's
+    backlog could starve its own liveness probe into a supervisor kill."""
+    import inspect
+
+    class _NullBackend(ModelBackend):
+        name = "null"
+
+        def load(self) -> None:  # pragma: no cover - never called here
+            pass
+
+        def identity(self) -> dict:  # pragma: no cover
+            return {"model_name": "null"}
+
+        def infer(self, request):  # pragma: no cover
+            return {}
+
+    app = build_app(_NullBackend())
+    route = next(r for r in app.routes if getattr(r, "path", "") == "/health")
+    assert inspect.iscoroutinefunction(route.endpoint)

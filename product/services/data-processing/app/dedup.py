@@ -19,10 +19,10 @@ Two cases, both covered here:
         processed; ``claim_for_async`` atomically decides done / in-flight / claim,
         so a concurrent redelivery is ACKed (202 duplicate) without a second enqueue.
 
-M0 is in-memory (single process). Because each record_id is itself deterministic on
-(chunk_id, pipeline_version, discriminator), storage's /context upsert is the
-durable backstop — even across a restart that clears this map, a reprocess is an
-upsert, not a dup.
+M0 is in-memory (single process). Because the record_id is itself deterministic
+on (chunk_id, pipeline_version) — the L3 two-component identity — storage's
+/context upsert is the durable backstop: even across a restart that clears this
+map, a reprocess is an upsert, not a dup.
 """
 from __future__ import annotations
 

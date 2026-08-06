@@ -23,9 +23,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.journal import Journal
-from app.processing.base import ProcessedContent, ProcessedUnit, Processor
 from tests.fake_storage import FakeStorage
-from tests.conftest import make_c1
+from tests.conftest import (
+    MOCK_AUDIO_PV,
+    FakeGraphProcessor,
+    install_mock_audio_registry,
+    make_c1,
+)
 
 
 def _wait(pred, timeout: float = 5.0, interval: float = 0.01) -> bool:
@@ -182,28 +186,27 @@ def test_processed_record_ids_pipeline_version_check(tmp_path):
 
 # ---- Restart drills (two apps over one var dir) --------------------------------
 
-class _GateProcessor(Processor):
-    """Blocks process() on an Event so a test can hold a chunk un-processed."""
-
-    modality = "audio"
-    content_kind = "transcript"
+class _GateProcessor(FakeGraphProcessor):
+    """Blocks the graph run on an Event so a test can hold a chunk un-processed
+    (the callable runs in the threadpool — v0's blocking-gate idiom carries over)."""
 
     def __init__(self) -> None:
         self.gate = threading.Event()
         self.calls = 0
 
-    def pipeline_version(self, settings) -> str:
-        return "asr-mock-v0"
+        def run(c1, blob, span):
+            self.calls += 1
+            self.gate.wait(timeout=10)
+            return {"asr": {"version": MOCK_AUDIO_PV,
+                            "value": f"ok {c1['chunk_id']}"}}
 
-    def process(self, c1, blob, settings, span_seconds):
-        self.calls += 1
-        self.gate.wait(timeout=10)
-        return [ProcessedUnit(content=ProcessedContent(kind="transcript",
-                                                       text=f"ok {c1['chunk_id']}"))]
+        super().__init__(run=run)
 
 
 def _async_env(monkeypatch, tmp_path, **extra):
-    monkeypatch.setenv("ASR_BACKEND", "mock")
+    """Env + the mock audio registry (create_app-based tests bypass the `client`
+    fixture, so the registry install happens here)."""
+    install_mock_audio_registry(monkeypatch)
     monkeypatch.setenv("STORAGE_URL", "http://storage.test")
     monkeypatch.setenv("DP_VAR_DIR", str(tmp_path / "var"))
     monkeypatch.setenv("INGEST_ASYNC", "1")
@@ -218,15 +221,15 @@ def test_kill_recovery_startup_redrive(monkeypatch, tmp_path):
     to completion with no external re-POST."""
     _async_env(monkeypatch, tmp_path, INGEST_DRAIN_TIMEOUT="0")
     import app.main as main_mod
-    from app.processing.registry import get_processor as real_get_processor
+    from app.stagegraph.processor import graph_processor as real_graph_processor
     from tests.conftest import SAMPLE_AUDIO
 
     fs1 = FakeStorage()
     gated = _GateProcessor()
-    gate_on = {"v": True}  # phase toggle: app1 sees the gate, app2 the real registry
+    gate_on = {"v": True}  # phase toggle: app1 sees the gate, app2 the mock registry
     monkeypatch.setattr(
-        main_mod, "get_processor",
-        lambda modality: gated if gate_on["v"] else real_get_processor(modality),
+        main_mod, "graph_processor",
+        lambda modality: gated if gate_on["v"] else real_graph_processor(modality),
     )
     app1 = main_mod.create_app()
     app1.state.storage._transport = fs1.transport()

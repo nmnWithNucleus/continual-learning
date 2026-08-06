@@ -53,7 +53,12 @@ def build_app(backend: ModelBackend) -> FastAPI:
     app.state.backend = backend
 
     @app.get("/health")
-    def health() -> JSONResponse:
+    async def health() -> JSONResponse:
+        # async def, deliberately (Stage C hardening): a sync handler here would
+        # share the threadpool with queued sync /infer calls, so a busy replica's
+        # backlog could starve its own liveness probe and the supervisor would
+        # kill a merely-busy process. This handler only reads an Event + strings
+        # — nothing blocks the loop.
         if state.load_error is not None:
             body = HealthNotReady(status="load_failed", server=backend.name,
                                   error=state.load_error)
