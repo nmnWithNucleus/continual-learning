@@ -16,6 +16,11 @@ Learn-loop (capture M0) — the /raw blob leg (C1) + the /context store (C2):
   GET  /context/records/{record_id}    -> the stored C2 (404 if absent)
   GET  /context/records?user_id=&from=&to=  -> C2 records for a user, ordered by t_start
                                                (window is half-open [from, to); bounds optional)
+  DELETE /context/records?user_id=&record_id=&chunk_id=&pipeline_version=&dry_run=
+       E-2 whole-record retraction (D28): selectors AND together, at least one required;
+       returns the auditable manifest (counts by pipeline_version + the day-log cascade's
+       blast radius). Retention / right-to-be-forgotten, never correctness — DP's ledger
+       is untouched, so a retracted chunk's redelivery still skips upstream.
 
 Learn-loop (D18) — the per-user profile (C12) + the training-window ledger (C10 evolved):
   GET  /users/{user_id}/profile        -> the C12 profile body (404 if the user has none —
@@ -75,6 +80,7 @@ from .models import (
     ReservoirEntry,
     ReservoirLedger,
     ResolveResponse,
+    RetractionManifest,
     TrainingWindow,
     TurnRecord,
     TurnWriteAck,
@@ -231,6 +237,36 @@ def create_app() -> FastAPI:
         ),
     ) -> JSONResponse:
         return JSONResponse(content=store.list_context(user_id, from_ts, to_ts))
+
+    @app.delete("/context/records", response_model=RetractionManifest)
+    def retract_context_records(
+        user_id: str = Query(..., min_length=1),
+        record_id: Optional[str] = Query(None, min_length=1),
+        chunk_id: Optional[str] = Query(None, min_length=1),
+        pipeline_version: Optional[str] = Query(None, min_length=1),
+        dry_run: bool = Query(False, description="Return the manifest without deleting"),
+    ) -> RetractionManifest:
+        # E-2 (D28): WHOLE-RECORD retraction — retention / right-to-be-forgotten,
+        # never correctness. The day-log cascade rides inside store.retract_context;
+        # DP's ledger is untouched BY DESIGN, so a retracted chunk's redelivery still
+        # skips upstream (200 + a record_id this store no longer holds) — rebuild-
+        # after-retraction is the OD-2 /raw replay tool or a version bump.
+        try:
+            manifest = store.retract_context(
+                user_id, record_id=record_id, chunk_id=chunk_id,
+                pipeline_version=pipeline_version, dry_run=dry_run)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": "no selector",
+                    "reason": "retraction requires record_id, chunk_id or "
+                              "pipeline_version; a selectorless delete would be the "
+                              "full-user wipe — M5's other primitive, deliberately "
+                              "not this endpoint",
+                },
+            ) from exc
+        return RetractionManifest(**manifest)
 
     # --- per-user profile (C12) -------------------------------------------------
 

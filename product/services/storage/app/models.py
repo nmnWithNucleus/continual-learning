@@ -447,6 +447,33 @@ class ReservoirAdmit(_Strict):
     corpus_text: str
 
 
+# --- E-2 whole-record retraction (D28) ------------------------------------------
+
+
+class RetractionSelector(_Strict):
+    """The selector echoed on the manifest — whichever of the three whole-record axes
+    the caller named (they AND together over the mandatory user_id)."""
+
+    record_id: str | None = None
+    chunk_id: str | None = None
+    pipeline_version: str | None = None
+
+
+class RetractionManifest(_Strict):
+    """E-2's auditable manifest (D28): whole-record counts by ``pipeline_version``,
+    plus the day-log cascade's blast radius. Storage-minted end to end, hence a strict
+    response model; there is no cross-service contract file — E-2 is a service-owned
+    retention primitive that Platform's M2 orchestration will call, and its shape is
+    pinned on the D28 card."""
+
+    user_id: str = Field(min_length=1)
+    dry_run: bool
+    selector: RetractionSelector
+    records: int = Field(ge=0)
+    by_pipeline_version: dict[str, int]
+    day_logs_invalidated: int = Field(ge=0)
+
+
 class TurnWriteAck(_Strict):
     ok: bool
     turn_id: str

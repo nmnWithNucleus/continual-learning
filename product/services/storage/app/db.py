@@ -643,6 +643,88 @@ class Store:
             conn.commit()
         return record_id
 
+    def retract_context(
+        self,
+        user_id: str,
+        *,
+        record_id: Optional[str] = None,
+        chunk_id: Optional[str] = None,
+        pipeline_version: Optional[str] = None,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        """E-2: whole-record retraction from ``/context``, with the day-log cascade
+        (D28; charter M5).
+
+        Selectors AND together over the mandatory ``user_id``; at least one is required
+        (a selectorless call would be a full-user wipe by typo — that is M5's OTHER
+        primitive, deliberately not this one). Whole RECORDS, never kinds or slots: the
+        kind-granular design retired unbuilt (D28). Returns the auditable manifest —
+        counts by ``pipeline_version``, the selector echoed, and how many cached
+        day-logs the cascade invalidated; ``dry_run`` returns the same manifest and
+        touches nothing. Retracting nothing is an honest zero manifest, never an error.
+
+        THE CASCADE: every cached day-log whose window contains an affected record's
+        ``updated_at`` is INVALIDATED — dropped and rebuilt on next fetch, the same
+        mechanism a corrected ``home_tz`` uses — because a retraction that clears
+        ``/context`` and leaves a materialized day-log standing has deleted nothing.
+
+        THE LEDGER BOUNDARY, plainly: this never touches DP's done-ledger, so a
+        retracted chunk's redelivery still SKIPS there — DP answers 200 with a
+        record_id this store no longer holds, and no write arrives here. That is the
+        designed posture, not a bug: E-2 is a retention / right-to-be-forgotten
+        primitive, never a correctness mechanism ("deletion is never the mechanism for
+        correctness" stands). Rebuild-after-retraction is the OD-2 ``/raw`` replay tool
+        (future) or a version bump. ``/raw`` bytes are untouched too — bytes are sacred
+        (OD-2), with their own M5 primitives.
+        """
+        if record_id is None and chunk_id is None and pipeline_version is None:
+            raise ValueError("retraction requires at least one selector")
+        clauses = ["user_id = ?"]
+        params: list[Any] = [user_id]
+        selector: dict[str, str] = {}
+        if record_id is not None:
+            clauses.append("record_id = ?")
+            params.append(record_id)
+            selector["record_id"] = record_id
+        if chunk_id is not None:
+            clauses.append("chunk_id = ?")
+            params.append(chunk_id)
+            selector["chunk_id"] = chunk_id
+        if pipeline_version is not None:
+            clauses.append("pipeline_version = ?")
+            params.append(pipeline_version)
+            selector["pipeline_version"] = pipeline_version
+        where = " AND ".join(clauses)
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"SELECT pipeline_version, updated_at FROM context_records "
+                f"WHERE {where}", params).fetchall()
+            by_pv: dict[str, int] = {}
+            for row in rows:
+                pv = row["pipeline_version"] or ""
+                by_pv[pv] = by_pv.get(pv, 0) + 1
+            invalidated = 0
+            if rows and not dry_run:
+                conn.execute(f"DELETE FROM context_records WHERE {where}", params)
+                before = conn.total_changes
+                stamps = sorted({row["updated_at"] for row in rows
+                                 if row["updated_at"]})
+                for stamp in stamps:
+                    conn.execute(
+                        "DELETE FROM day_logs "
+                        "WHERE user_id = ? AND t_start <= ? AND t_end > ?",
+                        (user_id, stamp, stamp))
+                invalidated = conn.total_changes - before
+                conn.commit()
+        return {
+            "user_id": user_id,
+            "dry_run": dry_run,
+            "selector": selector,
+            "records": len(rows),
+            "by_pipeline_version": by_pv,
+            "day_logs_invalidated": invalidated,
+        }
+
     def get_context(self, record_id: str) -> Optional[dict[str, Any]]:
         with self._connect() as conn:
             row = conn.execute(

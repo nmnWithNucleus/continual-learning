@@ -12,8 +12,10 @@
 > | *What did the founders decide?* | [../../DECISIONS.md](../../DECISIONS.md) — the `D-n` register |
 
 **Stage: PROTOTYPE** ([D19](../../DECISIONS.md)) · **Status:** serve loop + capture + the *D18
-expansion built and live* · *Last updated:* 2026-08-06 (DP-rebuild joint rows ratified as
-D27/D28; nothing running here changed)
+expansion built and live* · *Last updated:* 2026-08-06 (the D27/D28 joint rows BUILT on
+branch `dp-rebuild-v1` at rebuild Stage E; the live `:8083` service now launches from the
+main-pinned worktree `/home/ubuntu/nmn/dp-v0-live` — same interpreter, same data paths,
+so branch work can no longer reach it; nothing it serves changed)
 
 ---
 
@@ -78,27 +80,35 @@ per-user isolation enforced by the mandatory `user_id`).
   may move alone** ([D20](../../DECISIONS.md)) — *if the trainer can see it, it is contract; if only
   storage can see it, it is ours.*
 
-## Incoming — the DP rebuild's joint rows (ratified 2026-08-06)
+## Incoming — the DP rebuild's joint rows (ratified 2026-08-06; BUILT on branch at Stage E)
 
-Two of the rebuild's six rows are joint with us — **D27** and **D28**, ratified 2026-08-06
-([../../DECISIONS.md](../../DECISIONS.md)); both build at the rebuild's Stage E, and nothing
-running here changes before then:
+Two of the rebuild's six rows are joint with us — **D27** and **D28**
+([../../DECISIONS.md](../../DECISIONS.md)). Both were BUILT on `dp-rebuild-v1` at the
+rebuild's Stage E (2026-08-06, worklog:
+[../data-processing/docs/refactor_stage_E.md](../data-processing/docs/refactor_stage_E.md));
+nothing RUNNING here changes before the Stage F cutover:
 
-- **D27** — `ingest_time` splits into `created_at` + `updated_at` (byte-compare bump); the
-  training-window axis and the day-log dedup key move to `updated_at`.
+- **D27** — `ingest_time` split into `created_at` + `updated_at` (the byte-compare is the
+  upsert; a no-op re-POST leaves the row completely untouched); the training-window axis
+  and the day-log dedup key moved to `updated_at`. Built, suite-proven (heal×window
+  matrix, all three Stage D shapes).
 - **D28** — the day-log renderer walks C2 v1 `content.slots`
-  ([../../contracts/c10_daylog.v2.json](../../contracts/c10_daylog.v2.json)); dedup collapses to
-  latest `updated_at` per `(chunk_id)`. D20's parity bar re-baselines against the v2 renderer
-  (WP-E4).
-- E-2 is redesigned whole-record (delete by `record_id` / `chunk_id` / `pipeline_version`;
-  manifest by `pipeline_version`): §Next item 1's kind-aware shape is retired (D28), its
-  priority intact.
+  ([../../contracts/c10_daylog.v2.json](../../contracts/c10_daylog.v2.json)); dedup is
+  latest `updated_at` per `(chunk_id)`, rowid tiebreak; stamps bumped
+  (`daylog_format_version` "2" + `consolidation-v2.0`). D20's parity bar re-baselined:
+  31 checks green, tier A byte-identical to the untouched v0 reference over both origins.
+- E-2 built whole-record (`DELETE /context/records` by `record_id` / `chunk_id` /
+  `pipeline_version`; manifest by `pipeline_version`; day-log cascade; dry-run): §Next
+  item 1's kind-aware shape retired unbuilt (D28).
+- The branch is C2-v1-only end to end (founder ruling R1): the v0 wire keeps running on
+  the LIVE worktree service until cutover, and continuum must be TAUGHT the two new
+  stamps before then or its correct refusal blocks every window (the Stage F gate).
 
 ## Next
 
 | # | Item | Why it's open |
 |---|---|---|
-| 1 | **E-2 — the kind-aware retraction primitive** (`DELETE /context/records?…&kind=`), *cascading to the day-log and the reservoir*. | Each of those is a *second copy of user content*, so a retraction that clears `/context` and leaves a day-log standing has deleted nothing. Today a **re-wipe is the only way to retract rows** — the cutover hit this directly. CHARTER M5 |
+| 1 | **E-2 — BUILT whole-record on `dp-rebuild-v1`** (rebuild Stage E, [D28](../../DECISIONS.md)); reaches the RUNNING service at the Stage F cutover. Remaining here: Platform M2 orchestration, the reservoir leg of the cascade (window-granular, not record-granular — full-user delete's job), and M5's time-slice delete. | Until cutover a re-wipe is still the only retraction the LIVE service has; the branch primitive ends that. CHARTER M5 |
 | 2 | **C5 registration → the model-directory build** (M3). Three constraints, and they are not documentation: a *three*-value status enum (or `record_gate_failure()` has nowhere to land); *nullable* `adapter_dir` + `base_model_hash` (gate-failed rows carry NULLs); C6 eligibility as a *log replay*, not "latest row wins". | The last would otherwise serve a gate-failed candidate — the exact ungated swap the gate exists to prevent. Waits on the C5 shape pin (deferred by [D19](../../DECISIONS.md)) |
 | 3 | **D9 observability** — `/metrics` (request rate/latency/errors + query latency, rows read/written, DB size) + our Grafana dashboard JSON. | Platform's shared backbone is the blocker; emission is ours. CHARTER M7 |
 | 4 | **Retention mechanism** ([D19](../../DECISIONS.md)) — a versioned per-store retention document, every store `keep_forever`, read and surfaced on `/metrics`, *no sweeper*. Rules mark *eligibility*; a separate explicit sweep acts and writes a manifest. | So a bad config edit can produce a wrong report, never silent data loss |

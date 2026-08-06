@@ -249,3 +249,38 @@ New York). Scratch instance torn down after; live fleet 200/200/200.
 Evidence: proof re-run → exit 0, all 31 checks green (report committed);
 `tests/test_daylog_parity.py` → `8 passed`; full storage suite → `338 passed` (the
 WP-E2 red window closed).
+
+## WP-E3 — E-2 whole-record retraction, finally built (D28; charter M5)
+
+| File | Action | Why |
+|---|---|---|
+| `app/db.py` | extended | NEW `Store.retract_context(user_id, *, record_id, chunk_id, pipeline_version, dry_run)` — selectors AND over the mandatory `user_id`, at least one required (a selectorless call raises: the full-user wipe is M5's *other* primitive); whole records only; auditable manifest with counts by `pipeline_version` (D28); the day-log cascade invalidates every cached window containing an affected `updated_at` (the corrected-`home_tz` mechanism); dry-run returns the identical manifest and touches nothing; retracting nothing is an honest zero, not an error. The docstring states the LEDGER BOUNDARY plainly |
+| `app/main.py` | edited | `DELETE /context/records` → the manifest; 422 `{"error": "no selector"}` on a selectorless call; the route comment restates the boundary (retention, never correctness; redelivery skips upstream; rebuild = OD-2 replay or a version bump) |
+| `app/models.py` | edited | `RetractionManifest` + `RetractionSelector` (strict; storage-minted body → response model; no contract file — E-2 is a service-owned primitive whose shape is pinned on the D28 card, for Platform M2 to call) |
+| `tests/test_retraction.py` | NEW (TDD) | 12 tests: the three selectors (by-record, by-chunk takes the version-forward lineage *beside*, by-version), AND-composition, selectorless 422 that wipes nothing, `user_id` required + cross-user attempt fails closed with an honest zero, idempotent zero-manifest retry, dry-run parity with the wet manifest, the day-log cascade (renders *without* the retracted record; spans windows; bystander user survives), `/raw` blobs untouched (bytes are sacred), and the ledger-boundary drill |
+| `CHARTER.md` (storage) M5 | edited | E-2's rules block replaced with the built whole-record truth (the kind-granular board shape retired unbuilt, D28); the time-slice delete explicitly stays M5's own unbuilt primitive; "deletion is never the mechanism for correctness" stands verbatim in §Retention; dated How-it-got-here entry + Last-updated stamp |
+| `HANDOFF.md` (storage) | rewritten in place | today-state: the WP-E0a repoint recorded on the status line; §Incoming flips D27/D28 to built-on-branch with the Stage F stamp-teaching gate; §Next item 1 flips to built-with-remainder (Platform M2, reservoir leg, time-slice delete) |
+
+In-session decisions:
+
+- **The ledger-boundary drill simulates the skip reply** (the brief's "or" branch): DP's
+  claim tree decides from its OWN ledger, never a storage read (a Stage D decision), so
+  the wire fact to pin is that a redelivery after retraction produces *no write here* —
+  the drill retracts, states the D16 skip shape (`200 {ok, record_ids:[rid]}` with a
+  record_id storage no longer holds), and asserts the record stays 404 with zero rows.
+  The full cross-service replay drill belongs to Stage F's drill list.
+- **The reservoir is deliberately NOT in E-2's cascade**: reservoir corpora are
+  window-granular artifacts, not record-granular ones — no record selector maps to an
+  admitted corpus. The full-user delete (M5, unbuilt) owns that leg; the charter card
+  says so now instead of implying otherwise.
+- **`/raw` untouched, pinned by test**: bytes are sacred (OD-2); E-2 retracts processed
+  records only.
+
+Evidence: TDD red first — `tests/test_retraction.py` → `11 failed, 1 passed` against
+the shipped app (405 on the DELETE route, no `retract_context`); green after: `12
+passed`. One fixture corrected mid-round, disclosed: the isolation test originally gave
+two users the SAME chunk_id, and L3 (record identity = chunk_id ␀ pv, no user
+component) made the second POST upsert the first user's row — real contract behavior,
+not a defect; chunk ids are globally unique ULIDs in production, so the fixture now
+models that and adds the fails-closed cross-user assertion. Full storage suite →
+`350 passed`.
