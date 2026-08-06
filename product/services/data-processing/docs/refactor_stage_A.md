@@ -1,7 +1,7 @@
 # DP Rebuild — Stage A worklog (Ratify & cut paper)
 
-**Stage:** A — Ratify & cut paper · **Status:** BLOCKED, all WPs complete, awaiting founder
-sign-off (founders' board escalation DP-A) · *Dated:* 2026-08-05 · cleanup round 2026-08-06
+**Stage:** A — Ratify & cut paper · **Status:** DONE 2026-08-06, ratified as D23–D28 ·
+*Dated:* 2026-08-05 · cleanup 2026-08-06 · ratified 2026-08-06
 **Branch:** `dp-rebuild-v1` · **Plan:** [refactor_dp_service.md](refactor_dp_service.md) §8 Stage A
 **Scope:** WP-A1 (D-rows D-R1…D-R6 · CHARTER §Slot Law · ARCHITECTURE C2/C10 cards),
 WP-A2 (`contracts/c2_processed_record.v1.json` · `contracts/c10_daylog.v2.json`, README
@@ -326,11 +326,83 @@ positives on law-name labels ("L3 — Identity."), and three 21–31-word why-ce
 worklog's own WP tables, kept as contemporaneous record. This file's status line was brought
 under budget.
 
+## 2026-08-06 — Ratification round (founder sign-off; Stage A closes DONE)
+
+> decision · founder sign-off received via the session prompt of 2026-08-06 · two commits:
+> ratification + residual fixes, then this worklog
+
+**The sign-off instrument, quoted verbatim** (the authority for everything in this round):
+
+> "FOUNDER SIGN-OFF IS HEREBY GIVEN: the founder ratifies the Stage A paper as amended by the
+> cleanup round (rulings of 2026-08-06: processed_at dropped, Heard-lines asr fallback in,
+> device_clock stays, empty slots map legal)."
+
+**The D-number mapping.** The register's highest row was verified as D22, so the six drafted
+rows took the next six numbers in plan order:
+
+| Drafted (Stage A handle) | Ratified 2026-08-06 |
+|---|---|
+| D-R1 | **D23** — the Slot Law replaces the record-emission law |
+| D-R2 | **D24** — C2 v1: one record per chunk, built from slots |
+| D-R3 | **D25** — the version law |
+| D-R4 | **D26** — the machinery/bureaucracy split |
+| D-R5 | **D27** — the heal ledger, and `created_at`/`updated_at` |
+| D-R6 | **D28** — C10 v2 + whole-record retraction |
+
+**Residual fixes applied first** (from the independent verification of the cleanup round):
+the plan §7 D24 bullet re-punctuated to one em-dash (the specialist-OCR gloss parenthesized);
+ARCHITECTURE's D28 history row and line-8 header reworded so "drafted" attaches to decision
+rows, never to schema versions; the 127-char §On C2 line in the charter rewrapped.
+
+**Files touched in the ratification commit**
+
+- `product/DECISIONS.md` — §Drafted deleted whole (banner, index, cards); the six cards
+  entered the register as D23–D28 following its conventions (append-at-top rows, `ratified`
+  2026-08-06, house status-line format); bidirectional lineage back-edits on
+  D8/D10/D16/D18/D19/D20: Lineage cells and card status lines only, decision text untouched.
+- `docs/refactor_dp_service.md` — Status → RATIFIED 2026-08-06 (D23–D28); §7/§8 renumbered
+  with "(was D-R…)" parentheticals, which stay in this dated record only.
+- `CHARTER.md` — §Slot Law banner → ratified (D23), executable-at-Stage-C clause kept; dated
+  changelog bullet added; §On C2 rewrap.
+- `docs/record-emission-law.md` — Status stamped superseded 2026-08-06 by CHARTER §Slot Law
+  (D23); everything below the status untouched (STYLE rule 10).
+- `product/ARCHITECTURE.md` — header + C2/C10 cards flipped to ratified row numbers; v0/v1
+  still named the running wire until Stage F.
+- `product/contracts/` — both schema descriptions and the README rows/section cite
+  D24/D27/D28.
+- `product/HANDOFF.md` — DP-A resolved per the board's E-3(a) precedent: row and card out, a
+  dated resolved paragraph in; "Nothing is blocking" restored with the rebuild's true state.
+- three service boards — ratified statuses, final D-numbers, stamps.
+- `handoff/worklog.md` — the dated timeline entry (kind: decision, D23–D28, the branch,
+  Was/Changed/Now/Payoff), per that file's own finished-item rule.
+
+**D22 note — ratification does not re-trigger the field-guide rewrite.** The onboarding field
+guide still teaches the running v0 service, and that is still what runs: the branch is
+unmerged, so the repo-wins rule keeps the guide truthful today (the cleanup round's corrected
+basis). The rewrite lands with Stage G, before cutover. Restated here so the ratification
+edit is not read as the change-it-teaches trigger.
+
+**Verification (run before committing)**
+
+```
+$ grep -rl "D-R" product/
+product/services/data-processing/docs/refactor_stage_A.md
+product/services/data-processing/docs/refactor_dp_service.md     (both dated records)
+$ grep -rn "awaiting ratification|awaiting founder ratification" product/  (excl. this file)
+(no hits)
+$ grep -rn "§Drafted" product/  (excl. this file's history)
+(no hits)
+```
+
+Anchor, suite and validation evidence follow in the table below and were re-run in this
+round; the historical §Drafted and D-R mentions above this section are append-only history
+and stay.
+
 ## Exit criteria (§8 Stage A)
 
-§8 names one exit criterion; the table below splits it into what this session could complete
-and what only the founder can do. That remainder is why the status line reads BLOCKED, not
-DONE — sign-off is an act, not a work product.
+§8 names one exit criterion; the table below splits it into what the build session could
+complete and what only the founder could do. The remainder landed 2026-08-06
+(§Ratification round above), which is when the status line flipped to DONE.
 
 | Criterion | Status | Evidence |
 |---|---|---|
@@ -342,7 +414,7 @@ DONE — sign-off is an act, not a work product.
 | WP-A2: README contract-edit order respected | done | §Contracts first (`04a6828`) → `contracts/` → three canvases (`b5f39c8`) |
 | No runtime change | done | diff main…HEAD is `*.md`/`*.json` only; storage 310 · DP 788+21s · continuum 262+7s all green |
 | Adversarial review, findings resolved | done | 14 raw → 7 confirmed → all fixed (final commit); 7 refuted with reasons |
-| **Founder sign-off on the plan doc + schemas** | **pending — the blocker** | escalation **DP-A** on the founders' board, opened 2026-08-05 |
+| **Founder sign-off on the plan doc + schemas** | **done 2026-08-06** | the sign-off instrument is quoted in §Ratification round; the rows entered the register as D23–D28 |
 
-On sign-off: ratify/renumber D-R1…D-R6 into the register, then Stage B may open. Nothing in
-Stages B–G is started.
+Sign-off landed 2026-08-06: D-R1…D-R6 entered the register as D23–D28 (§Ratification round).
+Stage B remains not started — explicitly out of this session's scope.
