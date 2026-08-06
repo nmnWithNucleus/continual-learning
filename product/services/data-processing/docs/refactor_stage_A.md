@@ -1,7 +1,7 @@
 # DP Rebuild — Stage A worklog (Ratify & cut paper)
 
-**Stage:** A — Ratify & cut paper · **Status:** BLOCKED — all WPs complete, awaiting founder
-sign-off (founders' board escalation **DP-A**) · **Date:** 2026-08-05
+**Stage:** A — Ratify & cut paper · **Status:** BLOCKED, all WPs complete, awaiting founder
+sign-off (founders' board escalation DP-A) · *Dated:* 2026-08-05 · cleanup round 2026-08-06
 **Branch:** `dp-rebuild-v1` · **Plan:** [refactor_dp_service.md](refactor_dp_service.md) §8 Stage A
 **Scope:** WP-A1 (D-rows D-R1…D-R6 · CHARTER §Slot Law · ARCHITECTURE C2/C10 cards),
 WP-A2 (`contracts/c2_processed_record.v1.json` · `contracts/c10_daylog.v2.json`, README
@@ -118,6 +118,9 @@ canvases — all below in one commit.
   carry — the schema documents exactly this), but it silently drops real speech from the
   training corpus in the permanent-hole case. Not improvised around; Stage E should build
   whatever is ruled. The v2 schema needs no change either way.
+- **Resolved 2026-08-06, ruled in.** Speech lines render from `slots.transcript`; when that
+  slot is absent they fall back to `slots.asr`, speakers unlabeled. Stage E builds it — see
+  §Cleanup round below.
 
 ## Test evidence
 
@@ -228,6 +231,100 @@ file's own header).
   D-R1…D-R6, moves the cards into the register proper, and the `(DECISIONS.md §Drafted)`
   cross-references in ARCHITECTURE/CHARTER/canvases should be re-pointed in the same
   session.
+- **Ratification bookkeeping (added 2026-08-06)** — at sign-off, also stamp
+  `docs/record-emission-law.md`'s Status line superseded → CHARTER §Slot Law, so the extract
+  stops describing a charter section that no longer exists on this branch.
+- **Stage C (added 2026-08-06)** — extend T-3/T-4: each emitted slot's `version` must equal
+  its stage's segment of `pipeline_version`, so the schema's deliberate redundancy can never
+  drift.
+
+## 2026-08-06 — Cleanup round (independent review + founder rulings)
+
+> cleanup · applied on `dp-rebuild-v1`, two commits (fixes, then this worklog) · triggered by
+> an independent 12-agent review (6 lenses, skeptic-verified) plus four founder rulings.
+> Everything above this section stands as written; corrections below amend, never rewrite.
+
+**Founder rulings applied**
+
+- **`processed_at` dropped from C2 v1** (schema `required` + `properties`, plan §2 example,
+  C2 card shape and rules): a wall-clock field inside the record breaks the §5.1 byte-compare
+  (every reprocess would re-window) and makes T-1 unpassable. Processing latency moves to DP
+  `/metrics`. Plan §4 now states the byte-identical claim holds by construction; recorded on
+  the D-R2 card.
+- **Heard-lines fallback ruled in**: speech lines render from `slots.transcript`; when that
+  slot is absent, from `slots.asr` (speakers unlabeled). Added to the c10 v2 schema (root
+  description + `segments.asr`), the D-R6 card, plan §5.2 and the C10 card's v2 deltas;
+  §Design questions above is resolved by it. Stage E builds it.
+- **`device_clock` stays** in C2 v1 `source{}`; the D-R2 card now names the D17 trio riding
+  verbatim, citing the charter's D17 rules — the register-vs-charter/schema drift is closed
+  on the card, not just in the schema.
+- **Empty `content.slots` stays legal** — the in-session decision above is endorsed; no
+  change.
+
+**Review findings applied** (by file)
+
+- Plan §7 D-R2 gains D8's disposition: partially supersedes the shipped two-record shape, the
+  specialist-OCR-feeds-the-caption one-liner surviving; mirrored in the drafted index cell
+  and the card status line (two bolds).
+- DECISIONS.md: D-R3/D-R4 no longer quote the law verbatim — both bullets now summarize and
+  cite L4/L9, so D-R1's "restated nowhere" claim is true of its own section; D-R4's lineage
+  cell names `isolation.py`; D-R2's slots bullet split so `modality`-to-root is its own idea.
+- CHARTER.md: §On C2 repointed to the v0 schema and the retired law's extract (its old target,
+  §Record ids, was replaced by §Slot Law); L5/L7/L9 overflow clauses split into sub-bullets.
+- ARCHITECTURE.md: the C10 v2 block folded into that card's **Rules** with `designed` in place
+  of an ad-hoc "drafted" status word; the E-2 and D-R2-header double-em-dash sentences fixed;
+  the C2 source rule now names the transport-field exclusion; C2 shape and rules drop
+  `processed_at`; the C2 watch-out's dead-concepts claim narrowed (same defect as review
+  item 22, third site — disclosed here since the item named only the schemas).
+- Boards: founders' §Where-we-are names DP-A as the one blocker (was "Nothing is blocking");
+  DP-A's one-liner de-em-dashed; the DP board's two remaining 765 figures dated as at-the-merge
+  values; the DP rebuild bullet split to one bold per bullet; storage's §Incoming D-R6 bullet
+  split and its §Next item 1 cell un-widened; continuum's flag bullet split; the DP-A card
+  gains a How-it-got-here entry noting this cleanup.
+- Schemas: c2's two dead-concepts claims narrowed to what the charter list actually names
+  (discriminator, the enrichments block — with `content.kind`/`content.text` dying alongside
+  the per-kind model, not on the list); c10's two double-em-dash sentences fixed (root
+  description, `t_start`).
+- contracts/README.md: the fourteen-files bullet's comma splice repaired by splitting it in
+  two.
+
+**Corrections to earlier entries in this worklog**
+
+- The WP-A2 claim "Nothing else on those boards was touched" was false: continuum's
+  pre-existing storage flag bullet also gained a clause ("redesigned whole-record by the
+  drafted D-R6"). The edit was accurate; the disclosure was missing. Disclosed now.
+- "The board's stale figure was corrected in the review round" over-claimed: one of three
+  sites was (the status line). The WS-index VC row and a §Next bullet kept 765 until this
+  round dated them as at-the-merge figures.
+- The D22 deferral's basis is restated: not "plan-sanctioned" (the plan's own banner
+  disclaims binding force until ratified) but this — the branch is unmerged, so the field
+  guide still truthfully teaches the running v0 service; the rewrite lands with Stage G,
+  before cutover.
+- The review arithmetic, enumerably: 14 raw findings → 7 confirmed + 7 refuted; the 7
+  confirmed describe 6 distinct defects (the DP-board 765 figure was found by two lenses)
+  across 5 edit sites (the D-R2 lineage cell carried two defects, verb precision and bold
+  budget, fixed in one edit).
+- "README contract-edit order" in the WP-A2 heading means `product/README.md`'s conventions
+  row ("A contract changes in §Contracts first, then `contracts/`, then both canvases"), not
+  `contracts/README.md`.
+
+**Verification re-run (2026-08-06)**
+
+```
+$ …/scratchpad/validate_stage_a_schemas.py   # processed_at fixture removed; rejected-case added
+18 passed, 0 failed
+$ storage        .venv/bin/python -m pytest -q → 310 passed
+$ data-processing .venv/bin/python -m pytest -q → 788 passed, 21 skipped
+$ continuum       .venv/bin/python -m pytest -q → 262 passed, 7 skipped
+```
+
+STYLE §Self-check re-run over every touched file (bold density, widest cell, restatement
+grep, per-sentence em-dash scan): the restatement grep for the two law sentences now hits
+only the charter (the home) and the plan doc (the dated design source). Residual scanner
+flags are pre-existing legacy cells and status lines outside this round's scope, false
+positives on law-name labels ("L3 — Identity."), and three 21–31-word why-cells in this
+worklog's own WP tables, kept as contemporaneous record. This file's status line was brought
+under budget.
 
 ## Exit criteria (§8 Stage A)
 
