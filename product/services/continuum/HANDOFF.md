@@ -14,8 +14,8 @@
 > | *Per-workstream detail* | the `ws-*.md` files in [handoff/](handoff/) |
 
 **Stage: PROTOTYPE** ([D19](../../DECISIONS.md)) · **Status:** ✅ *learn loop closed and cut over to
-storage* · *Last updated:* 2026-08-05 (C10 v2 drafted by the DP rebuild; nothing running here
-changed)
+storage* · *Last updated:* 2026-08-06 (C10 v2 ratified by the DP rebuild, D28; nothing running
+here changed)
 
 ---
 
@@ -72,17 +72,17 @@ changed)
 
 ## Cross-service flags
 
-- **the DP rebuild (drafted 2026-08-05, awaiting ratification)** — C2 v1 (slots) and C10 day-log
+- **the DP rebuild (ratified 2026-08-06, D23–D28)** — C2 v1 (slots) and C10 day-log
   v2 (slot-walk renderer, `(chunk_id)`/`updated_at` dedup) are cut on branch `dp-rebuild-v1`
-  ([../../contracts/c10_daylog.v2.json](../../contracts/c10_daylog.v2.json); D-R5/D-R6 in
-  [../../DECISIONS.md](../../DECISIONS.md) §Drafted).
+  ([../../contracts/c10_daylog.v2.json](../../contracts/c10_daylog.v2.json); D27/D28 in
+  [../../DECISIONS.md](../../DECISIONS.md)).
 - Nothing to build here yet: at the cutover (rebuild Stage F) `daylog_format_version`/`recipe_id`
   bump and our already-built stamp-refusal is the transition safety net. Healed records land in
   the *next* window (accepted double-training, same class as a version bump).
 - **storage** — the day-log, the training-window ledger, the `window_id` minter and C12/C13/C14 are
   *theirs and built* ([D18](../../DECISIONS.md)). Open on their side: *E-2*, the kind-aware
   retraction primitive, which must cascade to the day-log and the reservoir — redesigned
-  whole-record by the drafted D-R6.
+  whole-record by D28.
 - **data-processing** — the caption-spec upgrade (event-verb dense descriptions, quality score,
   eval-only QA field) and later an `amplify` batch stage / slot-generation stage are still queued
   behind board ratification of [C-2](DECISIONS.md).

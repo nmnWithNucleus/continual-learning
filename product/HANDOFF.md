@@ -13,8 +13,8 @@
 > Read this first in any founders' session, then the aspect file you're working. Service-level state
 > lives in each service's own `HANDOFF.md` — this board links, it does not restate.
 
-**Stage: PROTOTYPE** (D19) · **Last updated:** 2026-08-05 (escalation DP-A opened — the DP
-rebuild's Stage A sign-off ask; nothing else on this board moved)
+**Stage: PROTOTYPE** (D19) · **Last updated:** 2026-08-06 (DP-A resolved — the DP rebuild's
+Stage A ratified as D23–D28)
 
 ---
 
@@ -33,8 +33,8 @@ rebuild's Stage A sign-off ask; nothing else on this board moved)
   `services/inference/serve_vllm.sh` when needed.
 - **Learn fleet is up on node-7** (storage 8083 · recording 8084 · data-processing 8085);
   `INGEST_ASYNC` and `INGEST_ISOLATION` stay off by default.
-- **One thing is blocking: DP-A.** The DP rebuild's Stages B–G wait on the Stage A sign-off
-  (§Escalations); every other open item is a follow-up, not a gate.
+- **Nothing is blocking.** The DP rebuild's Stage A is ratified (D23–D28, 2026-08-06); its next
+  act is Stage B (machinery), not started. Every open §Next item is a follow-up, not a gate.
 
 ---
 
@@ -144,54 +144,29 @@ Each thread carries its own reasoning and a newest-first worklog. The board does
 
 ## Escalations (open items needing a founders' decision)
 
-Two origins share this table. **DP-A** (opened 2026-08-05 by the DP rebuild) is a true blocker:
-rebuild Stages B–G wait on it. The **E-rows** were opened 2026-07-24 by the data-processing
-screen-video design session (WS-VC); that build is done and integrated (2026-07-25), so they are
-cutover gates and founders' calls, not build blockers — full write-ups, with the measured numbers
-behind each, in
+Opened 2026-07-24 by the data-processing screen-video design session (WS-VC). The build is done
+and integrated (2026-07-25), so these are cutover gates and founders' calls, not build blockers.
+Full write-ups, with the measured numbers behind each, in
 [services/data-processing/handoff/ws-video-clip.md](services/data-processing/handoff/ws-video-clip.md)
 §10.
 
 | # | Ask | Owner(s) | Blocks | Founders' call? |
 |---|---|---|---|---|
-| **DP-A** | Stage A sign-off of the DP rebuild: ratify D-R1…D-R6, plan + schemas | founders | rebuild Stages B–G | **yes** [↓](#dp-a--the-dp-rebuild-stage-a-sign-off) |
 | **E-3(b)** | A captioner VL endpoint distinct from the user-facing `:8000` | platform + inference | scale-up, not the build | **yes** [↓](#e-3b--a-captioner-vl-endpoint) |
 | **E-5** | The parked additive C2 edit — the ask is to *not* take it yet | founders → storage + data-processing | nothing | when triggered [↓](#e-5--the-parked-additive-c2-edit) |
 | **E-2** | A kind-aware retraction primitive; demoted by D18 | storage | nothing | service-level [↓](#e-2--the-retraction-primitive) |
 | **E-1 · E-4 · E-6** | Sibling-service asks with no contract surface | recording · continuum | cost figure · RWT granularity | no [↓](#e-1--e-4--e-6--sibling-service-asks) |
 
+**Resolved 2026-08-06: DP-A** — the DP rebuild's Stage A sign-off. The founder ratified the
+Stage A paper as amended by the cleanup round; the six drafted rows entered the register as
+**D23–D28**, E-2's whole-record redesign is ratified with D28 (the E-2 row below keeps its
+priority), and Stage A is complete on branch `dp-rebuild-v1`. Stage B (machinery) is the
+rebuild's next act and has not started.
+
 **Resolved during the build: E-3(a)** — the `--limit-mm-per-prompt` serving-flag ask. WS-A's probe
 verified vLLM 0.24.0 defaults the image cap to 999 and clamps nothing at 768×480, so the
 multi-image call validates on the *unmodified* `serve_vllm.sh`; the flags are determinism pins, not
 a prerequisite.
-
-### DP-A — the DP rebuild Stage A sign-off
-
-> open 2026-08-05 · founders · blocks rebuild Stages B–G, nothing running
-
-**In one line.** The DP rebuild's paper is cut on branch `dp-rebuild-v1` (six D-rows drafted,
-the Slot Law written into the DP charter, C2 v1 + C10 v2 schemas landed), and Stage A exits
-only on founder sign-off.
-
-**The ask**
-
-- Ratify [D-R1…D-R6](DECISIONS.md) (the drafted section above the register) and sign off the
-  [rebuild plan](services/data-processing/docs/refactor_dp_service.md) as written, plus the two
-  schemas.
-- `main` and the running service are untouched (OD-1 beside-build); v0/v1 stay the wire until
-  the Stage F cutover.
-
-**Watch out for**
-
-- D-R6 redesigns **E-2** (kind-aware → whole-record retraction). The E-2 row below stands as-is
-  until ratification; on ratification its design moves, not its priority.
-
-**How it got here**
-
-- **2026-08-06 — cleanup round applied.** An independent review's confirmed findings plus four
-  founder rulings (`processed_at` dropped from C2 v1; the Heard-lines `asr` fallback ruled in;
-  `device_clock` stays; empty `slots` stays legal) are folded into the paper. Validation and
-  all three suites re-run green; the paper is ready to ratify as amended.
 
 ### E-3(b) — a captioner VL endpoint
 

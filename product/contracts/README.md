@@ -30,13 +30,13 @@ is push/at-least-once, dedup on `chunk_id`, gaps via `(stream_id, sequence)`.
 |---|---|---|
 | `c1_raw_stream_envelope.v0.json` | C1 | recording → data-processing envelope |
 | `c2_processed_record.v0.json` | C2 | data-processing → storage `/context` record (the running wire) |
-| `c2_processed_record.v1.json` | C2 | the rebuild target: one record per chunk, slots (drafted, D-R2) |
+| `c2_processed_record.v1.json` | C2 | the rebuild target: one record per chunk, slots (ratified, D24) |
 | `c3_userprompt.v0.json` | C3 | input → inference UserPrompt |
 | `c4_turn_record.v0.json` | C4 | inference → storage `/sessions` turn |
 | `c6_resolve.v0.json` | C6 | model-directory resolution |
 | `c9_response_stream.v0.json` | C9 | inference → output stream envelope |
 | `c10_daylog.v1.json` | C10 | `GET /training/daylog` — the rendered day-log (the running read) |
-| `c10_daylog.v2.json` | C10 | the rebuild target: slot-walk renderer, `updated_at` axis (drafted, D-R6) |
+| `c10_daylog.v2.json` | C10 | the rebuild target: slot-walk renderer, `updated_at` axis (ratified, D28) |
 | `c10_training_window.v1.json` | C10 | one training-window ledger row (open · close · each element of the enumeration) |
 | `c12_user_profile.v0.json` | C12 | `GET /users/{user_id}/profile` |
 | `c13_recipe.v0.json` | C13 | `GET /recipes/{recipe_id}` |
@@ -93,12 +93,12 @@ the fixed-width property the whole lexicographic-ordering guarantee rests on. *T
 redundant with the pattern and must not be tidied away*; storage pins all three together in one test
 so the fix cannot silently reopen.
 
-## The DP-rebuild targets, drafted 2026-08-05 (Stage A — awaiting ratification)
+## The DP-rebuild targets (Stage A; ratified 2026-08-06 as D24/D28)
 
 *`c2_processed_record.v1.json` and `c10_daylog.v2.json` landed 2026-08-05* on branch
 `dp-rebuild-v1`, cut at Stage A of the DP rebuild
-([plan](../services/data-processing/docs/refactor_dp_service.md) §2 + §5; D-R2/D-R6 drafted in
-[DECISIONS.md](../DECISIONS.md), awaiting founder ratification). **No service validates against
+([plan](../services/data-processing/docs/refactor_dp_service.md) §2 + §5; ratified 2026-08-06
+as [D24](../DECISIONS.md) and [D28](../DECISIONS.md)). **No service validates against
 them yet, and that is by design, not the D17 drift failure**: they are the shapes the rebuild's
 Stages C–E build and validate against, cut first per [ORG.md](../ORG.md) §"Contracts before
 fan-out" — the same order C10-evolved/C13/C14 followed on 2026-07-27. The running service emits

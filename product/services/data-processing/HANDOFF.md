@@ -4,8 +4,8 @@
 > Read [CHARTER.md](CHARTER.md) first (mission/scope/interfaces), then this file — the
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
-**Status:** built · **788 tests** (+21 skipped, re-run 2026-08-05) · *Last updated:* 2026-08-05
-(rebuild Stage A paper cut on branch `dp-rebuild-v1`; the running service is untouched)
+**Status:** built · **788 tests** (+21 skipped, re-run 2026-08-06) · *Last updated:* 2026-08-06
+(rebuild Stage A ratified, D23–D28; the running service is untouched)
 
 **Where we are.** The service ingests C1 chunks and emits C2 records for every modality, behind a
 stage-graph pipeline where each processing step is a drop-in file. Audio is real end to end. Video
@@ -169,11 +169,10 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
   - Suite unregressed at 38.
 
 ## Next
-- **The service is being rebuilt beside itself** — Stage A paper is cut and awaiting sign-off
-  (2026-08-05, branch `dp-rebuild-v1`, founders' board ask DP-A; cleanup round applied
-  2026-08-06).
-- C2 v1 (one record per chunk, slots) and the charter §Slot Law are drafted as D-R1…D-R6
-  ([../../DECISIONS.md](../../DECISIONS.md) §Drafted); everything below describes the running
+- **The service is being rebuilt beside itself** — Stage A is ratified (2026-08-06, D23–D28,
+  branch `dp-rebuild-v1`); Stage B (machinery) is the next act, not started.
+- C2 v1 (one record per chunk, slots) and the charter §Slot Law are ratified as D23–D28
+  ([../../DECISIONS.md](../../DECISIONS.md)); everything below describes the running
   service, the wire until the rebuild's Stage F cutover.
 - Plan + stage worklogs: [docs/refactor_dp_service.md](docs/refactor_dp_service.md) ·
   [docs/refactor_stage_A.md](docs/refactor_stage_A.md).

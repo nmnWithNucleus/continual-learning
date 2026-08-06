@@ -12,8 +12,8 @@
 > | *What did the founders decide?* | [../../DECISIONS.md](../../DECISIONS.md) — the `D-n` register |
 
 **Stage: PROTOTYPE** ([D19](../../DECISIONS.md)) · **Status:** serve loop + capture + the *D18
-expansion built and live* · *Last updated:* 2026-08-05 (DP-rebuild joint rows drafted; nothing
-running here changed)
+expansion built and live* · *Last updated:* 2026-08-06 (DP-rebuild joint rows ratified as
+D27/D28; nothing running here changed)
 
 ---
 
@@ -78,20 +78,20 @@ per-user isolation enforced by the mandatory `user_id`).
   may move alone** ([D20](../../DECISIONS.md)) — *if the trainer can see it, it is contract; if only
   storage can see it, it is ours.*
 
-## Incoming — the DP rebuild's joint rows (drafted 2026-08-05, awaiting ratification)
+## Incoming — the DP rebuild's joint rows (ratified 2026-08-06)
 
-Two of the rebuild's six drafted rows are joint with us ([../../DECISIONS.md](../../DECISIONS.md)
-§Drafted; founders' board ask **DP-A**); both build at the rebuild's Stage E, and nothing running
-here changes before then:
+Two of the rebuild's six rows are joint with us — **D27** and **D28**, ratified 2026-08-06
+([../../DECISIONS.md](../../DECISIONS.md)); both build at the rebuild's Stage E, and nothing
+running here changes before then:
 
-- **D-R5** — `ingest_time` splits into `created_at` + `updated_at` (byte-compare bump); the
+- **D27** — `ingest_time` splits into `created_at` + `updated_at` (byte-compare bump); the
   training-window axis and the day-log dedup key move to `updated_at`.
-- **D-R6** — the day-log renderer walks C2 v1 `content.slots`
+- **D28** — the day-log renderer walks C2 v1 `content.slots`
   ([../../contracts/c10_daylog.v2.json](../../contracts/c10_daylog.v2.json)); dedup collapses to
   latest `updated_at` per `(chunk_id)`. D20's parity bar re-baselines against the v2 renderer
   (WP-E4).
 - E-2 is redesigned whole-record (delete by `record_id` / `chunk_id` / `pipeline_version`;
-  manifest by `pipeline_version`): §Next item 1's kind-aware shape retires on ratification, its
+  manifest by `pipeline_version`): §Next item 1's kind-aware shape is retired (D28), its
   priority intact.
 
 ## Next

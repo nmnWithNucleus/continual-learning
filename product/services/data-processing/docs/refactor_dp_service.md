@@ -1,6 +1,6 @@
 # DP Service Rebuild — Design & Migration Plan
 
-**Status:** DRAFT — design consensus reached point-by-point in founder session 2026-08-05; migration decisions OD-1/2/3 ruled (§8). Awaiting founder review of this document as written; nothing is ratified until the D-rows in §7 land.
+**Status:** RATIFIED 2026-08-06 (D23–D28) — executing; Stage A complete. Design consensus reached point-by-point in founder session 2026-08-05; migration decisions OD-1/2/3 ruled (§8); the §7 rows entered the register 2026-08-06 as amended by the Stage A cleanup round (rulings of 2026-08-06: `processed_at` dropped, Heard-lines `asr` fallback in, `device_clock` stays, empty slots map legal).
 **Date:** 2026-08-05
 **Scope:** everything downstream of chunk acceptance (the stage graph, record emission, C2 shape, model execution). The pre-graph machinery — journal, dedup claims, ingest queue, backpressure, continuity, blob-first pull, D16 reply wire — is explicitly KEPT and is the foundation this design stands on.
 **Supersedes on ratification:** CHARTER §Record-vs-mutation law; `docs/record-emission-law.md`; D10's C2-v0-shape clause; D16's fan-out `record_ids` clause; D19's "discriminator surfaced" clause; D8's shipped two-record shape (its one-liner — specialist OCR feeding the caption — survives).
@@ -143,14 +143,14 @@ reprocess under fixed versions is byte-identical per T-1.
 
 ---
 
-## 7. Decision-register work (append-only; drafted at Stage A, ratified by founder)
+## 7. Decision-register work (ratified 2026-08-06 as D23–D28; drafted at Stage A as D-R1…D-R6)
 
-- **D-R1** Ratify the Slot Law (§1 L1–L12); retire the WS-VC emission law + riders (charter edit, same ceremony that ratified it).
-- **D-R2** C2 v1 (§2) supersedes D10's shape clause; D19's discriminator clause retired; D16's fan-out clause restated (exactly one derivable id per chunk — strengthened); partially supersedes D8 (shipped two-record shape; its one-liner — specialist OCR feeding the caption — survives).
-- **D-R3** Version law (L4): no-knobs discipline, stage/backend split, experiments-fork-the-dialect.
-- **D-R4** Machinery/bureaucracy split (L9); `isolation.py` + `INGEST_ISOLATION` + `DP_DIALECT_FREEZE` retired with condensed history.
-- **D-R5** Heal ledger (L8) + storage `created_at`/`updated_at` (§5.1) — joint row with storage.
-- **D-R6** C10 v2 + E-2 whole-record retraction (§5.2–5.3) — joint row with storage; D20 parity re-baseline.
+- **D23** *(was D-R1)* Ratify the Slot Law (§1 L1–L12); retire the WS-VC emission law + riders (charter edit, same ceremony that ratified it).
+- **D24** *(was D-R2)* C2 v1 (§2) supersedes D10's shape clause; D19's discriminator clause retired; D16's fan-out clause restated (exactly one derivable id per chunk — strengthened); partially supersedes D8 (shipped two-record shape; its one-liner (specialist OCR feeding the caption) survives).
+- **D25** *(was D-R3)* Version law (L4): no-knobs discipline, stage/backend split, experiments-fork-the-dialect.
+- **D26** *(was D-R4)* Machinery/bureaucracy split (L9); `isolation.py` + `INGEST_ISOLATION` + `DP_DIALECT_FREEZE` retired with condensed history.
+- **D27** *(was D-R5)* Heal ledger (L8) + storage `created_at`/`updated_at` (§5.1) — joint row with storage.
+- **D28** *(was D-R6)* C10 v2 + E-2 whole-record retraction (§5.2–5.3) — joint row with storage; D20 parity re-baseline.
 
 ---
 
@@ -164,7 +164,7 @@ reprocess under fixed versions is byte-identical per T-1.
 Stages are sequential; work-packages (WPs) inside a stage can run as parallel agents where marked ∥. Every WP ends with its tests green and a one-line worklog entry.
 
 **Stage A — Ratify & cut paper (S).**
-WP-A1: D-rows D-R1…D-R6 drafted into `product/DECISIONS.md`; CHARTER §Slot Law written; ARCHITECTURE C2/C10 cards updated. WP-A2: `contracts/c2_processed_record.v1.json`, `contracts/c10_daylog.v2.json` (README contract-edit order respected). No runtime change. **Exit:** founder sign-off on this doc + schemas.
+WP-A1: D-rows D23…D28 (drafted as D-R1…D-R6) into `product/DECISIONS.md`; CHARTER §Slot Law written; ARCHITECTURE C2/C10 cards updated. WP-A2: `contracts/c2_processed_record.v1.json`, `contracts/c10_daylog.v2.json` (README contract-edit order respected). No runtime change. **Exit:** founder sign-off on this doc + schemas — given 2026-08-06.
 
 **Stage B — Machinery (M).** ∥ after B1
 WP-B1: server framework (`servers/common`: FastAPI skeleton, health, warmup, request schema) + `app/supervisor.py` (manifest → spawn/health/restart) + `app/model_client.py` (replica pick, timeout, bounded transient retry).

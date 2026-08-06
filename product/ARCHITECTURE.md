@@ -5,8 +5,8 @@
 > This is an evolving first version, not a frozen spec — changes to §Contracts route through
 > a founders' session and a note in [HANDOFF.md](HANDOFF.md).
 
-**Last updated:** 2026-08-05 (C2 v1 + C10 v2 drafted on branch `dp-rebuild-v1`, rebuild Stage A;
-[D-R2](DECISIONS.md)/[D-R6](DECISIONS.md) awaiting ratification)
+**Last updated:** 2026-08-06 (C2 v1 + C10 v2 cut on branch `dp-rebuild-v1` at rebuild Stage A;
+decision rows ratified 2026-08-06, [D24](DECISIONS.md)/[D28](DECISIONS.md))
 
 ---
 
@@ -244,8 +244,8 @@ Envelope leg  recording ──push──▶ data-processing
 
 ### C2 — the processed record
 
-> **data-processing → storage `/context`** · v1 `designed` 2026-08-05 (rebuild Stage A,
-> [D-R2](DECISIONS.md) drafted — awaiting ratification) · v0 `built`, the running wire until the
+> **data-processing → storage `/context`** · v1 `designed`, ratified 2026-08-06
+> ([D24](DECISIONS.md)) · v0 `built`, the running wire until the
 > Stage F cutover · [D10](DECISIONS.md) · [D17](DECISIONS.md) · [D19](DECISIONS.md)
 > · schemas [c2_processed_record.v1.json](contracts/c2_processed_record.v1.json) ·
 > [c2_processed_record.v0.json](contracts/c2_processed_record.v0.json)
@@ -283,7 +283,7 @@ still emits is its schema plus §How it got here.
   ordering and range-query axis. Sub-slot `splits[]` carry absolute RFC3339 times for C10's
   sub-span bucketing.
 - Storage-side timestamps are **not** in C2, and no DP wall-clock is either: storage assigns
-  `created_at`/`updated_at` ([D-R5](DECISIONS.md); `ingest_time` under the running v0), and
+  `created_at`/`updated_at` ([D27](DECISIONS.md); `ingest_time` under the running v0), and
   `processed_at` was dropped (ruled 2026-08-06) because a wall-clock field inside the record
   breaks the byte-compare and T-1. Processing latency is a `/metrics` matter.
 - Reading a record is Slot Law L11: stage in the dialect + slot absent = attempted and failed;
@@ -318,14 +318,14 @@ still emits is its schema plus §How it got here.
 
 **How it got here**
 
-- **2026-08-05 — D-R2 (drafted): the rebuild re-cut to one record per chunk, built from slots.**
+- **2026-08-05 — D24 (drafted; ratified 2026-08-06): the rebuild re-cut to one record per chunk, built from slots.**
   - **Was** — one chunk could fan out to several records (video keyframes, an `ocr` beside a
     `caption`, an original beside its translation), told apart by a discriminator, with in-place
     mutation governed by the emission law.
   - **Changed** — v1 pins exactly one record per `(chunk_id, pipeline_version)`; `content`
     becomes a slots map with one producer per slot; `modality` moves to the root; `enrichments`,
     `discriminator` and `content.kind` are deleted.
-  - **Now** — drafted at Stage A beside the running v0; ratification is the D-R2 row, the wire
+  - **Now** — cut at Stage A beside the running v0 and ratified 2026-08-06 as D24; the wire
     flips at Stage F.
   - **Payoff** — identity needs two components instead of three, sibling-record bookkeeping
     disappears, and the governance the old shape required (five tests, five riders, an
@@ -515,8 +515,8 @@ carrying `{error:"..."}`.
 
 ### C10 — the training-window read
 
-> **storage → continuum** · day-log v2 `designed` 2026-08-05 (rebuild Stage A,
-> [D-R6](DECISIONS.md) drafted — awaiting ratification) · v1 `built` 2026-07-27 (`a5a48fb`
+> **storage → continuum** · day-log v2 `designed`, ratified 2026-08-06
+> ([D28](DECISIONS.md)) · v1 `built` 2026-07-27 (`a5a48fb`
 > storage · `1757efb` continuum · `2698b63` DP), the running read until the Stage F cutover
 > · [D18](DECISIONS.md) · [D20](DECISIONS.md)
 > · schemas [c10_daylog.v2.json](contracts/c10_daylog.v2.json) ·
@@ -582,8 +582,8 @@ Day-log body:
 - `home_tz` in the body records **the fallback zone actually used**, so a wrong-timezone adapter is
   falsifiable after the fact instead of invisible.
 
-- The **v2 deltas** (`designed`; [D-R6](DECISIONS.md) with [D-R5](DECISIONS.md) drafted —
-  awaiting ratification; built at Stage E) against the rules above, everything else standing:
+- The **v2 deltas** (`designed`; ratified 2026-08-06 as [D28](DECISIONS.md) with
+  [D27](DECISIONS.md); built at Stage E) against the rules above, everything else standing:
   - The renderer walks C2 v1 `content.slots` instead of per-kind records: `slots.caption` →
     Scene · `slots.ocr` → World text (OCR) · `slots.transcript` → speaker-bucketed transcript
     lines via its `splits[]`.
@@ -693,14 +693,14 @@ Day-log body:
 
 **How it got here**
 
-- **2026-08-05 — D-R6 (drafted): the day-log re-cut for the slots world.**
+- **2026-08-05 — D28 (drafted; ratified 2026-08-06): the day-log re-cut for the slots world.**
   - **Was** — the v1 renderer walked per-kind records and deduped on
     `(chunk_id, content.kind, discriminator)` over `ingest_time`, because one chunk could carry
     several records in several dialects.
-  - **Changed** — v2 drafted at rebuild Stage A: slot-walk rendering, `(chunk_id)` dedup on
-    `updated_at`, and E-2 as whole-record operations.
-  - **Now** — paper only, on branch `dp-rebuild-v1`; v1 remains the running read until the
-    Stage F cutover, and Stage E builds the v2 renderer.
+  - **Changed** — v2 cut at rebuild Stage A (D28 drafted): slot-walk rendering, `(chunk_id)`
+    dedup on `updated_at`, and E-2 as whole-record operations.
+  - **Now** — paper only, on branch `dp-rebuild-v1`, ratified 2026-08-06; v1 remains the
+    running read until the Stage F cutover, and Stage E builds the v2 renderer.
   - **Payoff** — the dedup rule loses two components, retraction becomes expressible in one
     sentence, and the healed-record path gets a window to land in.
 - **2026-07-27 — F4: both renderers moved to the global epoch grid.**

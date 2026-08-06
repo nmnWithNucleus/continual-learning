@@ -20,12 +20,14 @@
 > Full posture + what changes at dev/prod: [ARCHITECTURE.md](../../ARCHITECTURE.md) §Stage.
 
 
-**Status:** chartered · **Last updated:** 2026-08-05 (§Slot Law drafted, DP rebuild Stage A) ·
+**Status:** chartered · **Last updated:** 2026-08-06 (§Slot Law ratified,
+[D23](../../DECISIONS.md)) ·
 [D18](../../DECISIONS.md) / [D19](../../DECISIONS.md) / [D20](../../DECISIONS.md)
 
+- **2026-08-06** — the Slot Law ratified ([D23](../../DECISIONS.md)); the rebuild's contract
+  rows D24–D28 ratified with it. Rebuild Stage A is complete.
 - **2026-08-05** — §Slot Law drafted in place of §Record-vs-mutation law, on branch
-  `dp-rebuild-v1` (rebuild Stage A; D-R1…D-R6 awaiting ratification,
-  [../../DECISIONS.md](../../DECISIONS.md) §Drafted).
+  `dp-rebuild-v1` (rebuild Stage A).
 - **2026-07-27** — C2 gains an additive-optional `discriminator`, surfaced so storage's day-log
   materialization can keep one dialect per record. The §Stage banner was added.
 - **2026-07-25** — the WS-VC screen-video clip path was ratified, and OQ10 / OQ13 / OQ14 rewritten.
@@ -115,8 +117,9 @@ belong to `recording`.
 matching the v0 schema
 ([../../contracts/c2_processed_record.v0.json](../../contracts/c2_processed_record.v0.json)) and
 the retired law's identity line ([docs/record-emission-law.md](docs/record-emission-law.md)),
-which have both carried the discriminator since v0. The record also carries source provenance, `content{kind,text,segments}`, a
-present-but-empty `enrichments`, the raw ref, `pipeline_version` and `processed_at`.
+which have both carried the discriminator since v0. The record also carries source
+provenance, `content{kind,text,segments}`, a present-but-empty `enrichments`, the raw ref,
+`pipeline_version` and `processed_at`.
 
 Indirect consumers (no direct contract with us): `continuum` reads /context + /sessions via
 **C10** (storage → continuum) — which changes nothing about our C2 obligations; `input` builds
@@ -146,12 +149,12 @@ reprocess is an upsert and not a duplicate.
 
 ## Slot Law (governance — the twelve laws of the rebuilt pipeline)
 
-> **Drafted 2026-08-05 at Stage A of the DP rebuild — awaiting founder ratification as
-> [D-R1](../../DECISIONS.md).** It replaces §Record-vs-mutation law, whose subject matter
-> (multi-record fan-out, in-place mutation) the rebuild deletes; the retired law's long-form
-> reasoning stays in [docs/record-emission-law.md](docs/record-emission-law.md) until Stage G
-> condenses it into the handoff. The law becomes executable at Stage C (test spine T-1…T-6);
-> until then this section is its statement. Design + migration plan:
+> **Ratified 2026-08-06 as [D23](../../DECISIONS.md).** It replaces §Record-vs-mutation law,
+> whose subject matter (multi-record fan-out, in-place mutation) the rebuild deletes; the
+> retired law's long-form reasoning stays in
+> [docs/record-emission-law.md](docs/record-emission-law.md) until Stage G condenses it into
+> the handoff. The law becomes executable at Stage C (test spine T-1…T-6); until then this
+> section is its statement. Design + migration plan:
 > [docs/refactor_dp_service.md](docs/refactor_dp_service.md).
 
 - **L1 — Chunk purity.** A stage output is a pure function of this chunk's bytes plus code.

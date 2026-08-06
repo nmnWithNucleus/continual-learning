@@ -7,6 +7,26 @@
 
 ## Worklog
 
+### 2026-08-06 — the DP rebuild's Stage A ratified (D23–D28)
+> decision · data-processing × storage × continuum · [D23–D28](../../../DECISIONS.md) ·
+> branch `dp-rebuild-v1`
+
+**Was** — the service ran under the WS-VC record-vs-mutation law: multi-record fan-out with
+discriminators, in-place mutation, and the five-tests/five-riders governance those capabilities
+required. The rebuild's Stage A paper sat cut on the branch, awaiting founder sign-off.
+
+**Changed** — the founder ratified the Stage A paper as amended by the 2026-08-06 cleanup
+round: the Slot Law entered the charter (D23); C2 v1 and C10 day-log v2 were pinned (D24, D28)
+alongside the version law (D25), the machinery/bureaucracy split (D26) and the heal ledger +
+`created_at`/`updated_at` split (D27).
+
+**Now** — Stage A is complete; the running service is untouched and v0 stays the wire until
+the rebuild's Stage F cutover. Stage B (machinery) is the next act, not started. Stage record:
+[../docs/refactor_stage_A.md](../docs/refactor_stage_A.md).
+
+**Payoff** — Stages B–G build against ratified contracts instead of drafts, which is exactly
+what "contracts before fan-out" exists to guarantee.
+
 ### 2026-07-25 (board hygiene) — retired the completed half of `HANDOFF.md §Next`
 > review · data-processing
 
