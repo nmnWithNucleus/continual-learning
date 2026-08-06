@@ -153,3 +153,62 @@ In-session decisions:
 
 Evidence: `pytest tests/test_stage_registry.py tests/test_executor.py -q` →
 `86 passed`.
+
+## WP-C3 — `pipeline.py` · `schemas.py`/`models.py` mirror · `config.py` shrink · the seam cut
+
+| File | Action | Why |
+|---|---|---|
+| `app/pipeline.py` | REWRITTEN | `compute_record_id(chunk_id, pipeline_version)` — exactly two NUL-joined components (L3, discriminator gone); `build_c2(c1, slots, pv)` — the v1 assembler: slots map, root modality, source verbatim minus modality + transport fields, D17 trio incl. `device_clock` + `device_location`, t_start/t_end VERBATIM C1 strings (D-05), no `processed_at` |
+| `app/schemas.py` | edited | `C2_ID` → `c2_processed_record.v1.json` (the v0 file stays in contracts/ — it is the running wire until Stage F) |
+| `app/models.py` | REWRITTEN (C2 side) | the pydantic v1 mirror: `C2RecordV1` + typed slot models for the six contract slots, `extra="forbid"` everywhere, segment-grammar patterns; C1 side untouched. The mirror moves as ONE change with the schema pointer and the tests (the four-parts rule; storage's mirror moves at Stage E, its own stage) |
+| `app/config.py` | SHRUNK (122 → ~90 lines) | output-affecting knobs dead (disposition table below); operational knobs survive verbatim |
+| `app/ingest_core.py` | REWRITTEN small | the L6 one-POST emit: graph → `build_c2` → schema gate + mirror → ONE atomic POST → journal receipt (v0-shaped, `[record_id]`) → dedup. Pulled forward from WP-C5's "minimal adaptation" so C4∥C5 build against a settled seam (packaging decision, scope unchanged). Adds a pv-drift assertion (accept-time vs graph-time resolution must agree — both are code) |
+| `app/stagegraph/processor.py` | REWRITTEN | `GraphProcessor` (public seam kept): `pipeline_version()` resolved from code alone, `process_async(...) -> GraphResult`; `graph_processor(modality)` takes over `processing/`'s modality routing (KeyError → 501) |
+| `app/main.py` | edited | processors-registry + `DP_DIALECT_FREEZE` + isolation wiring out; stage-registry routing in; `/health` reports per-modality `pipeline_versions` + supervisor flag (liveness probe, not a frozen contract); lifespan owns the L9 fleet: `DP_SUPERVISOR=1` starts `Supervisor` (operational opt-in — tests never spawn GPUs), model clients built from the manifest with `client_timeout_s` WIRED (Stage B carry-over closed); `dp_partial_write_total` deleted (one atomic POST makes partial writes structurally impossible); metric seeding now per registered slot |
+| `app/model_client.py` | edited | Stage B carry-over closed: a transient replica failure clears `verified`, so a respawned replica re-verifies its `/health` identity before serving again |
+| `app/processing/` (5 files) | **DELETED** | folded: `ProcessedUnit` fan-out dead (L2), modality routing now in the stage registry |
+| `app/isolation.py` | **DELETED** (was WP-C5's line) | models left the DP process (L9) — the subprocess shield has nothing to contain; its config knobs died in the same change, so keeping the file one WP longer only preserved a broken import |
+| `app/stages/audio/*.py`, `app/stages/video/*.py` (10 stage adapters) | **DELETED** | written against the dead API; WP-C4/C5 write the new thin clients fresh (v0 logic lives on in `app/asr`, `app/audio`, `app/vision`; the old adapters are in git history at `21fc411`) |
+| `tests/test_emission_law.py`, `test_discriminator.py`, `test_legacy_dialect.py`, `test_isolation.py` | **DELETED** | §6's deleted-suites list, verbatim |
+| `tests/test_stagegraph.py` | **DELETED** (superseded) | its subject was rewritten; the behaviors worth keeping live on in `test_stage_registry.py` + `test_executor.py` (concurrency, leaf re-raise, cancel-and-await, commit-on-success) |
+| `tests/test_pipeline_v1.py` | created (TDD) | 27 checks: two-component id (signature admits no third arg), v1 shape, verbatim spans, D17 passthrough, transport exclusion, empty-slots legality, contract + mirror validation, v0-shape rejection, unknown-slot fail-closed, required-nullable transcript speaker, ran-and-empty ocr, config-shrink assertions |
+| `tests/test_seam_v1.py` | created | the seam smoke: mock-dialect set through the real HTTP surface → exactly one v1 POST; dedup redelivery without a second POST; optional failure ships the record with a hole |
+
+**Killed-knob dispositions (`app/config.py`)** — every output-affecting knob dies
+by L4; each is either baked into a backend version or killed outright:
+
+| Knob (env) | Disposition |
+|---|---|
+| `ASR_BACKEND` | killed — backend selection is code (stage files pin `Backend`); mock is a code-constructed stage set named in the dialect |
+| `ASR_MODEL`, `ASR_DEVICE`, `ASR_COMPUTE_TYPE` | baked into the whisper server (large-v3 @ pinned revision, cuda, fp16 — server code + manifest identity); the asr stage's vB carries the deliberate dialect change from v0's base/cpu/int8 (Stage B carry-over) |
+| `ASR_BEAM_SIZE` | baked into the asr stage's pinned params (beam 1 — the Stage B golden's params); changing it is a vB bump |
+| `ASR_LANGUAGE` | baked into the asr stage's pinned params (language 'en' — the beta ruling of 2026-07-18 carried into code); vB bump to change |
+| `ASR_VAD` | baked into the asr stage's pinned params (VAD on — the honest-empty-transcript gate); vB bump to change |
+| `INGEST_ISOLATION`, `INGEST_SUBPROC_START` | killed with `isolation.py` (D26) |
+| `DP_DIALECT_FREEZE` | killed (D26) — dialects live in code; a deploy IS the flip; L8's version-compare (Stage D) owns redelivery semantics |
+| survivors | `STORAGE_URL`, `DP_HTTP_TIMEOUT`, `VERIFY_BLOB_SHA256` (integrity guard — cannot alter a valid record's bytes; T-1 proves), `INGEST_ASYNC/WORKERS/QUEUE_MAX/MAX_RETRIES/RETRY_BACKOFF/DRAIN_TIMEOUT`, `DP_VAR_DIR`, `DP_REDRIVE_MAX_ATTEMPTS`, `INGEST_MODALITY_LIMITS`, `METRICS_ENABLED` — all operational-only |
+| new operational | `DP_MANIFEST` (fleet manifest path), `DP_SUPERVISOR` (own-the-fleet opt-in; default off so pytest never spawns model servers) |
+
+(`audio/config.py`, `vision/config.py`, `vision/ocr/config.py`,
+`INJECT_CAPTION_*`, `DP_OFFLINE_EVAL` knob dispositions land with WP-C4/C5,
+where their subject files die.)
+
+In-session decisions:
+
+- **`record_ids` stays a list on the D16 wire** (`{"ok": true, "record_ids": [rid]}`)
+  — D24 restates D16 as "exactly one derivable id per chunk"; the wire SHAPE is
+  recording's contract and does not change, the cardinality does.
+- **Metric `kind` label now means slot name** (the per-kind record model died);
+  `dp_vad_empty_total` keys off an empty-claim `asr` slot; `dp_partial_write_total`
+  deleted rather than left as a lying zero.
+- **`/health` body re-cut** (per-modality `pipeline_versions` map, `supervisor`
+  flag; `asr_backend`/`dialect_frozen`/`video_pipeline_version` gone). The probe's
+  own docstring says it is not a frozen contract; the platform README's health
+  line updates at Stage F with the deploy story.
+- **Skeleton boots between WPs**: with the stage adapters deleted the registry is
+  empty — `/health` 200 with `pipeline_versions: {}`, `/ingest` → clean 501
+  (verified live). C4/C5 fill the registry.
+
+Evidence: `pytest tests/test_seam_v1.py tests/test_pipeline_v1.py
+tests/test_stage_registry.py tests/test_executor.py -q` → `116 passed`;
+storage suite re-run → `310 passed` (untouched).

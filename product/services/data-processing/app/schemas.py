@@ -23,7 +23,10 @@ from referencing import Registry, Resource
 _DEFAULT_CONTRACTS_DIR = Path(__file__).resolve().parents[3] / "contracts"
 
 C1_ID = "https://nucleus.ai/contracts/c1_raw_stream_envelope.v0.json"
-C2_ID = "https://nucleus.ai/contracts/c2_processed_record.v0.json"
+# C2 v1 (D24, Stage C): one record per chunk, built from slots. The v0 schema
+# file stays in contracts/ (the running wire until the Stage F cutover) but this
+# service now produces and validates v1 only — the beside-build (OD-1).
+C2_ID = "https://nucleus.ai/contracts/c2_processed_record.v1.json"
 
 
 def contracts_dir() -> Path:

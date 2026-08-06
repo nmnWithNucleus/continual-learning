@@ -1,8 +1,23 @@
 """Runtime configuration, read fresh per request from the environment.
 
+OPERATIONAL-ONLY, by law (L4/D25): no output-affecting env knob exists anywhere
+in this service. Every setting below can change endpoints, capacity, timeouts,
+retries, durability locations or observability — never one byte of a record.
+The v0 knobs that did affect output are dead, each either baked into a backend
+version or killed outright (dispositions in docs/refactor_stage_C.md):
+
+  * ASR_BACKEND / ASR_MODEL / ASR_DEVICE / ASR_COMPUTE_TYPE — the model and its
+    execution profile live in the whisper server's code + manifest identity;
+    backend selection is in code, named in the dialect (mock included).
+  * ASR_BEAM_SIZE / ASR_LANGUAGE / ASR_VAD — per-call params pinned in the asr
+    stage file; changing them is a vB bump.
+  * INGEST_ISOLATION / INGEST_SUBPROC_START — died with isolation.py (D26):
+    models left the DP process, the subprocess shield has nothing left to
+    contain.
+
 Reading env per request (rather than freezing at import) keeps the service
-trivially testable: a test can flip ASR_BACKEND or point STORAGE_URL at a stub
-without re-importing the app. Mirrors the serve-loop inference service.
+trivially testable: a test can point STORAGE_URL at a stub without re-importing
+the app.
 """
 from __future__ import annotations
 
@@ -13,28 +28,9 @@ from pathlib import Path
 
 logger = logging.getLogger("data-processing.config")
 
-# Enum knobs that saw an unrecognized value (warn ONCE per value — settings are
-# re-read per request; a typo must be visible, not a per-request log storm).
-_warned_choices: set[tuple[str, str]] = set()
-
 
 def _as_bool(value: str) -> bool:
     return value.strip().lower() not in ("0", "false", "no", "off", "")
-
-
-def _choice(name: str, raw: str, allowed: tuple[str, ...], default: str) -> str:
-    """Enum env knob: unrecognized values FALL BACK to the default, LOUDLY. Silent
-    fallback would be fail-open for safety knobs — e.g. `INGEST_ISOLATION=1` (the
-    natural mistake; every boolean knob here accepts 1/true) silently disabling the
-    poison-chunk containment the operator asked for."""
-    value = raw.strip().lower()
-    if value in allowed:
-        return value
-    if value and (name, value) not in _warned_choices:
-        _warned_choices.add((name, value))
-        logger.warning("%s=%r is not one of %s — falling back to %r",
-                       name, raw, list(allowed), default)
-    return default
 
 
 def _default_var_dir() -> str:
@@ -44,79 +40,41 @@ def _default_var_dir() -> str:
 
 @dataclass(frozen=True)
 class Settings:
-    asr_backend: str          # "mock" (default, no GPU) | "faster_whisper"
     storage_url: str          # /raw blob read + /context C2 write live here
     http_timeout: float       # inter-service httpx timeout (seconds)
     verify_blob_sha256: bool  # end-to-end integrity check of the pulled blob
-    # faster-whisper knobs (only read when asr_backend == "faster_whisper")
-    asr_model: str
-    asr_device: str
-    asr_compute_type: str
-    asr_beam_size: int
-    asr_language: str         # BCP-47 hint pinned for ASR ('' = auto-detect). First real
-                              # phone data showed auto-detect hallucinating other scripts
-                              # on faint room audio — pin 'en' for the beta fleet.
-    asr_vad: bool             # VAD gate: skip no-speech spans (default ON) so an
-                              # all-silence chunk yields an honest empty
-                              # transcript, not a Whisper hallucination
-    # --- Async /ingest (charter M7, arriving early) --------------------------------
-    # INLINE by default (async OFF), so the whole loop stays byte-identical + headless
-    # green with zero new behavior. Flip INGEST_ASYNC=1 to ACK 202 fast and process on
-    # a worker pool decoupled from capture cadence (retires RECORDING_HTTP_TIMEOUT=120).
+    # --- Async /ingest -------------------------------------------------------------
     ingest_async: bool        # 202 ACK + worker queue instead of inline processing
     ingest_workers: int       # worker pool size (>=1; 0 would accept-forever/lose-all)
     ingest_queue_max: int     # bounded queue capacity (>=1); full -> 503 backpressure
     ingest_max_retries: int   # transient-failure retries per chunk in the worker
     ingest_retry_backoff: float  # base backoff seconds between worker retries
     ingest_drain_timeout: float  # seconds to drain the queue on graceful shutdown
-    # --- Durable ingest journal (M7) ------------------------------------------------
+    # --- Durable ingest journal ----------------------------------------------------
     dp_var_dir: str           # dp.db (pending/processed journal) lives here
-    redrive_max_attempts: int  # startup re-drives before a chunk dead-letters (crash-loop cap)
+    redrive_max_attempts: int  # startup re-drives before a chunk dead-letters
     # --- Fairness ------------------------------------------------------------------
     ingest_modality_limits: str  # per-modality max-in-flight, e.g. "video=2,audio=4"
-    # --- Subprocess isolation (M7 hardening) ----------------------------------------
-    # "subprocess" runs each chunk's Processor step in a killable child: a poison
-    # chunk's segfault/OOM takes down ONE chunk (not the service), and a drain cancel
-    # SIGKILLs the child instead of leaking an unkillable ghost thread. Default off:
-    # in-process, byte-identical.
-    ingest_isolation: str        # "off" | "subprocess"
-    ingest_subproc_start: str    # multiprocessing start method: spawn | fork
     # --- D9 observability ----------------------------------------------------------
     metrics_enabled: bool     # expose /metrics + record request/pipeline metrics
 
 
 def get_settings() -> Settings:
     return Settings(
-        asr_backend=os.getenv("ASR_BACKEND", "mock").strip().lower(),
         storage_url=os.getenv("STORAGE_URL", "http://localhost:8083").rstrip("/"),
         http_timeout=float(os.getenv("DP_HTTP_TIMEOUT", "30")),
         verify_blob_sha256=_as_bool(os.getenv("VERIFY_BLOB_SHA256", "1")),
-        asr_model=os.getenv("ASR_MODEL", "base"),
-        asr_device=os.getenv("ASR_DEVICE", "cpu"),
-        asr_compute_type=os.getenv("ASR_COMPUTE_TYPE", "int8"),
-        asr_beam_size=int(os.getenv("ASR_BEAM_SIZE", "1")),
-        asr_language=os.getenv("ASR_LANGUAGE", "").strip().lower(),
-        asr_vad=_as_bool(os.getenv("ASR_VAD", "1")),
         ingest_async=_as_bool(os.getenv("INGEST_ASYNC", "0")),
         # >=1: zero drainers under async would accept forever and lose everything.
         ingest_workers=max(1, int(os.getenv("INGEST_WORKERS", "4"))),
         # >=1: a finite queue makes overload visible as 503 -> recording retries ->
-        # 'gaps' verdict, instead of an unbounded backlog that an OOM-kill drops silently.
+        # 'gaps' verdict, instead of an unbounded backlog an OOM-kill drops silently.
         ingest_queue_max=max(1, int(os.getenv("INGEST_QUEUE_MAX", "256"))),
         ingest_max_retries=max(0, int(os.getenv("INGEST_MAX_RETRIES", "3"))),
         ingest_retry_backoff=float(os.getenv("INGEST_RETRY_BACKOFF", "0.5")),
         ingest_drain_timeout=float(os.getenv("INGEST_DRAIN_TIMEOUT", "30")),
         dp_var_dir=os.getenv("DP_VAR_DIR", _default_var_dir()),
         redrive_max_attempts=max(1, int(os.getenv("DP_REDRIVE_MAX_ATTEMPTS", "5"))),
-        ingest_modality_limits=os.getenv("INGEST_MODALITY_LIMITS", "").strip(),
-        # forkserver is deliberately not offered: it freezes os.environ at server
-        # launch, breaking the child-inherits-parent-env premise the isolation
-        # boundary rests on (see isolation.py module docstring).
-        ingest_isolation=_choice("INGEST_ISOLATION",
-                                 os.getenv("INGEST_ISOLATION", "off"),
-                                 ("off", "subprocess"), "off"),
-        ingest_subproc_start=_choice("INGEST_SUBPROC_START",
-                                     os.getenv("INGEST_SUBPROC_START", "spawn"),
-                                     ("spawn", "fork"), "spawn"),
+        ingest_modality_limits=os.getenv("INGEST_MODALITY_LIMITS", ""),
         metrics_enabled=_as_bool(os.getenv("METRICS_ENABLED", "1")),
     )

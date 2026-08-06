@@ -158,6 +158,11 @@ class ModelClient:
             except IdentityMismatchError:
                 raise
             except (httpx.TimeoutException, httpx.TransportError, httpx.HTTPError) as exc:
+                # The replica may be mid-respawn under the supervisor: whatever
+                # comes back on that port next is a NEW process, so its identity
+                # must be re-verified before it serves again (L4 — never silently
+                # the wrong model). Stage B carried this as a hardening item.
+                replica.verified = False
                 last_error = f"{replica.url}: {type(exc).__name__}: {exc}"
                 logger.warning("%s transient: %s", self.server, last_error)
                 continue
