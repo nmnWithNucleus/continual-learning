@@ -53,7 +53,8 @@ from typing import Any
 from fastapi import FastAPI
 from starlette.concurrency import run_in_threadpool
 
-from .ingest_core import ProcessingError, process_chunk
+from .ingest_core import ProcessingError, _note_heal_outcome, process_chunk
+from .journal import HEAL_MAX_ATTEMPTS
 from .timeutil import now_iso
 
 logger = logging.getLogger("data-processing.ingest_queue")
@@ -312,6 +313,7 @@ class IngestQueue:
                     journal=deps.journal,          # durable receipt inside the core,
                     epoch=job.get("epoch", 0),     # epoch-guarded against stale workers
                     app_state=self._app.state,
+                    heal=job.get("heal", False),   # L8 case 4: budget arithmetic
                 )
             except asyncio.CancelledError:
                 raise
@@ -349,6 +351,13 @@ class IngestQueue:
                     await self._acquire_permit(modality)
                     permit["held"] = True
                 continue
+            if job.get("heal"):
+                # Heal containment (L8): retries exhausted or terminal — the chunk
+                # KEEPS its durable record and done-row; never a dead-letter. One
+                # heal claim charges at most ONE budget increment (attempts count
+                # this chunk's own failed heals, never deliveries or retries).
+                await self._heal_failed(c1, detail, epoch=job.get("epoch", 0))
+                return
             await self._dead_letter(c1, detail, transient=transient, epoch=job.get("epoch", 0))
             return
 
@@ -360,6 +369,31 @@ class IngestQueue:
         metrics = getattr(self._app.state, "metrics", None)
         if metrics is not None:
             metrics.inc(name, labels)
+
+    async def _heal_failed(self, c1: dict, detail: dict, *, epoch: int = 0) -> None:
+        """The worker-side heal containment: charge the budget (``heal_failed`` —
+        one increment per heal claim), clear the pending row (epoch-guarded),
+        release the claim. The chunk's existing record and done-row are untouched;
+        recording sees no gap. Falls back to the normal dead-letter taxonomy only
+        if no done-row exists (then the failure was never a heal)."""
+        deps = self._deps()
+        state = await run_in_threadpool(
+            deps.journal.heal_failed, c1["chunk_id"], now_iso(), epoch
+        )
+        if state is None:
+            # No durable record: the containment law doesn't apply — the normal
+            # taxonomy owns the failure (visible loss, never a silent drop).
+            await self._dead_letter(c1, detail, transient=False, epoch=epoch)
+            return
+        deps.dedup.release_inflight(c1["chunk_id"])
+        _note_heal_outcome(deps.metrics, c1["modality"], state, failed_run=True)
+        logger.warning(
+            "heal attempt failed for chunk %s (attempt %d/%d%s): %s — chunk keeps "
+            "its durable record %s; no dead-letter, no gap",
+            c1["chunk_id"], state["heal_attempts"], HEAL_MAX_ATTEMPTS,
+            ", holes now PERMANENT" if state["newly_final"] else "",
+            detail, state["record_ids"],
+        )
 
     async def _dead_letter(self, c1: dict, detail: dict, *, transient: bool, epoch: int = 0) -> None:
         deps = self._deps()

@@ -95,3 +95,41 @@ against the shipped journal (TypeError on `statuses=`, ImportError `HEAL_MAX_ATT
 AttributeError `done_row`, tuple-unpack on `pending_for_redrive`); after implementation
 → `22 passed`. Full DP suite → `535 passed, 3 skipped`.
 
+## WP-D2 — the L8 claim tree + seam wiring
+
+| File | Action | Why |
+|---|---|---|
+| `app/dedup.py` | REWRITTEN (the §9 verdict) | the five-verdict tree (`Claim` dataclass + `classify`): no row → fresh; stored pv ≠ current → version_forward; green ∨ done_final ∨ budget-exhausted ∨ pre-D NULL-statuses → skip; holes ∧ budget → heal; the async guard owns case 5 (inflight). Decided ONLY from the journal's done-row (`row_lookup`), never a storage read. `_done` now caches STABLE skips only — a healable chunk is re-judged from the ledger every delivery. `claim_for_async(chunk_id, current_pv)` returns a `Claim`; `put` gains `green=` (holey ships aren't skip-cached); the one-lock discipline (`lock_for` inline, guard async) unchanged |
+| `app/ingest_core.py` | edited | `process_chunk` gains `heal=` (routes the receipt through the journal's budget arithmetic; the run itself is UNCHANGED — full graph off this delivery's envelope, one POST, L3 re-derives the same record_id so the upsert replaces holey with fuller); NEW `heal_chunk` — the inline containment wrapper (any failure → `journal.heal_failed` → 200 + existing ids, never a raise); `_note_heal_outcome` shared hook (WP-D3 wires metrics into it); GREEN-only dedup caching |
+| `app/ingest_queue.py` | edited | heal jobs keep the worker's transient-retry loop; at the give-up point they branch to `_heal_failed` (budget charge + epoch-guarded pending clear + claim release — never `_dead_letter`, never a continuity `gaps` mark); one heal claim charges at most ONE increment (attempts count this chunk's own failed heals, never deliveries or retries); falls back to the normal taxonomy only when no done-row exists |
+| `app/main.py` | edited | `DedupStore(row_lookup=journal.done_row)` (the old `done_fallback`+`_current_pv` version-compare callback deleted — the tree owns it with the handler's freshly-resolved pv); inline handler routes skip (fast-path + under-lock re-judge) / heal (`heal_chunk`, contained, 200) / fresh+version_forward (unchanged path); async handler routes skip/inflight/claimed off the `Claim` and enqueues `heal:` flagged jobs; `_redrive_pending` claims with the current pv and re-drives a crashed heal AS a heal |
+| `tests/test_dedup_claim.py` | REWRITTEN (TDD) | 14 tests: every tree branch (incl. tree-order — version check beats holes/final; legacy NULL statuses; current_pv None posture; budget-exhausted belt), stable-skip caching vs heal re-judging (lookup call counts), green-vs-holey `put`, and the async claim lifecycle ported to `Claim` (heal claims ride the same inflight discipline — a mid-heal redelivery re-ACKs 202) |
+| `tests/test_heal_seam.py` | NEW (TDD) | 6 seam tests: inline heal fills the hole with the SAME record_id then skips; inline heal failure (required stage down) answers 200 + existing id, charges budget, never dead-letters; exhaustion finalizes then pure-skips (no POST, no blob pull); still-holey heal re-POSTs byte-identical wire bytes (the §5.1 no-op upsert input); async heal rides the queue with the D16 202 body byte-identical; async heal failure — no dead-letter, no gap, claim released, next redelivery heals |
+| `tests/test_t5_ledger_flows.py` | edited (1 test) | the Stage C-era skip test ran against this module's always-failing optional stage — under L8 that redelivery is now correctly a HEAL, so the skip pin patches the stage healthy first (case 3 demands all-green); noted in the test docstring |
+
+In-session decisions:
+
+- **The claim's `row` is advisory; budget arithmetic lives in the journal's own
+  transactions.** A heal claim raced by another worker's completion re-runs against the
+  CURRENT prior row inside `mark_processed`/`heal_failed` (BEGIN IMMEDIATE), so a stale
+  claim can inflate nothing.
+- **Async heal failures keep the worker's transient-retry loop** before charging the
+  budget: one delivered heal claim = at most one `heal_attempts` increment, after its
+  own retries exhaust. Inline heals run once (parity with the inline fresh path, which
+  also never retries).
+- **A heal's reply rides D16 unchanged**: inline heal success AND failure both answer
+  `200 {ok, record_ids:[...]}` — `dp_acked ⇔ durably written` holds on both (the record
+  IS durably written; a failed heal's answer is the existing record). Async heal claims
+  ACK the byte-identical `202 {ok, accepted, chunk_id}`; mid-heal redeliveries the
+  byte-identical duplicate 202.
+- **`dp_ingest_total{result}` vocabulary unchanged** (skip → `deduped`, heal completion
+  → `processed`): heal visibility arrives with WP-D3's dedicated families rather than a
+  new result label — dashboards are Stage F's, and the existing labels stay honest.
+
+Evidence: TDD red first — the claim-tree unit tests fail collection against the shipped
+`dedup.py` (ImportError `Claim`), which masked the seam tests' own red, so the seam file
+was additionally verified by stash-revert of the four app files: `6 failed` against the
+pre-D2 seam (heal not routed: reprocess-not-skip, 500-not-200, dead-letter-not-contain),
+`6 passed` restored. Full DP suite → `551 passed, 3 skipped` (+16 net: 14 rewritten
+dedup tests replacing 5, +6 seam, +1 t5 edit).
+

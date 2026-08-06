@@ -23,7 +23,16 @@ from app.stagegraph.stage import Backend, Stage, StageOutput
 from tests.conftest import MOCK_AUDIO_PV, MockAsrStage, make_c1
 
 
-def test_same_dialect_redelivery_skips(client):
+def test_same_dialect_redelivery_skips(client, monkeypatch):
+    """L8 case 3 demands ALL GREEN: with this module's always-failing optional
+    stage patched healthy, a same-dialect redelivery is a pure skip. (Since
+    Stage D, a HOLEY record's redelivery is a heal, not a skip — that flow is
+    pinned below and in test_heal_seam.py.)"""
+    monkeypatch.setattr(
+        _OptionalBoom, "run_sync",
+        lambda self, ctx: StageOutput(value={"values": ["keyboard typing"],
+                                             "confidence": 0.9}),
+    )
     fs = client.fake_storage
     c1 = make_c1(fs, chunk_id="t5-skip")
     first = client.post("/ingest", json=c1)

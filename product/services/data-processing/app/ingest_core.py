@@ -24,7 +24,9 @@ seam), so the same function serves the HTTP handler and the background worker.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import logging
 from time import perf_counter
 from typing import Any, Optional
 
@@ -34,10 +36,13 @@ from starlette.concurrency import run_in_threadpool
 from . import schemas
 from .config import Settings
 from .dedup import DedupStore
+from .journal import HEAL_MAX_ATTEMPTS
 from .models import C2RecordV1
 from .pipeline import build_c2, chunk_span_seconds
 from .storage_client import StorageClient
 from .timeutil import now_iso
+
+logger = logging.getLogger("data-processing.ingest_core")
 
 
 class ProcessingError(Exception):
@@ -85,13 +90,21 @@ async def process_chunk(
     journal=None,
     epoch: int = 0,
     app_state: Any = None,
+    heal: bool = False,
 ) -> list[str]:
     """Process one accepted chunk end-to-end and return ``[record_id]`` (the D16
     wire keeps its list shape; exactly one id is derivable per chunk — D24).
     Raises ``ProcessingError`` on failure; on success the durable journal receipt
     lands FIRST (epoch-guarded, off the loop), then the chunk is marked done in
     ``dedup`` — journal-before-dedup, so a crash between them re-drives an
-    already-written chunk (idempotent upsert) rather than ever forgetting one."""
+    already-written chunk (idempotent upsert) rather than ever forgetting one.
+
+    ``heal=True`` (L8 case 4) changes NOTHING about the run itself — full graph
+    off this delivery's envelope, same one-POST, and L3 makes the re-POSTed
+    record_id identical, so the upsert replaces holey with fuller — it only
+    routes the receipt through the journal's heal-budget arithmetic. Callers own
+    the containment of a FAILED heal (``heal_chunk`` / the worker's heal branch);
+    this function still raises on failure like any run."""
     chunk_id = c1["chunk_id"]
     modality = c1["modality"]
 
@@ -197,12 +210,81 @@ async def process_chunk(
                             {"modality": modality, "kind": slot_name})
 
     record_ids = [record_id]
+    all_green = all(v == "ok" for v in result.statuses.values())
     if journal is not None:
         # Ledger v2 (L8): the executor's per-stage statuses ride the done-row
         # verbatim (failed vs cancelled distinct) — the claim tree's evidence.
-        await run_in_threadpool(
+        # heal=True routes the budget arithmetic (computed in the journal's own
+        # transaction against the CURRENT prior row, never a stale claim).
+        state = await run_in_threadpool(
             journal.mark_processed, c1, record_ids, pipeline_version, now_iso(), epoch,
-            statuses=result.statuses,
+            statuses=result.statuses, heal=heal,
         )
-    dedup.put(chunk_id, record_ids)
+        if heal:
+            _note_heal_outcome(metrics, c1["modality"], state, failed_run=False)
+    # Only a GREEN result is skip-cached: a holey ship must be re-judged from
+    # the ledger on its next delivery (it may heal).
+    dedup.put(chunk_id, record_ids, green=all_green)
     return record_ids
+
+
+def _note_heal_outcome(metrics, modality: str, state: Optional[dict],
+                       failed_run: bool) -> None:
+    """Shared heal-attempt bookkeeping hook (both seams, success + failure).
+    WP-D3 wires the heal metric families here; logging is already live."""
+    if state is None:
+        return
+    if state["newly_final"]:
+        logger.error(
+            "heal budget exhausted (%d attempts): holes now PERMANENT "
+            "(done_final; stage_status=%s)",
+            state["heal_attempts"], state.get("stage_status"),
+        )
+
+
+async def heal_chunk(
+    *,
+    c1: dict[str, Any],
+    settings: Settings,
+    processor,
+    pipeline_version: str,
+    storage: StorageClient,
+    dedup: DedupStore,
+    metrics=None,
+    journal=None,
+    epoch: int = 0,
+    app_state: Any = None,
+    prior_record_ids: list[str],
+) -> list[str]:
+    """L8 case 4 with the containment rules, for the INLINE seam (the async
+    worker branches at its dead-letter point instead, keeping its transient-retry
+    loop): run the full graph off THIS delivery's envelope; on success the upsert
+    replaced holey with fuller and the journal did the budget arithmetic. On ANY
+    failure — even a required stage, e.g. the fleet down — the chunk KEEPS its
+    existing record and done-row, ``heal_attempts`` increments (``heal_failed``),
+    and the reply is 200 + the existing record_id. A heal never dead-letters a
+    chunk that has a durable record, and never regresses done."""
+    try:
+        return await process_chunk(
+            c1=c1, settings=settings, processor=processor,
+            pipeline_version=pipeline_version, storage=storage, dedup=dedup,
+            metrics=metrics, journal=journal, epoch=epoch, app_state=app_state,
+            heal=True,
+        )
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001 — containment IS the contract here
+        state = None
+        if journal is not None:
+            state = await run_in_threadpool(
+                journal.heal_failed, c1["chunk_id"], now_iso(), epoch
+            )
+        logger.warning(
+            "heal attempt failed for chunk %s (attempt %s/%d): %s — chunk keeps "
+            "its durable record %s",
+            c1["chunk_id"],
+            state["heal_attempts"] if state else "?", HEAL_MAX_ATTEMPTS,
+            exc, prior_record_ids,
+        )
+        _note_heal_outcome(metrics, c1["modality"], state, failed_run=True)
+        return list(prior_record_ids)

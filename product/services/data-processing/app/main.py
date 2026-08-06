@@ -53,8 +53,8 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from . import schemas
 from .config import get_settings
 from .continuity import ContinuityTracker
-from .dedup import DedupStore
-from .ingest_core import ProcessingError, process_chunk
+from .dedup import Claim, DedupStore
+from .ingest_core import ProcessingError, heal_chunk, process_chunk
 from .ingest_queue import IngestQueue, QueueFull
 from .journal import Journal
 from .metrics import MetricsASGIMiddleware, Metrics
@@ -378,8 +378,10 @@ def create_app() -> FastAPI:
                 app.state.continuity.note_dead_letter(c1["stream_id"], c1["sequence"])
                 skipped += 1
                 continue
-            claim = await app.state.dedup.claim_for_async(chunk_id)
-            if claim != "claimed":  # already done (journal backstop) or in flight
+            claim = await app.state.dedup.claim_for_async(
+                chunk_id, processor.pipeline_version()
+            )
+            if claim.verdict in ("skip", "inflight"):  # done or already claimed
                 continue
             try:
                 await queue.submit_wait({
@@ -387,6 +389,7 @@ def create_app() -> FastAPI:
                     "pipeline_version": processor.pipeline_version(),
                     "epoch": epoch,
                     "redrive": True,  # worker charges a per-chunk re-drive attempt
+                    "heal": claim.verdict == "heal",  # a crashed heal re-drives as one
                 })
             except asyncio.CancelledError:
                 app.state.dedup.release_inflight(chunk_id)  # shutdown mid-re-drive
@@ -484,19 +487,13 @@ def create_app() -> FastAPI:
     app.state.model_clients = _build_model_clients(_manifest_path())
     # Journal is LAZY (no filesystem touch until first use) — safe at module import.
     app.state.journal = Journal(Path(settings.dp_var_dir) / "dp.db")
-    # The journal's processed table backs dedup misses: a redelivery after a restart is
-    # answered with the prior record_ids (200) — UNLESS the pipeline dialect for that
-    # modality has since changed, in which case the receipt is stale and the honest
-    # answer is a reprocess under the new version (version-forward; old records stay).
-    # (Ledger semantics stay v0-shaped through Stage C; the L8 claim tree is Stage D.)
-    def _current_pv(modality: str):
-        try:
-            return graph_processor(modality).pipeline_version()
-        except Exception:  # unknown modality / stage set gone — can't judge, serve receipt
-            return None
-
+    # The L8 claim tree (Stage D): every delivery is judged from the journal's
+    # done-row — fresh / version-forward / skip / heal / in-flight — with the
+    # caller's freshly-resolved pipeline_version as the version-compare input.
+    # The tree lives in dedup.classify; the row comes from HERE and only here
+    # (DP's own ledger, never a storage read).
     app.state.dedup = DedupStore(
-        done_fallback=lambda cid: app.state.journal.processed_record_ids(cid, _current_pv)
+        row_lookup=lambda cid: app.state.journal.done_row(cid)
     )
     app.state.continuity = ContinuityTracker()
     app.state.ingest_async = settings.ingest_async   # FROZEN at startup (no per-request read)
@@ -590,29 +587,47 @@ def create_app() -> FastAPI:
         return await _ingest_inline(request, c1, settings, processor, pipeline_version)
 
     async def _ingest_inline(request, c1, settings, processor, pipeline_version) -> JSONResponse:
-        """M0 behaviour, byte-identical: process inside the request, return record_ids."""
+        """Process inside the request, return record_ids — the wire shape is
+        byte-identical to M0; the redelivery verdict now comes from the L8 tree."""
         dedup: DedupStore = request.app.state.dedup
         chunk_id = c1["chunk_id"]
         metrics = request.app.state.metrics
 
-        # Dedup (fast path): already-processed chunk_id -> prior record_ids.
-        prior = dedup.get(chunk_id)
-        if prior is not None:
-            logger.info("dedup hit (processed) chunk_id=%s -> %s", chunk_id, prior)
+        def _skip_response(claim: Claim) -> JSONResponse:
+            logger.info("dedup hit (skip) chunk_id=%s -> %s", chunk_id, claim.record_ids)
             _metrics_inc("dp_dedup_hits_total")
             _metrics_inc("dp_ingest_total", {"modality": c1["modality"], "result": "deduped"})
-            return JSONResponse(content={"ok": True, "record_ids": prior})
+            return JSONResponse(content={"ok": True, "record_ids": claim.record_ids})
+
+        # Fast path (no lock): a stable skip answers immediately (L8 case 3).
+        claim = dedup.classify(chunk_id, pipeline_version)
+        if claim.verdict == "skip":
+            return _skip_response(claim)
 
         # Serialize concurrent redeliveries of the same in-flight chunk_id.
         lock = await dedup.lock_for(chunk_id)
         async with lock:
-            prior = dedup.get(chunk_id)
-            if prior is not None:  # resolved while we waited on the lock (in-flight)
-                logger.info("dedup hit (in-flight) chunk_id=%s -> %s", chunk_id, prior)
-                _metrics_inc("dp_dedup_hits_total")
-                _metrics_inc("dp_ingest_total", {"modality": c1["modality"], "result": "deduped"})
-                return JSONResponse(content={"ok": True, "record_ids": prior})
+            claim = dedup.classify(chunk_id, pipeline_version)  # re-judge under the lock
+            if claim.verdict == "skip":
+                return _skip_response(claim)
 
+            if claim.verdict == "heal":
+                # L8 case 4, contained: heal_chunk NEVER raises a chunk failure —
+                # a failed heal keeps the durable record and answers 200 with the
+                # existing id (dp_acked ⇔ durably written holds: it IS written).
+                record_ids = await heal_chunk(
+                    c1=c1, settings=settings, processor=processor,
+                    pipeline_version=pipeline_version,
+                    storage=request.app.state.storage, dedup=dedup, metrics=metrics,
+                    journal=request.app.state.journal, app_state=request.app.state,
+                    prior_record_ids=claim.record_ids or [],
+                )
+                request.app.state.continuity.note_processed(c1["stream_id"], c1["sequence"])
+                _metrics_inc("dp_ingest_total",
+                             {"modality": c1["modality"], "result": "processed"})
+                return JSONResponse(content={"ok": True, "record_ids": record_ids})
+
+            # fresh | version_forward: a full run under the current dialect.
             try:
                 record_ids = await process_chunk(
                     c1=c1, settings=settings, processor=processor,
@@ -630,25 +645,27 @@ def create_app() -> FastAPI:
             return JSONResponse(content={"ok": True, "record_ids": record_ids})
 
     async def _ingest_async(request, c1, settings, processor, pipeline_version) -> JSONResponse:
-        """ACK 202 the moment the chunk is claimed; a worker processes it."""
+        """ACK 202 the moment the chunk is claimed; a worker processes it. The L8
+        tree routes the verdicts; a heal claim rides the queue like any job."""
         dedup: DedupStore = request.app.state.dedup
         chunk_id = c1["chunk_id"]
 
-        claim = await dedup.claim_for_async(chunk_id)
-        if claim == "done":  # redelivery of a completed chunk -> known record_ids
-            record_ids = dedup.get(chunk_id) or []
-            logger.info("dedup hit (processed) chunk_id=%s -> %s", chunk_id, record_ids)
+        claim = await dedup.claim_for_async(chunk_id, pipeline_version)
+        if claim.verdict == "skip":  # redelivery of a done chunk -> known record_ids
+            record_ids = claim.record_ids or []
+            logger.info("dedup hit (skip) chunk_id=%s -> %s", chunk_id, record_ids)
             _metrics_inc("dp_dedup_hits_total")
             _metrics_inc("dp_ingest_total", {"modality": c1["modality"], "result": "deduped"})
             return JSONResponse(content={"ok": True, "record_ids": record_ids})
-        if claim == "inflight":  # already queued/processing -> don't double-enqueue
+        if claim.verdict == "inflight":  # already queued/processing -> no double-enqueue
             _metrics_inc("dp_ingest_total", {"modality": c1["modality"], "result": "duplicate"})
             return JSONResponse(
                 status_code=202,
                 content={"ok": True, "accepted": True, "chunk_id": chunk_id, "duplicate": True},
             )
 
-        # claimed by us -> journal (durable accept receipt) THEN enqueue for a worker.
+        # fresh | version_forward | heal: claimed by us -> journal (durable accept
+        # receipt) THEN enqueue for a worker (a heal claim rides like any job).
         queue: IngestQueue | None = getattr(request.app.state, "ingest_queue", None)
         if queue is None:  # async configured but pool not up (no lifespan) — honest 503
             dedup.release_inflight(chunk_id)
@@ -676,6 +693,7 @@ def create_app() -> FastAPI:
                     "c1": c1, "settings": settings,
                     "processor": processor, "pipeline_version": pipeline_version,
                     "epoch": epoch,
+                    "heal": claim.verdict == "heal",
                 })
                 enqueued = True
             except QueueFull:
