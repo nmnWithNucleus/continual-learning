@@ -1,186 +1,124 @@
-"""Graph resolution + the readiness executor.
+"""Graph resolution + the readiness executor (DP rebuild Stage C, Slot Law core).
 
-RESOLUTION (per call — cheap string work over a handful of stages) turns the registered
-stage set + the active settings into the enabled DAG, enforcing the config-shaped rules
+RESOLUTION (cheap string work over a handful of stages, run BEFORE any stage) turns
+an explicit stage set into the executable DAG, enforcing the graph-shaped law
 loudly instead of skipping silently:
 
-  * exactly one enabled primary, with a non-empty base fragment;
-  * an enabled REQUIRED stage needing a disabled stage is an error (your config asked for
-    something that cannot run); an enabled best_effort stage needing a disabled one
-    auto-disables with a log — the documented, observable degradation;
-  * no required/primary stage may sit (transitively) downstream of a best_effort stage —
-    its "required" promise would be hollow;
-  * mutate stages implicitly depend on the primary (you cannot mutate slots that don't
-    exist yet), must declare ``writes`` ⊆ the primary's ``mutable_slots``, and two
-    enabled mutates with INTERSECTING writes are chained deterministically by
-    ``(order, name)`` — never concurrent, so the mutated record is a deterministic
-    function of the config (C2 idempotency), and an explicit ``needs`` contradicting
-    that order is a loud cycle error, not a silent reorder;
-  * ``pipeline_version = primary_fragment + mutate fragments in CHAIN order +
-    sorted(other enabled fragments)`` — reduces exactly to the shipped dialects
-    (``asr-mock-v0``, ``asr-mock-v0+diar-mock-v1``, ``vidproc-vlm-v0``); every future
-    mutating stage forks it automatically, and the fragment SEQUENCE encodes the
-    mutate execution order (diarize→speaker_id is a different dialect than the
-    reverse — their records genuinely differ);
-  * ``provides`` declarations of enabled stages must be disjoint (two stages committing
-    the same slot would be a silent last-writer-wins).
+  * every declaration re-validated (explicit mock sets fail like bad drop-ins);
+  * unique stage names; ONE producer per slot (L5, hard error);
+  * every ``needs`` resolves inside the set; no cycles;
+  * a required stage may not sit (transitively) downstream of an optional one —
+    its "required" promise would be hollow under L7's cancelled-cone rule;
+  * ``pipeline_version`` = the '+'-joined SORTED list of every stage's segment
+    ``<stage>.v<S>-<backend>.v<B>[.exp-<code>]`` (L4) — composed here, before any
+    stage runs, so the string states the ATTEMPTED dialect (L11).
 
-EXECUTION is readiness-driven, not level-barriered: one task per enabled stage inside an
-``asyncio.TaskGroup``, each awaiting its needs' futures — a slow sidecar never gates an
-independent stage. ``run_sync`` stages execute in worker threads (the event loop is
-structurally protected); a required failure cancels AND awaits every sibling before
-propagating (no stage task from attempt N survives into attempt N+1 — the worker's
-retry loop can never overlap attempts); a best_effort failure resolves its future to
-``SKIPPED`` and its (necessarily best_effort) dependents cascade, counted per stage.
+EXECUTION is readiness-driven, not level-barriered: one task per stage inside an
+``asyncio.TaskGroup``, each awaiting its needs' futures. ``run_sync`` stages
+execute in worker threads (the event loop is structurally protected); ``run_async``
+stages await natively (the thin-client path). A REQUIRED failure cancels AND
+awaits every sibling before propagating the exact leaf exception (ProcessingError
+preferred) — no record, the worker's retry taxonomy owns what happens next (L7).
+An OPTIONAL failure records status ``failed``, leaves its slot a HOLE, and its
+downstream cone resolves ``cancelled`` without running; the record ships.
 
-Slot ownership is enforced BY CONSTRUCTION: each stage runs against a ``SlotView``
-that refuses illegal access at the offending line (a sidecar cannot even READ the
-primary's mutable slots — no reference, no mutation), and a stage's committed
-``StageResult.slots`` keys must be declared (``provides``, or the primary's
-``mutable_slots``). This replaced the order-dependent end-of-run fingerprint guard.
+SLOT EMISSION (the single point where a stage's value becomes record bytes):
+the executor stamps the stage's segment as the slot's ``version`` key (a stage
+cannot forge it), requires a JSON object, serializes canonically
+(utf-8, no ascii escaping, compact separators) and enforces the stage file's
+``byte_budget`` on the emitted bytes — exceeding it is a stage failure, NEVER
+truncation (L5). Exactly one ``GraphResult`` leaves this module per run: the
+slots map + per-stage statuses — the single-record assembly L2 rides on.
 
-Assembly is LAST and deterministic regardless of completion order: the primary's
-``assemble(ctx)`` emits the primary units, then sidecar units append sorted by
-``(order, name)``. One residual runtime guard: discriminators must be unique
-(colliding record identities would silently upsert over each other).
+BLACKBOARD: each stage's ``StageOutput{value, bytes}`` lands keyed by stage name;
+consumers (declared ``needs``) receive exactly their inputs. ``bytes`` — the
+in-run transient payload (frames, decoded audio) — is freed the moment its last
+consumer finishes (and unconditionally by end of run), so heavy artifacts never
+outlive their consumers (L5: binary rides refs, never slots).
 """
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field
 from time import perf_counter
 from types import MappingProxyType
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 from starlette.concurrency import run_in_threadpool
 
 from ..ingest_core import ProcessingError
-from ..processing.base import ProcessedUnit
-from .stage import SKIPPED, SlotView, Stage, StageContext, StageResult
-
-
-def _flatten_exceptions(eg: BaseException) -> list[BaseException]:
-    """Depth-first leaves of a (possibly nested) ExceptionGroup."""
-    if isinstance(eg, BaseExceptionGroup):
-        out: list[BaseException] = []
-        for exc in eg.exceptions:
-            out.extend(_flatten_exceptions(exc))
-        return out
-    return [eg]
+from .stage import Stage, StageContext, StageOutput, validate_stage
 
 logger = logging.getLogger("data-processing.stagegraph")
 
 
 class GraphResolutionError(Exception):
-    """Config-shaped graph error (terminal: retrying the same config cannot help)."""
+    """Config-shaped graph error (terminal: retrying the same code cannot help)."""
+
+
+class SlotEmitError(RuntimeError):
+    """A stage's slot emission broke the law (budget, shape, forged version) —
+    a stage-file bug surfacing as a stage failure: required ⇒ the chunk attempt
+    fails; optional ⇒ a hole. Never a truncation, never a silent fix-up."""
+
+
+# Sentinel a failed-or-cancelled stage's future resolves to; dependents cascade.
+HOLE = object()
 
 
 @dataclass
 class ResolvedGraph:
     modality: str
-    primary: Stage
-    enabled: list[Stage]              # declared-order
-    needs: dict[str, tuple[str, ...]]  # effective needs (incl. implicit primary for mutate)
+    stages: list[Stage]                  # name-sorted
+    by_name: dict[str, Stage]
+    consumers: dict[str, int]            # stage name -> number of dependents
     pipeline_version: str
 
 
-def resolve(modality: str, stages: list[Stage], settings) -> ResolvedGraph:
+@dataclass
+class GraphResult:
+    """One chunk's single-record payload: the slots map (each value stamped with
+    its producer's segment) + the per-stage statuses (L8's vocabulary)."""
+
+    slots: dict[str, Any]
+    statuses: dict[str, str]             # stage name -> ok | failed | cancelled
+    pipeline_version: str = ""
+
+
+def resolve(modality: str, stages: list[Stage]) -> ResolvedGraph:
     if not stages:
-        raise GraphResolutionError(f"no stages registered for modality {modality!r}")
+        raise GraphResolutionError(f"no stages for modality {modality!r}")
 
-    enabled = {s.name: s for s in stages if s.is_enabled(settings)}
+    by_name: dict[str, Stage] = {}
+    slots_seen: dict[str, str] = {}
+    for s in stages:
+        validate_stage(s)
+        if s.modality != modality:
+            raise GraphResolutionError(
+                f"stage {s.name!r} declares modality {s.modality!r}, resolving "
+                f"{modality!r} — one graph per modality"
+            )
+        if s.name in by_name:
+            raise GraphResolutionError(f"{modality}: duplicate stage name {s.name!r}")
+        owner = slots_seen.get(s.slot_name)
+        if owner is not None:
+            raise GraphResolutionError(
+                f"{modality}: slot {s.slot_name!r} has two producers "
+                f"({owner!r} and {s.name!r}) — one enabled producer per slot (L5)"
+            )
+        by_name[s.name] = s
+        slots_seen[s.slot_name] = s.name
 
-    # Auto-disable best_effort stages whose needs are disabled (fixpoint); a REQUIRED
-    # stage in the same position is a hard error.
-    changed = True
-    while changed:
-        changed = False
-        for s in list(enabled.values()):
-            missing = [n for n in s.needs if n not in enabled]
-            if not missing:
-                continue
-            if s.policy == "best_effort":
-                logger.warning("stage %s/%s auto-disabled: needs disabled stage(s) %s",
-                               modality, s.name, missing)
-                del enabled[s.name]
-                changed = True
-            else:
+    for s in by_name.values():
+        for need in s.needs:
+            if need not in by_name:
                 raise GraphResolutionError(
-                    f"{modality}/{s.name} is enabled+required but needs disabled "
-                    f"stage(s) {missing} — fix the config, don't ship silent holes"
+                    f"{modality}/{s.name}: needs unknown stage {need!r}"
                 )
 
-    primaries = [s for s in enabled.values() if s.kind == "primary"]
-    if len(primaries) != 1:
-        raise GraphResolutionError(
-            f"{modality}: exactly one enabled primary stage required, found "
-            f"{[s.name for s in primaries]}"
-        )
-    primary = primaries[0]
-    base = primary.version_fragment(settings)
-    if not base:
-        raise GraphResolutionError(
-            f"{modality}/{primary.name}: an enabled primary must have a non-empty "
-            "version fragment (the base dialect)"
-        )
-
-    # Effective needs: mutate stages implicitly depend on the primary.
-    needs: dict[str, tuple[str, ...]] = {}
-    for s in enabled.values():
-        n = tuple(s.needs)
-        if s.kind == "mutate" and primary.name not in n:
-            n = (primary.name, *n)
-        needs[s.name] = n
-
-    # Mutate write-set discipline (finding #7): every enabled mutate must declare WHICH
-    # mutable slots it edits, the declaration must be a subset of what the primary
-    # offers, and two mutates whose writes INTERSECT are chained by (order, name) —
-    # an implicit dep from each writer to its predecessor in the slot's chain — so
-    # overlapping mutates can never run concurrently (a nondeterministic last-writer-
-    # wins would break C2 idempotency). Disjoint mutates still run concurrently.
-    mutates = sorted((s for s in enabled.values() if s.kind == "mutate"),
-                     key=lambda s: (s.order, s.name))
-    mutable = set(primary.mutable_slots)
-    for m in mutates:
-        if not m.writes:
-            raise GraphResolutionError(
-                f"{modality}/{m.name}: an enabled mutate must declare `writes` (which "
-                "primary mutable_slots it edits) — required for write access and for "
-                "deterministic ordering against sibling mutates"
-            )
-        illegal = [w for w in m.writes if w not in mutable]
-        if illegal:
-            raise GraphResolutionError(
-                f"{modality}/{m.name}: writes {illegal} not in primary "
-                f"{primary.name!r} mutable_slots {sorted(mutable)} — a mutate may only "
-                "edit slots the primary explicitly offered up"
-            )
-    for slot in primary.mutable_slots:
-        writers = [m for m in mutates if slot in m.writes]
-        for prev, nxt in zip(writers, writers[1:]):
-            if prev.name not in needs[nxt.name]:
-                needs[nxt.name] = (*needs[nxt.name], prev.name)
-
-    # Committed-slot ownership must be unambiguous: two enabled stages declaring the
-    # same `provides` key would be a silent last-writer-wins on the blackboard. The
-    # primary's mutable_slots are SEEDED as primary-owned whether or not the primary
-    # repeats them in `provides` — otherwise a sidecar declaring provides=('segments',)
-    # would pass resolution and blind-clobber the mutate cohort's output via a
-    # perfectly "declared" StageResult commit (review-confirmed hole).
-    seen_provides: dict[str, str] = {slot: primary.name for slot in primary.mutable_slots}
-    for s in enabled.values():
-        for key in s.provides:
-            owner = seen_provides.get(key)
-            if owner is not None and not (s is primary and owner == primary.name):
-                raise GraphResolutionError(
-                    f"{modality}: stage {s.name!r} declares provides={key!r} already "
-                    f"owned by {owner!r} — slot commits must have one owner (the "
-                    "primary's mutable_slots are primary-owned by definition)"
-                )
-            seen_provides[key] = s.name
-
-    # Cycle check (also validates the DAG is executable).
+    # Cycle check (DFS; also proves the DAG is executable).
     seen: dict[str, int] = {}  # 0=visiting, 1=done
 
     def _visit(name: str, trail: tuple[str, ...]) -> None:
@@ -192,50 +130,99 @@ def resolve(modality: str, stages: list[Stage], settings) -> ResolvedGraph:
                 f"{modality}: stage dependency cycle {' -> '.join((*trail, name))}"
             )
         seen[name] = 0
-        for dep in needs[name]:
+        for dep in by_name[name].needs:
             _visit(dep, (*trail, name))
         seen[name] = 1
 
-    for name in needs:
+    for name in by_name:
         _visit(name, ())
 
-    # best_effort cone: nothing required/primary may depend (transitively) on best_effort.
-    dependents: dict[str, list[str]] = {n: [] for n in enabled}
-    for name, deps in needs.items():
-        for dep in deps:
-            dependents[dep].append(name)
-    for s in enabled.values():
-        if s.policy != "best_effort":
+    # L7 shape rule: nothing required may depend (transitively) on an optional
+    # stage — an optional failure cancels its cone, and a cancelled required
+    # stage would mean "no record", making the optional stage required in fact.
+    dependents: dict[str, list[str]] = {n: [] for n in by_name}
+    for s in by_name.values():
+        for dep in s.needs:
+            dependents[dep].append(s.name)
+    for s in by_name.values():
+        if s.required:
             continue
         frontier = list(dependents[s.name])
         while frontier:
             d = frontier.pop()
-            ds = enabled[d]
-            if ds.policy != "best_effort":
+            if by_name[d].required:
                 raise GraphResolutionError(
-                    f"{modality}/{d} is {ds.kind}/required but sits downstream of "
-                    f"best_effort stage {s.name!r} — its promise would be hollow"
+                    f"{modality}/{d} is required but sits downstream of optional "
+                    f"stage {s.name!r} — its promise would be hollow (L7)"
                 )
             frontier.extend(dependents[d])
 
-    # Version composition: base + mutate fragments in CHAIN order (the (order, name)
-    # sequence that also drives overlap chaining — the dialect encodes WHO mutated and
-    # in WHAT order, because the records genuinely differ under a different order) +
-    # the remaining fragments sorted (declaration order must never perturb identity).
-    mutate_fragments = [
-        f for m in mutates for f in [m.version_fragment(settings)] if f
-    ]
-    other_fragments = sorted(
-        f for s in enabled.values() if s is not primary and s.kind != "mutate"
-        for f in [s.version_fragment(settings)] if f
-    )
+    ordered = sorted(by_name.values(), key=lambda s: s.name)
     return ResolvedGraph(
         modality=modality,
-        primary=primary,
-        enabled=sorted(enabled.values(), key=lambda s: s.order),
-        needs=needs,
-        pipeline_version=base + "".join(mutate_fragments) + "".join(other_fragments),
+        stages=ordered,
+        by_name=by_name,
+        consumers={n: len(dependents[n]) for n in by_name},
+        # L4: the sorted '+'-join, composed pre-run — the attempted dialect.
+        pipeline_version="+".join(sorted(s.segment for s in ordered)),
     )
+
+
+# ---------------------------------------------------------------------------
+# Slot emission (L5) — the one place a stage's value becomes record bytes
+# ---------------------------------------------------------------------------
+
+def emitted_slot_bytes(emitted: dict) -> int:
+    """The budget measure: len(utf8(json(emitted slot))) under the canonical
+    serialization (no ascii escaping, compact separators)."""
+    return len(json.dumps(emitted, ensure_ascii=False,
+                          separators=(",", ":")).encode("utf-8"))
+
+
+def _emit_slot(stage: Stage, value: Any) -> Optional[dict]:
+    if value is None:
+        return None  # this stage emits no record slot (transient-output stage)
+    if not isinstance(value, dict):
+        raise SlotEmitError(
+            f"{stage.modality}/{stage.name}: slot value must be a JSON object, "
+            f"got {type(value).__name__} — every v1 slot is an object under the "
+            "contract's typed sub-schemas"
+        )
+    if "version" in value:
+        raise SlotEmitError(
+            f"{stage.modality}/{stage.name}: slot value carries its own 'version' "
+            "key — the executor stamps the producing stage's segment; a stage "
+            "cannot forge (or drift from) its own identity"
+        )
+    emitted = {"version": stage.segment, **value}
+    try:
+        size = emitted_slot_bytes(emitted)
+    except (TypeError, ValueError) as exc:
+        raise SlotEmitError(
+            f"{stage.modality}/{stage.name}: slot value is not JSON-serializable "
+            f"({exc}) — binary rides refs, never slots (L5)"
+        ) from None
+    if size > stage.byte_budget:
+        raise SlotEmitError(
+            f"{stage.modality}/{stage.name}: emitted slot is {size} bytes, over the "
+            f"declared byte_budget {stage.byte_budget} — a budget breach is a stage "
+            "failure, never a truncation (L5); raising the budget is a vS bump"
+        )
+    return emitted
+
+
+# ---------------------------------------------------------------------------
+# Execution
+# ---------------------------------------------------------------------------
+
+def _flatten_exceptions(eg: BaseException) -> list[BaseException]:
+    """Depth-first leaves of a (possibly nested) ExceptionGroup."""
+    if isinstance(eg, BaseExceptionGroup):
+        out: list[BaseException] = []
+        for exc in eg.exceptions:
+            out.extend(_flatten_exceptions(exc))
+        return out
+    return [eg]
 
 
 def _observe(metrics, name: str, value: float, labels: dict) -> None:
@@ -254,70 +241,69 @@ def _count(metrics, name: str, labels: dict) -> None:
             logger.exception("metrics inc failed for %s", name)
 
 
-def _slot_view(ctx: StageContext, stage: Stage, primary: Stage) -> StageContext:
-    """The stage's capability-scoped context: same chunk fields, slots wrapped in a
-    ``SlotView`` and ``c1`` wrapped read-only. Mutation power follows the REFERENCE:
-
-      * sidecar — denied even a READ of every primary mutable slot;
-      * mutate  — denied a read of mutable slots OUTSIDE its declared ``writes``
-        (reading one would hand it an aliased object it could scribble on without a
-        chain edge ordering it against that slot's real writers — an in-place write
-        through a read reference is invisible to ``__setitem__`` enforcement, so the
-        reference itself is what must be withheld); direct rebinds allowed for
-        ``writes`` only;
-      * primary — full access (it owns the slots); it also runs ``assemble`` on the
-        real dict.
-
-    ``c1`` is a read-only mapping view: chunk identity fields feed ``record_id`` and
-    the journal row AFTER the graph runs — a stage (esp. a best_effort one that then
-    "skips") must never be able to corrupt them."""
-    if stage.kind == "sidecar":
-        deny_read = frozenset(primary.mutable_slots)
-    elif stage.kind == "mutate":
-        deny_read = frozenset(primary.mutable_slots) - frozenset(stage.writes)
-    else:
-        deny_read = frozenset()
-    allow_write = frozenset(stage.writes) if stage.kind == "mutate" else frozenset()
-    return replace(ctx,
-                   slots=SlotView(ctx.slots, stage.name, deny_read, allow_write),
-                   c1=MappingProxyType(ctx.c1))
-
-
-def _allowed_commits(stage: Stage, primary: Stage) -> frozenset:
-    """Slot keys a stage may commit via ``StageResult.slots``: its declared
-    ``provides`` (+ the primary's ``mutable_slots``, which the primary owns)."""
-    allowed = set(stage.provides)
-    if stage.kind == "primary":
-        allowed |= set(primary.mutable_slots)
-    return frozenset(allowed)
-
-
-async def run_graph(resolved: ResolvedGraph, ctx: StageContext) -> list[ProcessedUnit]:
-    metrics = getattr(ctx.resources, "metrics", None)
+async def run_graph(
+    resolved: ResolvedGraph,
+    *,
+    c1: Mapping[str, Any],
+    blob: bytes,
+    span_seconds: float,
+    clients: Optional[Mapping[str, Any]] = None,
+    metrics: Any = None,
+) -> GraphResult:
+    """Run one chunk through the resolved graph. Returns exactly ONE GraphResult
+    (the single-record assembly L2 rides on) or raises the leaf exception of a
+    required-stage failure (no record — L7)."""
     loop = asyncio.get_running_loop()
-    futures: dict[str, asyncio.Future] = {s.name: loop.create_future() for s in resolved.enabled}
-    sidecar_units: dict[str, list[ProcessedUnit]] = {}
+    futures: dict[str, asyncio.Future] = {s.name: loop.create_future()
+                                          for s in resolved.stages}
+    blackboard: dict[str, StageOutput] = {}
+    statuses: dict[str, str] = {}
+    slots: dict[str, Any] = {}
+    remaining = dict(resolved.consumers)
+    c1_view = MappingProxyType(dict(c1))
+
+    def _release_inputs(stage: Stage) -> None:
+        """One consumer (ran, failed or cancelled) is done with its inputs; free
+        a producer's transient bytes the moment its last consumer finishes."""
+        for need in stage.needs:
+            remaining[need] -= 1
+            if remaining[need] == 0 and need in blackboard:
+                blackboard[need].bytes = None
 
     async def _run_stage(stage: Stage) -> None:
         fut = futures[stage.name]
         try:
-            deps = [await futures[n] for n in resolved.needs[stage.name]]
+            deps = [await futures[n] for n in stage.needs]
         except asyncio.CancelledError:
             if not fut.done():
                 fut.cancel()
             raise
-        if any(d is SKIPPED for d in deps):
+        if any(d is HOLE for d in deps):
+            # L7: the failed optional's downstream cone is cancelled, recorded.
+            statuses[stage.name] = "cancelled"
             _count(metrics, "dp_graph_stage_failures_total",
-                   {"modality": resolved.modality, "stage": stage.name, "reason": "skipped"})
-            fut.set_result(SKIPPED)
+                   {"modality": resolved.modality, "stage": stage.name,
+                    "reason": "cancelled"})
+            fut.set_result(HOLE)
+            _release_inputs(stage)
             return
-        stage_ctx = _slot_view(ctx, stage, resolved.primary)
+        ctx = StageContext(
+            c1=c1_view, blob=blob, span_seconds=span_seconds,
+            inputs={n: blackboard[n] for n in stage.needs},
+            clients=clients or {}, metrics=metrics,
+        )
         t0 = perf_counter()
         try:
             if type(stage)._defines("run_async"):
-                result = await stage.run_async(stage_ctx)
+                out = await stage.run_async(ctx)
             else:
-                result = await run_in_threadpool(stage.run_sync, stage_ctx)
+                out = await run_in_threadpool(stage.run_sync, ctx)
+            if not isinstance(out, StageOutput):
+                raise SlotEmitError(
+                    f"{resolved.modality}/{stage.name}: run must return a "
+                    f"StageOutput, got {type(out).__name__}"
+                )
+            emitted = _emit_slot(stage, out.value)
         except asyncio.CancelledError:
             if not fut.done():
                 fut.cancel()
@@ -325,78 +311,48 @@ async def run_graph(resolved: ResolvedGraph, ctx: StageContext) -> list[Processe
         except Exception as exc:
             _observe(metrics, "dp_graph_stage_seconds", perf_counter() - t0,
                      {"modality": resolved.modality, "stage": stage.name})
-            if stage.policy == "best_effort":
-                _count(metrics, "dp_graph_stage_failures_total",
-                       {"modality": resolved.modality, "stage": stage.name, "reason": "failed"})
-                logger.warning("best_effort stage %s/%s failed (skipped): %s",
-                               resolved.modality, stage.name, exc)
-                fut.set_result(SKIPPED)
-                return
-            if not fut.done():
-                fut.cancel()
-            raise  # required: TaskGroup cancels + awaits all siblings, then propagates
+            statuses[stage.name] = "failed"
+            _count(metrics, "dp_graph_stage_failures_total",
+                   {"modality": resolved.modality, "stage": stage.name,
+                    "reason": "failed"})
+            if stage.required:
+                if not fut.done():
+                    fut.cancel()
+                raise  # TaskGroup cancels + awaits all siblings, then propagates
+            logger.warning("optional stage %s/%s failed (hole): %s",
+                           resolved.modality, stage.name, exc)
+            fut.set_result(HOLE)
+            _release_inputs(stage)
+            return
         _observe(metrics, "dp_graph_stage_seconds", perf_counter() - t0,
                  {"modality": resolved.modality, "stage": stage.name})
-        result = result if isinstance(result, StageResult) else StageResult()
-        # Commit-on-success: a failed stage contributed nothing; a succeeded one merges
-        # its slots atomically-enough (single-threaded loop) before dependents wake.
-        # Committed keys must be DECLARED (provides / the primary's mutable_slots) —
-        # an undeclared commit is a stage-file bug and fails the chunk loudly no matter
-        # the stage's policy (a best_effort stage may skip, never scribble).
-        undeclared = set(result.slots) - _allowed_commits(stage, resolved.primary)
-        if undeclared:
-            raise RuntimeError(
-                f"{resolved.modality}/{stage.name}: committed undeclared slot(s) "
-                f"{sorted(undeclared)} — declare them in `provides` (slot ownership "
-                "must be reviewable, not emergent)"
-            )
-        if result.units and stage.kind != "sidecar":
-            raise RuntimeError(
-                f"{resolved.modality}/{stage.name}: a {stage.kind} stage returned "
-                f"{len(result.units)} unit(s) — only sidecars emit units from run; "
-                "the primary emits via assemble(), a mutate edits in place"
-            )
-        ctx.slots.update(result.slots)
-        if result.units:
-            sidecar_units[stage.name] = result.units
-        fut.set_result(True)
+        # Commit-on-success: value + bytes land only now, before dependents wake.
+        statuses[stage.name] = "ok"
+        blackboard[stage.name] = out
+        if emitted is not None:
+            slots[stage.slot_name] = emitted
+        if remaining[stage.name] == 0:
+            out.bytes = None  # no consumers — free the transient payload now
+        fut.set_result(out)
+        _release_inputs(stage)
 
     try:
         async with asyncio.TaskGroup() as tg:
-            for stage in resolved.enabled:
+            for stage in resolved.stages:
                 tg.create_task(_run_stage(stage))
     except BaseExceptionGroup as eg:
-        # A required stage failed: TaskGroup cancelled + awaited every sibling, then
-        # wraps in an ExceptionGroup. Re-raise the ACTUAL cause (RuntimeError,
-        # ValueError, ProcessingError…) so the worker taxonomy + the inline HTTP
-        # mapping + tests that ``raises(RuntimeError)`` see the exact exception, not a
-        # wrapper. Prefer a non-Cancelled leaf; a ProcessingError wins if present.
+        # A required stage failed: TaskGroup cancelled + awaited every sibling.
+        # Re-raise the ACTUAL leaf (ProcessingError preferred) so the worker
+        # taxonomy + the HTTP mapping see the exact exception, not a wrapper.
         leaves = _flatten_exceptions(eg)
         real = [e for e in leaves if not isinstance(e, asyncio.CancelledError)]
         preferred = next((e for e in real if isinstance(e, ProcessingError)), None)
         raise (preferred or (real[0] if real else leaves[0]))
+    finally:
+        # End of run = every consumer is done: transient payloads never outlive
+        # the run, whatever path ended it.
+        for out in blackboard.values():
+            out.bytes = None
 
-    if futures[resolved.primary.name].result() is SKIPPED:  # defensive; unreachable by rules
-        raise GraphResolutionError(f"{resolved.modality}: primary stage was skipped")
-
-    # (The old post-run mutable-slots fingerprint guard lived here. It was order-
-    # dependent — an illegal sidecar write landing before the last mutate finished was
-    # baked into its reference snapshot and missed. The SlotView capability scoping
-    # above made it redundant: a sidecar can no longer OBTAIN a mutable-slot reference,
-    # so the illegal write raises at its own call site instead.)
-
-    units = list(resolved.primary.assemble(ctx))
-    for stage in sorted((s for s in resolved.enabled if s.name in sidecar_units),
-                        key=lambda s: (s.order, s.name)):
-        units.extend(sidecar_units[stage.name])
-
-    # Runtime guard: record identities must be distinct within the chunk.
-    seen: set[str] = set()
-    for u in units:
-        if u.discriminator in seen:
-            raise RuntimeError(
-                f"{resolved.modality}: duplicate discriminator {u.discriminator!r} — two "
-                "stages claimed the same record identity (their upserts would collide)"
-            )
-        seen.add(u.discriminator)
-    return units
+    return GraphResult(slots=slots, statuses=statuses,
+                       pipeline_version=resolved.pipeline_version)

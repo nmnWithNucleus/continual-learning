@@ -114,3 +114,42 @@ Transitional note: between WP-C1 and WP-C4/C5 the old stage files + executor are
 against the dead API and the v0 DP suite does not fully collect — expected
 mid-stage state; the suite disposition lands at WP-C6. storage/continuum suites
 are untouched by construction.
+
+## WP-C2 — `app/stagegraph/executor.py` rewrite (resolution + readiness executor)
+
+| File | Action | Why |
+|---|---|---|
+| `app/stagegraph/executor.py` | REWRITTEN (402 → ~330 lines) | KEPT: readiness TaskGroup, commit-on-success, cancel-and-await-siblings, leaf re-raise (ProcessingError preferred), threadpooled `run_sync`. ADDED: sorted `'+'`-join version composition pre-run (L4); one-producer-per-slot + required-never-downstream-of-optional resolve checks; single-`GraphResult` assembly with executor-stamped slot `version`; byte-budget enforcement at slot emission (`SlotEmitError`, never truncation); blackboard `{value, bytes}` with bytes freed after the last consumer. DELETED: kinds/mutate chains/SlotView plumbing/discriminator guard/`assemble` fan-out |
+| `app/stagegraph/__init__.py` | edited | executor exports restored (`resolve`, `run_graph`, `GraphResult`, `GraphResolutionError`, `SlotEmitError`) |
+| `tests/test_executor.py` | created (TDD) | 27 checks: composition sortedness + `.exp-` riding; every resolve rejection; concurrency timing; leaf re-raise + ProcessingError preference; cancel-and-await; L7 hole/cancelled-cone statuses; budget exact-boundary (fit passes, +1 fails); binary/non-dict/forged-version/wrong-return emission failures; bytes delivered to consumers and freed (incl. under a cancelled cone) |
+
+In-session decisions:
+
+- **Budget enforced at slot emission (stage completion), not final assembly.** L5
+  says "exceeding it at assembly is a stage failure"; enforcing when the stage's
+  value becomes record bytes is the only point where L7's "downstream cone
+  cancelled" stays coherent (a breach discovered after consumers ran could cancel
+  nothing). The measure is `len(utf8(json(emitted slot)))` under the canonical
+  serialization (compact separators, `ensure_ascii=False`), INCLUDING the stamped
+  `version` key — i.e. exactly the bytes the record will carry for that slot.
+- **The executor stamps `version`; a stage supplying its own is a loud failure.**
+  The contract's deliberate slot-version redundancy can never drift from the
+  dialect segment because there is exactly one writer for both (T-3/T-4 assert it
+  end-to-end at WP-C6).
+- **Slot values must be JSON objects.** Every v1 contract slot is an object; a
+  bare string/list would silently break the `{"version": …, **value}` merge.
+- **`value=None` = no record slot, status still `ok`** — the clipprep shape (§2
+  names video slots as caption/ocr only). L11 note: a transient-output stage's
+  name in the dialect with no slot reads as a hole to a consumer that doesn't
+  know the stage; acceptable because nothing consumes such a slot — recorded so
+  T-6 documents the distinction via slot-producing stages only.
+- **Statuses vocabulary `ok|failed|cancelled`** — exactly L8's done-row set, so
+  Stage D can persist `GraphResult.statuses` verbatim into the extended row.
+- **Bytes freeing**: refcount = declared dependents; released when each consumer
+  finishes (ran, failed, or cancelled), plus an unconditional end-of-run sweep in
+  a `finally` (transient payloads never outlive the run on any path).
+- **Required-failure leaves no `GraphResult`** — the leaf exception propagates;
+  there is structurally no partial record to emit (L2/L6).
+
+Evidence: `pytest tests/test_stage_registry.py tests/test_executor.py -q` →
+`86 passed`.

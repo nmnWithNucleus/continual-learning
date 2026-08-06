@@ -23,3 +23,10 @@ from .stage import (  # noqa: F401
     stages_for,
     validate_stage,
 )
+from .executor import (  # noqa: F401
+    GraphResolutionError,
+    GraphResult,
+    SlotEmitError,
+    resolve,
+    run_graph,
+)
