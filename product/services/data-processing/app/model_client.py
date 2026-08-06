@@ -12,12 +12,24 @@ manifest. A mismatch is a loud IdentityMismatchError, never a silent skip — a
 stage must never talk to the wrong model. Wired into main.py at Stage C;
 imported by nothing in v0.
 
+Observability (Stage D WP-D3, per the Stage C cleanup's owner assignment): an
+optional duck-typed ``metrics`` registry records the server-call family —
+``dp_server_calls_total{server,outcome}`` per completed call (outcome: ``ok`` |
+``deterministic_error`` | ``unavailable`` | ``identity_mismatch``),
+``dp_server_call_transient_retries_total{server}`` per transient presentation
+(transport error or 5xx-transient body), ``dp_server_identity_failures_total``
+per failed identity verification, and ``dp_server_call_seconds{server}`` — the
+per-ATTEMPT latency of HTTP-answered ``/infer`` attempts (transport failures
+carry no meaningful latency and are counted, not timed). Families are declared
+by main's metrics setup; recording is guarded — metrics must never fail a call.
+
 Stdlib + httpx only; no model code, no output-affecting env knobs (L4).
 """
 from __future__ import annotations
 
 import asyncio
 import logging
+from time import perf_counter
 
 import httpx
 
@@ -82,6 +94,7 @@ class ModelClient:
         call_timeout_s: float = 120.0,
         connect_timeout_s: float = 5.0,
         max_transient_retries: int = 2,
+        metrics=None,
     ):
         if not endpoints:
             raise ValueError(f"model client {server!r} needs at least one endpoint")
@@ -90,8 +103,40 @@ class ModelClient:
         self.max_transient_retries = max_transient_retries
         self._replicas = [_Replica(u) for u in endpoints]
         self._rr = 0
+        self._metrics = metrics
         self._client = httpx.AsyncClient(
             timeout=httpx.Timeout(call_timeout_s, connect=connect_timeout_s))
+        # Seed the call-outcome series to honest zeros so rate() is gap-free from
+        # process start (the counters exist the moment the client does).
+        for outcome in ("ok", "deterministic_error", "unavailable",
+                        "identity_mismatch"):
+            self._inc("dp_server_calls_total", {"server": server, "outcome": outcome},
+                      amount=0.0)
+        self._inc("dp_server_call_transient_retries_total", {"server": server},
+                  amount=0.0)
+        self._inc("dp_server_identity_failures_total", {"server": server}, amount=0.0)
+
+    # -- metrics (guarded: must never fail a call) ------------------------------
+
+    def _inc(self, name: str, labels: dict, amount: float = 1.0) -> None:
+        if self._metrics is None:
+            return
+        try:
+            self._metrics.inc(name, labels, amount=amount)
+        except Exception:  # noqa: BLE001
+            logger.exception("metrics inc failed for %s", name)
+
+    def _observe(self, name: str, value: float, labels: dict) -> None:
+        if self._metrics is None:
+            return
+        try:
+            self._metrics.observe(name, value, labels)
+        except Exception:  # noqa: BLE001
+            logger.exception("metrics observe failed for %s", name)
+
+    def _outcome(self, outcome: str) -> None:
+        self._inc("dp_server_calls_total",
+                  {"server": self.server, "outcome": outcome})
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -109,6 +154,7 @@ class ModelClient:
         identity = resp.json().get("identity", {})
         problems = identity_matches(self.expected_identity, identity)
         if problems:
+            self._inc("dp_server_identity_failures_total", {"server": self.server})
             raise IdentityMismatchError(
                 f"{self.server} replica {replica.url} runs the wrong model: "
                 + "; ".join(problems))
@@ -154,8 +200,10 @@ class ModelClient:
             try:
                 if not replica.verified:
                     await self._verify_replica(replica)
+                t0 = perf_counter()
                 resp = await self._client.post(f"{replica.url}/infer", json=payload)
             except IdentityMismatchError:
+                self._outcome("identity_mismatch")
                 raise
             except (httpx.TimeoutException, httpx.TransportError, httpx.HTTPError) as exc:
                 # The replica may be mid-respawn under the supervisor: whatever
@@ -163,11 +211,17 @@ class ModelClient:
                 # must be re-verified before it serves again (L4 — never silently
                 # the wrong model). Stage B carried this as a hardening item.
                 replica.verified = False
+                self._inc("dp_server_call_transient_retries_total",
+                          {"server": self.server})
                 last_error = f"{replica.url}: {type(exc).__name__}: {exc}"
                 logger.warning("%s transient: %s", self.server, last_error)
                 continue
+            # HTTP-answered attempt: real server latency (queue wait included).
+            self._observe("dp_server_call_seconds", perf_counter() - t0,
+                          {"server": self.server})
             if resp.status_code == 200:
                 body = resp.json()
+                self._outcome("ok")
                 return body["result"]
             if resp.status_code >= 500:
                 # A 5xx (incl. the framework's 503-warming) can be a respawned
@@ -184,11 +238,15 @@ class ModelClient:
             except ValueError:
                 error = resp.text
             if not transient:
+                self._outcome("deterministic_error")
                 raise ModelCallError(f"{self.server}: {error}",
                                      status_code=resp.status_code)
+            self._inc("dp_server_call_transient_retries_total",
+                      {"server": self.server})
             last_error = f"{replica.url}: HTTP {resp.status_code}: {error}"
             logger.warning("%s transient: %s", self.server, last_error)
             await asyncio.sleep(0)  # yield; replicas rotate, no backoff needed
+        self._outcome("unavailable")
         raise ModelUnavailableError(
             f"{self.server}: transient-retry budget exhausted "
             f"({1 + self.max_transient_retries} attempts); last: {last_error}")

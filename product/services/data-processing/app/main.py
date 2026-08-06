@@ -90,10 +90,12 @@ def _supervisor_enabled() -> bool:
     return os.getenv("DP_SUPERVISOR", "").strip().lower() in ("1", "true", "yes", "on")
 
 
-def _build_model_clients(manifest_path: Path) -> dict[str, ModelClient]:
+def _build_model_clients(manifest_path: Path, metrics=None) -> dict[str, ModelClient]:
     """One ModelClient per manifest server. ``client_timeout_s`` is wired from the
     manifest (it was parsed by nothing before Stage C); remember client call
-    timeouts include queue wait — replicas serialize inference."""
+    timeouts include queue wait — replicas serialize inference. ``metrics`` is
+    the app registry (server-call families, WP-D3) — declared before the clients
+    are built so each client can seed its zeros."""
     if not manifest_path.exists():
         return {}
     manifest = json.loads(manifest_path.read_text())
@@ -106,6 +108,7 @@ def _build_model_clients(manifest_path: Path) -> dict[str, ModelClient]:
         clients[server] = ModelClient(
             server, endpoints, spec.get("expected_identity"),
             call_timeout_s=float(spec.get("client_timeout_s", 120.0)),
+            metrics=metrics,
         )
     return clients
 
@@ -153,6 +156,44 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
     metrics.declare_counter(
         "dp_graph_stage_failures_total", "Graph stage failures/skips.",
         ["modality", "stage", "reason"],
+    )
+
+    # ---- Ledger v2 / heal observability (L8, WP-D3) ---------------------------------
+    metrics.declare_counter(
+        "dp_heal_attempts_total",
+        "Heal attempts: full-graph re-runs on redelivery of a holey chunk, success "
+        "or failure (the ledger's heal_attempts column counts only non-green ones).",
+        ["modality"],
+    )
+    metrics.declare_counter(
+        "dp_records_finalized_with_permanent_holes_total",
+        "Records finalized (done_final) with their holes now permanent, by holed "
+        "stage — fires once per finalization per non-ok stage.",
+        ["stage"],
+    )
+    # ---- Server-call observability (model_client; Stage C cleanup §C assignment) ----
+    metrics.declare_counter(
+        "dp_server_calls_total",
+        "Model-server calls by outcome (ok | deterministic_error | unavailable | "
+        "identity_mismatch), one per completed ModelClient.infer call.",
+        ["server", "outcome"],
+    )
+    metrics.declare_counter(
+        "dp_server_call_transient_retries_total",
+        "Transient replica presentations (transport error or 5xx-transient body) "
+        "retried on another replica.",
+        ["server"],
+    )
+    metrics.declare_counter(
+        "dp_server_identity_failures_total",
+        "Replica identity verifications that failed (wrong model — L4).",
+        ["server"],
+    )
+    metrics.declare_histogram(
+        "dp_server_call_seconds",
+        "Per-attempt /infer latency by server (HTTP-answered attempts only; "
+        "includes replica queue wait — replicas serialize inference).",
+        ["server"],
     )
 
     # ---- WS-VC screen-video observability (§8) --------------------------------------
@@ -432,12 +473,18 @@ def create_app() -> FastAPI:
                 # Heal containment at the crash-loop cap (L8): a chunk WITH a durable
                 # record is finalized (holes permanent), never dead-lettered — its
                 # record must not read as a gap. Loud: this is budget force-spent.
-                # (WP-D3 wires the permanent-holes metric at this site.)
                 logger.error(
                     "crash-loop cap: chunk %s has a durable record — finalized with "
                     "permanent holes (stage_status=%s) instead of dead-letter",
                     f["chunk_id"], f["stage_status"],
                 )
+                if app.state.metrics is not None and f["newly_final"]:
+                    for stage, status in (f["stage_status"] or {}).items():
+                        if status != "ok":
+                            app.state.metrics.inc(
+                                "dp_records_finalized_with_permanent_holes_total",
+                                {"stage": stage},
+                            )
         app.state.continuity.rehydrate(await _tp(journal.rehydration))
         redrive_task: asyncio.Task | None = None
         if app.state.ingest_async:
@@ -483,8 +530,16 @@ def create_app() -> FastAPI:
     # transport AFTER create_app() but BEFORE the TestClient `with` block, and
     # process_chunk reads app.state.storage per call — so the fake transport is honored.
     app.state.storage = StorageClient(settings.storage_url, timeout=settings.http_timeout)
+    # Metrics BEFORE the model clients: the server-call families (WP-D3) must be
+    # declared when the clients construct and seed their zeros.
+    app.state.metrics = Metrics() if settings.metrics_enabled else None
+    if app.state.metrics is not None:
+        _setup_metrics(app, app.state.metrics)
+        app.add_middleware(MetricsASGIMiddleware, metrics=app.state.metrics,
+                           prefix="dp", templatizer=_dp_route_template)
     # Model clients (L9): one per manifest server; timeouts from the manifest.
-    app.state.model_clients = _build_model_clients(_manifest_path())
+    app.state.model_clients = _build_model_clients(_manifest_path(),
+                                                   metrics=app.state.metrics)
     # Journal is LAZY (no filesystem touch until first use) — safe at module import.
     app.state.journal = Journal(Path(settings.dp_var_dir) / "dp.db")
     # The L8 claim tree (Stage D): every delivery is judged from the journal's
@@ -498,11 +553,6 @@ def create_app() -> FastAPI:
     app.state.continuity = ContinuityTracker()
     app.state.ingest_async = settings.ingest_async   # FROZEN at startup (no per-request read)
     app.state.ingest_queue = None
-    app.state.metrics = Metrics() if settings.metrics_enabled else None
-    if app.state.metrics is not None:
-        _setup_metrics(app, app.state.metrics)
-        app.add_middleware(MetricsASGIMiddleware, metrics=app.state.metrics,
-                           prefix="dp", templatizer=_dp_route_template)
 
     def _metrics_inc(name: str, labels: dict | None = None) -> None:
         if app.state.metrics is not None:

@@ -397,7 +397,7 @@ class Journal:
                 )
                 conn.execute("COMMIT")
                 return {"heal_attempts": heal_attempts, "done_final": done_final,
-                        "newly_final": newly_final}
+                        "newly_final": newly_final, "stage_status": statuses}
             except BaseException:
                 conn.rollback()
                 raise

@@ -133,3 +133,60 @@ pre-D2 seam (heal not routed: reprocess-not-skip, 500-not-200, dead-letter-not-c
 `6 passed` restored. Full DP suite → `551 passed, 3 skipped` (+16 net: 14 rewritten
 dedup tests replacing 5, +6 seam, +1 t5 edit).
 
+## WP-D3 — metrics + T-5 full + e2e heal drill
+
+| File | Action | Why |
+|---|---|---|
+| `app/main.py` | edited | `_setup_metrics` declares the heal families (`dp_heal_attempts_total{modality}`, `dp_records_finalized_with_permanent_holes_total{stage}`) and the server-call family (`dp_server_calls_total{server,outcome}`, `dp_server_call_transient_retries_total{server}`, `dp_server_identity_failures_total{server}`, `dp_server_call_seconds{server}` histogram); metrics construction moved BEFORE the model clients (declaration-before-seeding); `_build_model_clients` hands the registry to each client; the redrive force-finalize site now fires the permanent-holes metric. Dashboards untouched (Stage F owns panels) |
+| `app/model_client.py` | edited | the Stage C cleanup §C assignment landed: per-completed-call outcome counter (`ok` \| `deterministic_error` \| `unavailable` \| `identity_mismatch`), per-transient-presentation retry counter (transport error or 5xx-transient body — a failed re-verify counts too), identity-failure counter at the verify site (both connect-time and first-use paths), per-ATTEMPT `/infer` latency histogram (HTTP-answered attempts only; transport failures are counted, not timed — a timeout ceiling is not a latency). Recording is guarded (metrics never fail a call); zeros seeded at construction; `metrics=` optional so servers/common's suite is untouched |
+| `app/ingest_core.py` | edited | `_note_heal_outcome` records: every completed heal attempt (success or failure) increments `dp_heal_attempts_total`; the finalization edge (`newly_final`) fires the permanent-holes counter once per non-ok stage |
+| `app/journal.py` | edited (1 line) | `mark_processed`'s return gains `stage_status` so the success-path finalization edge carries its hole evidence to the metric |
+| `tests/test_model_client_metrics.py` | NEW (TDD) | 5 tests: ok + latency observed; deterministic-error outcome; transient retries ×3 then unavailable (5xx attempts DO land in the histogram); identity-mismatch counted at both counters; metrics-less construction stays silent (the servers/common posture) |
+| `tests/test_t5_ledger_flows.py` | grown to the FULL law | header rewritten as the §4/§8-matrix map; new: healed record BYTE-IDENTICAL to a never-holed run (two apps, two journals — sorted assembly makes it provable, and the holey ship differs); heal-exhaustion fires both metric families then pure-skips; post-POST-pre-mark crash replay (mark raises once → redelivery reprocesses → byte-identical re-POST → upsert no-op → converges to skip); statuses round-trip after kill-9 (fresh `Journal` handle + restarted app both read `failed` vs `cancelled` DISTINCT — a dependent-cone stage pins `cancelled` — and the claim tree heals off that evidence); the poison row (terminal → dead-letter, visible in journal + continuity, no record, redelivery re-arms to a clean run); version-forward test now asserts the ledger row (new pv, `superseded_pv`, budget reset) |
+| `tests/test_e2e_real_heal.py` | NEW (gated `DP_E2E=1`) | the heal drill: split fleet via two filtered manifests (full-minus-ast, then ast-only; the app keeps the DEFAULT manifest so its ast client fails transient while the server is down — the production outage posture); hole → heal (same record_id, ledger all-ok, green heal uncharged) → healed bytes ≡ clean-fleet run → redeliver → pure skip with ZERO server calls (`dp_server_calls_total` snapshot unchanged, blob never re-pulled). Full drill discipline: v0 200 before/after, ports free, per-GPU deltas. File named to sort AFTER `test_e2e_real.py` (that module's fleet must tear down before this one claims the ports) |
+
+In-session decisions:
+
+- **`dp_server_call_seconds` measures per-ATTEMPT latency of HTTP-answered attempts**
+  (success or error status), not per-call wall time: a call's transport timeouts would
+  otherwise pollute the histogram with client-side ceilings. Transient presentations are
+  visible in their own counter instead.
+- **Heal outcomes ride `dp_heal_attempts_total` regardless of result** (the rate);
+  the ledger's `heal_attempts` column stays the budget (non-green only) — restated from
+  WP-D1 because the two numbers will differ on dashboards and that is by design.
+- **The e2e partial fleet is manifest-filtering, not supervisor surgery**: the
+  supervisor CLI has no per-server filter (a Stage F nicety if the heal drill becomes a
+  routine op); two supervisors over disjoint filtered manifests compose cleanly.
+
+Evidence: TDD red first — `tests/test_model_client_metrics.py` → `4 failed, 1 passed`
+against the shipped client (TypeError `metrics=`); green after. T-5 grown: `9 passed`.
+Full DP suite (mock) → `561 passed, 3 skipped`; servers/common → `30 passed`.
+
+E2E drill evidence (2026-08-06, node-7). The first heal-drill attempt errored in
+FIXTURE SETUP (the filtered tmp manifests made the supervisor resolve server dirs
+into the tmp dir — its default base is the manifest's grandparent); fixed by passing
+`--base-dir <service root>`, disclosed here because the same run's first half is the
+Stage C e2e re-verified green over ALL Stage D changes:
+
+```
+$ DP_E2E=1 …pytest tests/test_e2e_real.py tests/test_e2e_real_heal.py -v
+tests/test_e2e_real.py::test_audio_chunk_end_to_end PASSED
+tests/test_e2e_real.py::test_video_chunk_end_to_end PASSED
+tests/test_e2e_real.py::test_audio_reprocess_is_byte_identical_through_the_real_fleet PASSED
+3 passed (heal drill errored at fixture setup: tmp-manifest base-dir; fixed)
+
+$ DP_E2E=1 …pytest tests/test_e2e_real_heal.py -v      # after the --base-dir fix
+tests/test_e2e_real_heal.py::test_heal_drill_hole_then_heal_then_skip PASSED
+1 passed in 50.01s
+```
+
+Inside that one test, asserted in order: ast down → 200 + record with the acoustic
+hole, asr/transcript slots byte-equal the golden pins, ledger `acoustic: failed` and
+no cancelled cone; ast up → redelivery 200 + the SAME record_id, acoustic slot = the
+real golden's empty-claim fold, ledger all-ok, `heal_attempts` 0 (green heal); healed
+wire bytes == a never-holed clean-fleet run's (fresh journal, same envelope);
+redeliver again → 200 same ids, zero new POSTs, zero blob pulls, and the
+`dp_server_calls_total` snapshot UNCHANGED (zero server calls on skip). Teardown:
+no fleet port listening, per-GPU deltas clean (all 8 back to 0 MiB), v0 `:8085` → 200
+before and after (in-fixture asserts + post-run spot check).
+

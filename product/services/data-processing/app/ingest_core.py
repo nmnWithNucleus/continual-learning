@@ -230,8 +230,12 @@ async def process_chunk(
 
 def _note_heal_outcome(metrics, modality: str, state: Optional[dict],
                        failed_run: bool) -> None:
-    """Shared heal-attempt bookkeeping hook (both seams, success + failure).
-    WP-D3 wires the heal metric families here; logging is already live."""
+    """Shared heal-attempt bookkeeping (both seams, success + failure): every
+    completed heal attempt counts (the metric is the rate; the ledger column is
+    the budget and counts only non-green ones), and the finalization edge fires
+    the permanent-holes counter once per holed stage."""
+    if metrics is not None:
+        metrics.inc("dp_heal_attempts_total", {"modality": modality})
     if state is None:
         return
     if state["newly_final"]:
@@ -240,6 +244,11 @@ def _note_heal_outcome(metrics, modality: str, state: Optional[dict],
             "(done_final; stage_status=%s)",
             state["heal_attempts"], state.get("stage_status"),
         )
+        if metrics is not None:
+            for stage, status in (state.get("stage_status") or {}).items():
+                if status != "ok":
+                    metrics.inc("dp_records_finalized_with_permanent_holes_total",
+                                {"stage": stage})
 
 
 async def heal_chunk(
