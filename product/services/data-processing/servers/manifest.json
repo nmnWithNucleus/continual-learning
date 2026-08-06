@@ -1,0 +1,74 @@
+{
+  "manifest_version": 1,
+  "_comment": "Supervisor manifest (L9): which model servers run, where, on which GPU. Behavior lives in server code + this file; env vars stay operational-only (L4). Ports 8120-8159 were verified free on node-7 (2026-08-06); live ports 8083/8084/8085/8091/8097/8099 are other services' and untouchable. GPUs 0-1 are left free for the v0 service / ad-hoc work; VRAM per pinned GPU stays under ~6 GB of 80 GB (H100).",
+  "host": "127.0.0.1",
+  "servers": {
+    "whisper": {
+      "dir": "servers/whisper",
+      "entry": "server.py",
+      "python": ".venv/bin/python",
+      "replicas": [
+        {"port": 8121, "gpu": 4},
+        {"port": 8122, "gpu": 5}
+      ],
+      "startup_timeout_s": 300,
+      "health_interval_s": 5,
+      "health_fail_threshold": 3,
+      "client_timeout_s": 120,
+      "expected_identity": {
+        "model_name": "Systran/faster-whisper-large-v3",
+        "weights": {"revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478"}
+      }
+    },
+    "pyannote": {
+      "dir": "servers/pyannote",
+      "entry": "server.py",
+      "python": ".venv/bin/python",
+      "replicas": [
+        {"port": 8131, "gpu": 2},
+        {"port": 8132, "gpu": 3}
+      ],
+      "startup_timeout_s": 300,
+      "health_interval_s": 5,
+      "health_fail_threshold": 3,
+      "client_timeout_s": 120,
+      "expected_identity": {
+        "model_name": "pyannote/speaker-diarization-3.1",
+        "weights": {"pipeline_revision": "84fd25912480287da0247647c3d2b4853cb3ee5d"}
+      }
+    },
+    "ast": {
+      "dir": "servers/ast",
+      "entry": "server.py",
+      "python": ".venv/bin/python",
+      "replicas": [
+        {"port": 8141, "gpu": 6},
+        {"port": 8142, "gpu": 7}
+      ],
+      "startup_timeout_s": 300,
+      "health_interval_s": 5,
+      "health_fail_threshold": 3,
+      "client_timeout_s": 60,
+      "expected_identity": {
+        "model_name": "MIT/ast-finetuned-audioset-10-10-0.4593",
+        "weights": {"revision": "f826b80d28226b62986cc218e5cec390b1096902"}
+      }
+    },
+    "ocr": {
+      "dir": "servers/ocr",
+      "entry": "server.py",
+      "python": ".venv/bin/python",
+      "replicas": [
+        {"port": 8151, "gpu": null},
+        {"port": 8152, "gpu": null}
+      ],
+      "startup_timeout_s": 120,
+      "health_interval_s": 5,
+      "health_fail_threshold": 3,
+      "client_timeout_s": 30,
+      "expected_identity": {
+        "model_name": "rapidocr-onnxruntime PP-OCRv4 det+rec"
+      }
+    }
+  }
+}

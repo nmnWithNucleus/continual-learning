@@ -1,0 +1,182 @@
+"""Thin async client for the model-server fleet (Stage B, L9 bureaucracy side).
+
+One ModelClient per server kind (whisper, pyannote, ast, ocr): picks a replica
+round-robin, enforces a per-call timeout, and retries TRANSIENT failures on other
+replicas, bounded. Deterministic failures (the server said this input is bad) are
+raised immediately — every replica would fail them identically, and L7 owns what
+happens next.
+
+Identity verification (the L4 hook): before a replica serves its first call, its
+/health identity must subset-match the expected identity from the supervisor
+manifest. A mismatch is a loud IdentityMismatchError, never a silent skip — a
+stage must never talk to the wrong model. Wired into main.py at Stage C;
+imported by nothing in v0.
+
+Stdlib + httpx only; no model code, no output-affecting env knobs (L4).
+"""
+from __future__ import annotations
+
+import asyncio
+import logging
+
+import httpx
+
+logger = logging.getLogger("data-processing.model_client")
+
+
+class ModelClientError(Exception):
+    """Base for everything this client raises."""
+
+
+class ModelCallError(ModelClientError):
+    """Deterministic failure: the server rejected THIS input (transient=false)."""
+
+    def __init__(self, message: str, status_code: int | None = None):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class ModelUnavailableError(ModelClientError):
+    """No replica could serve the call within the transient-retry budget."""
+
+
+class IdentityMismatchError(ModelClientError):
+    """A replica reports a different identity than the manifest expects."""
+
+
+def identity_matches(expected: dict, actual: dict) -> list[str]:
+    """Subset match: every key in `expected` must equal `actual`'s value; nested
+    dicts recurse. Returns the list of mismatch descriptions (empty = match)."""
+    problems: list[str] = []
+
+    def walk(exp: dict, act: object, path: str) -> None:
+        if not isinstance(act, dict):
+            problems.append(f"{path or '.'}: expected mapping, got {act!r}")
+            return
+        for key, exp_value in exp.items():
+            here = f"{path}.{key}" if path else key
+            if key not in act:
+                problems.append(f"{here}: missing (expected {exp_value!r})")
+            elif isinstance(exp_value, dict):
+                walk(exp_value, act[key], here)
+            elif act[key] != exp_value:
+                problems.append(f"{here}: expected {exp_value!r}, got {act[key]!r}")
+
+    walk(expected, actual, "")
+    return problems
+
+
+class _Replica:
+    def __init__(self, url: str):
+        self.url = url.rstrip("/")
+        self.verified = False
+
+
+class ModelClient:
+    def __init__(
+        self,
+        server: str,
+        endpoints: list[str],
+        expected_identity: dict | None = None,
+        *,
+        call_timeout_s: float = 120.0,
+        connect_timeout_s: float = 5.0,
+        max_transient_retries: int = 2,
+    ):
+        if not endpoints:
+            raise ValueError(f"model client {server!r} needs at least one endpoint")
+        self.server = server
+        self.expected_identity = expected_identity or {}
+        self.max_transient_retries = max_transient_retries
+        self._replicas = [_Replica(u) for u in endpoints]
+        self._rr = 0
+        self._client = httpx.AsyncClient(
+            timeout=httpx.Timeout(call_timeout_s, connect=connect_timeout_s))
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
+
+    # -- identity ---------------------------------------------------------------
+
+    async def _verify_replica(self, replica: _Replica) -> None:
+        """Fetch /health and subset-match identity. Raises IdentityMismatchError on
+        a wrong model; raises transient httpx errors upward for the caller to
+        treat as replica-unavailable."""
+        resp = await self._client.get(f"{replica.url}/health")
+        if resp.status_code != 200:
+            raise httpx.TransportError(
+                f"{replica.url} not ready: /health {resp.status_code}")
+        identity = resp.json().get("identity", {})
+        problems = identity_matches(self.expected_identity, identity)
+        if problems:
+            raise IdentityMismatchError(
+                f"{self.server} replica {replica.url} runs the wrong model: "
+                + "; ".join(problems))
+        replica.verified = True
+
+    async def verify_identity(self) -> dict:
+        """Connect-time check: every reachable replica must match. Unreachable or
+        still-warming replicas stay unverified and are re-checked before first
+        use. Returns {url: 'ok' | 'unreachable: ...'}."""
+        report: dict[str, str] = {}
+        for replica in self._replicas:
+            try:
+                await self._verify_replica(replica)
+                report[replica.url] = "ok"
+            except IdentityMismatchError:
+                raise
+            except (httpx.HTTPError, httpx.TransportError) as exc:
+                report[replica.url] = f"unreachable: {type(exc).__name__}: {exc}"
+        if not any(r.verified for r in self._replicas):
+            logger.warning("%s: no replica verifiable at connect: %s",
+                           self.server, report)
+        return report
+
+    # -- inference --------------------------------------------------------------
+
+    def _pick_order(self) -> list[_Replica]:
+        start = self._rr % len(self._replicas)
+        self._rr += 1
+        return self._replicas[start:] + self._replicas[:start]
+
+    async def infer(self, payload: dict) -> dict:
+        """POST /infer on a replica; bounded transient retry on the others.
+        Returns the server's `result`. Raises ModelCallError (deterministic),
+        IdentityMismatchError (wrong model), or ModelUnavailableError."""
+        attempts_left = 1 + self.max_transient_retries
+        last_error = "no replica attempted"
+        order = self._pick_order()
+        idx = 0
+        while attempts_left > 0:
+            replica = order[idx % len(order)]
+            idx += 1
+            attempts_left -= 1
+            try:
+                if not replica.verified:
+                    await self._verify_replica(replica)
+                resp = await self._client.post(f"{replica.url}/infer", json=payload)
+            except IdentityMismatchError:
+                raise
+            except (httpx.TimeoutException, httpx.TransportError, httpx.HTTPError) as exc:
+                last_error = f"{replica.url}: {type(exc).__name__}: {exc}"
+                logger.warning("%s transient: %s", self.server, last_error)
+                continue
+            if resp.status_code == 200:
+                body = resp.json()
+                return body["result"]
+            transient = True
+            try:
+                body = resp.json()
+                error = body.get("error", resp.text)
+                transient = bool(body.get("transient", resp.status_code >= 500))
+            except ValueError:
+                error = resp.text
+            if not transient:
+                raise ModelCallError(f"{self.server}: {error}",
+                                     status_code=resp.status_code)
+            last_error = f"{replica.url}: HTTP {resp.status_code}: {error}"
+            logger.warning("%s transient: %s", self.server, last_error)
+            await asyncio.sleep(0)  # yield; replicas rotate, no backoff needed
+        raise ModelUnavailableError(
+            f"{self.server}: transient-retry budget exhausted "
+            f"({1 + self.max_transient_retries} attempts); last: {last_error}")

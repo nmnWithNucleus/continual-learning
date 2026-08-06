@@ -1,0 +1,9 @@
+# servers/common — framework venv (runs the framework + supervisor + model-client tests).
+# Pins mirror the DP service venv where the same package appears, so the framework is
+# exercised against the exact web-stack versions the fleet runs.
+fastapi==0.139.0
+uvicorn==0.51.0
+pydantic==2.13.4
+httpx==0.28.1
+pytest==9.1.1
+-e .
