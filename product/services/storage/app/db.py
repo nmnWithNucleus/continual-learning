@@ -356,14 +356,30 @@ class Store:
         index goes — no query orders by ``created_at`` — and ``_SCHEMA`` then builds
         the ``updated_at`` one. The OD-2 cutover wipes ``/context`` anyway; this keeps
         every pre-E DB file openable without a special case.
+
+        RE-ENTRANT UNDER kill-9 (review round): python-sqlite3 autocommits DDL, so the
+        ladder cannot ride one transaction — instead EVERY step is independently
+        conditional or idempotent, and a crash at any point completes on the next
+        boot. The NULL backfill runs whenever the column exists: a NULL ``updated_at``
+        can only be a mid-ladder shape (``put_context`` always writes the stamp), so
+        healing it unconditionally is safe and is what keeps a crash from stranding
+        rows off the window axis.
         """
         cols = {row["name"] for row in conn.execute("PRAGMA table_info(context_records)")}
+        if not cols:
+            return  # fresh DB: _SCHEMA creates the v2 shape directly
         if "ingest_time" in cols and "created_at" not in cols:
             conn.execute(
                 "ALTER TABLE context_records RENAME COLUMN ingest_time TO created_at")
+            cols = (cols - {"ingest_time"}) | {"created_at"}
+        if "created_at" in cols and "updated_at" not in cols:
             conn.execute("ALTER TABLE context_records ADD COLUMN updated_at TEXT")
-            conn.execute("UPDATE context_records SET updated_at = created_at")
-            conn.execute("DROP INDEX IF EXISTS idx_context_user_ingest")
+            cols.add("updated_at")
+        if "updated_at" in cols:
+            conn.execute(
+                "UPDATE context_records SET updated_at = created_at "
+                "WHERE updated_at IS NULL")
+        conn.execute("DROP INDEX IF EXISTS idx_context_user_ingest")
         conn.commit()
 
     @staticmethod
@@ -660,7 +676,8 @@ class Store:
         primitive, deliberately not this one). Whole RECORDS, never kinds or slots: the
         kind-granular design retired unbuilt (D28). Returns the auditable manifest —
         counts by ``pipeline_version``, the selector echoed, and how many cached
-        day-logs the cascade invalidated; ``dry_run`` returns the same manifest and
+        day-logs the cascade invalidated; ``dry_run`` returns the IDENTICAL manifest —
+        ``day_logs_invalidated`` included, predicted rather than performed — and
         touches nothing. Retracting nothing is an honest zero manifest, never an error.
 
         THE CASCADE: every cached day-log whose window contains an affected record's
@@ -696,6 +713,10 @@ class Store:
             selector["pipeline_version"] = pipeline_version
         where = " AND ".join(clauses)
         with self._connect() as conn:
+            # One transaction from the manifest read to the last delete (review
+            # round): a write racing the retraction must not let the manifest
+            # describe rows the delete did not take, or vice versa.
+            conn.execute("BEGIN IMMEDIATE")
             rows = conn.execute(
                 f"SELECT pipeline_version, updated_at FROM context_records "
                 f"WHERE {where}", params).fetchall()
@@ -704,18 +725,30 @@ class Store:
                 pv = row["pipeline_version"] or ""
                 by_pv[pv] = by_pv.get(pv, 0) + 1
             invalidated = 0
-            if rows and not dry_run:
+            stamps = sorted({row["updated_at"] for row in rows if row["updated_at"]})
+            if rows and dry_run:
+                # IDENTICAL manifest means identical: the dry run PREDICTS the
+                # cascade's blast radius (a distinct-row count over the same window
+                # ranges the wet path deletes) instead of reporting the zero it did
+                # not perform.
+                ranges = " OR ".join("(t_start <= ? AND t_end > ?)" for _ in stamps)
+                range_params: list[Any] = [user_id]
+                for stamp in stamps:
+                    range_params += [stamp, stamp]
+                invalidated = conn.execute(
+                    f"SELECT COUNT(*) AS n FROM day_logs "
+                    f"WHERE user_id = ? AND ({ranges})", range_params,
+                ).fetchone()["n"] if stamps else 0
+            elif rows:
                 conn.execute(f"DELETE FROM context_records WHERE {where}", params)
                 before = conn.total_changes
-                stamps = sorted({row["updated_at"] for row in rows
-                                 if row["updated_at"]})
                 for stamp in stamps:
                     conn.execute(
                         "DELETE FROM day_logs "
                         "WHERE user_id = ? AND t_start <= ? AND t_end > ?",
                         (user_id, stamp, stamp))
                 invalidated = conn.total_changes - before
-                conn.commit()
+            conn.commit()
         return {
             "user_id": user_id,
             "dry_run": dry_run,

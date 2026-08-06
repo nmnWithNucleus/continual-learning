@@ -167,9 +167,16 @@ def test_retracting_nothing_is_an_honest_zero_not_an_error(client):
     assert manifest["day_logs_invalidated"] == 0
 
 
-def test_dry_run_returns_the_manifest_without_deleting(client, store):
-    record = _rec()
-    assert client.post("/context/records", json=record).status_code == 200
+def test_dry_run_returns_the_identical_manifest_without_deleting(client, store):
+    """IDENTICAL means identical (review round): the dry manifest must PREDICT the
+    day-log cascade's blast radius, not report the zero it did not perform — an audit
+    preview that under-states what a wet run would touch is not an audit."""
+    store.put_profile("u1", "UTC")
+    record = _land(store, _rec())
+    window = store.open_training_window(
+        "u1", now=datetime(2026, 7, 24, 4, 0, 0, tzinfo=UTC))
+    from app.daylog import materialize_daylog
+    materialize_daylog(store, "u1", window["window_id"])    # a cached day-log exists
 
     dry = client.request("DELETE", "/context/records",
                          params={"user_id": "u1", "chunk_id": record["source"]["chunk_id"],
@@ -177,15 +184,52 @@ def test_dry_run_returns_the_manifest_without_deleting(client, store):
     assert dry["dry_run"] is True
     assert dry["records"] == 1
     assert dry["by_pipeline_version"] == {"asr.v1-mock.v1": 1}
-    assert dry["day_logs_invalidated"] == 0        # nothing was touched, so none
+    assert dry["day_logs_invalidated"] == 1        # predicted, not performed
     assert client.get(f"/context/records/{record['record_id']}").status_code == 200
+    with store._connect() as conn:                 # the cache row survived the dry run
+        assert conn.execute("SELECT COUNT(*) AS n FROM day_logs").fetchone()["n"] == 1
 
     wet = client.request("DELETE", "/context/records",
                          params={"user_id": "u1",
                                  "chunk_id": record["source"]["chunk_id"]}).json()
-    assert wet["records"] == dry["records"]
-    assert wet["by_pipeline_version"] == dry["by_pipeline_version"]
+    assert wet == {**dry, "dry_run": False}        # identical manifest, flag aside
     assert client.get(f"/context/records/{record['record_id']}").status_code == 404
+
+
+def test_the_manifest_read_and_the_delete_share_one_transaction(store):
+    """Review round: the selector read, the deletes and the cascade run under one
+    BEGIN IMMEDIATE, so a write racing the retraction cannot make the manifest
+    describe rows the delete did not take (or vice versa)."""
+    record = _land(store, _rec())
+    seen: list[bool] = []
+    real_connect = store._connect
+
+    class _Probe:
+        def __init__(self, conn):
+            self._c = conn
+
+        def execute(self, sql, *args):
+            if sql.lstrip().startswith("SELECT pipeline_version"):
+                seen.append(self._c.in_transaction)
+            return self._c.execute(sql, *args)
+
+        def __getattr__(self, name):
+            return getattr(self._c, name)
+
+        def __enter__(self):
+            self._c.__enter__()
+            return self
+
+        def __exit__(self, *exc):
+            return self._c.__exit__(*exc)
+
+    store._connect = lambda: _Probe(real_connect())          # type: ignore[method-assign]
+    try:
+        manifest = store.retract_context("u1", chunk_id=record["source"]["chunk_id"])
+    finally:
+        store._connect = real_connect                        # type: ignore[method-assign]
+    assert manifest["records"] == 1
+    assert seen == [True]        # the read already held the write transaction
 
 
 # --- the day-log cascade (charter M5: the widening D18 named) ------------------------

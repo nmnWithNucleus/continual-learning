@@ -9,6 +9,7 @@ in both the request path and the tests.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 from functools import lru_cache
@@ -119,6 +120,18 @@ def validate_c2(payload: Any) -> list[dict[str, str]]:
                 "path": f"content/slots/{name}/version",
                 "message": "must fullmatch the contract slot_version pattern",
             })
+    # One more Python-validator trap (review round): the json parser admits the
+    # non-standard NaN/Infinity literals, and jsonschema's minimum/maximum are
+    # VACUOUSLY TRUE for NaN — which the pydantic mirror then rejects, turning a bad
+    # request into a 500. Closed here, where the other trap closures live.
+    acoustic = payload["content"]["slots"].get("acoustic") or {}
+    confidence = acoustic.get("confidence")
+    if isinstance(confidence, float) and not math.isfinite(confidence):
+        out.append({
+            "path": "content/slots/acoustic/confidence",
+            "message": "must be a finite number (NaN/Infinity are json-parser "
+                       "extensions the schema's bounds cannot exclude)",
+        })
     return out
 
 

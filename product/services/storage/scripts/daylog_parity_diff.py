@@ -45,12 +45,13 @@ dialects of a unit survives. Two of the three are NEUTRALISED BY THE FIXTURE; th
 one is no longer a divergence at all, and the story of how it stopped being one is the most
 important thing on this page:
 
-  (N1) MEMBERSHIP — storage selects by `ingest_time`, continuum filters by event `t_start`.
-       Neutralised by giving every fixture record an `ingest_time` inside storage's window
-       AND an event `t_start` inside continuum's window. Both paths therefore see the same
-       27 records, and the script PROVES that rather than assuming it (precondition P2).
-       This is the ONE rule the two renderers still genuinely differ on, and it is
-       deliberate on both sides.
+  (N1) MEMBERSHIP — storage selects by `updated_at` (D27), continuum filters by event
+       `t_start`. Neutralised by giving every fixture record a stamp inside storage's
+       window AND an event `t_start` inside continuum's window. Both paths therefore
+       see the SAME CONTENT — the 27 v0 originals on the left, their 24 v1 equivalents
+       on the right (see N4 below) — and P2 PROVES the landed order and the 1:1
+       pairing rather than assuming them. This is the ONE rule the two renderers still
+       genuinely differ on, and it is deliberate on both sides.
 
   (N2) THE BUCKET GRID — **ELIMINATED AT THE SOURCE ON 2026-07-27 (F4), NOT NEUTRALISED.**
        Both renderers now bucket on the GLOBAL EPOCH GRID, `floor(t/segment_seconds)`, with

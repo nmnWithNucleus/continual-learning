@@ -285,3 +285,58 @@ def test_migration_is_idempotent(tmp_path):
     with store._connect() as conn:
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(context_records)")}
     assert "created_at" in cols and "updated_at" in cols and "ingest_time" not in cols
+
+
+def test_migration_reenters_after_a_crash_between_rename_and_add(tmp_path):
+    """The kill-9 shapes (review round): python-sqlite3 autocommits DDL, so the ladder
+    cannot be one transaction — every step must be independently conditional instead.
+    This is the post-RENAME crash shape: created_at exists, updated_at does not. The
+    next boot must complete the ladder, never fail on the missing-column index."""
+    db = tmp_path / "legacy.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "CREATE TABLE context_records ("
+            " record_id TEXT PRIMARY KEY, user_id TEXT NOT NULL,"
+            " t_start TEXT NOT NULL, t_end TEXT, chunk_id TEXT,"
+            " pipeline_version TEXT, created_at TEXT NOT NULL,"
+            " record_json TEXT NOT NULL)"
+        )
+        conn.execute(
+            "INSERT INTO context_records VALUES"
+            " ('r-old','u1','2026-07-01T00:00:00Z',NULL,'c1','v1',"
+            "  '2026-07-01T00:00:01Z','{}')"
+        )
+
+    store = Store(path=str(db), raw_root=str(tmp_path / "raw"))   # must not raise
+    with store._connect() as conn:
+        row = conn.execute("SELECT created_at, updated_at FROM context_records "
+                           "WHERE record_id = 'r-old'").fetchone()
+    assert row["updated_at"] == row["created_at"] == "2026-07-01T00:00:01Z"
+    assert store.earliest_updated_at("u1") == "2026-07-01T00:00:01Z"
+
+
+def test_migration_heals_null_updated_at_rows(tmp_path):
+    """The post-ADD-pre-backfill crash shape: updated_at exists but is NULL — rows
+    that would otherwise be invisible on the entire window axis. NULL can only exist
+    mid-ladder (put_context always writes the stamp), so the backfill may target NULLs
+    unconditionally and the next boot heals them."""
+    db = tmp_path / "legacy.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "CREATE TABLE context_records ("
+            " record_id TEXT PRIMARY KEY, user_id TEXT NOT NULL,"
+            " t_start TEXT NOT NULL, t_end TEXT, chunk_id TEXT,"
+            " pipeline_version TEXT, created_at TEXT NOT NULL,"
+            " updated_at TEXT, record_json TEXT NOT NULL)"
+        )
+        conn.execute(
+            "INSERT INTO context_records VALUES"
+            " ('r-old','u1','2026-07-01T00:00:00Z',NULL,'c1','v1',"
+            "  '2026-07-01T00:00:01Z',NULL,'{}')"
+        )
+
+    store = Store(path=str(db), raw_root=str(tmp_path / "raw"))
+    assert store.earliest_updated_at("u1") == "2026-07-01T00:00:01Z"
+    rows = store.list_context_by_updated("u1", "2026-01-01T00:00:00Z",
+                                         "2027-01-01T00:00:00Z")
+    assert [r["record"] for r in rows] == [{}]

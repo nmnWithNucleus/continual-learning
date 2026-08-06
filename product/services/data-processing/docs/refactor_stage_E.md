@@ -1,6 +1,6 @@
 # DP Rebuild — Stage E worklog (Storage v2)
 
-**Stage:** E — Storage v2 · **Status:** in progress · *Dated:* 2026-08-06
+**Stage:** E — Storage v2 · **Status:** DONE 2026-08-06 · *Dated:* 2026-08-06
 **Branch:** `dp-rebuild-v1` · **Plan:** [refactor_dp_service.md](refactor_dp_service.md) §8 Stage E
 **Laws this stage:** plan §5 (the storage-side set, ratified as D27/D28) · §1 L8 as
 corrected at the Stage D close-out (convergence, not monotonicity) · D18 (watermark
@@ -284,3 +284,155 @@ component) made the second POST upsert the first user's row — real contract be
 not a defect; chunk ids are globally unique ULIDs in production, so the fixture now
 models that and adds the fails-closed cross-user assertion. Full storage suite →
 `350 passed`.
+
+## Noticed for later stages
+
+- **Stage F — the continuum stamp-teaching gate (the brief's own carry, now concrete):**
+  the v2 stamps are `daylog_format_version "2"` and `recipe_id "consolidation-v2.0"`.
+  Continuum's stamp-refusal (built, F3) will — correctly — block every window until it
+  is taught both; teach them (and copy `consolidation-v2.0.json` into continuum's local
+  registry: recipes are deliberate copies, immutable under their id) *before* cutover.
+  The C10 body's contract `version` is now "2" as well, so any continuum-side body
+  validation needs the v2 schema at the same moment. A cutover gate, not a bug.
+- **Stage F — the VLM endpoint decision (Stage C's carry, restated):** clipcap needs
+  `VLM_URL` (+key/timeout) pointing at an endpoint actually serving
+  Qwen/Qwen3-VL-32B-Instruct; it sits outside the manifest identity scheme — the
+  startup `/v1/models` probe suggestion stands.
+- **Stage F — recording's 501-retry note (named by the brief):** the rebuilt DP answers
+  a clean 501 for a modality with no registered pipeline. Before cutover, verify
+  recording's push-retry taxonomy treats 501 as non-retryable — a retryable 501 on an
+  image/text chunk would loop forever against the v1 fleet.
+- **Stage F — the repoint inventory (what runs where, verified 2026-08-06):**
+  - `:8083` storage — code from `/home/ubuntu/nmn/dp-v0-live` (main); interpreter =
+    this tree's `storage/.venv` via a worktree symlink (`.git/info/exclude` carries the
+    `.venv` entry); data pinned to THIS tree (`app/dev.db`, `app/raw_store`,
+    `app/reservoir`); `recipes/`+`policies/` read from THIS tree per request
+    (immutable-under-id keeps that safe; branch edits must stay additive).
+  - `:8085` DP v0 — worktree code, `.venv-learn` interpreter, `DP_VAR_DIR` pinned to
+    the worktree (Stage C).
+  - `:8084` recording — still THIS tree's code + `.venv-learn`; never touched on the
+    branch; Stage F must repoint or absorb it at cutover.
+  - `:8097` (OCR sidecar from a deleted worktree) and `:8099` (a Jul-24 storage smoke
+    on a scratchpad DB) both still answer 200 — not deploy-managed, not ours to stop
+    this stage; the Stage B/G ownership notes stand.
+  - `learn.env` now pins the five `STORAGE_*` data paths (with `SERVICES_ROOT` +
+    `DP_VAR_DIR` from Stage C) — machine-local operational config to carry through
+    cutover.
+- **Stage F — acoustic stays unrouted in C10 v2** (this stage's ruling, from the
+  brief's closed routing list): if ambient-sound tags should ever train, that is a
+  founder contract edit, not a renderer patch; the stage's `speculative` consumer
+  marker stays honest until then.
+- **Stage G — the parity proof's reference side retires with cutover:** once
+  continuum's local renderer is deleted (M9's own condition — the narrowed diff is
+  green, re-baselined), the differential loses its left side. Decide then whether the
+  proof retires with condensed history or becomes a storage-only golden pinned to the
+  committed baseline report.
+- **Stage F/G — the OD-2 wipe meets the D27 ladder cleanly either way:** the wipe
+  clears `/context` rows, not the DB file; `_migrate_context_v2` no-ops on an
+  already-migrated table, migrates a pre-E one, and (review round) is re-entrant under
+  kill-9 at any ladder step — so the cutover order cannot strand a DB shape.
+
+## 2026-08-06 — Adversarial review round (six lenses, skeptic-verified; fixes applied)
+
+> review · a 22-agent workflow over the full Stage E diff (`139b1ce^..HEAD`): six
+> reviewer lenses — D27-law / D28-renderer / sqlite-mechanics / contract-surface /
+> parity-proof honesty / test+worklog honesty — each raw finding then attacked by an
+> independent skeptic against the actual code, the ratified rows and the recorded
+> rulings, with live reproduction (incl. real kill-9 fault injection).
+> Arithmetic: 16 raw findings → **9 confirmed** (2 major · 4 minor · 3 nit; the
+> migration-atomicity defect was found by two lenses, the dry-run divergence by two)
+> → **6 distinct defects**, all resolved in this round's commit. 7 refuted, recorded
+> below. The d28-renderer lens returned zero findings.
+
+**Code fixes (TDD — all four new/changed tests watched red first, `5 failed` against
+the shipped code):**
+
+- **`_migrate_context_v2` made re-entrant under kill-9 (major, found twice).**
+  python-sqlite3 autocommits DDL, so the three-step ladder could not ride one
+  transaction — and its single guard keyed on the FIRST step's effect meant a crash
+  between RENAME and ADD left a permanently unbootable store (`no such column:
+  updated_at` from `_SCHEMA`'s index, every boot), while a crash before the backfill
+  committed stranded NULL-`updated_at` rows invisible to the entire window axis. Both
+  shapes were reproduced by the reviewers with real kill-9 fault injection. Fix: every
+  step independently conditional/idempotent, plus an unconditional NULL backfill (a
+  NULL stamp can only be a mid-ladder shape — `put_context` always writes it). Tests:
+  `test_migration_reenters_after_a_crash_between_rename_and_add` +
+  `test_migration_heals_null_updated_at_rows` — both red first.
+- **Dry-run manifest made genuinely identical (major, found twice).** The docstring
+  and the WP-E3 worklog row said "identical manifest"; the code returned
+  `day_logs_invalidated: 0` on every dry run — an audit preview that under-states the
+  blast radius. The dry path now PREDICTS the cascade (a distinct-row count over the
+  same window ranges the wet path deletes); the rewritten test pins
+  `wet == {**dry, "dry_run": False}`.
+- **`retract_context` reads and deletes under one `BEGIN IMMEDIATE` (minor).** The
+  selector read ran in autocommit before the deletes, so a racing write could make the
+  manifest describe rows the delete did not take.
+  `test_the_manifest_read_and_the_delete_share_one_transaction` (a connection probe
+  asserting `in_transaction` at read time) — red first.
+- **Non-finite `acoustic.confidence` closed at the schema gate (minor).** The json
+  parser admits the NaN/Infinity literals and jsonschema's bounds are vacuously true
+  for NaN, so the pydantic mirror 500'd on what the schema gate passed — the exact
+  two-gates-in-series trap the D17/discriminator history warns about. `validate_c2`
+  now rejects non-finite confidence beside its other Python-validator trap closures;
+  `test_a_non_finite_confidence_is_a_422_not_a_500` sends the raw wire bytes
+  (stdlib `json.dumps` emits `NaN` by default) — red first.
+- **The parity module's N1 bullet corrected (minor, paper):** it still claimed both
+  paths see "the same 27 records", P2 proving it, on the `ingest_time` axis — all
+  three stale against the re-cut (24 v1 equivalents, P2 proves the pairing, the axis
+  is `updated_at`). Docstring only; the checks and the committed report were already
+  truthful.
+
+**Worklog corrections (quote-and-correct; the committed sections above stand):**
+
+- WP-E1's evidence line "after implementation the same three files → `108 passed`"
+  was wrong twice: the three red-run files collect and pass **102**; the 108 figure
+  came from a four-file green run that silently included `test_civil_time.py`'s 6.
+  The red figure (`86 failed, 16 passed`) and the suite total (321) were verified
+  accurate.
+- WP-E0b's "−7 net" style-findings claim does not match the checker: measured, the
+  six edited files went **−6** (repo-wide 816 → 811 = **−5**, including this new
+  worklog's own +1 finding). The named nits were all verified fixed; only the
+  arithmetic was off.
+
+**Refuted (recorded so the next reader does not re-litigate):** the `put_context`
+prior-read race (two lenses; the SQL observation is accurate but the failure scenario
+is unreachable in the system as built, and the claimed trigger was factually wrong);
+the cross-user same-`record_id` cache-stranding (reproduces, but the user-keyed
+invalidation predates the stage and the scenario requires a record_id changing owners,
+which L3 + globally-unique chunk ULIDs exclude); the N4 pairing "weaker than
+disclosed" (P2's check text states exactly what it proves, and content drift is tier
+A's to catch — the disclosure is accurate); the WP-E2 stash-revert (`40 failed, 18
+passed`) and WP-E3 (`11 failed, 1 passed`) red claims called irreproducible — both
+reproduced byte-for-byte by the skeptics; the ledger-boundary drill "asserts on a
+reply it constructs" (a recorded in-session decision executing the brief's authorized
+simulate-the-skip branch, with the cross-service replay named as Stage F's).
+
+**Verification after all fixes:** review-fix tests red first (`5 failed` against the
+shipped code), green after; full storage suite → `354 passed`; the parity proof
+re-runs PASS (all 31 checks; the docstring edit touches no check); DP → `573 passed,
+4 skipped` and continuum → `262 passed, 7 skipped` (re-run after the fixes, below).
+
+## Exit criteria (§8 Stage E + the session brief)
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| Live-service repoint before any storage change; data paths preserved exactly; e2e verified | done | WP-E0a: pid 330817 from the worktree, ≈4 s window, all five `STORAGE_*` byte-identical, fresh chunk → same `dev.db` (2 → 4 records) |
+| Hand-posted v1 records render a correct day-log (pasted) | done | WP-E4: three hand-written v1 records over a real socket → the C10 v2 block pasted (speaker line, null-speaker line, asr fallback, Scene, World text, home-zone anchor) |
+| Retraction drill passes; ledger boundary stated plainly | done | WP-E3 (+review round): `test_retraction.py` 13 tests incl. retract-then-skip no-resurrection; docstrings + route + charter M5 state the boundary |
+| heal×window matrix green — all three Stage D shapes | done | WP-E2 PART 4: filling heal re-windows; byte-identical still-holey does not; hole-migrated re-windows and renders the new truth |
+| D20 parity re-baseline recorded the way the card expects | done | WP-E4: 31 checks green over both origins, tier A byte-identical across the renderer swap; report committed; D20 + M9 status lines stamped |
+| Full storage suite green; every deleted v0 test dispositioned | done | `354 passed` (was 310); `test_discriminator.py` deleted with disposition, every rewritten file's delta itemized per WP |
+| DP suite untouched-green | done | `573 passed, 4 skipped` — the exact Stage D close-out count; diff touches no DP code (paper + worklogs only) |
+| continuum suite untouched-green | done | `262 passed, 7 skipped`; no continuum file touched |
+| No new env knobs | done | storage's operational set is unchanged (`STORAGE_DAYLOG_RECIPE_ID` etc. predate the stage; the recipe bump is a code default + an additive artifact) |
+| Live v0 services healthy all stage | done | `:8083`/`:8084`/`:8085` → 200 at WP-E0, after WP-E4's scratch drill, and at close; the stray `:8097`/`:8099` untouched |
+| One commit per WP, worklog in the same commit; onboarding strays uncommitted | done | `139b1ce` E0 · `3443697` E1 · `f1c719c` E2 · `5f874c2` E4 · `f943094` E3 · this closing commit (review round + close-out); the two onboarding files remain uncommitted |
+| Stage F not started | honored | zero cutover work; the Stage F carries are in "Noticed" above |
+
+Deviations, restated in one place: WP-E4 ran before WP-E3 (to close the one-commit red
+window the renderer swap forced — the Stage C mid-stage precedent, disclosed in
+WP-E2); the parity re-cut rode WP-E4 as the renderer's one seam. No design questions
+for the founder arose: every ambiguity resolved inside the ratified rows and the
+session's rulings, and each resolution is recorded in its WP's decision list.
+
+**Status: DONE.**

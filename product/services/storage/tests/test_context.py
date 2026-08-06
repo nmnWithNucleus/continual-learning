@@ -245,6 +245,23 @@ def test_slot_version_grammar_is_pinned(client):
     assert client.post("/context/records", json=record).status_code == 422
 
 
+def test_a_non_finite_confidence_is_a_422_not_a_500(client):
+    """Another Python-validator trap, closed in validate_c2 (review round): the json
+    parser admits the non-standard NaN/Infinity literals, jsonschema's minimum/maximum
+    are vacuously true for NaN — and the pydantic mirror then rejects what the schema
+    gate passed, which is the two-gates-in-series 500 this service exists to avoid.
+    Sent as raw wire bytes: `json.dumps` happily EMITS the NaN literal by default, so
+    any stdlib-json client can produce this body."""
+    import json as jsonlib
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        record = make_c2(slots={"acoustic": slot_acoustic(["keyboard typing"],
+                                                          confidence=bad)})
+        res = client.post("/context/records", content=jsonlib.dumps(record),
+                          headers={"Content-Type": "application/json"})
+        assert res.status_code == 422, (bad, res.status_code)
+        assert res.json()["detail"]["error"] == "C2 schema validation failed"
+
+
 # ---- The mirror itself, alongside the frozen schema --------------------------
 
 
