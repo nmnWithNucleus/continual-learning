@@ -34,18 +34,17 @@ only on a genuine decoder anomaly, and a clip shorter than its declared span deg
 gracefully (fewer frames) instead of dead-lettering. It also drops the 29.97/23.976
 integer-rounding drift, because no rate is reconstructed at all.
 
-CONFIG SHIM: the ``VIDEO_CLIP_*`` / ``VIDEO_OCR_*`` / ``VIDEO_ANALYSIS_*`` knobs are read
-here via a small local ``os.getenv`` helper with the §D-03 / §D-07 / §8 defaults, each
-marked ``# TEMP -> VisionSettings (WS-D owns config.py)``. WS-D folds these into
-``VisionSettings`` at integration; its ``OUTPUT_AFFECTING`` completeness test enforces
-coverage. This file never imports or edits ``app/vision/config.py`` beyond reading the
-already-shipped base ``VisionSettings`` (backend + wire), so WS-B never blocks on WS-D.
+NO CONFIG (DP rebuild, L4). The v0 ``VIDEO_CLIP_*`` / ``VIDEO_OCR_*`` /
+``VIDEO_ANALYSIS_*`` env shim that used to live here is gone: every knob is a field of
+:class:`ClipSettings`, and the ONE place values come from is the ``clipprep`` stage file
+(``app/stages/video/clipprep.py``), where they are pinned in code under the stage's
+backend version (changing one is a vB bump, never an env flip). This module is pure
+machinery over an explicit ``ClipSettings``.
 """
 from __future__ import annotations
 
 import logging
 import math
-import os
 import re
 import shutil
 import subprocess
@@ -55,7 +54,6 @@ from pathlib import Path
 
 from . import delta as _delta
 from .clip_types import ClipFrames, Delta, Frame
-from .config import VisionSettings, get_vision_settings
 
 logger = logging.getLogger("data-processing.vision.clip")
 
@@ -83,105 +81,23 @@ class FrameCountError(RuntimeError):
     from ``ClipDecodeError`` so the stage never masks it with the synthetic fallback."""
 
 
-# ---------------------------------------------------------------------------------------
-# Config shim — TEMP, WS-D owns app/vision/config.py.
-# ---------------------------------------------------------------------------------------
-def _env_float(name: str, default: float) -> float:  # TEMP -> VisionSettings (WS-D owns config.py)
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    try:
-        return float(raw)
-    except ValueError:
-        logger.warning("%s=%r is not a number — using default %s", name, raw, default)
-        return default
-
-
-def _env_int(name: str, default: int) -> int:  # TEMP -> VisionSettings (WS-D owns config.py)
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    try:
-        return int(raw)
-    except ValueError:
-        logger.warning("%s=%r is not an integer — using default %s", name, raw, default)
-        return default
-
-
-# The one knob with a hard clamp: 768 -> exactly 360 Qwen3-VL vision tokens/frame; 1280 is
-# 2.78x that and the single easiest accidental cost blowup, so >1024 is clamped with a WARN
-# (D-03 / A-16). The token arithmetic sits here so the price is read before the dial turns.
-_FRAME_WIDTH_CLAMP = 1024
-
-
 @dataclass(frozen=True)
 class ClipSettings:
-    """The clip-path knobs, read fresh per chunk (defaults: §D-03 sampling + §D-07
-    selector + §8 required config). Production thresholds are gated on O-1's real-capture
-    hour — build to these; they get pinned later."""
+    """The clip-path knobs. NOT read from anywhere at run time: the one live instance
+    is the code-pinned constant in ``app/stages/video/clipprep.py`` (L4 — a knob change
+    is a vB bump there). Kept as an explicit dataclass so the machinery below stays a
+    pure function of ``(bytes, ClipSettings)`` and tests can construct variants."""
 
     seconds_per_frame: float   # caption grid cadence; K = clamp(ceil(span/x), min, max)
     max_frames: int            # hard prefill ceiling on caption frames (<= server mm limit)
     min_frames: int            # caption-frame floor (one frame can't answer "what changed")
-    frame_width: int           # caption (lo) JPEG width; clamped at 1024 with a WARN
+    frame_width: int           # caption (lo) JPEG width; 768 = 360 Qwen3-VL tokens/frame
     ocr_frame_width: int       # OCR (hi) JPEG width; 1728 = the mac capture cap, no resample
     analysis_period_s: float   # Pass-A delta probe period (2.0 s: sensitivity beats precision)
     ocr_idle_peak: int         # class=IDLE at accumulated peak <= this (D-07)
     ocr_layout_peak: int       # class=LAYOUT above this peak (D-07)
     ocr_max_events: int        # rank-free even-spaced cap on OCR reads/chunk (3->8 is ~2.7x CPU)
     ocr_floor_s: float         # a static screen still reads once per this many wall-clock s
-
-
-def get_clip_settings() -> ClipSettings:
-    fw = _env_int("VIDEO_CLIP_FRAME_WIDTH", 768)  # TEMP -> VisionSettings (WS-D owns config.py)
-    if fw > _FRAME_WIDTH_CLAMP:
-        logger.warning(
-            "VIDEO_CLIP_FRAME_WIDTH=%d clamped to %d — 1280 is 2.78x the vision tokens of "
-            "768 on every call (D-03 / A-16)", fw, _FRAME_WIDTH_CLAMP)
-        fw = _FRAME_WIDTH_CLAMP
-    return ClipSettings(
-        seconds_per_frame=_env_float("VIDEO_CLIP_SECONDS_PER_FRAME", 2.5),  # TEMP -> VisionSettings (WS-D owns config.py)
-        max_frames=_env_int("VIDEO_CLIP_MAX_FRAMES", 12),                   # TEMP -> VisionSettings (WS-D owns config.py)
-        min_frames=_env_int("VIDEO_CLIP_MIN_FRAMES", 2),                    # TEMP -> VisionSettings (WS-D owns config.py)
-        frame_width=fw,
-        ocr_frame_width=_env_int("VIDEO_OCR_FRAME_WIDTH", 1728),            # TEMP -> VisionSettings (WS-D owns config.py)
-        analysis_period_s=_env_float("VIDEO_ANALYSIS_PERIOD_S", 2.0),       # TEMP -> VisionSettings (WS-D owns config.py)
-        ocr_idle_peak=_env_int("VIDEO_OCR_IDLE_PEAK", 8),                   # TEMP -> VisionSettings (WS-D owns config.py)
-        ocr_layout_peak=_env_int("VIDEO_OCR_LAYOUT_PEAK", 40),             # TEMP -> VisionSettings (WS-D owns config.py)
-        ocr_max_events=_env_int("VIDEO_OCR_MAX_EVENTS", 3),                 # TEMP -> VisionSettings (WS-D owns config.py)
-        ocr_floor_s=_env_float("VIDEO_OCR_FLOOR_S", 120.0),                 # TEMP -> VisionSettings (WS-D owns config.py)
-    )
-
-
-@dataclass(frozen=True)
-class ClipVisionSettings:
-    """The ``vision_settings`` slot ``clipprep`` provides: the already-shipped base
-    ``VisionSettings`` (backend + VLM wire, from WS-D's ``config.py``, read not edited)
-    with the clip knobs attached alongside. Unknown attribute reads delegate to ``base``
-    THEN ``clip``, so a downstream stage can read ``.backend`` (base) OR a clip knob like
-    ``.seconds_per_frame`` (clip) at the TOP LEVEL here — exactly the shape it will read
-    once WS-D folds the clip knobs into ``VisionSettings`` at integration (the two field
-    sets are disjoint, so there is no ambiguity). ``.base``/``.clip`` remain available for
-    code that wants the halves explicitly."""
-
-    base: VisionSettings
-    clip: ClipSettings
-
-    def __getattr__(self, name: str):
-        # `base`/`clip` are real fields resolved by __getattribute__; reaching here for
-        # them means a partially-constructed object (pickle/copy) — raise instead of
-        # recursing. Dunders never delegate. Otherwise prefer a base field, then a clip
-        # knob, so both read at the top level (forward-compatible with the folded settings).
-        if name in ("base", "clip") or (name.startswith("__") and name.endswith("__")):
-            raise AttributeError(name)
-        try:
-            return getattr(self.base, name)
-        except AttributeError:
-            return getattr(self.clip, name)
-
-
-def build_vision_settings() -> ClipVisionSettings:
-    return ClipVisionSettings(base=get_vision_settings(), clip=get_clip_settings())
 
 
 def ffmpeg_available() -> bool:
@@ -337,14 +253,14 @@ def _map_outputs(out_dir: str, prefix: str, targets: list[tuple[object, float]],
 # Orchestration.
 # ---------------------------------------------------------------------------------------
 def prepare_clip(
-    blob: bytes, span_seconds: float, t_start_epoch: float, cvs: ClipVisionSettings
+    blob: bytes, span_seconds: float, t_start_epoch: float, cs: ClipSettings
 ) -> tuple[ClipFrames, Delta]:
     """Two ffmpeg passes -> ``(ClipFrames, Delta)``. Raises ``ClipDecodeError`` if the blob
-    won't decode (the stage handles that per backend) and ``FrameCountError`` if a frame the
-    delta pass decoded is missing in Pass B (a genuine anomaly — always fatal)."""
+    won't decode (a required-stage failure under L7 — the chunk retries then dead-letters;
+    placeholder frames are never emitted) and ``FrameCountError`` if a frame the delta
+    pass decoded is missing in Pass B (a genuine anomaly — always fatal)."""
     if not blob:
         raise ClipDecodeError("empty blob")
-    cs = cvs.clip
     with tempfile.TemporaryDirectory(prefix="clipprep-") as tmp:
         src = str(Path(tmp) / "chunk.bin")
         Path(src).write_bytes(blob)
@@ -383,19 +299,7 @@ def prepare_clip(
         )
         return clip_frames, delta
 
-
-def synthetic_clip_frames(span_seconds: float, cs: ClipSettings) -> ClipFrames:
-    """The mock/dev fallback for an undecodable blob: ``min_frames`` timing-less frames
-    (both renditions ``None``, which the captioner/OCR must tolerate), no OCR reads, idle.
-    Keeps the headless loop running with the SAME shape on every worker."""
-    n = max(1, cs.min_frames)
-    frames = tuple(
-        Frame(index=i, t_offset_s=round(i * span_seconds / n, 3) if span_seconds > 0 else 0.0,
-              jpeg_lo=None, jpeg_hi=None)
-        for i in range(n)
-    )
-    return ClipFrames(frames=frames, ocr_times=(), idle=True, span_s=float(span_seconds))
-
-
-def empty_delta() -> Delta:
-    return Delta(times=(), cells=(), accum=())
+# DELETED (DP rebuild): ``synthetic_clip_frames`` + ``empty_delta`` — the v0 mock-backend
+# fallback that emitted placeholder frames for an undecodable blob. In v1 mock dialects are
+# client-level fakes and ``clipprep`` is required: an undecodable blob RAISES, the chunk
+# retries then dead-letters (L7). Placeholders never persist as processed truth.

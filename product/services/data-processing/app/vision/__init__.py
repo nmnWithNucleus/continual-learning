@@ -1,29 +1,19 @@
-"""Vision backends behind the VIDEO_BACKEND switch — the video-modality's seam.
+"""Video-stage internals (DP rebuild, Stage C): the machinery the thin video stages
+under ``app/stages/video/`` call into.
 
-Mirrors ``app/asr`` exactly: a captioner backend exposes
+  * ``clip`` / ``clip_types`` / ``delta`` — the two ffmpeg passes + the delta gate
+    (``clipprep`` internals; ffmpeg is a subprocess, self-isolating — L9).
+  * ``ocr`` — DP-side OCR post-processing (assemble + redact) for ``screentext``.
+  * ``clipcap`` — the one-multi-image-call VLM wire (+ the vertex oracle stub) for
+    the ``clipcap`` stage; ``prompts`` — the prompt pack whose aggregate digest the
+    stage pins in code.
+  * ``parse`` — the tolerant caption parse ladder; ``budget`` — the char-budget math;
+    ``circuit`` — the endpoint breaker (present, unwired — see the module docstring).
 
-  * ``PIPELINE_VERSION``: the stamped pipeline dialect for records it produces.
-  * ``caption(settings, keyframes, c1) -> list[KeyframeCaption]``
-
-``mock`` is the DEFAULT and imports no heavy deps / needs no GPU, so the whole
-learn loop runs headless on any box. ``vlm`` is LATE-BOUND only when selected
-(pure httpx against an OpenAI-compatible VL endpoint — the Qwen3-VL served on the
-GPU node, or any compatible captioner), so the mock default (and every mock unit
-test) never needs a model, a GPU, or a network.
-
-Frame *extraction* (``frames.py``) is backend-independent: it turns the raw video
-blob into timestamped keyframe images that either backend then captions.
+NO CONFIG anywhere in this package (L4): the v0 ``config.py``/``mode.py``/``version.py``
+env machinery is dead — every output-affecting knob is a code pin in a stage file, and
+identity is composed by the stage graph (``app/stagegraph``). The legacy keyframe
+pipeline's ``frames.py``/``result.py``/``vlm.py``/``mock.py`` died with the legacy
+graph (plan §9).
 """
 from __future__ import annotations
-
-from .config import VisionSettings
-
-
-def select(vs: VisionSettings):
-    """Return the captioner backend module for the configured VIDEO_BACKEND."""
-    if vs.backend == "vlm":
-        from . import vlm  # late-bound: only import the real captioner on this path
-        return vlm
-    # Default (and any unrecognized value) -> mock, the no-GPU / no-network path.
-    from . import mock
-    return mock

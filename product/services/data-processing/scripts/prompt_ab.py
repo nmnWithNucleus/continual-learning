@@ -1,5 +1,33 @@
 #!/usr/bin/env python3
-"""The offline prompt A/B + the quality gates (WS-H · §11 → WS-H, O-4, O-8).
+"""PARKED — BROKEN AGAINST THE DP-REBUILD STAGE GRAPH (Stage C, WP-C5). DO NOT RUN.
+
+This harness is built on machinery the rebuild deleted (deliberately, per L4 — no
+output-affecting env knobs): per-arm ``VIDEO_PROMPT_DIR`` temp registries +
+``VIDEO_CLIP_PROMPT``/``VIDEO_*`` env forks, ``prompt_dir_fingerprint``/``cfg_tag``
+dialects, the v0 ``resolve(modality, stages, settings)`` / per-unit ``run_graph`` /
+4-arg ``build_c2``/``compute_record_id`` signatures, and the ``keyframe`` legacy
+pipeline. ``main()`` refuses to run below.
+
+WHAT A REBUILD NEEDS (report to the eval owner; a minimal adaptation was judged NOT
+minimal and a half-fix worse than a clear break):
+  1. Arms become IN-CODE stage constructions: ``ClipcapStage(backend=Backend("vlm", n),
+     experiment="<arm>")`` (the ``.exp-<code>`` dialect) — experimental packs load via
+     ``prompts.load_registry(<arm dir>)`` handed to an arm-specific describe(), or the
+     arm pack is temporarily added to the packaged registry on an experiment branch
+     (the digest pin + vB bump make it visible by construction).
+  2. Drive ``resolve("video", [clipprep, screentext_fake_or_real, clipcap_arm])`` +
+     ``run_graph(resolved, c1=..., blob=..., span_seconds=..., clients=...)`` and score
+     ``GraphResult.slots`` (one record; the old per-unit loop is gone).
+  3. The OCR truth/corrupt30 arms become client-level fakes handed via ``clients``
+     (no VIDEO_OCR_BACKEND).
+  4. The storage-poison guard (``_forbid_storage``) and the scorers are still sound
+     and can be lifted as-is; ``DP_OFFLINE_EVAL`` keeps its serving-guard role in
+     app/main.py for whatever replaces this driver.
+
+The original design notes are preserved below for that rebuild.
+--------------------------------------------------------------------------------------
+
+The offline prompt A/B + the quality gates (WS-H · §11 → WS-H, O-4, O-8).
 
 Runs a chunkset through the REAL video stage graph — ``resolve()`` + ``run_graph()`` +
 ``pipeline.build_c2``, imported DIRECTLY — once per arm, and scores the arms side by side
@@ -1132,6 +1160,18 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--_arm-worker", help=argparse.SUPPRESS)
     p.add_argument("--_arm-out", help=argparse.SUPPRESS)
     args = p.parse_args(sys.argv[1:] if argv is None else argv)
+
+    # PARKED (DP rebuild Stage C): the arm machinery below targets the deleted v0
+    # graph/config surface — see the module docstring for exactly what a rebuild
+    # needs. Refuse loudly rather than half-run against the new API.
+    print(
+        "prompt_ab.py is PARKED: it drives the retired v0 stage graph (env-forked "
+        "arms, VIDEO_PROMPT_DIR registries, per-unit records). The DP rebuild made "
+        "experiments in-code (.exp-<code> dialects); see this file's docstring for "
+        "the rebuild checklist.",
+        file=sys.stderr,
+    )
+    return 3
 
     # ---- worker mode (one arm, this process, env already set) ------------------------
     if args._arm_worker:

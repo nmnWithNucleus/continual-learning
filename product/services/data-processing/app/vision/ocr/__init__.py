@@ -1,93 +1,26 @@
-"""OCR backend seam — VIDEO_OCR_BACKEND = off | mock | ppocr | vlm.
+"""DP-side OCR post-processing for the ``screentext`` stage (DP rebuild, Stage C).
 
-``select`` (what runs) and ``version_tag`` (the record_id dialect suffix) BOTH derive
-from one private ``_resolve`` — the load-bearing invariant, transposed from
-``app/audio/diarize/__init__.py``: if the two ever diverged, an OCR read would be
-injected into the caption and emitted as a record under a ``pipeline_version`` that
-does not name the OCR backend, and the mismatch would upsert silently over ``/context``.
-Any unrecognized ``VIDEO_OCR_BACKEND`` resolves to ``off`` in BOTH resolvers (a typo can
-never fork or collide), mirroring how ``app/asr`` treats an unknown backend as the safe
-default.
+What remains of the v0 OCR seam after L9 moved the engine behind the model-server
+fleet: the pure post-processing pipeline the thin client runs over the ocr server's
+regions — ``assemble`` (confidence gate → reading order + role → min-chars →
+redaction → dedup → single-line render under the char budget) and ``redact`` (the
+deterministic secret scrub, an access control not a knob).
 
-WHY ``off`` CARRIES A NON-EMPTY FRAGMENT (the one deliberate departure from the diarize
-precedent, where ``off`` maps to ``''``). ``diarize`` is a *mutate* whose enabledness IS
-its fragment, so ``off`` means "the stage does not run". ``screentext`` is different: it
-is a *sidecar that FEEDS the primary* — it ``provides=("ocr_text",)``, which ``clipcap``
-injects (D-09), and it is enabled in EVERY clip-mode configuration (``clipcap`` hard-needs
-it). By §4.3 R1 (the fork rider — "a sidecar declaring a non-empty ``provides`` must
-return a non-empty fragment when enabled"), its fragment must be non-empty for every
-backend value, ``off`` included. So ``off`` is an honest dialect — "OCR was configured off
-for this chunk" (A-10's honest escape) — not stage-disablement. ``version_tag`` therefore
-never returns ``''`` (``off`` is a key in ``_TAGS``); the coarse EP/model is baked into the
-tag, and the precise model shas fork via WS-D's ``cfg_tag`` (they are in ``OUTPUT_AFFECTING``).
+Dead with the rebuild (v0 → v1 dispositions):
 
-Heavy backends (``ppocr``/``vlm``) are LAZY-IMPORTED only inside ``select`` on their path,
-so importing this package — which stage discovery does on every ``/ingest`` — never pulls
-``httpx`` on the mock/off default beyond what the base image already carries.
+  * ``ppocr.py`` — the sidecar HTTP client (bespoke ``POST /ocr`` wire, per-process
+    ``/health`` sha assertion). Superseded by ``servers/ocr`` + ``app/model_client.py``:
+    the stage calls ``ctx.clients["ocr"].infer`` on the framework ``/infer`` envelope,
+    and the det/rec sha pins moved into ``servers/manifest.json`` ``expected_identity``
+    (verified by the client before a replica serves — the same guarantee, one home).
+  * ``vlm.py`` — the OCR A/B arm over an OpenAI endpoint. An experiment path selected
+    by env; under L4 an experiment is an in-code ``.exp-`` dialect or it does not
+    exist. Rebuild it as a ``screentext`` instance with ``Backend("vlm", n)`` if the
+    comparison is ever re-run.
+  * ``mock.py`` — the env-selected canned backend. Mock dialects are client-level
+    fakes in tests now (plan §3).
+  * ``config.py`` — the ``VIDEO_OCR_*`` env shim. Every output-affecting knob is a
+    code pin in ``app/stages/video/screentext.py``; the operational wire knobs
+    (url/timeout) live in the server manifest.
 """
 from __future__ import annotations
-
-from .config import OcrConfig
-
-# SINGLE SOURCE OF TRUTH for both runtime behavior (select) and the record_id dialect
-# (version_tag). A backend not in this map resolves to 'off' everywhere. Every value is
-# non-empty (incl. 'off'): screentext feeds the caption, so R1 forbids an empty fragment
-# for any enabled configuration (see the module docstring).
-# The ppocr tag names the ACTUALLY-bundled engine for provenance honesty: the sidecar
-# ships PP-OCRv4 (rapidocr-onnxruntime's default det+rec), NOT the PP-OCRv6 the design
-# names as the eventual target. This coarse human token is the engine family only; the
-# PRECISE model-file shas fork the corpus via WS-D's cfg_tag (ocr_model_sha_det/rec are in
-# OUTPUT_AFFECTING), so a file-swap to a real v6 pair re-keys regardless of this label.
-_TAGS = {
-    "off": "+ocr-off-v1",
-    "mock": "+ocr-mock-v1",
-    "ppocr": "+ocr-ppv4-cpu-v1",
-    "vlm": "+ocr-vlm-v1",
-}
-
-
-def _resolve(cfg: OcrConfig) -> str:
-    """Canonical backend name — ``'off' | 'mock' | 'ppocr' | 'vlm'``. Any unrecognized
-    ``VIDEO_OCR_BACKEND`` resolves to ``'off'`` (never fork, never collide)."""
-    backend = cfg.ocr_backend
-    return backend if backend in _TAGS else "off"
-
-
-def version_tag(cfg: OcrConfig) -> str:
-    """The ``pipeline_version`` fragment for the active OCR dialect — ALWAYS non-empty
-    (``off`` included), because ``screentext`` feeds the caption and R1 requires a fork
-    for every enabled configuration. One pipeline_version stamps the whole chunk, so this
-    fragment forks the caption (its input changed) and its own OCR record together."""
-    return _TAGS[_resolve(cfg)]
-
-
-def select(cfg: OcrConfig):
-    """Return the resolved OCR backend module, or ``None`` when ``off``. Each backend
-    exposes ``make_client(cfg) -> httpx.Client | None`` and
-    ``read(cfg, frame, client, chunk_id) -> OcrRead``."""
-    name = _resolve(cfg)
-    if name == "mock":
-        from . import mock
-
-        return mock
-    if name == "ppocr":
-        from . import ppocr  # lazy: only import the httpx sidecar client on this path
-
-        return ppocr
-    if name == "vlm":
-        from . import vlm  # lazy: the A/B arm's OpenAI-compatible client
-
-        return vlm
-    return None
-
-
-def assert_health(cfg: OcrConfig) -> None:
-    """Assert the co-located OCR sidecar's ``GET /health`` model shas match the pinned
-    config, failing LOUD on mismatch — a swapped model file must fail before any corpus
-    is written, not silently in it (D-06). A no-op for every backend but ``ppocr`` (the
-    only one with a sha-pinned sidecar); ``vlm`` hits an OpenAI-compatible endpoint that
-    carries no det/rec shas, and ``mock``/``off`` reach no network at all."""
-    if _resolve(cfg) == "ppocr":
-        from . import ppocr
-
-        ppocr.assert_health(cfg)

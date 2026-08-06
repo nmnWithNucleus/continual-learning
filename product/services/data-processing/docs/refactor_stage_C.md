@@ -282,6 +282,48 @@ Evidence (agent run, then re-run independently by the orchestrator):
 `pytest tests/test_audio_* tests/test_stage_registry.py tests/test_executor.py
 tests/test_seam_v1.py tests/test_pipeline_v1.py -q` → `168 passed`.
 
+### WP-C5 — video stages (subagent; verified + committed by the orchestrator)
+
+Registered video dialect (resolved from code, pinned by test):
+`clipcap.v1-vlm.v1+clipprep.v1-ffmpeg.v1+screentext.v1-ppocr.v1`.
+
+| File | Action | Why |
+|---|---|---|
+| `app/stages/video/clipprep.py` | NEW, registered | `clipprep.v1-ffmpeg.v1`, required, `run_sync` (ffmpeg subprocess is self-isolating); `StageOutput(value=None, bytes=ClipFrames)` — no record slot (frames are re-derivable transient data); all 10 v0 frame/delta knobs pinned as `CLIP_SETTINGS` verbatim; undecodable blob raises (the mock synthetic-frames fallback is dead); `byte_budget=1` is the structurally-inert registry minimum |
+| `app/stages/video/screentext.py` | NEW, registered | `screentext.v1-ppocr.v1` → slot `ocr`, optional, thin client on the `/infer` envelope; the Stage B carry-over rewire done (old `/ocr` wire + `model_sha_det/rec` pins → manifest `expected_identity.weights.det/rec_sha256` + `/infer`); `_match_frame`/`_jpeg_dims`/`_normalize_bbox` ported; v0 A-10 posture (absorb minority frame errors, raise >50%); `value: ""` = ran-and-empty, always emitted on success |
+| `app/stages/video/clipcap.py` | NEW, registered | `clipcap.v1-vlm.v1` → slot `caption`, optional, needs (clipprep, screentext); absorbs `render_caption` + the D-11/D-12 caps; **`PACK_DIGEST_PIN` raises `StageRegistrationError` at import if the on-disk pack digest moved** — a `.prompt.md` edit without a vB bump cannot ship; model/scenario/caption-rate all code pins; `VLM_URL`/`VLM_API_KEY`/`VLM_TIMEOUT_S` are the only env in the video path (operational, test-proven output-inert) |
+| `app/vision/clip.py`, `budget.py`, `ocr/assemble.py`, `ocr/redact.py`, `delta.py`, `parse.py`, `clip_types.py`, `prompts/*` (+LOCK), `circuit.py` | KEEP (edited to explicit-args, env shims dead) | the §9 keep list; prompts' `select` takes a scenario string; LOCK/digest/relock intact |
+| `app/vision/clipcap/vlm.py` | REWRITE | explicit-args `describe` (D-02 payload + D-09 OCR injection byte-for-byte); guided decoding pinned OFF (v0 default; probe never wired) |
+| `app/vision/clipcap/vertex.py` | KEEP (edited) | the documented stub, unregistered, still raising |
+| `app/vision/emit.py`, `config.py`, `version.py`, `mode.py`, `frames.py`, `result.py`, `vlm.py`, `mock.py`, `ocr/{ppocr,vlm,mock,config}.py`, `clipcap/mock.py` | **DELETED** | dispositions below; three are §9-verdict confirmations (§9's own header licenses line-by-line confirmation at execution): `frames.py` is the LEGACY keyframe decoder clip.py replaced (D-04; sole importers were the deleted adapters), `mode.py`'s resolver had no live importer, `version.py`'s "REWRITE → version-composition module" already shipped as `stagegraph.stage.segment` + `executor.resolve` at WP-C1/C2 |
+| `scripts/prompt_ab.py` | PARKED | the env-unlocked pack-override machinery is dead (L4); adaptation is a rebuild, not an edit — loud docstring + `main()` exits 3 with a 4-point rebuild checklist (in-code `.exp-` arm stages, GraphResult scoring, client-fake OCR arms, lifted scorers) |
+| video test files | per-file dispositions in the C5 report, §6 applied | deleted: `test_video_pipeline`, `test_clip_pipeline_e2e`, `test_screentext_integration`, `test_clip_consolidation`, `test_metrics_video` (breaker state-machine tests extracted verbatim → NEW `test_circuit.py`), `test_eval_scorers`; rewritten: `test_clipprep` (real ffmpeg over lavfi fixtures), `test_screentext` (fake client replays the REAL `golden_regions.json` verbatim → the pinned `ocr` slot value, C6's real-fleet reference), `test_clipcap` (MockTransport OpenAI fake → pinned caption slot; digest-gate test), `test_prompt_pack`; adapted: `test_ocr_assemble`, `test_budget`; kept: `test_delta`, `test_parse`, `conftest_video` |
+
+Knob dispositions (vision/config.py 31 fields + clip shim + ocr/config.py — the
+complete table is in the C5 agent report, reproduced here in summary): frame/
+delta/OCR-selection/caption-rate knobs → `CLIP_SETTINGS` and stage pins at v0
+default values; `VIDEO_VLM_MODEL` → `MODEL="Qwen/Qwen3-VL-32B-Instruct"` pin;
+`VIDEO_SCENARIO` → `"screen-mac"` pin; prompt-dir/pack-override knobs dead
+(identity = `PACK_DIGEST_PIN` + vB); `VIDEO_OCR_MODEL_SHA_*` → manifest
+`expected_identity` verified by ModelClient; backend selectors dead (code);
+three knobs found INERT in v0 and killed as orphans (`VIDEO_CLIP_MAX_TOKENS`,
+`VIDEO_OCR_LAYOUT_SPREAD`, `VIDEO_PRIVACY_FILTER` — redaction pinned always-on,
+its v0 reality); `VIDEO_VLM_URL/_API_KEY/_TIMEOUT` → operational `VLM_URL`/
+`VLM_API_KEY`/`VLM_TIMEOUT_S`. Zero `VIDEO_*` env reads remain in `app/`.
+
+Agent decisions endorsed: the cone coupling proven by test (OCR failure = `ocr`
+hole AND cancelled caption — v0's "caption never ships on silently-missing OCR"
+guarantee, now structural, healing instead of dead-lettering); the 48 MB body
+cap not carried (frame width 1728 bounds a JPEG well under 2 MB by
+construction); the `delta` observability trace computed-and-discarded (no
+consumer, L10); circuit.py kept+tested but wired nowhere (same as v0) with the
+one honest future use flagged for Stage D/F; `_assert_not_offline_eval` KEPT in
+main.py (operational-only latch any prompt_ab successor wants).
+
+Evidence (agent run, then re-run independently by the orchestrator):
+`pytest -q` over the ENTIRE service suite → `493 passed, 2 skipped` (the skips
+are the DP_E2E-gated real-fleet drills).
+
 ## WP-C6 — groundwork laid while C4/C5 ran (orchestrator, disjoint paths)
 
 - **Kept core suites adapted to v1** (§6 keep list): `conftest.py` now installs a

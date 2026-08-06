@@ -1,32 +1,34 @@
-"""WS-C seam: OCR post-processing (assemble/redact), the backend resolver, and the ppocr
-client helpers — all pure/headless, no network, no GPU, mock default.
+"""OCR post-processing (assemble/redact) — pure/headless, no network, no GPU.
+
+Rebuilt for the DP rebuild: the v0 backend resolver (`_resolve`/`select`/`version_tag`)
+and the ppocr sidecar client died with the env-selected seam (the engine is
+`servers/ocr`, the stage is `app/stages/video/screentext.py`, identity is the stage's
+Backend + the manifest's sha pins). What remains here is the KEPT pure pipeline:
+redact (the access control) + assign_role + render — now under EXPLICIT keyword pins
+(L4), exercised at the screentext stage's pinned values.
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-import httpx
 import pytest
 
+from app.vision.budget import ocr_cap, truncate_word
 from app.vision.clip_types import OcrRead, OcrRegion
-from app.vision.ocr import assemble, ppocr, redact
-from app.vision.ocr import _resolve, select, version_tag
-from app.vision.ocr.assemble import ROLES, assign_role, ocr_cap, render, truncate_word
-from app.vision.ocr.config import OcrConfig
+from app.vision.ocr import assemble, redact
+from app.vision.ocr.assemble import ROLES, assign_role, render
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "ocr_truth"
 
+# The screentext stage's code pins (app/stages/video/screentext.py) — the one live
+# configuration; passed explicitly, the way the stage calls render.
+PINS = dict(min_conf=0.60, min_chars=4, dedup_ratio=0.92, chars_per_second=6.0)
 
-def _cfg(**over) -> OcrConfig:
-    base = dict(
-        ocr_backend="mock", min_conf=0.60, min_chars=4, dedup_ratio=0.92,
-        ocr_chars_per_second=6.0, max_events=3, idle_peak=8, layout_peak=40,
-        floor_s=120.0, frame_width=1728, url="http://ocr.test", timeout=15.0,
-        model_sha_det="", model_sha_rec="", ep="cpu", model="", api_key="", max_tokens=900,
-    )
-    base.update(over)
-    return OcrConfig(**base)
+
+def _render(reads, span_seconds, **over):
+    kw = {**PINS, **over}
+    return render(reads, span_seconds, **kw)
 
 
 def _region(text, bbox=(0.1, 0.4, 0.9, 0.45), conf=0.95, role=""):
@@ -104,8 +106,8 @@ def test_assign_role_matches_fixture_ground_truth(fixture):
 
 
 def test_assign_role_degenerate_bbox_is_main():
-    # A zero-area / no-geometry bbox (e.g. the vlm arm's sentinel) must default to the
-    # content region, NOT fall through cx=cy=0 into the titlebar band.
+    # A zero-area / no-geometry bbox must default to the content region, NOT fall
+    # through cx=cy=0 into the titlebar band.
     assert assign_role((0.0, 0.0, 0.0, 0.0)) == "main"
     assert assign_role((0.5, 0.5, 0.5, 0.5)) == "main"   # zero width+height, centered
     assert assign_role((0.8, 0.9, 0.2, 0.1)) == "main"   # inverted (x1<x0)
@@ -135,7 +137,7 @@ def test_render_conf_and_minchars_gates_from_fixture():
                    regions=tuple(_region(r["text"], tuple(r["bbox"]), r["conf"]) for r in data["regions"]))
     # span=120 -> 720-char budget, so this test isolates the conf/min-chars/role gates
     # from the (separately tested) budget truncation.
-    line, n = render([read], _cfg(), span_seconds=120.0)
+    line, n = _render([read], 120.0)
     kept = [r for r in data["regions"] if r["keep"]]
     dropped = [r for r in data["regions"] if not r["keep"]]
     for r in kept:
@@ -151,7 +153,7 @@ def test_render_is_single_line_even_with_embedded_newlines():
     read = OcrRead(t_offset_s=0.0, regions=(
         _region("first line\nsecond line\tthird", bbox=(0.1, 0.4, 0.9, 0.45)),
     ))
-    line, _ = render([read], _cfg(), span_seconds=60.0)
+    line, _ = _render([read], 60.0)
     assert "\n" not in line and "\r" not in line and "\t" not in line
     assert "first line second line third" in line
 
@@ -162,12 +164,12 @@ def test_render_within_chunk_dedup():
         OcrRead(t_offset_s=0.0, regions=(_region("Re: Q3 deck review with the team"),)),
         OcrRead(t_offset_s=5.0, regions=(_region("Re: Q3 deck review with the team"),)),
     ]
-    line, _ = render(reads, _cfg(), span_seconds=60.0)
+    line, _ = _render(reads, 60.0)
     assert line.count("Re: Q3 deck review") == 1
 
 
 def test_render_empty_reads_is_empty_string():
-    line, n = render([], _cfg(), span_seconds=10.0)
+    line, n = _render([], 10.0)
     assert line == "" and n == 0
 
 
@@ -175,7 +177,7 @@ def test_render_redacts_and_counts_through_the_pipeline():
     read = OcrRead(t_offset_s=0.0, regions=(
         _region(f"key is {SECRET_CASES['sk_key']} keep private"),
     ))
-    line, n = render([read], _cfg(), span_seconds=60.0)
+    line, n = _render([read], 60.0)
     assert n == 1 and redact.REDACTED in line and SECRET_CASES["sk_key"] not in line
 
 
@@ -184,18 +186,31 @@ def test_render_truncates_on_word_boundary_at_budget():
     read = OcrRead(t_offset_s=0.0, regions=(
         _region("alpha bravo charlie delta echo foxtrot golf hotel india"),
     ))
-    line, _ = render([read], _cfg(), span_seconds=6.0)
+    line, _ = _render([read], 6.0)
     assert len(line) <= 36
     assert not line.endswith(" ")
     # never a mid-word cut: the truncated text ends on a whole token.
     assert line.split(" ")[-1] in "+0s main: alpha bravo charlie delta echo foxtrot golf hotel india".split(" ")
 
 
+def test_render_keeps_model_supplied_roles_and_coerces_off_vocab_ones():
+    # A valid supplied role is kept; an off-vocab role resolves from the bbox — a
+    # degenerate zero bbox lands "main", never "titlebar" (the guard path).
+    read = OcrRead(t_offset_s=0.0, regions=(
+        _region("Reply to Sarah here", bbox=(0.0, 0.0, 0.0, 0.0), role="compose"),
+        _region("Meeting notes for Q3 review", bbox=(0.0, 0.0, 0.0, 0.0), role="body"),
+    ))
+    line, _ = _render([read], 60.0)
+    assert "compose: Reply to Sarah here" in line
+    assert "main: Meeting notes for Q3 review" in line
+    assert "titlebar:" not in line
+
+
 # ============================ budget helpers (D-11) =============================
 
 @pytest.mark.parametrize("span,expected", [(10.0, 60), (60.0, 360), (0.0, 0), (2.5, 15)])
-def test_ocr_cap(span, expected):
-    assert ocr_cap(span, _cfg()) == expected
+def test_ocr_cap_at_the_pinned_rate(span, expected):
+    assert ocr_cap(span, PINS["chars_per_second"]) == expected
 
 
 def test_truncate_word_boundaries():
@@ -205,123 +220,8 @@ def test_truncate_word_boundaries():
     assert truncate_word("supercalifragilistic", 5) == "super"               # single long word: hard cut
 
 
-# ============================ backend resolver (D-06) ===========================
-
-def test_resolver_known_backends():
-    assert _resolve(_cfg(ocr_backend="mock")) == "mock"
-    assert _resolve(_cfg(ocr_backend="ppocr")) == "ppocr"
-    assert _resolve(_cfg(ocr_backend="vlm")) == "vlm"
-    assert _resolve(_cfg(ocr_backend="off")) == "off"
-
-
-def test_unknown_backend_is_off_in_both_resolvers():
-    unknown = _cfg(ocr_backend="pp-ocr-typo")
-    off = _cfg(ocr_backend="off")
-    # select(): both None
-    assert select(unknown) is None and select(off) is None
-    # version_tag(): identical, and NON-empty (screentext feeds the caption -> R1)
-    assert version_tag(unknown) == version_tag(off) == "+ocr-off-v1"
-    assert version_tag(unknown) != ""
-
-
-def test_version_tags_are_all_nonempty_and_distinct():
-    tags = {b: version_tag(_cfg(ocr_backend=b)) for b in ("off", "mock", "ppocr", "vlm")}
-    assert all(tags.values())                       # none empty (R1)
-    assert len(set(tags.values())) == 4             # distinct dialects
-    assert tags["ppocr"] == "+ocr-ppv4-cpu-v1"      # names the actually-bundled engine (v4)
-
-
-def test_select_returns_modules():
-    assert select(_cfg(ocr_backend="mock")).__name__.endswith("ocr.mock")
-    assert select(_cfg(ocr_backend="ppocr")).__name__.endswith("ocr.ppocr")
-
-
-# ============================ ppocr client helpers =============================
-
-def test_ppocr_health_mismatch_pure():
-    cfg = _cfg(model_sha_det="detAAA", model_sha_rec="recBBB")
-    assert ppocr._health_mismatch({"ok": True, "model_sha_det": "detAAA", "model_sha_rec": "recBBB"}, cfg) is None
-    assert "not ok" in ppocr._health_mismatch({"ok": False}, cfg)
-    assert "model_sha_det mismatch" in ppocr._health_mismatch(
-        {"ok": True, "model_sha_det": "WRONG", "model_sha_rec": "recBBB"}, cfg)
-    # Unpinned shas ('') skip the compare but still require ok.
-    assert ppocr._health_mismatch({"ok": True}, _cfg()) is None
-
-
-def test_ppocr_assert_health_over_mock_transport(monkeypatch):
-    cfg = _cfg(ocr_backend="ppocr", model_sha_det="D1", model_sha_rec="R1", url="http://ocr.test")
-    calls = {"n": 0}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls["n"] += 1
-        assert request.url.path == "/health"
-        return httpx.Response(200, json={"ok": True, "model_sha_det": "D1", "model_sha_rec": "R1",
-                                         "ort_version": "1.20.0", "ep": "cpu"})
-
-    monkeypatch.setattr(ppocr, "make_client",
-                        lambda c: httpx.Client(transport=httpx.MockTransport(handler)))
-    ppocr._HEALTH_VERIFIED.clear()
-    ppocr.assert_health(cfg)                 # matches -> no raise
-    ppocr.assert_health(cfg)                 # cached -> no second call
-    assert calls["n"] == 1
-
-
-def test_ppocr_assert_health_raises_on_sha_mismatch(monkeypatch):
-    cfg = _cfg(ocr_backend="ppocr", model_sha_det="EXPECTED", model_sha_rec="R1", url="http://ocr.test")
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"ok": True, "model_sha_det": "SWAPPED", "model_sha_rec": "R1"})
-
-    monkeypatch.setattr(ppocr, "make_client",
-                        lambda c: httpx.Client(transport=httpx.MockTransport(handler)))
-    ppocr._HEALTH_VERIFIED.clear()
-    with pytest.raises(RuntimeError, match="mismatch"):
-        ppocr.assert_health(cfg)
-
-
-def test_ppocr_read_normalizes_bbox_and_assigns_role_downstream(monkeypatch):
-    cfg = _cfg(ocr_backend="ppocr", url="http://ocr.test")
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/ocr"
-        return httpx.Response(200, json={
-            "regions": [
-                {"text": "Inbox - Gmail", "bbox": [0, 0, 691, 32], "conf": 0.97},
-                {"text": "hello world body", "bbox": [173, 486, 1555, 540], "conf": 0.9},
-            ],
-            "engine": "ppocrv6", "model_sha_det": "D", "model_sha_rec": "R",
-        })
-
-    from app.vision.clip_types import Frame
-    client = httpx.Client(transport=httpx.MockTransport(handler))
-    frame = Frame(index=0, t_offset_s=0.0, jpeg_lo=None, jpeg_hi=b"\xff\xd8\xff\xd9not-a-real-jpeg")
-    read = ppocr.read(cfg, frame, client, "chunk-1")
-    # pixel bbox normalized to 0..1 (no real jpeg dims -> config-width + 16:10 estimate).
-    assert all(0.0 <= c <= 1.0 for r in read.regions for c in r.bbox)
-    line, _ = render([read], cfg, span_seconds=60.0)
-    assert "Inbox - Gmail" in line and "titlebar:" in line
-
-
-def test_vlm_read_role_handling(monkeypatch):
-    from app.vision.clip_types import Frame
-    from app.vision.ocr import vlm
-
-    cfg = _cfg(ocr_backend="vlm", url="http://ocr.test", model="qwen")
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/v1/chat/completions"
-        content = (
-            '{"regions":[{"role":"compose","text":"Reply to Sarah here"},'
-            '{"role":"body","text":"Meeting notes for Q3 review"}]}'
-        )
-        return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
-
-    client = httpx.Client(transport=httpx.MockTransport(handler))
-    frame = Frame(index=0, t_offset_s=0.0, jpeg_lo=None, jpeg_hi=b"\xff\xd8jpeg")
-    read = vlm.read(cfg, frame, client, "chunk-1")
-    line, _ = render([read], cfg, span_seconds=60.0)
-    # a valid model role is kept; an off-vocab role ("body") resolves to "main", NEVER
-    # "titlebar" (the zero-bbox degenerate-guard path).
-    assert "compose: Reply to Sarah here" in line
-    assert "main: Meeting notes for Q3 review" in line
-    assert "titlebar:" not in line
+def test_assemble_reexports_the_shared_budget_math():
+    # The v0 local ocr_cap/truncate_word stub collapsed into app/vision/budget (its own
+    # recorded follow-up L-2): one implementation, one truncation behavior fleet-wide.
+    assert assemble.ocr_cap is ocr_cap
+    assert assemble.truncate_word is truncate_word

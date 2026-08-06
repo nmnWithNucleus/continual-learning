@@ -6,9 +6,9 @@ service lead BEFORE the fan-out, so every workstream imports one authoritative
 definition rather than each re-creating it on its own branch. Do not change
 these shapes without a lead-ratified edit to the design doc.
 
-Distinct from the legacy ``app/vision/result.py`` (``Keyframe`` /
-``KeyframeCaption``), which the retained ``VIDEO_PIPELINE=keyframe`` path still
-uses — the clip pipeline speaks these shapes instead.
+(The legacy keyframe pipeline's ``result.py`` shapes — ``Keyframe`` /
+``KeyframeCaption`` — died with that pipeline in the DP rebuild; these are the only
+video shapes now.)
 """
 from __future__ import annotations
 
