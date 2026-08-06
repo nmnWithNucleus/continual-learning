@@ -360,20 +360,19 @@ class DayLogBlock(_Strict):
 
 
 class DayLogBody(_Strict):
-    """C10 v1 — the day-log fetch body.
+    """C10 v2 — the day-log fetch body (D28: the slot-walk renderer over C2 v1).
 
-    Mirrors ``contracts/c10_daylog.v1.json``; the JSON Schema stays the authority and this
-    service validates its own output against it before serving. ``version`` is "1" because
-    C10 EVOLVED in place from the raw C2 range read (which is not retired and keeps its
-    own, event-time, semantics).
+    Mirrors ``contracts/c10_daylog.v2.json``; the JSON Schema stays the authority and this
+    service validates its own output against it before serving. C10 EVOLVED in place from
+    the raw C2 range read (which is not retired and keeps its own, event-time, semantics).
 
-    ``t_start``/``t_end`` are the window's INGEST-time bounds, not the extent of the
-    rendered content — segment timestamps routinely precede ``t_start``, which is the
-    late-upload case working correctly.
+    ``t_start``/``t_end`` are the window's ``updated_at``-axis bounds (D27), not the
+    extent of the rendered content — segment timestamps routinely precede ``t_start``,
+    which is the late-upload case working correctly.
     """
 
     contract: Literal["C10"]
-    version: Literal["1"]
+    version: Literal["2"]
     user_id: str = Field(min_length=1)
     window_id: str = Field(min_length=1)
     t_start: str

@@ -170,3 +170,41 @@ three files → `108 passed`. Full storage suite → `321 passed` (was 310: −1
 discriminator, +10 context, +12 created_updated; daylog/windows/civil counts
 unchanged). The parity proof re-runs green over the split columns (31 checks; P1
 explicitly v0 until the WP-E4 re-cut).
+
+## WP-E2 — `daylog.py` v2: the slot-walk renderer (D28)
+
+| File | Action | Why |
+|---|---|---|
+| `app/daylog.py` | REWRITTEN (renderer core) | the record loop walks `content.slots`: `caption` → Scene · `ocr` → World text (OCR) · `transcript.splits[]` → speaker-bucketed speech, each split in its OWN bucket by its OWN `t_start` (both spellings — verbatim `Z` root spans and the `+00:00`-microsecond form — via `_parse_ts`); the RULED fallback: transcript *absent* → `slots.asr`, spk null (splits by own `t_start`; the split-less whole-chunk shape at the record's `t_start`); present-but-empty transcript = an aligned-and-empty claim, no fallback; holes render as absence, `""` values are honest claims, empty slots map renders nothing (L11); NO acoustic/diarization route (the contract names none; acoustic's consumer marker stays honestly speculative); dedup collapses to `(chunk_id)` — latest `updated_at`, rowid tiebreak (D28 verbatim); module docstring rewritten to the v2 story |
+| `app/daylog.py` stamps | edited | `DAYLOG_FORMAT_VERSION = "2"`; default recipe → `consolidation-v2.0`; `daylog_body` emits contract version "2" |
+| `recipes/consolidation-v2.0.json` | NEW (additive) | forks v1.1 with every knob byte-identical; the note records why the fork exists (D28: `recipe_id` enters stage keys and C5 lineage, so v2-rendered corpora must not share an id with v1-rendered ones) and the Stage F stamp-teaching gate. Additive on purpose: the LIVE service reads this tree's `recipes/` per request and never asks for the new id |
+| `app/schemas.py` | edited | `C10_ID` → `c10_daylog.v2.json` — the v2 schema now gates every served body |
+| `app/models.py` | edited | `DayLogBody` mirrors v2 (`version: "2"`) |
+| `tests/test_daylog.py` | REWRITTEN (46 → 58) | PARTs 1–3 rebuilt over v1 fixtures (the v0-content shims from WP-E1 die); NEW pins: dedup key is `(chunk_id)` alone + version-forward renders once end-to-end + orphan-chunk defensive key; both split-timestamp spellings bucket by instant and keep their verbatim `t`; the asr fallback (with and without splits) + no-fallback-when-present-but-empty + honest-silence/ran-and-empty/hole-absence + no acoustic route; the v2 stamps and the v2-recipe-knob agreement; PART 4 — the heal×window matrix, all three Stage D shapes |
+| `tests/test_windows.py` | edited (1 test) | the trailing-newline trap test's day-log case becomes valid-v2-except-the-forged-id, so the rejection stays about `window_id` (the c10 v2 file joins the width-bounds closure — the Stage A carry) |
+
+In-session decisions:
+
+- **Acoustic stays unrouted.** The brief's routing list and the c10 v2 contract name
+  caption/ocr/transcript(+asr fallback) and nothing else; Stage C left acoustic's
+  consumer marker `speculative:c10_ambient_route_unruled` for Stage E, and the ruling
+  the brief implies is *no route* — routing it would be a contract edit this stage was
+  not given. Recorded under Noticed for Stage F.
+- **Fallback fires only on an ABSENT transcript slot.** Present-with-empty-splits is
+  an aligned-and-empty claim the renderer must not second-guess (L11); absence — a
+  hole, a permanent hole, or a dialect that never attempted alignment — falls back to
+  `slots.asr` with speakers unlabeled, exactly the 2026-08-06 ruling.
+- **The parent `asr` witness never renders on top of its aligned view** — one witness
+  on two channels is one voice in the day-log (the L11 provenance corollary).
+- **PACKAGING, loud (the Stage C mid-stage precedent):** the renderer swap necessarily
+  breaks the old v0-fixture differential proof — a slot-walk renders nothing from
+  per-kind records, so `tests/test_daylog_parity.py` is RED at this commit (4
+  failures, all in that file; every other suite green: 334 passed). The proof and the
+  renderer are one seam; the re-cut IS WP-E4's substance and lands in the next commit,
+  which restores full green. WP-E3 follows it, keeping the red window to one commit.
+
+Evidence: the v2 suite watched red by stash-revert of the three app files against the
+WP-E1 renderer — `40 failed, 18 passed` (v1 fixtures render nothing through the v0
+kind loop; the 18 that pass are grid/zone/HTTP-failure tests with no slot content at
+stake) — then `58 passed` restored. Full suite at this commit: `334 passed, 4 failed`
+(the four = the old parity proof, disclosed above).

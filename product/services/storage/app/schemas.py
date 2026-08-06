@@ -29,16 +29,18 @@ C2_ID = "https://nucleus.ai/contracts/c2_processed_record.v1.json"
 C3_ID = "https://nucleus.ai/contracts/c3_userprompt.v0.json"
 C4_ID = "https://nucleus.ai/contracts/c4_turn_record.v0.json"
 C6_ID = "https://nucleus.ai/contracts/c6_resolve.v0.json"
-# C10 is v1, not v0: it EVOLVED in place (D18) from a raw C2 range read into the day-log
-# fetch, keeping its number because its direction and peers are unchanged.
+# C10's day-log body is v2 on this branch (D28: the slot-walk renderer over C2 v1; the
+# v1 file stays in contracts/ as the live worktree service's running read until the
+# Stage F cutover). It EVOLVED in place at D18 from a raw C2 range read, keeping its
+# number because its direction and peers are unchanged.
 #
 # C10 is TWO schemas for the same reason C13 is: a contract is a family of OPERATIONS,
 # and the day-log body and the training-window ledger row are different bodies on
 # different endpoints. One file could only carry both behind a `oneOf` that hides exactly
-# the distinction the contract is about, and `c10_daylog.v1.json`'s $id names the day-log
+# the distinction the contract is about, and `c10_daylog.v2.json`'s $id names the day-log
 # specifically — a consumer validating "a C10 day-log" against a root that had quietly
 # become a union would be checking nothing.
-C10_ID = "https://nucleus.ai/contracts/c10_daylog.v1.json"
+C10_ID = "https://nucleus.ai/contracts/c10_daylog.v2.json"
 C10_WINDOW_ID = "https://nucleus.ai/contracts/c10_training_window.v1.json"
 C12_ID = "https://nucleus.ai/contracts/c12_user_profile.v0.json"
 # C13 is TWO schemas, not one, and that is the contract rather than a filing choice: the

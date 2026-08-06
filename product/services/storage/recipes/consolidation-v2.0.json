@@ -1,0 +1,32 @@
+{
+  "recipe_id": "consolidation-v2.0",
+  "source": "Forks consolidation-v1.1 with EVERY training and corpus knob byte-identical: 48x amplification, 15% deny-then-correct, ok_rate_min 0.85, LoRA r128/a256 lr 1e-4 3ep batch 2 chunk 1024, replay frac 0.30 from rawlog neg_boost 0, corpus quality_min 0.5 / segment_seconds 10 / block_segments 12, boundary 04:00. Nothing about HOW a night trains changes here.",
+  "note": "WHY v2.0 EXISTS (D28, DP rebuild Stage E). The day-log renderer moved from per-kind C2 v0 records to the C2 v1 slot walk (C10 v2: slots.caption -> Scene, slots.ocr -> World text, slots.transcript -> speaker-bucketed speech with the ruled slots.asr fallback), and D28 rules that recipe_id bumps ALONGSIDE daylog_format_version at that transition: recipe_id enters continuum's amplify/train stage keys and C5 lineage, so a corpus amplified over a v2-rendered day-log must not share an id with one amplified over a v1 render — the block text is contract (D20) but the rendered INPUT SET genuinely changed shape. The fork costs zero lineage at the OD-2 cutover wipe, exactly as the v1.0 -> v1.1 fork did ('it will never be this cheap again' held twice). v1.1 IS RETAINED, not deleted: it is the recipe the LIVE worktree service renders under until the Stage F cutover, and its provenance must not be orphaned. Continuum must be TAUGHT both new stamps (daylog_format_version 2 + this id) before cutover or its correct stamp-refusal blocks every window — the Stage F gate, recorded in the Stage E worklog.",
+  "amplify": {
+    "variants": 48,
+    "neg_frac": 0.15,
+    "ok_rate_min": 0.85
+  },
+  "replay": {
+    "frac": 0.3,
+    "source": "rawlog",
+    "neg_boost": 0.0
+  },
+  "train": {
+    "lora_r": 128,
+    "lora_alpha": 256,
+    "lr": 0.0001,
+    "epochs": 3,
+    "batch_size": 2,
+    "chunk_tokens": 1024,
+    "objective": "next-token CPT (never QA-SFT)"
+  },
+  "corpus": {
+    "quality_min": 0.5,
+    "block_segments": 12,
+    "segment_seconds": 10
+  },
+  "window": {
+    "boundary_local_time": "04:00"
+  }
+}

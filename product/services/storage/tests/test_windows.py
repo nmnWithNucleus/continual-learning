@@ -694,10 +694,13 @@ def test_no_contract_accepts_a_window_id_with_a_trailing_newline():
          "t_end": "2026-07-22T03:59:00Z", "state": "open", "outcome": None,
          "opened_at": "2026-07-22T04:00:00Z", "closed_at": None}
     )
+    # The c10 v2 day-log file is the FOURTH carrier of the width-bounds trap closure
+    # (Stage A carry): valid v2 in every other respect, so the rejection is about the
+    # forged id and nothing else.
     assert schemas.validate_c10(
-        {"contract": "C10", "version": "1", "user_id": "u1", "window_id": forged,
+        {"contract": "C10", "version": "2", "user_id": "u1", "window_id": forged,
          "t_start": "2026-07-20T00:00:00Z", "t_end": "2026-07-22T03:59:00Z",
-         "daylog_format_version": "daylog-v1", "recipe_id": "consolidation-v1.0",
+         "daylog_format_version": "2", "recipe_id": "consolidation-v2.0",
          "home_tz": "UTC", "segments": [], "blocks": [], "content_fingerprint": "f"}
     )
     assert schemas.validate_c14(
