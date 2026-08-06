@@ -383,3 +383,83 @@ liveness assertions (tail in WP-D3's evidence, re-verified this round).
 
 **Status: DONE.**
 
+## 2026-08-06 — Close-out round (independent verification, 4 lenses; founder-directed)
+
+> close-out · applied on `dp-rebuild-v1`, two commits (fixes, then this worklog) ·
+> triggered by an independent 4-lens verification that CONFIRMED Stage D with no
+> blockers (the review-round fixes re-reproduced red-first) and directed exactly the
+> items below. Everything above stands as written; corrections amend, never rewrite.
+> Stage D closes with this round; Stage E not started.
+
+**Code (three small items, each verified red-against-the-defect):**
+
+- **The inline containment-write guard was an UNTESTED behavior change.** The review
+  round's own TDD framing claimed its behavior changes were watched red; the guard in
+  `heal_chunk` (journal write failing during a failed heal) shipped with no test —
+  that claim over-reached, said plainly. Now pinned:
+  `test_inline_heal_failure_with_failed_bookkeeping_still_answers_200` (graph fails
+  AND `journal.heal_failed` raises → 200 + existing id, budget uncharged, no
+  dead-letter, next redelivery re-judges) — verified red against the pre-review
+  `heal_chunk` (3d02f0e revert: the 500 escapes), green at HEAD.
+- **`heal_failed` green-row hardening (TDD, red first).** Now evidence-based in its
+  own transaction, mirroring `mark_processed`: an all-green current row (a racing
+  worker healed it green between claim and failure report) is neither charged nor
+  finalized — closing the probe-proven edge where stale writers could finalize with
+  the permanent-holes metric silently swallowed. The pending clear still runs.
+  `test_heal_failed_on_an_all_green_row_is_a_no_op` — red before the guard.
+- **`classify`'s off-loop read pinned.**
+  `test_classify_ledger_read_runs_off_the_event_loop` asserts the ledger lookup runs
+  on a non-loop thread with no running loop — the review-round fix now has a
+  regression test instead of a docstring promise.
+
+**Law-text corrections (the built truth wins; quote-and-correct):**
+
+- **"Upsert replaces holey with fuller" was false of the built code** (probe: a heal
+  during a *different* server's outage regresses a green slot until convergence —
+  coherent by design: blind replace + ledger + re-heal). Corrected in CHARTER §Slot
+  Law L8 and plan §1 L8 (both stamped), and added to the D27 card's Watch-out (a
+  permitted addition; decision text untouched): a heal re-POSTs whatever the full
+  re-run produced — the ledger, not the record, carries hole truth; convergence is
+  the guarantee, not monotonicity.
+- **"Same stage fails again ⇒ heal_attempts++" understated the built rule** in the
+  same two homes: any non-green completed heal charges; a green heal never charges; a
+  failed re-run charges via the failure path. Folded into the same clause fix.
+- **D27 Watch-out, second addition:** budget exhaustion is not the only route to
+  permanent holes — the crash-loop re-drive cap force-finalizes durable-record chunks.
+- **"While a heal flows into the next window"** (ARCHITECTURE C10 card + the c10 v2
+  contract's top description) read as every-heal-bumps; both now say "a heal that
+  lands a byte-different record", aligned to the contract's own `t_start` phrasing.
+  The contract edit is a DESCRIPTION-ONLY clarification — additive, no shape change,
+  no validator impact (JSON re-validated; storage suite re-run green below).
+
+**Worklog corrections (append-only, per the house rule):**
+
+- The review round's "+4 more seam tests → 10" was itself a count error introduced
+  while correcting count errors (the irony is noted with due enjoyment): the fourth
+  "addition" was the RENAME of an existing test, so the file collected **9** at that
+  commit. This round's new containment test makes it 10 — true now, by accident of
+  one more test, not because the earlier line was right.
+- **Keep ruling recorded:** `classify`'s `current_pv=None` branch stays (dead-
+  defensive: not reachable from app code at HEAD — every call site passes a resolved
+  pv); one code comment now names it None-safety, per this round's ruling.
+- **Benign window noted:** after exhaustion, `heal_attempts` can exceed
+  `HEAL_MAX_ATTEMPTS` with `done_final` already set (e.g. a stale failure report
+  landing after finalization) — harmless: every comparison is `>=`, `newly_final`
+  fires only on the flipping write, and classification reads `done_final` first.
+
+**Verification re-run (2026-08-06, after all close-out edits):**
+
+```
+$ ./.venv/bin/python -m pytest tests/test_journal.py tests/test_dedup_claim.py \
+    tests/test_heal_seam.py tests/test_t5_ledger_flows.py -q
+60 passed, 1 warning in 2.40s                # journal 25 · dedup 16 · seam 10 · t5 9
+$ ./.venv/bin/python -m pytest -q            # full DP suite
+573 passed, 4 skipped, 1 warning in 55.54s   # 570+4 at the review round, +3 this round
+$ storage   pytest -q → 310 passed           # contract description change: no effect
+$ continuum pytest -q → 262 passed, 7 skipped
+```
+
+Goldens and pins untouched: no server golden, no C4/C5 slot pin, no T-1 matrix cell
+changed in this round (diff touches app/journal.py, app/dedup.py, four test files and
+paper only). Status stays **DONE**; Stage E not started.
+
