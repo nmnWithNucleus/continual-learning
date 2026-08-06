@@ -135,6 +135,46 @@ $ cd servers/whisper && CUDA_VISIBLE_DEVICES=4 ./.venv/bin/python -m pytest test
 6 passed, 1 warning in 5.72s
 ```
 
+## WP-B3 — servers/pyannote (diarization behind the seam)
+
+Built by a parallel subagent inside the WP boundaries (only `servers/pyannote/`
+touched); verified independently by the orchestrating session (test re-run below).
+
+| File | Action | Why |
+|---|---|---|
+| `servers/pyannote/requirements.txt` | created | torch==2.8.0 / torchaudio==2.8.0 / pyannote.audio==3.3.2 (the trio validated on this node 2026-07-19) + framework stack + `-e ../common` + **two deviation pins, flagged below** |
+| `servers/pyannote/server.py` | created | `PyannoteBackend`: pipeline pinned `pyannote/speaker-diarization-3.1@84fd2591…`, cuda fail-loud; v0 semantics preserved (scoped `torch.load weights_only=False` for the Lightning checkpoints, ffmpeg pre-decode to 16 kHz mono WAV, spk_N first-onset normalization, clamping, overlap allowed); sub-model revisions resolved post-load into identity |
+| `servers/pyannote/README.md` | created | setup, gated-model note, identity, determinism verdict |
+| `servers/pyannote/tests/test_server.py` | created | 5 tests: identity (manifest subset + shape), golden exact, garbage→422, missing span_seconds→422, unknown param→422 |
+| `servers/pyannote/tests/fixtures/{golden_diarize.json,PROVENANCE.md}` | created | golden + provenance (identity verbatim, run hashes, policy) |
+
+**DEVIATIONS (loud), both endorsed:**
+- **`huggingface_hub==0.36.2` added**: the resolver picks hub 1.26.0, which removed the
+  `use_auth_token` kwarg pyannote 3.3.2 still passes → guaranteed TypeError at load.
+  0.36.2 is the node's validated 2026-07-19 stack.
+- **`matplotlib==3.10.8` added**: pyannote.audio 3.3.2 imports matplotlib at import time
+  without declaring it; pinned to the validated stack's version.
+
+In-session decisions (agent's, endorsed): pyannote 3.3.2 has no `revision=` kwarg — the
+pin is the supported `repo@revision` checkpoint string (same in-code pin, different
+spelling); sub-models land in pyannote's own cache (`~/.cache/torch/pyannote`), NOT the
+HF hub cache — found empirically; the revision resolver checks pyannote's cache first,
+HF hub second, fails loud on ambiguity. Identity carries measured sub-model commits
+(segmentation `e66f3d3b…` — equal to the manifest's pre-resolved pin — and embedding
+`837717dd…`), so a silent upstream sub-model bump surfaces as an identity change.
+
+**Determinism: bit-stable.** 4 fresh-process runs — 3 on GPU 2, 1 on GPU 3 — canonical
+sha256 identical on all four, no torch determinism flags forced. Output: 2 turns /
+2 speakers, split exactly at the fixture's 0.8 s silence gap. Exact compare, zero
+tolerance.
+
+Test evidence (agent run, then re-run independently by the orchestrator):
+
+```
+$ cd servers/pyannote && CUDA_VISIBLE_DEVICES=2 ./.venv/bin/python -m pytest tests/ -q
+5 passed, 9 warnings in 19.85s
+```
+
 ## WP-B4 — servers/ast (acoustic tagging behind the seam)
 
 Built by a parallel subagent inside the WP boundaries (only `servers/ast/` touched);

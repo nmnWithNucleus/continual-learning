@@ -1,0 +1,20 @@
+# servers/pyannote — fully pinned (L4: versions are behavior; nothing floats).
+# torch/torchaudio/pyannote trio validated together on this node 2026-07-19
+# (see app/audio/diarize/pyannote.py docstring — torch>=2.6 weights_only gotcha).
+torch==2.8.0
+torchaudio==2.8.0
+pyannote.audio==3.3.2
+# huggingface_hub 1.x removed the `use_auth_token` kwarg that pyannote 3.3.2 still
+# passes to hf_hub_download (TypeError at pipeline load, found at install time here);
+# 0.36.2 is the hub version the node's validated 2026-07-19 stack actually ran with.
+huggingface_hub==0.36.2
+# pyannote.audio 3.3.2 imports matplotlib at import time (tasks/segmentation/mixins.py)
+# without declaring it (ModuleNotFoundError found at first load here); 3.10.8 is the
+# version present in the node's validated 2026-07-19 stack.
+matplotlib==3.10.8
+fastapi==0.139.0
+uvicorn==0.51.0
+pydantic==2.13.4
+httpx==0.28.1
+pytest==9.1.1
+-e ../common
