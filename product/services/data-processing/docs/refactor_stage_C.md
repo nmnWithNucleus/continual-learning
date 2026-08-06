@@ -73,3 +73,44 @@ default resolves to) so the journal location can never drift again.
 
 v0 is now immune to anything Stage C does to this tree. The single authorized restart
 is spent; no further v0 restarts this stage.
+
+## WP-C1 — `app/stagegraph/stage.py` rewrite (uniform Stage)
+
+| File | Action | Why |
+|---|---|---|
+| `app/stagegraph/stage.py` | REWRITTEN (326 → ~250 lines) | the uniform Stage{name, modality, stage_version, backend, needs, slot, required, byte_budget, one-of run_sync\|run_async}; registration checks (unique slot per modality, one-of run methods, segment grammar); kinds/mutate/writes/mutable_slots/SlotView/best_effort/order/version_fragment/enabled/assemble/R1 machinery all deleted |
+| `app/stagegraph/__init__.py` | edited | exports the new stage surface only; executor/processor exports return with WP-C2/C3 |
+| `tests/test_stage_registry.py` | created (TDD, red→green) | 59 checks: the uniform declaration, slot default, segment composition (+ `.exp-` codes), backend-override-at-construction (mock named in the version string), every registration rejection, dead concepts absent from module and class |
+
+In-session decisions (things the plan left to code):
+
+- **`Backend(name, version)` frozen dataclass + constructor override.** "backend …
+  resolved in code" is realized as an in-code default on the class plus a
+  constructor override (`AsrStage(backend=Backend("mock", 1))`) — how tests and any
+  future offline harness select fakes/experiments. Selection is always code; the
+  dialect always names it (plan §3's mock rule).
+- **Grammar enforced at registration**: stage/backend/slot/experiment names must
+  match `[a-z0-9_]+` — the same grammar the v1 contract's `pipeline_version` /
+  `slot_version` regexes pin, so an illegal segment cannot exist at runtime.
+- **`server` attribute (operational only).** Thin clients need a routing key into
+  the model-client pool (`"whisper"`, `"ocr"`…). It is deliberately not part of the
+  identity segment: endpoints/replicas are operational (L9); the model behind them
+  is pinned by server code + manifest identity.
+- **`StageOutput{value, bytes}`.** `value` = the JSON slot value (None = stage
+  emits no record slot — the clipprep case; the §2 video example shows slots only
+  for caption/ocr). `bytes` = the in-run transient payload the executor frees after
+  the last consumer (L5's blackboard `{ref, bytes}`).
+- **No Settings anywhere in the stage surface.** `StageContext{c1, blob,
+  span_seconds, inputs, clients, metrics}` — a stage structurally cannot read a
+  knob; L4 by construction, T-1 backstops `os.getenv` cheating.
+- **No `order` field.** Execution is readiness-driven, record slots are a map;
+  nothing consumes an ordering. `stages_for` sorts by name for determinism only.
+- **`registered_modalities()` moves here** — the first half of folding
+  `processing/`'s modality routing into the stage registry (completed at WP-C5).
+
+Evidence: `./.venv/bin/python -m pytest tests/test_stage_registry.py -q` →
+`59 passed` (was collection-error red against v0 stage.py before the rewrite).
+Transitional note: between WP-C1 and WP-C4/C5 the old stage files + executor are
+against the dead API and the v0 DP suite does not fully collect — expected
+mid-stage state; the suite disposition lands at WP-C6. storage/continuum suites
+are untouched by construction.
