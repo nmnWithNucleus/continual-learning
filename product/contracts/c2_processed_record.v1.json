@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://nucleus.ai/contracts/c2_processed_record.v1.json",
-  "title": "C2 Processed record v1 (DP rebuild — one record per chunk, built from slots)",
+  "title": "C2 Processed record v1 (one record per chunk, built from slots)",
   "description": "The processed life-stream record data-processing writes to storage /context (POST /context/records), ratified 2026-08-06 as D24. EXACTLY ONE record per (chunk_id, pipeline_version) — Slot Law L2, schema-hard: the executor structurally emits one, a test asserts it (T-2), and this contract states it; adding a second record per chunk requires forking this contract to C2 v2. record_id = sha256(chunk_id NUL pipeline_version), NUL-joined, lowercase hex — no discriminator (L3; one-record-per-chunk is why dropping it is safe). content is a SLOTS MAP: one enabled producer per slot, written once, never edited (L5); a slot type's sub-schema is added to this file ADDITIVELY when its first producer ships, and an unknown slot name fails closed (additionalProperties:false at every level, deliberately — the contract edit IS the ceremony). The v0 concepts enrichments, discriminator and content.kind DO NOT EXIST here and must not be re-added: the charter §Slot Law dead-concepts list names the discriminator and the enrichments present-but-empty block explicitly, and content.kind/content.text die with the per-kind record model they labeled (slots carry names and values instead). Reading a record is L11 honesty: stage named in pipeline_version + slot absent = attempted and failed (a hole); slot present with an empty value = an honest empty claim (OCR ran, the screen had no text); stage not in the dialect = never attempted — consumers never infer a negative from an absent slot under a dialect that did not attempt it. Storage-side timestamps are NOT carried here: storage assigns created_at (first landing of a record_id) and updated_at (bumped only when record_json byte-compares different; D27). t_start/t_end are the C1 span strings carried VERBATIM (the D-05 rule) and remain the sole ordering and range-query axis; the D17 civil-time fields ride source{} verbatim, unchanged. WIRE STATUS: this is the running wire. data-processing emits records under this contract to storage /context, and both sides validate against this file.",
   "type": "object",
   "additionalProperties": false,
@@ -144,7 +144,7 @@
                 "version": { "$ref": "#/$defs/slot_version" },
                 "value": { "type": "string", "description": "The rendered dense caption for the chunk's span." }
               },
-              "description": "Produced by the clipcap stage (one multi-image VLM call; absorbs render_caption and the D-11/D-12 caps at Stage C). May be grounded in the ocr slot's text (injected into the prompt, D-09) — one witness on two channels, never corroboration (L11 corollary)."
+              "description": "Produced by the clipcap stage (one multi-image VLM call; absorbs the per-second character caps). May be grounded in the ocr slot's text (injected into the prompt, D-09) — one witness on two channels, never corroboration (L11 corollary)."
             },
             "ocr": {
               "type": "object",
@@ -154,12 +154,12 @@
                 "version": { "$ref": "#/$defs/slot_version" },
                 "value": { "type": "string", "description": "Legible on-screen text, reading-ordered. Empty string = the honest empty claim: OCR ran and the screen carried no legible text (L11) — distinct from the slot being absent, which means the stage failed." }
               },
-              "description": "Produced by the screentext stage (thin client over the ocr server). Region geometry stays internal to the backend (reading order + coarse role woven into the text), exactly as before the rebuild; bbox emission remains parked (E-5, no consumer)."
+              "description": "Produced by the screentext stage (thin client over the ocr server). Region geometry stays internal to the backend (reading order + coarse role woven into the text); bbox emission remains parked (E-5, no consumer)."
             }
           }
         }
       },
-      "description": "The record body: nothing but slots. Of the v0 companions, enrichments and discriminator are named on the DP charter §Slot Law dead-concepts list; content.kind and content.text go with the per-kind record model they served."
+      "description": "The record body: nothing but slots. enrichments, discriminator, content.kind and content.text DO NOT EXIST here and must not be re-added; the first two are named on the DP charter §Slot Law dead-concepts list, and the last two went with the per-kind record model they served."
     }
   },
   "$defs": {

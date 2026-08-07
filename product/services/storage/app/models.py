@@ -271,7 +271,7 @@ class TrainingWindow(_Strict):
     Mirrors ``contracts/c10_training_window.v1.json`` field-for-field; that schema stays
     the AUTHORITY and this service validates its own output against it before serving
     (``schemas.validate_c10_window``), exactly as it does for C6/C10/C12/C14. The schema
-    is a SIBLING of ``c10_daylog.v1.json`` rather than an extension of it because C10 is
+    is a SIBLING of the day-log schema rather than an extension of it because C10 is
     a family of operations and these are two different bodies on two different endpoints.
 
     Note that the schema is strictly STRONGER than this model, which is the point of

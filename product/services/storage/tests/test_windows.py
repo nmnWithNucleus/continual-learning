@@ -552,7 +552,7 @@ def test_the_open_body_rejects_caller_supplied_bounds(client, store):
 #
 # `contracts/c10_training_window.v1.json` is the AUTHORITY; `models.TrainingWindow` is a
 # second, independent check — the same order `POST /context/records` applies to C2 (schema
-# first, mirror second). The schema is a SIBLING of `c10_daylog.v1.json` rather than an
+# first, mirror second). The schema is a SIBLING of the day-log schema rather than an
 # extension of it because C10 is a family of OPERATIONS: the day-log body and the ledger
 # row are different bodies on different endpoints, and one file could only carry both
 # behind a `oneOf` that hides exactly the distinction the contract is about.
