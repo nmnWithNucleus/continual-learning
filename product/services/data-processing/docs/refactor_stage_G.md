@@ -157,3 +157,35 @@ F `413b3a6→26f763f`, G `afe0103→`this close). The §Supersedes line marks ev
 EXECUTED (record-emission-law.md retired into §Condensed history). §8 Stage G rewritten from a plan
 into the executed record, and its Exit criterion restated as met (the dead-vocabulary grep returns
 hits only in history/worklogs/this plan; all suites green; fleet 200 across every commit).
+
+## WP-G6 — the onboarding FIELD GUIDE, rewritten for the new world (the D22 correction)
+
+The debt that named the rebuild: the field guide still taught the v0 world (a record-vs-mutation
+law, discriminators, the OCR sidecar, the two-record video shape). D22's bargain is that a teaching
+view is corrected in the same session as the change it teaches — this rewrite, landing in the same
+stage that demolished the v0 code, IS that correction, owed since Stage A.
+
+- **`onboarding/field-guide.html` — full rewrite.** A fresh, self-contained, theme-aware HTML guide
+  (same token palette and class vocabulary as before, so the visual identity holds) teaching the
+  running v1 world in **ten modules** with a **ten-term glossary** (chunk · record · slot · stage ·
+  backend · pipeline_version/dialect · hole · heal · machinery/bureaucracy · model server — down
+  from the old ~20). It teaches: one record per chunk built from slots (L2/L3/L5); the version law
+  (identity in code, no output-affecting knobs, experiments fork the dialect) with the Stage-G
+  `vlm.v1→v2` bump as the worked example; the machinery/bureaucracy split (L9); slots in practice
+  for audio and video; required/optional + holes + heal (L7/L8); async ingest + the durable journal
+  + the in-flight-kill recovery; and an **honest real-vs-unbuilt board** (C8 designed, backfill-by-
+  version owed, video throughput watch). The bespoke v0 interactive widgets (the emission-law judge,
+  the discriminator explorer) are dropped — they dramatised the retired world; STYLE §Teaching views
+  governs prose, not interactivity, and a correct static guide beats an interactive wrong one.
+- **D22 obligations, all met:** the **repo-wins banner** is the first callout under the hero and is
+  repeated in the closing module; the charter link is present (and the charter's callout was updated
+  to point at the local file, not the stale hosted artifact); the guide is honest about what is
+  unbuilt (module 09). STYLE §Teaching views governs the prose — full sentences, meaning-first with
+  ids in brackets, basics before advanced, every coined term introduced where it first appears.
+- **`onboarding/review_actions.md` — reset.** The v0-guide review rounds (CTO 2026-08-05) are
+  retired as superseded by the rewrite; the old finding list is cleared (its subjects — the OCR
+  sidecar, `VIDEO_OCR_*` knobs, clip-path-on-a-branch — are gone or resolved), with a fresh read of
+  the v1 guide named as the one open item and future findings routed to the service board.
+
+Residual dead-vocabulary in the guide sits only where it names a retired concept precisely to say
+it is gone and point at the charter §Condensed history — the honest transition a teaching view owes.

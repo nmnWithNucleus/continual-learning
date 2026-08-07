@@ -4,9 +4,10 @@
 > enriched records out. Stable doc — working state lives in [HANDOFF.md](HANDOFF.md);
 > system-wide architecture + contracts in [../../ARCHITECTURE.md](../../ARCHITECTURE.md).
 >
-> **New to the service?** Start with the interactive onboarding field guide —
-> [onboarding/field-guide.html](onboarding/field-guide.html), hosted at
-> <https://claude.ai/code/artifact/760e18ff-2eb1-47e9-9b0d-c305fde223d4> — then come back here.
+> **New to the service?** Start with the onboarding field guide —
+> [onboarding/field-guide.html](onboarding/field-guide.html), a derived teaching view (D22)
+> rewritten for the v1 world at Stage G — then come back here. The repo wins wherever the two
+> disagree.
 
 > ### ⚠️ STAGE: PROTOTYPE (pre-dev, pre-production) — D19, 2026-07-27
 > This charter is written in a production voice. **It is aspirational, not a commitment.** We are
