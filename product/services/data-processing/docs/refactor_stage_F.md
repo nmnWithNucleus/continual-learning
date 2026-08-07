@@ -244,6 +244,63 @@ DP **576 passed, 4 skipped** · servers/common **30 passed** · storage **354 pa
 · continuum (post-teaching) **264 passed, 7 skipped**. The two onboarding strays
 remain uncommitted.
 
+## WP-F1 — the cutover (executing past GATE 1)
+
+**The authority for everything below, quoted verbatim (founder, in-session,
+2026-08-07):**
+
+> CUTOVER APPROVED at 445e1ce. WIPE APPROVED — dp_state: keep. 501: accept as-is.
+> E-3(b) :8161 split: ratified.
+
+Rulings consumed: the wipe runs with `--recording-claims keep`; recording's
+501-retry taxonomy ships as-is (bounded transient class, dormant); the :8161
+captioner split is ratified — the three HANDOFF E-3(b) rows annotate in this WP.
+
+**Executed order, one refinement over the staged plan (documented, not silent):**
+the v0 DP journal — an approved wipe target — lives INSIDE the dp-v0-live worktree
+(`var/dp.db`), so the wipe must run before the worktree retires or its target
+vanishes and wet could no longer match the approved dry-run. The finding-4
+constraint (worktree retires before `git checkout main`) is unaffected. Final
+order: freeze (:8085, :8083, the :8099 old-world smoke; recording keeps capturing)
+→ approved wipe (keep) → retire worktree → checkout main → merge --no-ff →
+un-repoint → relaunch from merged main → kill :8097 (the authorized disposition)
+→ resume/redrive verification → /health shapes. Log below, pids + UTC timestamps.
+
+**Freeze (executed):** pid identities re-verified against the pre-flight inventory
+immediately before each kill; recording checked 200 before, during and after.
+
+```
+freeze begin: 2026-08-07T05:49:43Z
+:8085 freed 2026-08-07T05:49:46Z (dp v0 pid 3835816 stopped)
+:8083 freed 2026-08-07T05:49:49Z (storage v0 pid 330817 stopped)
+:8099 freed 2026-08-07T05:49:51Z (Jul-24 smoke pid 803820 stopped)
+recording during freeze: 200
+```
+
+The :8099 stop rides F1's "anything else running from the old world" — a Jul-24
+storage smoke on a scratch DB, holding pre-Stage-E code in memory. `:8097` waits
+for its own authorized step after relaunch.
+
+**The approved wipe (executed `2026-08-07T05:50:13Z`,
+`--execute --recording-claims keep`):** wet output matches the approved dry-run
+LINE FOR LINE on the pre-action manifest (same counts, same verdicts), then:
+
+```
+[wet] storage dev.db: DELETE FROM context_records -> 4 row(s)
+[wet] storage dev.db: DELETE FROM day_logs -> 0 row(s)
+[wet] storage dev.db: DELETE FROM training_windows -> 0 row(s)
+[wet] DP journal (v0): DELETE FROM pending -> 0 row(s)
+[wet] DP journal (v0): DELETE FROM processed -> 4 row(s)
+[wet] recording ledger: claims kept (documented reconciliation noise)
+[wet] storage reservoir: 0 file(s) removed
+```
+
+Post-wipe verification (same manifest code path): every WIPE target 0; every KEEP
+count unchanged — model_directory 1, raw_blobs 4, turns 0, user_profiles 0,
+recording ledger all 0, continuum research dirs 236/36/90/93. `/raw` bytes
+untouched by construction (never opened for write). Full transcript retained in
+the session log.
+
 ## 2026-08-07 — GATE 1 verification round (founder, 3 lenses; fixes applied)
 
 > verification · an independent 3-lens round over the first GATE 1 post, the wipe
