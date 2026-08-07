@@ -9,10 +9,20 @@ operational, never output-affecting (L4).
 
 THE SUPERVISOR IS NOT A SEPARATE PROCESS. It is a task inside the DP service, started
 by ``main.py``'s lifespan when ``DP_SUPERVISOR`` is set, so the DP process is the direct
-PARENT of every replica it spawns: the pid that owns a replica is DP's, and killing DP
-takes the whole fleet with it. Without the opt-in, a plain DP process runs against an
-already-running fleet instead. The module can also be driven standalone for local work,
-which is the only case where a supervisor pid is not DP's:
+PARENT of every replica it spawns and the pid that owns a replica is DP's.
+
+How DP's death reaches the fleet depends entirely on HOW it dies, because replicas are
+spawned with ``start_new_session=True`` and do not die with their parent:
+
+  * **Graceful stop** (SIGTERM, or any shutdown that runs the lifespan) — ``stop()``
+    kills each replica, so the fleet goes down with DP.
+  * **``kill -9`` on DP** — the lifespan never runs, so all eight replicas SURVIVE as
+    orphans, still holding their ports and GPU memory. They must be reaped by hand, and
+    a restarted DP will fail to bind their ports until they are.
+
+Without the opt-in, a plain DP process runs against an already-running fleet instead.
+The module can also be driven standalone for local work, which is the only case where a
+supervisor pid is not DP's:
 
     .venv/bin/python -m app.supervisor --manifest servers/manifest.json
 

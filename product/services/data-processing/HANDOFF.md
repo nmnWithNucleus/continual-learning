@@ -10,7 +10,8 @@
 built from `content.slots`, one stage per slot, never edited ([CHARTER.md](CHARTER.md)
 §Slot Law). Models run as long-lived **model servers** (`servers/whisper`, `pyannote`, `ast`,
 `ocr`) supervised from inside the DP process, which is their parent and calls them as a thin
-async orchestrator (L9).
+async orchestrator (L9). A graceful DP stop takes them down with it; a `kill -9` leaves all
+eight running as orphans, to be reaped by hand.
 Audio and video both run end to end against the live fleet. Ingest operating default is
 **async** ([D16](../../DECISIONS.md): code default off, depot default on); a durable journal
 re-drives the pending set on restart. The video captioner is the self-hosted Qwen3-VL on

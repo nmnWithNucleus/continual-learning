@@ -763,3 +763,233 @@ The new HANDOFF card and CHARTER bullet added this round cost zero findings.
 restarted, killed or POSTed to this round.
 
 Phase 3 **not started**.
+
+---
+
+# Verification round 4 — truth fixes, then merge
+
+> **Appended 2026-08-07.** Append-only; earlier claims are corrected by quotation below.
+
+## Corrections to earlier claims in this file
+
+**Correction 10 — "stopping DP stops the fleet" is false as written.** Round 3 §5 said:
+
+> Killing DP takes the fleet with it, and the pid owning a replica is DP's.
+
+The second half is true; the first is true only for a *graceful* stop. `app/supervisor.py`
+spawns every replica with `start_new_session=True`, and its own comment says so: "replicas do
+NOT die with the supervisor on their own". So a SIGTERM (or any shutdown that runs the
+lifespan) reaps the fleet through `stop()`, while a `kill -9` on DP orphans all eight replicas,
+still holding their ports and GPU memory. This is the one place the teaching surface was
+operationally wrong — a newcomer trusting it would hard-kill DP, assume the fleet went with it,
+and then find eight orphans squatting the ports a restarted DP needs.
+
+Qualified at all four sites (`app/supervisor.py`, DP `CHARTER` L9, the DP board, the field
+guide module 05). The field guide also carried a **self-contradiction**: module 05 implied the
+fleet dies with DP, while module 08's crash drill hard-kills DP and finds the fleet still up.
+Both modules now state the same rule and cross-reference each other.
+
+**Correction 11 — the round-3 deferral table dropped a row and was incomplete.** It listed
+`recording/HANDOFF.md:38` but silently dropped the still-dead `ws-async-observability` link in
+the same table (now `:42`). It also listed only four drifting lines in `storage/HANDOFF.md`.
+The complete tables are below.
+
+**Correction 12 — round 3's census exempted `.json`, which hid a live site.** The DP census
+grep never swept `.json`, and `app/vision/prompts/LOCK.json` was additionally listed as a
+standing exemption. Its `note` field carried "2026-08-07 (Stage G): legacy per-frame-v0
+removed" — an era pointer naming a deleted file. `.json` is now swept and LOCK.json's
+exemption is **withdrawn**; the file passes on its merits.
+
+---
+
+## 1. LOCK.json
+
+The `note` now states the fact with its date and no era pointer: the aggregate digest moved
+`565066a0 -> 80efa39f` and clipcap bumped `vlm.v1 -> vlm.v2`.
+
+Safe because the field feeds nothing: `app/vision/prompts/__init__.py` reads LOCK.json for
+`pack_version` only (`__init__.py:214`), and `PACK_DIGEST` is recomputed from the packs on disk
+at import. Editing `note` cannot fork a dialect. Checked too that `relock.py`'s canonical note
+template does not carry the era text, so a future `relock` will not reintroduce it.
+
+## 2. Two test docstrings pointing at the deleted worklog
+
+`test_t5_ledger_flows.py` — "the worklog's crash-table checklist maps every row to its test"
+became "Every other crash row is owned by a named test elsewhere, and this map is the record of
+which". `test_t1_determinism.py` — the allowlist assertion no longer demands "a worklog
+disposition"; the allowlist entry *is* the disposition.
+
+That second one was an **assertion message, not a docstring**, so it is a third
+string-literal exception in the app/tests proof rather than a docstring edit. Declared, not
+hidden; like the other two it is structurally inert.
+
+## 3. The supervisor truth fix
+
+Stated identically in all four places:
+
+> A graceful DP stop takes the fleet down with it; a `kill -9` does not, because replicas own
+> their sessions — eight orphans survive, holding ports and GPU memory until reaped.
+
+## 4. Contract descriptions that were false today
+
+`c2_processed_record.v1.json` and `c10_daylog.v2.json` both still ended:
+
+> WIRE STATUS: v0 remains the running wire until the Stage F cutover … nothing emits v1 before
+> then
+
+> WIRE STATUS: v1 remains the running read until the Stage F cutover; nothing serves v2 before
+> then
+
+Both are the running wire and have been since the cutover. Rewritten to say so. The c2
+description also cited a deleted `docs/refactor_dp_service.md`; dropped.
+
+**Description-only, proved mechanically** — every `description` key stripped at every depth,
+then compared against `main`:
+
+```
+c2_processed_record.v1.json
+  loads as valid JSON            : True
+  identical with descriptions off: True
+  top-level keys that changed    : ['description']
+  $id / required / properties intact: True / True / True
+c10_daylog.v2.json
+  loads as valid JSON            : True
+  identical with descriptions off: True
+  top-level keys that changed    : ['description']
+  $id / required / properties intact: True / True / True
+```
+
+Storage suite green afterwards (354 passed), which is the schema's live consumer.
+
+The field guide's file tree also listed a `docs/` directory this phase deleted; replaced with
+`onboarding/`, which exists.
+
+## 5. Owed phase-3 work — complete tables
+
+### Dangling links (9 remaining; 2 fixed this phase)
+
+| File | Line | Dead target |
+|---|---|---|
+| `product/HANDOFF.md` | 161 | `…/handoff/ws-video-clip.md` |
+| `product/HANDOFF.md` | 175 | `…/docs/refactor_dp_service.md` |
+| `product/contracts/README.md` | 100 | `…/docs/refactor_dp_service.md` |
+| `product/handoff/engineering.md` | 131 | `…/handoff/ws-video-clip.md` |
+| `product/handoff/engineering.md` | 1282 | `…/handoff/ws-dp-hardening.md` |
+| `product/handoff/engineering.md` | 2140 | `…/handoff/ws-async-observability.md` |
+| `product/onboarding/LEARN_LOOP.md` | 49 | `…/docs/refactor_dp_service.md` |
+| `product/services/recording/HANDOFF.md` | 39 | `…/handoff/ws-m1-continuity-asr.md` |
+| `product/services/recording/HANDOFF.md` | 42 | `…/handoff/ws-async-observability.md` — **the row round 3 dropped** |
+
+### Broken anchors into the rewritten DP charter
+
+`CHARTER.md` no longer has a §Condensed history heading (verified: zero matches).
+
+| File | Line | Problem |
+|---|---|---|
+| `product/ARCHITECTURE.md` | 141 | anchor `#condensed-history-…` is dead **and** the link text reads "§Condensed history", so the retired vocabulary is visible before the reader discovers the target is gone |
+| `product/onboarding/LEARN_LOOP.md` | 47 | cites "(§Slot Law, §Condensed history)"; the second no longer exists |
+
+### `storage/HANDOFF.md` — every drifting line
+
+| Line | What it says |
+|---|---|
+| `:15–18` | Status block: "the DP rebuild cut over at Stage F", "the `dp-v0-live` worktree retired at the cutover", "wiped fresh-forward, OD-2" |
+| `:40` | "the most recent change is the D27/D28 rebuild rows" |
+| `:54–58` | the superseded D18 dedup rule in `ingest_time` / `content.kind` / `discriminator` — **live drift** |
+| `:99` | "Proven live at the Stage F soak's train leg" |
+| `:103–104` | "wiped **fresh-forward at the cutover** (OD-2 …): every v0 record deleted" |
+| §Next row 0 | "With the rebuild cut over", "the Stage F soak proved synthetically" |
+| §Next row 1 | "rebuild Stage E → cut over at Stage F" |
+
+### `recording/HANDOFF.md`
+
+| Line | What it says |
+|---|---|
+| `:8–11` | status line: "the DP rebuild cut over", "the Stage F soak" |
+| `:184–188` | "With the DP rebuild cut over…", "the Stage F soak proved synthetically", "resolved at the DP-rebuild Stage F cutover" |
+
+### Untracked residue (will not merge, noted for the sweep)
+
+`product/services/data-processing/sidecars/ocr/` survives on disk as `__pycache__` only —
+`git ls-files` returns nothing for it. A directory named for a deleted service still teaches
+the wrong world to anyone listing the tree, but it is not in the merge.
+
+---
+
+## Exit evidence — round 4
+
+### Extended census, now sweeping `.json`
+
+```
+=== EXTENDED CENSUS (now sweeping .json too) — DP tree ===
+HANDOFF.md:48:`huggingface-hub`, so rebuilding that venv from requirements alone does not reproduce the
+HANDOFF.md:51:**Why it's this way** — it was caught live: a rebuild resolved `huggingface-hub` to 1.27.0
+servers/ast/requirements.txt:6:# torch 2.8.0+cu128; the explicit index below makes a rebuild reproduce the cu128
+servers/whisper/requirements.txt:11:# (surfaced at /health.frameworks too); hub/tokenizers pinned so a rebuild cannot
+servers/pyannote/requirements.txt:3:# torch 2.8.0+cu128; the explicit index below makes a rebuild reproduce the cu128
+app/continuity.py:190:        """Rebuild per-stream state from the durable journal at boot (both modes).
+(end)
+
+=== ORIGINAL narrative census incl. .json + LOCK.json (no longer exempt) ===
+(end)
+```
+
+Six exemptions, each the ordinary verb (reinstall a venv, reconstruct state). Standing
+exemptions are now only `.venv/`, `__pycache__` and `readings/`; **LOCK.json's exemption is
+withdrawn.**
+
+### Both diff proofs
+
+```
+=== app/ + tests/ ===
+  plain           :  59 files changed, 258 insertions(+), 266 deletions(-)
+  ignore-all-space:  59 files changed, 258 insertions(+), 266 deletions(-)
+=== servers/ ===
+  plain           :  18 files changed, 43 insertions(+), 302 deletions(-)
+  ignore-all-space:  18 files changed, 43 insertions(+), 302 deletions(-)
+```
+
+AST modulo docstrings: `servers/` **10 / 10** with zero exceptions; app/tests carries three
+declared string-literal exceptions (supervisor argparse help, the t1 assertion message, the t3
+skip reason), each `statement structure identical (strings blanked): True`, plus the declared
+`clipcap.py` logger fix.
+
+### All eight suites
+
+| Suite | Tail |
+|---|---|
+| data-processing | **569 passed, 4 skipped** |
+| storage | **354 passed** |
+| continuum | **264 passed, 7 skipped** |
+| recording | **144 passed** |
+| servers/common | **30 passed** |
+| servers/ocr | **8 passed** |
+| servers/ast | **6 passed** |
+| servers/pyannote | **6 passed** |
+
+### Ratchet
+
+```
+baseline written: 330 findings across 58 files
+STYLE.md: no regressions (330 known findings held at baseline)
+
+product/ORG.md                                    2     1  shrank
+product/services/data-processing/CHARTER.md      36    23  shrank
+product/services/data-processing/HANDOFF.md       6     4  shrank
+
+FILES THAT GREW AGAINST MAIN: 0
+TOTAL: main 1183 -> HEAD 330
+```
+
+### Fleet
+
+```
+=== TWELVE PORTS (2026-08-07T22:11:03Z) ===
+8083:200 8084:200 8085:200 8121:200 8122:200 8131:200
+8132:200 8141:200 8142:200 8151:200 8152:200 8161:200
+  DP pid/uptime:  632026 14:25:01
+  DP video dialect: clipcap.v1-vlm.v1+clipprep.v1-ffmpeg.v1+screentext.v1-ppocr.v1
+```
+
+DP is still the original process from 07:46:02 and `clipcap.v1-vlm.v1` is unflipped. Nothing
+was restarted, killed or POSTed to.

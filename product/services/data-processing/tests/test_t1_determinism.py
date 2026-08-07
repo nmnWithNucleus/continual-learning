@@ -401,8 +401,8 @@ def test_env_reads_in_app_are_exactly_the_operational_allowlist():
     unknown = {n: sorted(sites) for n, sites in found.items()
                if n not in OPERATIONAL_ENV_ALLOWLIST}
     assert not unknown, (
-        f"undocumented env reads in app/: {unknown} — a new knob must be "
-        "operational-only, added to this allowlist WITH a worklog disposition "
+        f"undocumented env reads in app/: {unknown} — a new setting must be "
+        "operational-only and added to this allowlist, which is the disposition "
         "(L4: no output-affecting env knob exists)"
     )
     # Bare `os.environ` (whole-mapping) use: only the supervisor's child-env

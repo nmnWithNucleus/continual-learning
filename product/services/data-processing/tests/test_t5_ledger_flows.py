@@ -6,8 +6,8 @@ permanent-holes metric + skip thereafter / poison -> dead-letter, visible,
 redelivery re-arms. Plus the crash rows this file owns directly:
 post-POST-pre-mark (redelivery reprocesses -> byte-identical upsert no-op ->
 converges) and the statuses round-trip (failed vs cancelled DISTINCT after a
-kill-9 of the journal). The remaining §4 rows are owned by named tests
-elsewhere — the worklog's crash-table checklist maps every row to its test:
+kill-9 of the journal). Every other crash row is owned by a named test
+elsewhere, and this map is the record of which:
 
   * before journal.accept        -> test_async_ingest.test_failed_journal_accept_releases_claim
   * after accept, before work    -> test_journal.test_kill_recovery_startup_redrive

@@ -280,8 +280,9 @@ ul.tight li { margin-bottom:8px; max-width:72ch; }
       <div class="sg-stage opt">captioner :8161<small>Qwen3-VL · external endpoint</small></div>
     </div>
   </div>
-  <p>The <strong>supervisor</strong> is not a process of its own: it is a task inside DP, which means the DP process is the direct parent of every replica, and stopping DP stops the whole fleet. It reads a manifest — which servers, how many replicas, which GPU each pins to — and spawns, health-checks and restarts them. A stage talks to a server through a thin client that picks a replica, enforces a per-call timeout, and retries a transient failure on another replica. When a replica dies, the supervisor brings it back; when all replicas fail one input the same way, that is a real failure and the next module owns what happens.</p>
+  <p>The <strong>supervisor</strong> is not a process of its own: it is a task inside DP, which means the DP process is the direct parent of every replica. It reads a manifest — which servers, how many replicas, which GPU each pins to — and spawns, health-checks and restarts them. A stage talks to a server through a thin client that picks a replica, enforces a per-call timeout, and retries a transient failure on another replica. When a replica dies, the supervisor brings it back; when all replicas fail one input the same way, that is a real failure and the next module owns what happens.</p>
   <div class="note"><p>This split is why the old subprocess isolation shield is gone: it existed to contain a model crash <em>inside</em> the DP process. With the models outside, a poison chunk fails one stage client and the supervisor restarts a dead replica — there is nothing left in DP to isolate.</p></div>
+  <div class="note"><p><b class="tag">Know this before you kill anything</b>How DP's death reaches the fleet depends on <em>how</em> it dies. Replicas are spawned into their own sessions, so they do not die with their parent. A <strong>graceful stop</strong> — <code>SIGTERM</code>, or any shutdown that runs the lifespan — takes the fleet down with DP. A <strong><code>kill -9</code></strong> does not: the lifespan never runs, and all eight replicas survive as orphans still holding their ports and GPU memory. You reap those by hand, and a restarted DP cannot bind those ports until you do. This is why the crash drill in module 08 hard-kills DP and still finds a fleet running.</p></div>
 </section>
 
 <!-- ===================================================== 06 -->
@@ -333,7 +334,7 @@ ul.tight li { margin-bottom:8px; max-width:72ch; }
   <p class="dek">How the service refuses to lose a chunk silently.</p>
   <p>Ingest is <strong>async</strong> today: recording pushes a chunk, DP writes it durably to a journal and answers <code>202 Accepted</code> immediately, and a bounded pool of workers drains the queue. Capture never blocks on model latency, and a full queue answers <code>503</code> so overload is visible backpressure rather than a silent drop. A redelivery of a finished chunk returns its record id with a <code>200</code>; an in-flight one re-acknowledges <code>202</code>.</p>
   <p>The safety net is a shared, honest accounting between us and recording. DP's <code>/continuity</code> reports, per stream, which chunks are processed and which were dead-lettered; recording marks a chunk truly confirmed only when DP says <em>processed</em>. So an accepted-then-lost chunk reads as <em>recording</em> or <em>gaps</em> in recording's report — never a false <em>clean</em>.</p>
-  <div class="note"><p><b class="tag">Proven in crash-recovery soak</b>The service was hard-killed (<code>SIGKILL</code>) with 27 chunks durably accepted-but-unprocessed in its journal. On restart the boot re-drive re-enqueued all 27 and every one reached <code>processed</code> — zero in-flight loss across a crash. The durable journal is what makes that true.</p></div>
+  <div class="note"><p><b class="tag">Proven in crash-recovery soak</b>The service was hard-killed (<code>SIGKILL</code>) with 27 chunks durably accepted-but-unprocessed in its journal. On restart the boot re-drive re-enqueued all 27 and every one reached <code>processed</code> — zero in-flight loss across a crash. The durable journal is what makes that true. Note what a hard kill does <em>not</em> do: the model servers survive it as orphans (module 05), so the restarted service found its fleet already up.</p></div>
   <p><strong>The inline path is kept alive on purpose.</strong> It is byte-identical to async for a single chunk and it is C8's skeleton — the synchronous shape the input service will call one day. Do not delete it "because async exists"; that has been proposed and refused on exactly this ground.</p>
 </section>
 
@@ -375,7 +376,7 @@ ul.tight li { margin-bottom:8px; max-width:72ch; }
 <span class="dir">servers/</span>          <span class="cm"># the machinery — one dir per model, each its own venv</span>
   whisper/ pyannote/ ast/ ocr/ common/
 <span class="dir">tests/</span>            <span class="cm"># the executable law: T-1…T-6 plus the kept suites</span>
-<span class="dir">docs/</span>            <span class="cm"># service docs (when present)</span>
+<span class="dir">onboarding/</span>       <span class="cm"># this guide, and the review checklist</span>
   </div>
   <h4>A sensible first hour</h4>
   <ol class="tight" style="padding-left:22px">
