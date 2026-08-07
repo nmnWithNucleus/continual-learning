@@ -268,6 +268,10 @@ tr:last-child td { border-bottom: 0; }
 .sg-stage.mutate small { color: var(--warn); }
 .sg-stage.sidecar { border-style: dotted; }
 .sg-emit { font-family: var(--mono); font-size: 11px; color: var(--ok); border: 1px dashed color-mix(in srgb, var(--ok) 50%, transparent); background: var(--ok-soft); border-radius: 8px; padding: 6px 10px; white-space: nowrap; }
+.sg-lane { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-faint); margin: 14px 0 8px; }
+.sg-flex { display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch; }
+.sg-flex .sg-stage, .sg-flex .sg-emit { white-space: normal; max-width: 300px; }
+.sg-stage .nd { display: block; font-size: 10px; color: var(--ink-faint); margin-top: 3px; }
 
 /* path explorer */
 .explorer { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
@@ -723,60 +727,79 @@ ul.tight li { margin-bottom: 8px; max-width: 70ch; }
   </div>
 
   <h3>The graphs as they exist today</h3>
+  <p style="font-size:14px;color:var(--ink-soft)">Read each panel top-down, the way the executor actually runs it: the top lane holds every stage that needs nothing — they all launch together the moment the chunk arrives — and each lower lane holds the stages that wait on someone above them. The number in brackets is the stage's fixed <em>assembly order</em>: it decides the sequence records are emitted in at the very end, not who runs first (acoustic carries order 30 yet starts at time zero). Every stage shipped today carries the <b>required</b> policy: if it fails, the whole chunk fails and redelivery retries it. The machinery also offers a <b>best_effort</b> policy for sidecars — a failure would skip just that stage and count a metric — but no current stage uses it, so the badge below is honest repetition, not decoration.</p>
+
   <div class="sgraph">
     <div class="sg-title">audio — asr(0) · diarize(10) · translate(20) · acoustic(30) · injected_caption(40)</div>
-    <div class="sg-row">
-      <span class="sg-stage primary">asr<small>primary · asr-mock-v0 / asr-fw-v1</small></span>
-      <span class="st-arr">→</span>
-      <span class="sg-stage mutate">diarize<small>mutate · +diar-* · off by default</small></span>
-      <span class="st-arr">→</span>
-      <span class="sg-emit">transcript (disc "")</span>
+    <div class="sg-lane">Start line — these need nothing, so all three launch together</div>
+    <div class="sg-flex">
+      <span class="sg-stage primary">asr (0)<small>primary · required · always on</small><span class="nd">base dialect: asr-mock-v0 / asr-fw-v1</span></span>
+      <span class="sg-stage sidecar">acoustic (30)<small>sidecar · required · off by default</small><span class="nd">reads only the raw blob — no need for asr, so it runs at the same time as asr</span></span>
+      <span class="sg-stage sidecar">injected_caption (40)<small>sidecar · required · off by default</small><span class="nd">reads only the chunk's C1 span — also independent of asr</span></span>
     </div>
-    <div class="sg-row">
-      <span class="sg-stage sidecar">translate<small>sidecar · off · reads asr slot only</small></span>
-      <span class="st-arr">→</span>
-      <span class="sg-emit">transcript (disc "translation")</span>
-      <span style="width:18px"></span>
-      <span class="sg-stage sidecar">acoustic<small>sidecar · off · needs=() → runs ∥ asr</small></span>
-      <span class="st-arr">→</span>
-      <span class="sg-emit">caption (disc "acoustic")</span>
+    <div class="sg-lane">Second lane — both declare needs=(asr), so each waits for asr to finish, then they run at the same time as each other</div>
+    <div class="sg-flex">
+      <span class="sg-stage mutate">diarize (10)<small>mutate · required · off by default</small><span class="nd">needs asr · fills speaker into the transcript's timed lines, in place · forks the dialect: +diar-mock-v1 or +diar-pyannote-v1</span></span>
+      <span class="sg-stage sidecar">translate (20)<small>sidecar · required · off by default</small><span class="nd">needs asr · reads the immutable asr result, never the diarized lines — which is why it can run beside diarize safely</span></span>
+    </div>
+    <div class="sg-lane">What lands in /context — assembled by order (0 · 10 · 20 · 30 · 40) after every stage has finished</div>
+    <div class="sg-flex">
+      <span class="sg-emit">transcript · discriminator absent (asr's record, with diarize's speakers already filled in)</span>
+      <span class="sg-emit">transcript · disc "translation"</span>
+      <span class="sg-emit">caption · disc "acoustic"</span>
+      <span class="sg-emit">caption × N · disc "injcap-&lt;window&gt;"</span>
     </div>
   </div>
+
   <div class="sgraph">
     <div class="sg-title">video · keyframe path (default) — the shipped legacy</div>
-    <div class="sg-row">
-      <span class="sg-stage sidecar">keyframes (0)<small>sidecar · the one frozen R1 exemption</small></span>
-      <span class="st-arr">→</span>
-      <span class="sg-stage primary">captions (10)<small>primary · vidproc-mock-v0 / vidproc-vlm-v0</small></span>
-      <span class="st-arr">→</span>
-      <span class="sg-emit">caption × K (disc "0","1",…)</span>
+    <div class="sg-lane">Start line</div>
+    <div class="sg-flex">
+      <span class="sg-stage sidecar">keyframes (0)<small>sidecar · required · always on</small><span class="nd">extracts frames into a slot for captions — the one frozen R1 exemption (module 09)</span></span>
+    </div>
+    <div class="sg-lane">Second lane — needs keyframes</div>
+    <div class="sg-flex">
+      <span class="sg-stage primary">captions (10)<small>primary · required</small><span class="nd">needs keyframes · vidproc-mock-v0 / vidproc-vlm-v0</span></span>
+    </div>
+    <div class="sg-lane">What lands in /context</div>
+    <div class="sg-flex">
+      <span class="sg-emit">caption × K · disc "0", "1", …</span>
     </div>
   </div>
+
   <div class="sgraph">
     <div class="sg-title">video · clip path (VIDEO_PIPELINE=clip) — built, cutover gated</div>
-    <div class="sg-row">
-      <span class="sg-stage sidecar">clipprep (5)<small>sidecar · +cp-v1 · 2 ffmpeg passes + delta gate</small></span>
-      <span class="st-arr">→</span>
-      <span class="sg-stage sidecar">screentext (15)<small>sidecar · +ocr-*-v1 · CPU OCR sidecar</small></span>
-      <span class="st-arr">→</span>
-      <span class="sg-stage primary">clipcap (20)<small>primary · vidclip-*-v1@pack#cfg</small></span>
-      <span class="st-arr">→</span>
-      <span class="sg-emit">caption (disc "") + ocr (disc "ocr")</span>
+    <div class="sg-lane">Start line</div>
+    <div class="sg-flex">
+      <span class="sg-stage sidecar">clipprep (5)<small>sidecar · required · +cp-v1</small><span class="nd">2 ffmpeg passes + the delta gate</span></span>
+    </div>
+    <div class="sg-lane">Second lane — needs clipprep</div>
+    <div class="sg-flex">
+      <span class="sg-stage sidecar">screentext (15)<small>sidecar · required · +ocr-*-v1</small><span class="nd">needs clipprep · CPU OCR at native resolution</span></span>
+    </div>
+    <div class="sg-lane">Third lane — needs both clipprep and screentext</div>
+    <div class="sg-flex">
+      <span class="sg-stage primary">clipcap (20)<small>primary · required</small><span class="nd">needs clipprep + screentext · vidclip-*-v1@pack#cfg</span></span>
+    </div>
+    <div class="sg-lane">What lands in /context</div>
+    <div class="sg-flex">
+      <span class="sg-emit">caption · discriminator absent</span>
+      <span class="sg-emit">ocr · disc "ocr"</span>
     </div>
   </div>
 
   <h3>What the executor guarantees</h3>
   <ul class="tight">
-    <li><b>Readiness, not levels.</b> Each stage is an asyncio task awaiting exactly its dependencies' futures — a slow sidecar never delays an independent stage (<code>stagegraph/executor.py</code>).</li>
-    <li><b>Capability-scoped slots.</b> Every stage runs against a <code>SlotView</code>: in Python, holding a reference to a mutable object <em>is</em> the power to mutate it, so illegal access is prevented by never handing out the reference. A violation raises <code>SlotAccessError</code> at the offending line.</li>
-    <li><b>Commit on success only.</b> A stage's slot outputs merge into the shared context only after it succeeds — a half-run stage contributes nothing, like a rolled-back transaction.</li>
-    <li><b>Required failure fails the chunk</b> (all siblings cancelled and awaited, the real leaf exception re-raised); <code>best_effort</code> failure skips its cone and counts a metric. Nothing required may sit downstream of a best_effort stage — "its promise would be hollow."</li>
-    <li><b>Duplicate discriminators are terminal.</b> Two units sharing one would share a <code>record_id</code> and silently clobber each other in <code>/context</code> (<code>executor.py:393-401</code>).</li>
-    <li><b>The dialect composes deterministically:</b> base fragment + mutate fragments in chain order + remaining fragments sorted — so declaration order can never perturb identity.</li>
+    <li><b>A stage starts the moment the stages it needs have finished.</b> Each stage is an asyncio task that waits for exactly the futures of the stages in its <code>needs</code> tuple and for nothing else. There are no synchronized "rounds" where everyone at one depth must finish before the next depth begins — so a slow sidecar never delays a stage that does not depend on it (<code>stagegraph/executor.py</code>).</li>
+    <li><b>A stage can only touch the slots it declared.</b> Every stage runs against a <code>SlotView</code> instead of the raw slot dictionary. The reason this works: in Python, holding a reference to a mutable object <em>is</em> the power to change it — so the view simply never hands a sidecar the reference to the primary's mutable slots. If a stage tries an access it never declared, it gets a <code>SlotAccessError</code> at the exact offending line.</li>
+    <li><b>A stage's outputs become visible only after it succeeds.</b> Slot values a stage returns are merged into the shared context at the end of its run. A stage that fails halfway contributes nothing at all, the same way a rolled-back database transaction leaves no trace.</li>
+    <li><b>When a required stage fails, the whole chunk fails.</b> Every sibling task is cancelled and awaited, and the original leaf exception is re-raised so the failure taxonomy sees the real error. A <code>best_effort</code> failure would instead skip that stage plus anything downstream of it and count a metric — and the resolver refuses any graph where a required stage sits downstream of a best_effort one, because that required stage's promise could then be silently broken.</li>
+    <li><b>Two units may never share a discriminator.</b> If they did, they would share a <code>record_id</code> and silently overwrite each other in <code>/context</code> — so the executor treats a duplicate as a terminal error for the chunk (<code>executor.py:393-401</code>).</li>
+    <li><b>The dialect string always composes the same way:</b> base fragment first, then mutate fragments in their chain order, then every remaining fragment in sorted order. The order you happen to declare stages in a file can never change a record's identity.</li>
   </ul>
 
   <div class="note warn">
-    <p><b class="tag">History: why the fingerprint guard died</b>v1 checked slot integrity with an end-of-run fingerprint — and the hardening review proved it order-dependent: an illegal write landing <em>before</em> the mutate cohort finished was baked into the reference snapshot and missed. The fix was structural, not a patch: delete the guard, deny the reference (SlotView). When you find yourself verifying after the fact, ask whether you can make the violation impossible instead.</p>
+    <p><b class="tag">History: why the fingerprint guard died</b>The first version of the graph protected the primary's slots with a detective: before stages ran, it snapshotted the primary's mutable slots; after the legitimate mutate stages finished, it snapshotted again and compared, treating any unexpected difference as an illegal write. The hardening review (2026-07-21) found the flaw — the check depended on <em>timing</em>. If a misbehaving sidecar's illegal write landed <em>early</em>, before the reference snapshot was taken, the corrupted state <em>became</em> the reference, and the comparison at the end saw nothing wrong. A guard that only catches you if you break the rules at the right moment is not a guard. The fix removed the detective entirely and changed the physics instead: the <code>SlotView</code> above never gives a sidecar the reference in the first place, so the illegal write cannot happen at any moment — and an attempt raises <code>SlotAccessError</code> right at the offending line no matter when it runs. The fingerprint code is gone from the tree. The lesson the team kept: when you find yourself verifying after the fact, ask whether you can make the violation impossible instead.</p>
   </div>
 </section>
 
@@ -784,33 +807,99 @@ ul.tight li { margin-bottom: 8px; max-width: 70ch; }
 <section class="module" id="m7">
   <div class="eyebrow"><span class="lvl">MODULE 07</span> Machinery</div>
   <h2>The audio pipeline — real, end to end</h2>
-  <p class="dek">Audio is the modality that has carried real user data since day one: phone-mic and tab audio through faster-whisper into <code>/context</code>, verified on real hardware in the capture alpha.</p>
+  <p class="dek">Audio is the service's most exercised path: the real faster-whisper backend, not just the mock, has already transcribed genuine phone-mic and tab audio into <code>/context</code> on real hardware. That matters to how you read this module — every rule here (the VAD gate, the language pin, the single-resolver invariant) was earned from those real runs, and the stages below are the ones a production audio chunk will actually traverse.</p>
 
   <h3>ASR — the primary</h3>
   <ul class="tight">
     <li><code>ASR_BACKEND=mock</code> is the default, and it is deliberate: no GPU, no torch, byte-stable output the tests can pin. The real path is <code>faster_whisper</code>, which was smoke-tested green on node-7 and stands on the beta fleet today.</li>
-    <li><b>The VAD gate</b> (<code>ASR_VAD=1</code>, default on) runs voice-activity detection before decoding. Whisper's classic failure is hallucinating plausible sentences from silence; with the gate, an all-silence chunk yields an <em>honest empty transcript</em> — still a valid C2 documenting its span. This dialect change is exactly why the version bumped <code>asr-fw-v0 → asr-fw-v1</code>.</li>
+    <li><b>The VAD gate</b> (<code>ASR_VAD=1</code>, default on) runs voice-activity detection before decoding. Whisper's classic failure is hallucinating plausible sentences from silence; with the gate, an all-silence chunk yields an <em>honest empty transcript</em> — still a valid C2 documenting its span. A note on the version history, because only <code>asr-fw-v1</code> appears in the graph above: <code>asr-fw-v0</code> was the same faster-whisper backend as first written in the M0 skeleton — no VAD gate, and not even installed in requirements yet (only the mock ran in that era). When the M1 workstream made faster-whisper a standing backend, it added the gate in the same change and bumped the version, because a gated and an ungated decode transcribe <em>silence</em> to different bytes, and two configurations that can produce different bytes must never share a dialect — even though v0 had likely never stamped a real record anywhere. The old string survives only in the M0 handoff notes, the worklog's bump entry, and one unit test's arbitrary version literal; there is no switch that brings it back.</li>
     <li><b><code>ASR_LANGUAGE</code> pins the language</b> — the beta fleet pins <code>en</code> after the first real phone session: auto-detect on faint room audio hallucinated Hindi/Korean-script text. Deliberately a runtime knob, <em>not</em> a dialect fork: same-language reprocessing must stay an idempotent upsert.</li>
-    <li>Backends speak chunk-relative seconds; only the stage layer knows wall-clock, clamping offsets into the span and mapping to RFC3339. One conversion point, no backend can spill outside its chunk.</li>
+    <li><b>One place converts model time into wall-clock time.</b> A backend never sees a date: faster-whisper is handed twelve seconds of audio and answers in seconds from the start of those bytes — "the plan for today" spans 3.1&nbsp;s to 5.8&nbsp;s. The stage layer (<code>_absolute_segments</code> in <code>stages/audio/asr.py</code>) does the whole conversion exactly once: it clamps each offset into <code>[0, span]</code>, then adds it to the chunk's C1 <code>t_start</code> to mint the RFC3339 stamps every C2 segment carries. The clamp is not pedantry — Whisper's decoder can emit an offset slightly negative or slightly past the end of the audio, and an unclamped <code>-0.4&nbsp;s</code> would stamp words <em>before the chunk began</em>: a claim about seconds the <em>previous</em> chunk's transcript already owns, so the corpus would hold two records contradicting each other about the same instant, and any consumer ordering segments by their stamps would interleave words across the chunk boundary wrongly. Because the translate stage reuses the very same function, no backend anywhere in audio can invent a wall-clock time or spill outside its own chunk.</li>
   </ul>
 
   <h3>The capability ladder — everything defaults off</h3>
+  <p style="font-size:14px;color:var(--ink-soft)">"Off by default" is concrete: every switch below is an environment variable, and an unset variable means off. The code reads them fresh on every request (<code>app/audio/config.py</code>), which is what lets a test flip a knob without rebuilding the app — but you cannot change a running process's environment from outside it, so operationally a flip means editing the deploy environment file (the beta fleet's is <code>deploy/learn.env</code>) and restarting the service. There is no admin API and no hot reload. And if the flip changes the dialect — turning diarize on does — it is a full dialect flip, with everything module&nbsp;05 taught: drain-and-replace, and the freeze flag during the window.</p>
   <div class="tblwrap"><table>
     <thead><tr><th>Stage</th><th>Kind</th><th>Switch</th><th>Emits</th><th>Dialect effect</th><th>Real backend status</th></tr></thead>
     <tbody>
-      <tr><td>diarize</td><td><span class="pill warn">mutate</span></td><td><code>DIARIZE_BACKEND=off|mock|pyannote</code></td><td>It emits nothing of its own — it fills <code>speaker</code> into the primary's segments, in place.</td><td>It <b>forks the whole chunk's dialect</b>: <code>+diar-mock-v1</code> or <code>+diar-pyannote-v1</code>.</td><td>pyannote was smoke-tested on node-7, and the run surfaced two real torch fixes inspection had missed.</td></tr>
+      <tr><td>diarize</td><td><span class="pill warn">mutate</span></td><td><code>DIARIZE_BACKEND=off|mock|pyannote</code></td><td>It emits nothing of its own — it fills <code>speaker</code> into each timed line of the transcript's <code>content.segments</code> array, in place. (Careful with the overloaded word: these C2 segments are the transcript's timed lines, which happen to live in a slot that is also <em>named</em> <code>segments</code> — and neither has anything to do with recording's upload segments.)</td><td>It <b>forks the whole chunk's dialect</b>: <code>+diar-mock-v1</code> or <code>+diar-pyannote-v1</code>.</td><td>pyannote was smoke-tested on node-7, and the run surfaced two real torch fixes inspection had missed.</td></tr>
       <tr><td>translate</td><td><span class="pill dim">sidecar</span></td><td><code>TRANSLATE_BACKEND</code> + <code>TRANSLATE_TARGET</code> (the target is the master switch)</td><td>One extra transcript record, discriminator <code>"translation"</code>.</td><td>None — it only adds, so it never touches the version.</td><td>The whisper path is written but has never been proven on a genuinely non-English source.</td></tr>
       <tr><td>acoustic</td><td><span class="pill dim">sidecar</span></td><td><code>ACOUSTIC_BACKEND=off|mock|ast</code></td><td>One caption record, discriminator <code>"acoustic"</code> — "doing dishes", "dog nearby".</td><td>None — additive only.</td><td>The AST backend is honestly unverified: the model has never even been downloaded in this environment.</td></tr>
       <tr><td>injected_caption</td><td><span class="pill dim">sidecar</span></td><td><code>INJECT_CAPTION_BACKEND=index</code></td><td>Caption records joined in by wall-clock, discriminator <code>"injcap-&lt;window&gt;"</code>.</td><td>None — additive only.</td><td>This is the Phase-3 dogfood stage that plays a captioner's role until a real one lands.</td></tr>
     </tbody>
   </table></div>
 
+  <h3>Two of those records, side by side</h3>
+  <p style="font-size:14px;color:var(--ink-soft)">The same 12-second chunk from module&nbsp;03's explorer, this time with the acoustic sidecar turned on, so the one chunk emits <em>two</em> records. Read them against each other: identical <code>source</code>, identical span, identical <code>pipeline_version</code> (acoustic is additive, so the dialect does not move) — and yet two different <code>record_id</code>s, because the acoustic record hashes in its discriminator. Both hashes below are real sha256 outputs, not placeholders.</p>
+  <div class="grid2">
+    <pre><code>// the primary transcript — asr's record, assembled last
+{
+  "record_id": "d559bd4b3b5de794d1c5690a4d9c880440bbc0fa5977e7120c0b829e07514a06",
+  //           = sha256("01KXWE3F0AQ8Z2V9T1N4C6R7SD" + "\u0000" + "asr-fw-v1")
+  "user_id": "nmn",
+  "source": {
+    "device_id": "mac-cli-7F3K9Q",
+    "stream_id": "01KXWE2DQY5RT8MZ0V4H6B1JNC",
+    "chunk_id": "01KXWE3F0AQ8Z2V9T1N4C6R7SD",
+    "blob_ref": "raw/01KXWE3F0AQ8Z2V9T1N4C6R7SD",
+    "modality": "audio",
+    "device_tz": "Asia/Tokyo",
+    "device_utc_offset_minutes": 540
+  },
+  "t_start": "2026-07-19T17:04:10Z",
+  "t_end": "2026-07-19T17:04:22Z",
+  "content": {
+    "kind": "transcript",
+    "text": "okay so the plan for today is the emission law tests",
+    "language": "en",
+    "segments": [
+      { "t_start": "2026-07-19T17:04:13Z",
+        "t_end": "2026-07-19T17:04:18Z",
+        "text": "okay so the plan for today is the emission law tests",
+        "speaker": null }
+    ]
+  },
+  "enrichments": { "speakers": [], "faces": [], "places": [], "objects": [] },
+  "pipeline_version": "asr-fw-v1",
+  // "discriminator" is absent -- the primary is the chunk's one anonymous record
+  "processed_at": "2026-07-19T17:04:31Z"
+}</code></pre>
+    <pre><code>// the acoustic sidecar's record -- same chunk, own identity
+{
+  "record_id": "4eff945633113e4263933ea97fd49dff63f9cb6a87be10d7b352f40696a61fac",
+  //           = sha256("01KXWE3F0AQ8Z2V9T1N4C6R7SD" + "\u0000" + "asr-fw-v1"
+  //                    + "\u0000" + "acoustic")
+  "user_id": "nmn",
+  "source": {
+    "device_id": "mac-cli-7F3K9Q",
+    "stream_id": "01KXWE2DQY5RT8MZ0V4H6B1JNC",
+    "chunk_id": "01KXWE3F0AQ8Z2V9T1N4C6R7SD",
+    "blob_ref": "raw/01KXWE3F0AQ8Z2V9T1N4C6R7SD",
+    "modality": "audio",
+    "device_tz": "Asia/Tokyo",
+    "device_utc_offset_minutes": 540
+  },
+  "t_start": "2026-07-19T17:04:10Z",
+  "t_end": "2026-07-19T17:04:22Z",
+  "content": {
+    "kind": "caption",
+    "text": "keyboard typing; espresso machine hissing nearby"
+    // no "language", no "segments" -- a caption has neither
+  },
+  "enrichments": { "speakers": [], "faces": [], "places": [], "objects": [] },
+  "pipeline_version": "asr-fw-v1",
+  "discriminator": "acoustic",
+  "processed_at": "2026-07-19T17:04:31Z"
+}</code></pre>
+  </div>
+  <p style="font-size:14px;color:var(--ink-soft)">Two details worth pausing on. First, the acoustic record carries its <em>own</em> present-but-empty <code>enrichments</code> block — deliberately a fresh one, never a shared reference to the primary's, so a later mutate filling the primary's speakers can never bleed into the sidecar's record. Second, notice what turning diarize on would do to <em>both</em> columns: the shared <code>pipeline_version</code> would become <code>asr-fw-v1+diar-pyannote-v1</code>, so both record_ids change together — one dialect stamps the whole chunk.</p>
+
   <div class="note">
     <p><b class="tag">Why off-by-default beats mock-by-default here</b>A deliberate deviation from "mock is the default": if mock diarization were <em>on</em> by default, the default dialect would carry <code>+diar-mock-v1</code> and every byte-identity test would break. So capabilities ship off; mock is the no-GPU backend you get when you deliberately turn one on.</p>
   </div>
 
   <div class="note law">
-    <p><b class="tag">The single-resolver invariant — memorize this one</b>Diarize's enabledness and its version fragment derive from <em>one</em> resolver. If they could diverge, a diarized record could be written under the undiarized dialect — minting the <em>same</em> <code>record_id</code> as the pristine transcript and silently overwriting it via the idempotent upsert. A typo in <code>DIARIZE_BACKEND</code> resolves to <code>off</code> in <em>both</em> places: never fork, never collide. Every backend switch in the service follows this pattern.</p>
+    <p><b class="tag">The single-resolver invariant — memorize this one</b>Two separate facts about diarize must always agree: <em>does the stage run?</em> and <em>does the dialect string carry a <code>+diar-…</code> fragment?</em> Picture them disagreeing in the dangerous direction — the stage runs, but the fragment is missing. The diarized transcript would then be hashed under the plain dialect <code>asr-mock-v0</code>, minting the <em>same</em> <code>record_id</code> as the undiarized transcript that already exists — and because <code>/context</code> is a blind idempotent upsert, the new record would silently replace the old one. No error, no log line, two different byte-streams claiming one identity. The audio review caught this as a <em>possible</em> divergence back when enabledness and the fragment were computed in two places; the fix made the divergence structurally impossible rather than merely avoided. Today one private function, <code>diarize._resolve</code>, is the only source of truth: <code>select()</code> (which backend runs) and <code>version_tag()</code> (what joins the dialect) both call it, and the stage framework goes further — a mutate stage's enabledness <em>is defined as</em> "its fragment is non-empty", and overriding <code>enabled()</code> on a mutate is a registration error. One pleasant corollary: a typo like <code>DIARIZE_BACKEND=pyanote</code> resolves to <code>off</code> in <em>both</em> answers — the stage neither runs nor forks, so a bad deploy produces plain transcripts, never corrupted ones. Every backend switch in the service copies this pattern.</p>
   </div>
 
   <h3>Traps the real backends taught us</h3>
@@ -1217,7 +1306,7 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
     ['HOL blocking', 'one stuck item wedges all', 'Head-of-line blocking: a worker dequeues a job it can\'t run yet (modality cap reached) and everything behind it waits. DP\'s v1 fairness had exactly this bug; the rewrite takes the permit atomically <em>at dispatch</em> and scans past capped jobs.'],
     ['isolation', 'blast radius = 1 chunk', '<code>INGEST_ISOLATION=subprocess</code> runs the Processor step in a killable child. A segfault in native model code kills one child, not the service; a drain-timeout SIGKILLs the ghost computation a CPython thread could never stop.'],
     ['VAD', 'voice-activity detection', 'A cheap speech/no-speech filter run before the expensive ASR decoder. Whisper hallucinates plausible sentences from silence; the VAD gate makes an all-silence chunk yield an honest empty transcript instead. Also recording\'s chunking signal: audio chunks are cut at speech pauses.'],
-    ['diarization', 'who spoke when', 'Splitting audio into speaker turns (spk_0, spk_1…). In DP it is the canonical <em>mutate</em> stage: it fills <code>speaker</code> into the transcript\'s segments in place, and therefore must fork the dialect (<code>+diar-*</code>).'],
+    ['diarization', 'who spoke when', 'Splitting audio into speaker turns (spk_0, spk_1…). In DP it is the canonical <em>mutate</em> stage: it fills <code>speaker</code> into the transcript\'s segments in place, and therefore must fork the dialect — the fragment names the backend: <code>+diar-mock-v1</code> or <code>+diar-pyannote-v1</code>.'],
     ['chunk & envelope', 'a few seconds of life', 'A <b>chunk</b> is recording\'s unit: a few seconds of one stream from one device. Its <b>C1 envelope</b> is the metadata — who, which stream, when, and where the bytes landed (<code>blob_ref</code>). The bytes themselves live in storage <code>/raw</code>; DP pulls them by ref.'],
     ['record', 'one claim about a span of life', 'One processed unit in <code>/context</code>: a transcript, a caption, an OCR pass. The emission law defines it precisely: independently placeable (<code>t_start</code>), labelable (<code>content.kind</code>), losable (per-stage). If a signal doesn\'t need its own place, label, or failure — it isn\'t a record.'],
     ['dialect', 'pipeline_version', 'The versioned name of <em>how</em> records were produced: backends, prompt digests, config. It feeds <code>record_id</code>, so changing anything that could change record bytes forks the ids — new records land beside old ones. The trainer must only ever see one dialect per unit; storage\'s day-log enforces that downstream.'],
@@ -1408,7 +1497,7 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
     ['How done becomes visible', ['reply']],
   ];
   const MOD = {
-    audio:  { name: 'a 12 s mic chunk (wav, 16 kHz mono)', graph: 'The audio graph runs. <code>acoustic</code> (needs=∅) would start in parallel with <code>asr</code>, but it\'s off by default — so <code>asr</code> transcribes in the threadpool with the VAD gate on: speech becomes segments, silence becomes an honest empty transcript. Diarize/translate: off, contributing nothing to the dialect.', out: '1 transcript record — no discriminator (a single-record chunk)', pv: 'asr-mock-v0' },
+    audio:  { name: 'a 12 s mic chunk (wav, 16 kHz mono)', graph: 'The audio graph runs. <code>acoustic</code> (it needs nothing, so it would start at the same time as <code>asr</code>) would run, but it\'s off by default — so <code>asr</code> transcribes in the threadpool with the VAD gate on: speech becomes segments, silence becomes an honest empty transcript. Diarize/translate: off, contributing nothing to the dialect.', out: '1 transcript record — no discriminator (a single-record chunk)', pv: 'asr-mock-v0' },
     videok: { name: 'a 10 s screen chunk (mp4, container-copy)', graph: 'The legacy video graph: <code>keyframes</code> (sidecar, the one frozen R1 exemption) extracts a uniform grid ∪ scene-change frames via ffmpeg; <code>captions</code> (primary) fans one VLM call per keyframe concurrently over a shared client, then assembles one caption per frame with sub-spans partitioning the chunk exactly.', out: '4 caption records — discriminators "0" through "3", one per keyframe', pv: 'vidproc-mock-v0' },
     videoc: { name: 'a 10 s screen chunk (clip path)', graph: 'The clip graph: <code>clipprep(5)</code> runs two VFR-safe ffmpeg passes + the delta gate (binarize → 32×32 map → IDLE/LAYOUT/TEXT); <code>screentext(15)</code> asserts the OCR sidecar\'s model SHAs, reads delta-selected frames at native 1728 px, redacts secrets; <code>clipcap(20)</code> makes ONE multi-image VLM call with OCR injected as labelled input, and the parse ladder absorbs whatever comes back.', out: '1 caption record (no discriminator) + 1 ocr record (discriminator "ocr")', pv: 'vidclip-mock-v1#cfg+cp-v1+ocr-mock-v1' },
     image:  { name: 'a screenshot (png)', graph: 'The image processor is a deliberate STUB — the founders deferred image and text pipelines until a producing surface exists, and nothing on the fleet emits an image chunk yet (D15). It runs a mock dense caption with an “On-screen text:” clause standing in for the decoupled-OCR design the founders chose for reading screen text (D8). The real ImgProc → OCR → caption pipeline lands by editing one plugin file, zero core edits.', out: '1 caption record (stub dialect imgproc-mock-v0)', pv: 'imgproc-mock-v0' },
@@ -1569,7 +1658,7 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const OPTS = ['Primary record', 'Mutation of the primary', 'New record (own discriminator)', 'Not emitted / not DP\'s job', 'Fork pipeline_version'];
   const Q = [
     { sig: 'Diarization computes <b>speaker labels</b> for the transcript\'s segments.', right: 1,
-      why: 'T4 structure-fill: it fills a field the primary declared and left empty (speaker: null). So it is a MUTATE — it declares writes=(segments, enrichments) and MUST fork the dialect (+diar-*), or the diarized record would silently overwrite the pristine one under the same record_id.' },
+      why: 'T4 structure-fill: it fills a field the primary declared and left empty (speaker: null). So it is a MUTATE — it declares writes=(segments, enrichments) and MUST fork the dialect (+diar-mock-v1 or +diar-pyannote-v1), or the diarized record would silently overwrite the pristine one under the same record_id.' },
     { sig: 'The OCR pass produces <b>bounding-box geometry</b> — where each text region sits in the frame.', right: 3,
       why: 'T2 REACHABLE fails: enrichments has zero readers today, so geometry is used internally (reading order, roles) and then discarded. The additive C2 edit is written up and parked as escalation E-5 — to be taken in one commit when the first real consumer lands. Store nothing you cannot spend.' },
     { sig: 'The translate stage produces an <b>English translation</b> of a Japanese transcript.', right: 2,
