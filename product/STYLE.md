@@ -3,8 +3,10 @@
 > [ORG.md](ORG.md) decides **which file** a fact belongs in; this file decides **what it reads
 > like**. Binds every node: root, service, workstream.
 
-**Last updated:** 2026-07-30 · ratified — [D21](DECISIONS.md). The file is ratified, not this
-revision; editing it is a founders' act. §Teaching views added 2026-07-30 ([D22](DECISIONS.md)):
+**Last updated:** 2026-08-08 · ratified — [D21](DECISIONS.md). The file is ratified, not this
+revision; editing it is a founders' act. §Growing a worklog gained the [D29](DECISIONS.md)
+suspended-for-this-stage clause 2026-08-08 (the roll-never-prune rule stays; the license
+lapses at production end-to-end). §Teaching views added 2026-07-30 ([D22](DECISIONS.md)):
 onboarding views are read start to finish, so three rules are lifted for them and four imposed. §Was / Changed / Now / Payoff trimmed 2026-07-28: the
 example is the teaching, so the glosses restating it and the duplicate worklog-entry block went.
 Rule 6's general cap raised 25 → 40 on 2026-07-29: 40 is where one idea plus its citation lands,
@@ -143,6 +145,12 @@ rather than table cells and clipped bullets. What does bind it:
 you would be deleting it. When the read cost gets too high, cut the file at a date boundary into
 `handoff/<aspect>-<period>.md` and leave a one-line pointer. Moving costs nothing; deleting is
 unrecoverable in practice, because nobody greps git history for a rejected design.
+
+**Roll-never-prune is suspended for this stage.** At stage PROTOTYPE ([D19](DECISIONS.md)), while
+the learn and serve loops are not yet stable end to end, designs we stepped over are bloat, not
+history — the founders may remove any document, register row, or open question wholesale, and git
+history is the archive ([D29](DECISIONS.md)). The license lapses the day the loops run end to end
+in production; the roll-never-prune and never-edited-away rules resume unamended that day.
 
 ## Status vocabulary
 

@@ -8,6 +8,9 @@
 >
 > Only the founders (CTO + AI co-founder) add rows here. Service owners **propose** via
 > [HANDOFF.md](HANDOFF.md) §Escalations; a founders' session ratifies and numbers it.
+>
+> History before 2026-08-08 lives in git history, not in this tree. A skipped number is a removed
+> row, not an error.
 
 **Newest first.** A new decision is *prepended*: a row at the top of the index, and its card
 directly under the index ([ORG.md](ORG.md) §Documentation protocol). Cards follow
@@ -23,20 +26,22 @@ That is expected, and this register is built for it:
 
 - **A decision is never silently rewritten to say something different.** It is superseded by a new
   numbered row, so the record shows what changed our minds.
-- D17 supersedes its own same-day first draft; D19 overturned two clauses of D18. Both are visible
-  above rather than edited away.
+- D17 supersedes its own same-day first draft; D19 overturned two clauses of D18. Both stay visible
+  above rather than edited away — except under **D29**'s stage license (below), when a spent row
+  may leave the tree whole and git history keeps the archive.
 - **A D-number never changes**, not for a revision and not for a retirement. No `D18-v1`, no
-  `D18-RETIRED`.
-- An id that encodes meaning has to change when the meaning does, and this repo has already paid
-  for that lesson once.
-- D18's `window_id` was `w<local-date>` until the window stopped having a local date; re-keying it
-  moved filesystem paths, the training seed and C5 lineage at once.
-- Ids are stable handles; meaning lives in the columns beside them. Roughly forty files cite a
-  D-number today, and none should ever need auditing.
+  `D18-RETIRED`. Numbers are never reused; a hole is a removed row, not an error.
+- An id that encodes meaning must change when the meaning does, and every consumer that parsed it
+  breaks with it. Ids are stable handles; meaning lives in the columns beside them — so a
+  decision's number never changes, only its status.
+- Roughly forty files cite a D-number today, and none should ever need auditing.
 - **Lineage is bidirectional**, in its own column: the new row records what it supersedes, the old
   row records what superseded it.
 - One direction alone lets you walk forward from history but never backward from the decision you
   are reading now, which is the question people actually have.
+- **Append-only / never-edited-away is suspended for this stage (D29).** The laws are not
+  overruled; the license lapses the day the learn and serve loops run end to end in production,
+  and they resume unamended that day.
 - **A row's *status* may change in place** — status is a fact about today, while the decision text is
   history and stays put:
 
@@ -63,6 +68,7 @@ That is expected, and this register is built for it:
 
 | # | Decision | Date | Status | Lineage | Card |
 |---|---|---|---|---|---|
+| **D29** | Purge license at PROTOTYPE: append-only suspended for this stage | 2026-08-08 | ratified | suspends roll-never-prune / never-edited-away *for this stage only* · does not overrule them | [↓](#d29--purge-license-at-prototype) |
 | **D28** | C10 v2 + whole-record retraction | 2026-08-06 | ratified | joint row with storage · re-baselines **D20**'s parity bar | [↓](#d28--c10-v2--whole-record-retraction) |
 | **D27** | The heal ledger, and `created_at`/`updated_at` in storage | 2026-08-06 | ratified | joint row with storage · moves **D18**'s watermark axis | [↓](#d27--the-heal-ledger-and-created_atupdated_at) |
 | **D26** | Machinery/bureaucracy split: models become servers | 2026-08-06 | ratified | retires `isolation.py` · `INGEST_ISOLATION` · `DP_DIALECT_FREEZE` | [↓](#d26--the-machinerybureaucracy-split) |
@@ -91,6 +97,36 @@ That is expected, and this register is built for it:
 | **D3** | Serve-loop first | 2026-07-09 | ratified | — | [↓](#d3--serve-loop-first) |
 | **D2** | Single-markdown doc protocol | 2026-07-09 | ratified | — | [↓](#d2--single-markdown-doc-protocol) |
 | **D1** | Platform is a ratified service | 2026-07-09 | ratified | — | [↓](#d1--platform-is-a-service) |
+
+### D29 — purge license at PROTOTYPE
+
+> `ratified` 2026-08-08 · suspends [STYLE.md](STYLE.md) §Growing a worklog's roll-never-prune and
+> this register's never-edited-away rule *for this stage only* · does not overrule them
+> · recorded in [STYLE.md](STYLE.md) §Growing a worklog; [ORG.md](ORG.md) §Documentation protocol;
+> [storage CHARTER](services/storage/CHARTER.md) §Open questions; [README.md](README.md)
+
+**In one line.** While learn and serve are not yet stable end to end, designs we stepped over are
+bloat, not history — the founders may remove them wholesale; git is the archive.
+
+**What was decided**
+
+- The append-only laws (roll-never-prune; never-edited-away) are **not overruled**. They are
+  **suspended for this stage**.
+- While the product is at stage PROTOTYPE (**D19**) and the learn and serve loops are not yet
+  stable end to end, the founders may remove any document, register row, or open question
+  wholesale.
+- Git history is the archive. A skipped number is a removed row, not an error; numbers are never
+  reused.
+- **The license lapses** the day the loops run end to end in production. That day the
+  roll-never-prune and never-edited-away rules resume unamended.
+
+**Watch out for**
+
+- This is a founders-only license. It does not authorize an ordinary session to delete register
+  rows or charters.
+- Suspension is not a third status word and not a permanent posture. There is deliberately no
+  `frozen` for the same reason ([STYLE.md](STYLE.md) §Status vocabulary): at PROTOTYPE a word
+  that promises permanence misleads.
 
 ### D28 — C10 v2 + whole-record retraction
 

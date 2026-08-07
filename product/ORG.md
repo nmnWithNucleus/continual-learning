@@ -96,8 +96,8 @@ workstream) maintains:
 |---|---|---|
 | `CHARTER.md` (root: README/VISION/ARCHITECTURE/ORG) | **Stable.** Mission, scope, interfaces, milestones; changes deliberately | POC `README.md` |
 | `HANDOFF.md` | **Volatile board** — status tables, where we are, what's next, gotchas. *Rewritten in place* every session. | POC `HANDOFF.md` |
-| `handoff/<ws>.md` | Per-workstream / per-aspect working file: the reasoning and a newest-first worklog | POC `phase-N-*.md` / `wsN-*.md` |
-| `DECISIONS.md` | **Append-at-top register** of ratified decisions, cited everywhere and restated nowhere. Root holds the D-numbers; a service opens one only when it has local decisions | — (new 2026-07-27) |
+| `handoff/<ws>.md` | Per-workstream working file + newest-first worklog. [D29](DECISIONS.md): spent files may leave whole | POC `phase-N-*.md` / `wsN-*.md` |
+| `DECISIONS.md` | **Append-at-top register**; cited, never restated. [D29](DECISIONS.md): spent rows may leave whole (no reuse) | — (new 2026-07-27) |
 | `onboarding/*` | **Derived teaching view** — a guided explanation for newcomers, in whatever format teaches best. Optional | — (new 2026-07-30, [D22](DECISIONS.md)) |
 
 **A teaching view is allowed to restate, and pays for it.** [STYLE.md](STYLE.md) rule 8 forbids a
@@ -125,7 +125,7 @@ append. So the mode is now named, per section:
 | Mode | Applies to | Rule |
 |---|---|---|
 | **Rewrite in place** | every `HANDOFF.md` (root + service), every `CHARTER.md`, `README`/`VISION`/`ARCHITECTURE`/`STACK`/`ORG`/`STYLE` | Describe **today**. A finished item leaves the board for its worklog rather than staying struck through |
-| **Prepend (newest first)** | `handoff/<aspect>.md` and `handoff/<ws>.md` §Worklog · `DECISIONS.md` | Append-only history, written **at the top**. A cold reader hits today first and can stop whenever they have enough |
+| **Prepend (newest first)** | `handoff/<aspect>.md` and `handoff/<ws>.md` §Worklog · `DECISIONS.md` | Append-only at the top. **Suspended for this stage** ([D29](DECISIONS.md)); license lapses at production end-to-end |
 
 Worklog entries are `### <date> — <title>` headings, not list items, so every entry is a stable
 anchor other documents can point at. That is what lets a decision row carry a *pointer* to its

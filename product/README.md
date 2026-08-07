@@ -46,6 +46,9 @@ product/
     └── platform/          infra · CI/CD · security/privacy · cost · observability
 ```
 
+History before 2026-08-08 lives in git history, not in this tree. A skipped number is a removed
+row, not an error.
+
 ## Conventions
 
 Four rules bind every session. Each is stated once, elsewhere, and linked from here.

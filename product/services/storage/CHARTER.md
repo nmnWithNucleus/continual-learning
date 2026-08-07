@@ -545,6 +545,8 @@ explicitly"* and which D19 explicitly defers rather than silently adopts.
 > **OQ numbers are stable identifiers and are never renumbered** — resolved ones are struck
 > through in place (OQ3, OQ6), so a cross-service reference like "storage OQ3" keeps meaning what
 > it meant. The counter runs across both subsections, which is why Engineering skips 5.
+> Under [D29](../../DECISIONS.md), a question whose subject matter left the tree is removed whole,
+> leaving a hole — not an error, and the number is never reused.
 
 Engineering:
 
