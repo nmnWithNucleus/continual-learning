@@ -86,7 +86,7 @@ class OcrBackend(ModelBackend):
     name = "ocr"
 
     def load(self) -> None:
-        # Heavy imports live here: the framework calls load once, in the
+        # Heavy imports live here: the framework calls load() once, in the
         # warmup thread, before any infer.
         import onnxruntime
         from rapidocr_onnxruntime import RapidOCR

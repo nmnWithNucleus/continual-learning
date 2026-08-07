@@ -1,4 +1,4 @@
-"""Tests for app/model_client.py : replica pick, identity verification,
+"""Tests for app/model_client.py: replica pick, identity verification,
 per-call timeout, bounded transient retry against other replicas.
 
 The fake fleet here is the real framework (build_app + uvicorn on loopback), so these
@@ -274,7 +274,7 @@ def test_dead_replica_is_skipped():
 
 
 def test_wrong_model_replica_is_never_silently_used():
-    """L4 teeth: if a replica reports a different identity, infer must refuse to
+    """L4 teeth: if a replica reports a different identity, infer() must refuse to
     use it — even when it was unreachable at verify time and comes up later."""
     wrong = CountingBackend("wrong", identity_extra={"model_name": "other-model"})
     servers = fleet(wrong)
@@ -346,7 +346,7 @@ def test_5xx_presentation_clears_verified_and_reverifies(status, body):
 
 
 def test_transport_error_still_clears_verified():
-    """The original  hardening's presentation, pinned alongside."""
+    """The transport-error presentation of the same rule, pinned alongside the 5xx one."""
     calls = {"n": 0}
 
     def handler(request: httpx.Request) -> httpx.Response:

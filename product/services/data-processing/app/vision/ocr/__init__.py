@@ -6,21 +6,18 @@ regions — ``assemble`` (confidence gate → reading order + role → min-chars
 redaction → dedup → single-line render under the char budget) and ``redact`` (the
 deterministic secret scrub, an access control not a knob).
 
-Dead with the rebuild (v0 → v1 dispositions):
+What this package deliberately does NOT hold, and where each thing lives instead:
 
-  * ``ppocr.py`` — the v0 OCR HTTP client (bespoke ``POST /ocr`` wire, per-process
-    ``/health`` sha assertion). Superseded by ``servers/ocr`` + ``app/model_client.py``:
-    the stage calls ``ctx.clients["ocr"].infer`` on the framework ``/infer`` envelope,
-    and the det/rec sha pins moved into ``servers/manifest.json`` ``expected_identity``
-    (verified by the client before a replica serves — the same guarantee, one home).
-  * ``vlm.py`` — the OCR A/B arm over an OpenAI endpoint. An experiment path selected
-    by env; under L4 an experiment is an in-code ``.exp-`` dialect or it does not
-    exist. Rebuild it as a ``screentext`` instance with ``Backend("vlm", n)`` if the
-    comparison is ever re-run.
-  * ``mock.py`` — the env-selected canned backend. Mock dialects are client-level
-    fakes in tests now (plan §3).
-  * ``config.py`` — the ``VIDEO_OCR_*`` env shim. Every output-affecting knob is a
-    code pin in ``app/stages/video/screentext.py``; the operational wire knobs
-    (url/timeout) live in the server manifest.
+  * No OCR HTTP client. The stage calls ``ctx.clients["ocr"].infer`` on the framework
+    ``/infer`` envelope (``app/model_client.py``), and the det/rec sha pins live in
+    ``servers/manifest.json`` ``expected_identity``, verified by the client before a
+    replica serves — one home for the guarantee.
+  * No alternate OCR backend. An experiment is an in-code ``.exp-`` dialect or it does
+    not exist (L4); a VLM-based comparison arm would be a ``screentext`` instance with
+    ``Backend("vlm", n)``.
+  * No canned backend module. Mock dialects are client-level fakes in tests.
+  * No env shim. Every output-affecting value is a code pin in
+    ``app/stages/video/screentext.py``; the operational wire settings (url/timeout)
+    live in the server manifest.
 """
 from __future__ import annotations

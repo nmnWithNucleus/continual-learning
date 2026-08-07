@@ -8,8 +8,9 @@
 
 **Where we are.** The service ingests C1 chunks and writes **one C2 v1 record per chunk** —
 built from `content.slots`, one stage per slot, never edited ([CHARTER.md](CHARTER.md)
-§Slot Law). Models run as long-lived **model servers** under a supervisor (`servers/whisper`,
-`pyannote`, `ast`, `ocr`); the DP process is a thin async orchestrator that calls them (L9).
+§Slot Law). Models run as long-lived **model servers** (`servers/whisper`, `pyannote`, `ast`,
+`ocr`) supervised from inside the DP process, which is their parent and calls them as a thin
+async orchestrator (L9).
 Audio and video both run end to end against the live fleet. Ingest operating default is
 **async** ([D16](../../DECISIONS.md): code default off, depot default on); a durable journal
 re-drives the pending set on restart. The video captioner is the self-hosted Qwen3-VL on
@@ -36,6 +37,23 @@ Open items only. Finished work leaves the board.
 | 4 | **The captioner-fleet `vlm.v2` deploy.** Code pins `vlm.v2`; the running fleet may still serve the prior pin until the next deliberate drain-and-replace restart. Caption bytes are unchanged. | a scheduled restart |
 | 5 | **D9 observability backbone** — the shared Prometheus + Grafana. Emission shipped; the backbone is platform's. | platform's §Next |
 | 6 | **Parity-apparatus retirement** — pointer only; the owed one-act retirement lives on the [storage board](../storage/HANDOFF.md) §Next 7. | storage-led |
+| 7 | **Pin `huggingface-hub` in `servers/ast/requirements.txt`** — see [the card below](#pinning-huggingface-hub-for-the-ast-server). | a deliberate pin decision |
+
+### Pinning huggingface-hub for the ast server
+
+> `designed` 2026-08-07 · engineering, not purge work
+
+**In one line.** `servers/ast/requirements.txt` pins `transformers` but not
+`huggingface-hub`, so rebuilding that venv from requirements alone does not reproduce the
+environment that is running.
+
+**Why it's this way** — it was caught live: a rebuild resolved `huggingface-hub` to 1.27.0
+against the installed 1.26.0. That repair worked around it with a pip constraints file built
+from the running venv, which fixes the instance and not the cause.
+
+**Watch out for** — pinning is a deliberate act, not a tidy-up. Package versions are reported
+in `/health.frameworks` and feed the identity the model client verifies, so choosing the pin
+means choosing what the ast server declares itself to be. Decide the version first, then pin.
 
 ## Gotchas
 

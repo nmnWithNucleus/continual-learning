@@ -1,9 +1,9 @@
 """``screentext`` — thin client over the ocr model server → the ``ocr`` slot.
 
-The DP-side half of D-06/D-07/D-08 under the rebuild. Consumes ``clipprep``'s
-transient ``ClipFrames``, sends each delta-gate-selected hi-res frame to the ocr
+The DP-side half of D-06/D-07/D-08. Consumes ``clipprep``'s transient
+``ClipFrames``, sends each delta-gate-selected hi-res frame to the ocr
 server (``ctx.clients["ocr"]``, the framework ``/infer`` envelope: one base64 JPEG
-per call), then runs the KEPT client-side pipeline — bbox normalization → assemble
+per call), then runs the client-side pipeline — bbox normalization → assemble
 (confidence gate, reading order + role, min-chars, deterministic redaction,
 within-chunk dedup, char budget) — down to ONE self-anchored line.
 

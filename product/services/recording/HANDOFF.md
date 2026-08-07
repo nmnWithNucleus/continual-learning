@@ -7,7 +7,8 @@
 **Status:** built · recording suite **144 tests** (110 + 7 async-seam/redrive/migration +
 3 metrics) · *Last updated:* 2026-08-07 (the DP rebuild cut over: DP now runs async by default and
 the durable-journal + in-flight-kill recovery were witnessed against our capture ledger at the
-Stage F soak; the E-6 retry-window is the one live gap that soak surfaced)
+Stage F soak; the E-6 retry-window is the one live gap that soak surfaced. Later that day, the
+§Async-ingest seam pointer was repointed at the DP charter after its target was deleted.)
 
 **Where we are.** The client wire speaks `capture_id` + `segment_num` as of 2026-07-29 (were `session_id` + `seq`; routes `/capture/sessions/*` → `/capture/captures/*` — reasoning in [CHARTER.md](CHARTER.md) §Glossary, record in [handoff/worklog.md](handoff/worklog.md)). The computer-capture-surfaces slice is alpha-complete: all three surfaces were
 verified `clean` end to end on real devices on 2026-07-19. Each ran a real capture that landed

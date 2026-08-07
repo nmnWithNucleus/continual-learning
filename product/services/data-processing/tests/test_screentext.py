@@ -1,6 +1,6 @@
-"""The ``screentext`` stage — a thin client over the ocr model server (DP rebuild).
+"""The ``screentext`` stage — a thin client over the ocr model server.
 
-New-API client tests: the stage is driven directly with a StageContext whose
+The stage is driven directly with a StageContext whose
 ``clients["ocr"]`` is a client-level fake (plan §3 — no server spawned). The
 centerpiece is the GOLDEN test: the fake returns the REAL ocr server's measured
 ``/infer`` result (servers/ocr/tests/fixtures/golden_regions.json, bit-stable per its

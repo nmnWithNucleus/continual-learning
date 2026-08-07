@@ -7,9 +7,12 @@ capped backoff ladder. GPU pinning is CUDA_VISIBLE_DEVICES per replica (gpu: nul
 pins to CPU by hiding every device) — which physical GPU a replica lands on is
 operational, never output-affecting (L4).
 
-The supervisor lives in DP and is wired into ``main.py``'s lifespan, which starts it
-when ``DP_SUPERVISOR`` is set — an operational opt-in, so a plain DP process runs
-against an already-running fleet. It also drives the fleet standalone:
+THE SUPERVISOR IS NOT A SEPARATE PROCESS. It is a task inside the DP service, started
+by ``main.py``'s lifespan when ``DP_SUPERVISOR`` is set, so the DP process is the direct
+PARENT of every replica it spawns: the pid that owns a replica is DP's, and killing DP
+takes the whole fleet with it. Without the opt-in, a plain DP process runs against an
+already-running fleet instead. The module can also be driven standalone for local work,
+which is the only case where a supervisor pid is not DP's:
 
     .venv/bin/python -m app.supervisor --manifest servers/manifest.json
 

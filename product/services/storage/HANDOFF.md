@@ -15,7 +15,8 @@
 expansion live*, and the *D27/D28 joint rows now LIVE* · *Last updated:* 2026-08-07 (the DP
 rebuild cut over at Stage F: `:8083` now serves `created_at`/`updated_at` and the C10 v2
 slot-walk day-log to the live fleet; the `dp-v0-live` worktree retired at the cutover and the
-`/context` store was wiped fresh-forward, OD-2, `/raw` kept)
+`/context` store was wiped fresh-forward, OD-2, `/raw` kept. Later that day: §Next row 7 became a
+card, the joint-rows heading was renamed, and the §Day-log cross-reference was repointed at it.)
 
 ---
 
@@ -55,7 +56,7 @@ below):
   discriminator)`* — on `ingest_time` because `pipeline_version` is a composed string and not
   orderable, on `kind` because captions and transcripts can share one `pipeline_version`. *(That
   was the D18 rule; since [D27/D28](../../DECISIONS.md) the live renderer dedups latest
-  `updated_at` per `(chunk_id)` — §The DP rebuild's joint rows, below.)* Every
+  `updated_at` per `(chunk_id)` — [§The joint rows with data-processing](#the-joint-rows-with-data-processing-d27d28), below.)* Every
   body is stamped with its `recipe_id` *and* `daylog_format_version`, and continuum *refuses* a
   body whose stamps are not the ones it trains under.
 - **C13 recipe registry** (`GET /recipes/{recipe_id}`, `GET /policies/{policy_id}`) and

@@ -34,8 +34,7 @@ only on a genuine decoder anomaly, and a clip shorter than its declared span deg
 gracefully (fewer frames) instead of dead-lettering. It also drops the 29.97/23.976
 integer-rounding drift, because no rate is reconstructed at all.
 
-NO CONFIG (DP rebuild, L4). The v0 ``VIDEO_CLIP_*`` / ``VIDEO_OCR_*`` /
-``VIDEO_ANALYSIS_*`` env shim that used to live here is gone: every knob is a field of
+NO CONFIG (L4). No env shim lives here: every setting is a field of
 :class:`ClipSettings`, and the ONE place values come from is the ``clipprep`` stage file
 (``app/stages/video/clipprep.py``), where they are pinned in code under the stage's
 backend version (changing one is a vB bump, never an env flip). This module is pure
@@ -299,7 +298,7 @@ def prepare_clip(
         )
         return clip_frames, delta
 
-# DELETED (DP rebuild): ``synthetic_clip_frames`` + ``empty_delta`` — the v0 mock-backend
-# fallback that emitted placeholder frames for an undecodable blob. In v1 mock dialects are
-# client-level fakes and ``clipprep`` is required: an undecodable blob RAISES, the chunk
-# retries then dead-letters (L7). Placeholders never persist as processed truth.
+# NO PLACEHOLDER FRAMES. There is deliberately no synthetic-frame fallback for an
+# undecodable blob: mock dialects are client-level fakes and ``clipprep`` is required, so
+# an undecodable blob RAISES and the chunk retries then dead-letters (L7). Placeholders
+# must never persist as processed truth.

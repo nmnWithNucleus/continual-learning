@@ -150,7 +150,7 @@ ul.tight li { margin-bottom:8px; max-width:72ch; }
 <header class="hero">
   <div class="hero-card">
     <h1>The Data Processing Service is where a captured life becomes <em>language</em>.</h1>
-    <p class="sub">Raw audio and video chunks flow in from recording; one structured, timestamped record per chunk flows out to storage. Every token the per-user model is ever trained on passes through this pipeline, so the quality ceiling of the whole product is set here. This guide teaches the service <strong>as it runs today</strong> — the v1 model that replaced the old multi-record, in-place-mutation design at cutover.</p>
+    <p class="sub">Raw audio and video chunks flow in from recording; one structured, timestamped record per chunk flows out to storage. Every token the per-user model is ever trained on passes through this pipeline, so the quality ceiling of the whole product is set here. This guide teaches the service <strong>as it runs today</strong>: one record per chunk, assembled from slots that are each written exactly once.</p>
     <span class="stage-chip">⚠ Stage: PROTOTYPE (D19) — the docs speak in a production voice; the build is a prototype</span>
     <div class="note law" style="margin-top:20px">
       <b class="tag">Derived teaching view · D22</b>
@@ -280,7 +280,7 @@ ul.tight li { margin-bottom:8px; max-width:72ch; }
       <div class="sg-stage opt">captioner :8161<small>Qwen3-VL · external endpoint</small></div>
     </div>
   </div>
-  <p>The <strong>supervisor</strong> lives inside DP for now. It reads a manifest — which servers, how many replicas, which GPU each pins to — and spawns, health-checks and restarts them. A stage talks to a server through a thin client that picks a replica, enforces a per-call timeout, and retries a transient failure on another replica. When a replica dies, the supervisor brings it back; when all replicas fail one input the same way, that is a real failure and the next module owns what happens.</p>
+  <p>The <strong>supervisor</strong> is not a process of its own: it is a task inside DP, which means the DP process is the direct parent of every replica, and stopping DP stops the whole fleet. It reads a manifest — which servers, how many replicas, which GPU each pins to — and spawns, health-checks and restarts them. A stage talks to a server through a thin client that picks a replica, enforces a per-call timeout, and retries a transient failure on another replica. When a replica dies, the supervisor brings it back; when all replicas fail one input the same way, that is a real failure and the next module owns what happens.</p>
   <div class="note"><p>This split is why the old subprocess isolation shield is gone: it existed to contain a model crash <em>inside</em> the DP process. With the models outside, a poison chunk fails one stage client and the supervisor restarts a dead replica — there is nothing left in DP to isolate.</p></div>
 </section>
 
@@ -323,7 +323,7 @@ ul.tight li { margin-bottom:8px; max-width:72ch; }
   </ul>
   <h3>Healing</h3>
   <p>The journal keeps a done-row per chunk: its dialect, its record id, each stage's status, and how many heals it has spent. When a chunk is redelivered, the row decides what happens — no row means process fresh; a different dialect means reprocess and land a new record <em>beside</em> the old; the same dialect all-green means skip (return the record id); the same dialect with holes and budget left means <strong>heal</strong>. A heal re-runs the whole graph and re-writes the <em>same</em> record id, so a hole that the fleet can now fill converges. The promise is convergence, not monotonicity: the re-run writes whatever it produced, and the ledger — not the record — carries the truth about which holes remain.</p>
-  <div class="note"><p>This was proven live at cutover: an optional stage was killed so a chunk shipped with a hole, the supervisor restarted the model, and the chunk's redelivery healed the record to be byte-identical to a clean-fleet twin — then a further redelivery was a pure skip.</p></div>
+  <div class="note"><p>This has been proven against the live fleet: an optional stage was killed so a chunk shipped with a hole, the supervisor restarted the model, and the chunk's redelivery healed the record to be byte-identical to a clean-fleet twin — then a further redelivery was a pure skip.</p></div>
 </section>
 
 <!-- ===================================================== 08 -->
@@ -343,7 +343,7 @@ ul.tight li { margin-bottom:8px; max-width:72ch; }
   <h2>What is real, and what is not</h2>
   <p class="dek">A teaching view that hides the gaps misleads the reader who cannot yet see them. So here they are.</p>
   <div class="board">
-    <div class="bd-item"><div class="hd"><span class="pill ok">real</span><b>Audio &amp; video, end to end</b></div><p>Real faster-whisper, pyannote, AST and PP-OCR servers, and a real Qwen3-VL captioner, all ran a synthetic multi-hour soak through the live fleet at the cutover. Records are C2 v1, one per chunk.</p></div>
+    <div class="bd-item"><div class="hd"><span class="pill ok">real</span><b>Audio &amp; video, end to end</b></div><p>Real faster-whisper, pyannote, AST and PP-OCR servers, and a real Qwen3-VL captioner, all ran a synthetic multi-hour soak through the live fleet. Records are C2 v1, one per chunk.</p></div>
     <div class="bd-item"><div class="hd"><span class="pill ok">real</span><b>Crash safety</b></div><p>The durable journal, async ingest, heal-on-redrive and the zero-silent-loss accounting are built and drilled, including a live in-flight-kill recovery.</p></div>
     <div class="bd-item"><div class="hd"><span class="pill warn">partial</span><b>Backfill by version</b></div><p>Reprocessing a whole day under a new dialect from the kept <code>/raw</code> bytes is designed (the owed reprocess-by-version tool) but not built. Kill/restart recovery is done; the replay tool is owed.</p></div>
     <div class="bd-item"><div class="hd"><span class="pill dim">designed</span><b>C8 — the synchronous API</b></div><p>Offering the pipeline to the input service for interactive requests. Nothing is built; the inline path is its skeleton.</p></div>

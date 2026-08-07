@@ -1,11 +1,10 @@
 """OCR post-processing (assemble/redact) — pure/headless, no network, no GPU.
 
-Rebuilt for the DP rebuild: the v0 backend resolver (`_resolve`/`select`/`version_tag`)
-and the ppocr sidecar client died with the env-selected seam (the engine is
-`servers/ocr`, the stage is `app/stages/video/screentext.py`, identity is the stage's
-Backend + the manifest's sha pins). What remains here is the KEPT pure pipeline:
-redact (the access control) + assign_role + render — now under EXPLICIT keyword pins
-(L4), exercised at the screentext stage's pinned values.
+The subject is the pure pipeline only: redact (the access control) + assign_role +
+render, under EXPLICIT keyword pins (L4), exercised at the screentext stage's pinned
+values. The engine is `servers/ocr`, the stage is `app/stages/video/screentext.py`,
+and identity is the stage's Backend plus the manifest's sha pins — none of which this
+file touches.
 """
 from __future__ import annotations
 

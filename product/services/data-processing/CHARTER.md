@@ -211,6 +211,8 @@ reprocess is an upsert and not a duplicate.
   - Stages are thin clients (prepare request → call server/cloud → post-process into slot)
     with per-call timeouts and bounded transient retries against other replicas; ffmpeg
     remains a self-isolating subprocess.
+  - The supervisor is a task **inside** the DP process, not a process of its own, so DP is
+    the parent of every replica and stopping DP stops the fleet.
   - *No model loads inside the DP process*, and no per-chunk child processes exist;
     `isolation.py` does not exist.
 - **L10 — Consumer & budget rule.** A slot ships with a named consumer-today, or an explicit

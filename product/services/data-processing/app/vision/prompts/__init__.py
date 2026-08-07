@@ -5,15 +5,15 @@ One ``.prompt.md`` file per prompt (front-matter + ``[system]`` / ``[user]``), p
 (the guided-decoding JSON Schemas), and ``LOCK.json`` (the hand-bumped ``PACK_VERSION`` +
 the last-locked digest). This module loads, validates, resolves and hashes them.
 
-Identity under the DP rebuild (L4): ``PACK_DIGEST`` — sha8 over the NORMALISED specs
+Identity (L4): ``PACK_DIGEST`` — sha8 over the NORMALISED specs
 (id + role + decode params + output schema + system + user, with line endings normalised
 and trailing whitespace stripped per line) plus the canonical ``routes.json``. A reflow /
 CRLF checkout / trailing newline does NOT move it; every model-facing byte, decode
 parameter and the schema DO. The ``clipcap`` stage pins the expected digest as a code
 constant and registration FAILS LOUD on a mismatch — so a ``.prompt.md`` edit without a
-backend-version (vB) bump is impossible to ship silently. The v0 ``version_tag`` suffix
-machinery is gone: identity is the stage's ``<stage>.v<S>-<backend>.v<B>`` segment, and a
-prompt change is a vB bump (enforced by the digest pin), never a self-composing tag.
+backend-version (vB) bump is impossible to ship silently. There is no self-composing
+version tag: identity is the stage's ``<stage>.v<S>-<backend>.v<B>`` segment, and a
+prompt change is a vB bump, enforced by the digest pin.
 
 **Loading discipline (D-13 TOCTOU note).** Packs are read ONCE per process at import and
 never re-stat'd. Prompts are baked into the image; the v0 ``VIDEO_PROMPT_DIR`` override

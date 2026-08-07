@@ -1,6 +1,6 @@
-"""The ``clipprep`` stage — real ffmpeg over generated fixtures (DP rebuild).
+"""The ``clipprep`` stage — real ffmpeg over generated fixtures.
 
-New-API tests: the stage runs REAL ffmpeg (the two passes) over ``ffmpeg lavfi``
+The stage runs REAL ffmpeg (the two passes) over ``ffmpeg lavfi``
 fixtures built at test time (tests/conftest_video.py — no binaries committed).
 The contract proven here: frames land in ``StageOutput.bytes`` and NO record slot
 is emitted (``value=None`` — frames are re-derivable heavy data, not-persisted by

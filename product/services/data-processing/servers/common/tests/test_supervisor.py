@@ -1,4 +1,4 @@
-"""Tests for app/supervisor.py : manifest -> spawn, health-check,
+"""Tests for app/supervisor.py: manifest -> spawn, health-check,
 restart-on-crash, GPU pinning env, clean stop.
 
 Replicas here are real framework servers (fake_server.py) spawned exactly the way
@@ -170,7 +170,7 @@ def test_crash_looping_replica_keeps_restarting_with_backoff(tmp_path):
 
 
 def test_load_failure_exits_loud_and_wait_ready_times_out(tmp_path):
-    """A backend whose load raises must fail the process (runner exit 3), and
+    """A backend whose load() raises must fail the process (runner exit 3), and
     wait_ready must surface that instead of hanging."""
     port = free_port()
     m = manifest([{"port": port, "gpu": None}], env={"FAKE_LOAD_ERROR": "1"})

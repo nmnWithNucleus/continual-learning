@@ -7,10 +7,10 @@ RATE into a per-record character cap, applied as ``cap = round(rate × span_seco
 so the dose is identical at any chunk length (that span-parametricity is what lets DP
 ship at 10 s and absorb 60 s without touching identity — D-01).
 
-NO CONFIG (DP rebuild, L4): the v0 ``VIDEO_CHARS_PER_SECOND`` / ``VIDEO_CAPTION_CHARS_SHARE``
-env knobs are dead. The rates are code pins in the stage files that spend them —
-``app/stages/video/clipcap.py`` pins the caption rate (16), ``app/stages/video/screentext.py``
-pins the OCR rate (6; the v0 split of 22 total). Changing a rate there is a vB bump.
+NO CONFIG (L4): no env knob sets these rates. They are code pins in the stage files that
+spend them — ``app/stages/video/clipcap.py`` pins the caption rate (16),
+``app/stages/video/screentext.py`` pins the OCR rate (6), splitting 22 chars per
+second-of-life between them. Changing a rate there is a vB bump.
 Everything here is a pure function of ``(span_seconds, rate)`` / ``(text, cap)``.
 
 Truncation is deterministic (sentence boundary for the caption, word boundary for OCR)

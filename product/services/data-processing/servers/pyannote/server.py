@@ -1,4 +1,4 @@
-"""dp-server: pyannote speaker diarization .
+"""dp-server: pyannote speaker diarization.
 
 One ModelBackend around pyannote/speaker-diarization-3.1, served by the
 dp_servers_common framework (warmup thread, /health identity, /infer). The

@@ -37,8 +37,8 @@ dead-lettered chunk → verdict `gaps`, an accepted-but-unconfirmed chunk → ve
 `INGEST_ASYNC=1`, *`RECORDING_HTTP_TIMEOUT` reverts to 30* (the 120 s mitigation is retired). *Founders ratified this wire 2026-07-19 (D16)* — the one
 ratification condition (a named + drilled re-drive path for accepted-unconfirmed chunks) is satisfied in-slice: `POST /capture/sessions/{id}/redrive` (+
 `emitter.redrive_accepted_chunks`, callable on restart / periodically) re-pushes each `dp_state='accepted'` chunk's original C1; DP's dedup makes it
-idempotent (a done chunk short-circuits to 200+record_ids → `confirm_chunk` → `clean`; still-pending re-ACKs 202). Detail:
-[../data-processing/handoff/ws-async-observability.md](../data-processing/handoff/ws-async-observability.md).
+idempotent (a done chunk short-circuits to 200+record_ids → `confirm_chunk` → `clean`; still-pending re-ACKs 202). Detail, DP's side of the
+wire: [the DP charter's ingest-processing-mode entry](../data-processing/CHARTER.md) (open question 13).
 - **DP-side alignment (DP v1 + hardening, merged 2026-07-21):** DP now carries a *durable ingest
   journal* — an accepted chunk survives a DP kill/restart and *auto-recovers on the DP side* (its
   `/continuity` `processed`/`dead_lettered` sets rehydrate from the journal, so a DP restart can

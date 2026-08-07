@@ -1,4 +1,4 @@
-"""Wire-contract tests for the servers/common framework .
+"""Wire-contract tests for the servers/common framework.
 
 The contract every model server speaks (plan §3, L9):
 
@@ -184,7 +184,7 @@ def test_infer_calls_are_serialized_one_at_a_time():
 
 
 def test_health_handler_is_loop_native():
-    """ hardening: /health must be async (starve-proof) — a sync handler
+    """A hardening rule: /health must be async (starve-proof) — a sync handler
     shares the threadpool with queued sync /infer calls, so a busy replica's
     backlog could starve its own liveness probe into a supervisor kill."""
     import inspect

@@ -462,3 +462,304 @@ allowing any respawn.
 4. `16c3ed3` teach the service, not the transition (also-fix list)
 
 Not pushed. No PR. Not merged. Phase 3 **not started**.
+
+---
+
+# Verification round 3 — census completeness, servers/ finish, attribution repair
+
+> **Appended 2026-08-07.** Append-only. Earlier claims that were wrong are quoted and
+> corrected here, never rewritten above.
+
+## Corrections to earlier claims in this file
+
+**Correction 5 — the census was regex-scoped, not surface-complete.** Round 2's §Token census
+pasted an empty grep and called the DP tree clean. That grep never contained the bare words
+`rebuild` or `cutover`, so it could not have found them. It missed 25 sites: three
+`field-guide.html` body passages and roughly twenty `(DP rebuild)` provenance markers in
+`app/` and `tests/` docstrings. A census is only as complete as its token list, and a zero
+from a narrow list is not evidence of a clean surface.
+
+**Correction 6 — the mandated dangling-link edit was misattributed.** Round 2 said:
+
+> The eleventh (`recording/HANDOFF.md:60`) was executed this round per the classification's
+> explicit mandate.
+
+Wrong file. The classification (`docs/purge_classification.md:243`) names **recording R-2's
+"Detail:" pointer** — that is `product/services/recording/DECISIONS.md`, not
+`recording/HANDOFF.md`. The HANDOFF line was a different, unnamed link that happened to point
+at the same deleted document. Both are now fixed; only the DECISIONS one was mandated.
+
+**Correction 7 — the round-2 attribution table was wrong.** That table credits also-fix items
+6, 7 and 8 to `16c3ed3`. They landed in **`009183f`** (the sweep-repair commit), which is
+where the `servers/` token-pass residue and the `supervisor.py` docstring were fixed. Items 4,
+5, 9 and 10 are correctly attributed to `16c3ed3`.
+
+**Correction 8 — the `servers/` restore was declared finished before it was.** Round 2 pasted
+a clean whitespace proof for `servers/` and moved on. Eleven token-pass wreckage sites
+survived inside it as broken prose. They are fixed below.
+
+**Correction 9 — the storage/HANDOFF disclosure was too narrow.** Round 2 disclosed only that
+"§Next rows 0 and 1 still carry `Stage E`/`Stage F` wording". The board carries more than
+that, itemised in §Owed phase-3 work below.
+
+---
+
+## 1. Gitignore guard (`580bbd1`) — done first
+
+`servers/*/.venv-rebuild` and `.venv-corrupt-*` were untracked and **not** ignored: the
+existing `.venv/` pattern matches only that exact directory name, so a `git add -A` would have
+staged roughly 5.4 GB of third-party packages. Added `.venv-*/` at both the `servers/` and DP
+roots, and proved it with throwaway probe directories:
+
+```
+  IGNORED: servers/ast/.venv-rebuild
+  IGNORED: servers/ocr/.venv-corrupt-20260807
+  IGNORED: servers/pyannote/.venv-discard-99
+  IGNORED: data-processing/.venv-rebuild
+  git status --porcelain | grep '\.venv-'  ->  no output
+```
+
+Probes removed after the proof. The guard stays even though the directories are currently
+gone, because the next repair recreates them.
+
+## 2. The extended census
+
+Added the bare words `rebuild` and `cutover`; ran `migration`, `legacy` and `v0` as
+review-only signals.
+
+**Cleaned.** `field-guide.html` body: the lede no longer says the guide teaches "the v1 model
+that replaced the old multi-record, in-place-mutation design at cutover" — it says what the
+system is (one record per chunk, slots written once). Two further "at cutover" claims became
+"against the live fleet". In `app/` and `tests/`, every `(DP rebuild)` / "Dead with the
+rebuild" / "Rebuilt for the DP rebuild" marker was rewritten to state the current rule; the
+`app/vision/ocr/__init__.py` dead-module list became "what this package deliberately does NOT
+hold, and where each thing lives instead".
+
+**Result.**
+
+```
+=== EXTENDED CENSUS — 'rebuild' / 'cutover' inside DP tree ===
+HANDOFF.md:47:`huggingface-hub`, so rebuilding that venv from requirements alone does not reproduce the
+HANDOFF.md:50:**Why it's this way** — it was caught live: a rebuild resolved `huggingface-hub` to 1.27.0
+servers/ast/requirements.txt:6:# torch 2.8.0+cu128; the explicit index below makes a rebuild reproduce the cu128
+servers/whisper/requirements.txt:11:# (surfaced at /health.frameworks too); hub/tokenizers pinned so a rebuild cannot
+servers/pyannote/requirements.txt:3:# torch 2.8.0+cu128; the explicit index below makes a rebuild reproduce the cu128
+app/continuity.py:190:        """Rebuild per-stream state from the durable journal at boot (both modes).
+(end)
+
+=== ORIGINAL narrative census (must stay zero) ===
+(end)
+```
+
+**Zero old-world hits. Zero `cutover` anywhere.** The six survivors are exemptions, and each
+is the ordinary English verb, never the era: five mean *reinstall a virtual environment* (the
+`huggingface-hub` card and three `requirements.txt` comments) and one means *reconstruct
+in-memory state from the journal*. Standing exemptions from earlier rounds are unchanged:
+`.venv/`, `__pycache__`, `app/vision/prompts/LOCK.json`, `readings/`, and the negative guards
+that name a prohibition as their subject.
+
+**Review-only signals**, reported not cleaned: `migration` 0, `legacy` 14, `v0` 143 across 50
+files. The `v0` surface is dominated by the exempt `c2_processed_record.v0.json` contract, the
+retired-dialect strings inside negative guards, and `servers/*` provenance. Judging it is
+phase-3 work.
+
+## 3. `servers/` finished, and proved the same way as `app/`+`tests/`
+
+Eleven sites, all comments, all traceable to the token pass inside the earlier restore
+(`9dbfd2f`). Each was rewritten into a proper sentence, with the pre-sweep text consulted so
+the *meaning* came back and not just the grammar:
+
+| Was | Now |
+|---|---|
+| `framework ( L9 machinery)` | `framework (L9 machinery)` |
+| `Only called after load.` | `Only called after load()` |
+| `framework .` | `framework.` |
+| `""" hardening:` | `"""A hardening rule:` |
+| `app/model_client.py :` | `app/model_client.py:` |
+| `infer must refuse` | `infer() must refuse` |
+| `The original␣␣hardening's presentation` | `The transport-error presentation of the same rule, pinned alongside the 5xx one.` |
+| `app/supervisor.py :` | `app/supervisor.py:` |
+| `whose load raises` | `whose load() raises` |
+| `the framework calls load once` | `the framework calls load() once` |
+| `pyannote speaker diarization .` | `pyannote speaker diarization.` |
+
+**Proof — both diffs identical, no whitespace-only change:**
+
+```
+=== app/ + tests/ ===
+  plain           :  58 files changed, 243 insertions(+), 261 deletions(-)
+  ignore-all-space:  58 files changed, 243 insertions(+), 261 deletions(-)
+=== servers/ ===
+  plain           :  18 files changed, 43 insertions(+), 302 deletions(-)
+  ignore-all-space:  18 files changed, 43 insertions(+), 302 deletions(-)
+```
+
+**Proof — AST modulo docstrings, now run over `servers/` too:**
+
+```
+########## AST PROOF — servers/ ##########
+changed files vs main : 18
+  deleted this phase  : 1  ['drill_stage_b.py']
+  non-.py             : 7  ['.gitignore', 'README.md', 'pyproject.toml', 'README.md', 'requirements.txt', 'README.md', 'PROVENANCE.md']
+  .py under proof     : 10
+
+AST-identical modulo docstrings : 10 / 10
+files with any other difference : 0
+
+CONCLUSION: every surviving servers/ .py difference is comment or docstring text.
+```
+
+`servers/` is cleaner than `app/`+`tests/`: it carries **no** string-literal exceptions. The
+two message-string deviations declared in round 2 (`supervisor.py` argparse help,
+`test_t3_version_composition.py` skip reason) remain the only ones in the phase, and both
+still show `statement structure identical (strings blanked): True`.
+
+## 4. Also fixed this round
+
+- **`recording/DECISIONS.md` R-2** — the actually-mandated "Detail:" pointer now aims at the
+  DP charter's ingest-processing-mode entry (open question 13), which states the 202/200/503
+  replies as the joint contract.
+- **`storage/HANDOFF.md:58`** — a cross-reference to "§The DP rebuild's joint rows" that
+  round 2 **broke by renaming that heading**. Repointed at the live anchor. Self-inflicted, so
+  fixed here rather than deferred.
+- **`servers/pyannote/README.md`** — round 2's edit left a sentence fragment ("The diarization
+  behavior: ffmpeg pre-decode…") and silently dropped a provenance fact. Both restored: the
+  behaviour is now attributed as smoke-validated on node-7, 2026-07-19.
+- **`app/pipeline.py`** — the reflow left ragged three-word lines and a dangling `§4`
+  reference. Rewrapped; the citation now names T-1, which exists.
+- **Restamped** `storage/HANDOFF.md` and `recording/HANDOFF.md`, each naming what this round
+  changed.
+
+## 5. The supervisor process model — an accuracy fix
+
+The venv repair established a fact the teaching surface did not carry: **the supervisor is not
+a separate process.** It is a task inside the DP service, started by `main.py`'s lifespan under
+`DP_SUPERVISOR`, which makes the DP process the direct **parent** of all eight model-server
+replicas. Killing DP takes the fleet with it, and the pid owning a replica is DP's.
+
+A newcomer holding the wrong model kills the wrong pid, so this is now stated in four places:
+`app/supervisor.py`'s docstring, the DP `CHARTER` L9, the DP board's §Where we are, and the
+field guide's supervisor section. The field guide's vocabulary entry already said "a supervisor
+that lives in DP" and was correct.
+
+## 6. Owed phase-3 work — updated
+
+Two `§Condensed history` references added to the table. The first is worse than a dead link:
+its **anchor is broken and its link text carries an old-world token**, so a reader sees the
+retired vocabulary before discovering the target is gone.
+
+| File | Line | Dead target |
+|---|---|---|
+| `product/ARCHITECTURE.md` | 141 | `…/CHARTER.md#condensed-history-…` (broken anchor; link text reads "§Condensed history") |
+| `product/onboarding/LEARN_LOOP.md` | 47 | `…/CHARTER.md` §Condensed history (+ a `refactor_dp_service.md` link on the same line) |
+| `product/HANDOFF.md` | 161 | `…/handoff/ws-video-clip.md` |
+| `product/HANDOFF.md` | 175 | `…/docs/refactor_dp_service.md` |
+| `product/contracts/README.md` | 100 | `…/docs/refactor_dp_service.md` |
+| `product/handoff/engineering.md` | 131 | `…/handoff/ws-video-clip.md` |
+| `product/handoff/engineering.md` | 1282 | `…/handoff/ws-dp-hardening.md` |
+| `product/handoff/engineering.md` | 2140 | `…/handoff/ws-async-observability.md` |
+| `product/onboarding/LEARN_LOOP.md` | 49 | `…/docs/refactor_dp_service.md` |
+| `product/services/recording/HANDOFF.md` | 38 | `…/handoff/ws-m1-continuity-asr.md` |
+
+### `storage/HANDOFF.md` — the accurate deferral
+
+Round 2's disclosure named two lines. The board actually narrates the transition in four
+places, and one is live drift rather than stale prose:
+
+| Line | What it still says |
+|---|---|
+| Status block, `:15–18` | "the DP rebuild cut over at Stage F", "the `dp-v0-live` worktree retired at the cutover", "wiped fresh-forward, OD-2" |
+| `:54–58` | the superseded D18 dedup rule, stated in `ingest_time` / `content.kind` / `discriminator` — **live drift**, since the running renderer dedups latest `updated_at` per `(chunk_id)` |
+| §Next row 0 | "With the rebuild cut over", "the Stage F soak proved synthetically" |
+| §Next row 1 | "rebuild Stage E → cut over at Stage F" |
+
+`recording/HANDOFF.md`'s own status line carries the same framing ("the DP rebuild cut over",
+"Stage F soak"). All of it is cross-service sweep work, deliberately left for phase 3; only
+the cross-reference this phase broke was fixed now.
+
+## 7. Scope note — what this branch actually carries
+
+The venv-repair session committed **`37d0a39` (`docs/venv_repair.md`)** onto
+`cursor/purge-phase2-dp`, so it merges with the purge. It is a worklog only — no code, no
+config — but the merge is not purely a documentation purge and should not be described as one.
+
+Full branch contents, `main..HEAD`:
+
+```
+580bbd1 dp: ignore side-by-side rebuild venvs (.venv-*/)
+37d0a39 worklog: repair three model-server venvs corrupted by the doc sweep
+e462414 purge phase 2: verification round 2 worklog
+16c3ed3 dp purge: teach the service, not the transition
+f4d9cf6 style: meet the ratchet instead of raising it
+d240910 dp: define the module logger in clipcap (latent NameError)
+009183f dp purge: repair the bad sweep transform across app/ and tests/
+6c33604 dp purge phase 2 exit: worklog, style baseline, server README polish
+9dbfd2f dp purge: restore servers/ after bad sweep transform
+b6843a6 dp purge: surgical comment/docstring sweep
+8633a66 dp purge: delete calibrate_delta, vlm_probe, drill_stage_b (inert)
+a90b4aa dp purge: fresh board + onboarding
+9990346 dp purge: rewrite CHARTER
+ad61898 dp purge: delete handoff ws-* + worklog (inert)
+81ea672 dp purge: delete rebuild plan + stage worklogs (inert)
+81d531e dp purge: rescue L5 silent-overwrite + §4 transplants
+3d2739c register corrections under D29 (founder ruling 4)
+1197bc6 founders' act D29: suspend append-only for this stage
+```
+
+## 8. Owed engineering item recorded (not done)
+
+DP board §Next 7 + card: `servers/ast/requirements.txt` pins `transformers` but not
+`huggingface-hub`, so rebuilding that venv from requirements alone does not reproduce the
+running environment — caught live at 1.26.0 → 1.27.0 and worked around with a constraints
+file. Deliberately **not** pinned here: package versions surface in `/health.frameworks` and
+feed the identity the model client verifies, so choosing the pin is choosing what the ast
+server declares itself to be.
+
+---
+
+## Exit evidence — round 3
+
+### Suites
+
+| Suite | Tail |
+|---|---|
+| data-processing | **569 passed, 4 skipped** in 56.04s |
+| storage | **354 passed** in 16.42s |
+| continuum | **264 passed, 7 skipped** in 10.62s |
+| recording | **144 passed** in 28.99s |
+| servers/common | **30 passed** in 21.98s |
+
+### Style ratchet
+
+```
+baseline written: 330 findings across 58 files
+STYLE.md: no regressions (330 known findings held at baseline)
+
+file                                                        main  HEAD  verdict
+----------------------------------------------------------------------------------
+product/ORG.md                                                 2     1  shrank
+product/services/data-processing/CHARTER.md                   36    23  shrank
+product/services/data-processing/HANDOFF.md                    6     4  shrank
+
+held at baseline: 55 files
+deleted this phase: 20 files, 837 findings
+
+FILES THAT GREW AGAINST MAIN: 0
+TOTAL findings: main 1183 -> HEAD 330
+```
+
+The new HANDOFF card and CHARTER bullet added this round cost zero findings.
+
+### Fleet — read-only, GET /health
+
+```
+=== TWELVE PORTS (2026-08-07T21:06:38Z) ===
+  8083 200  8084 200  8085 200  8121 200  8122 200  8131 200
+  8132 200  8141 200  8142 200  8151 200  8152 200  8161 200
+  DP video dialect: clipcap.v1-vlm.v1+clipprep.v1-ffmpeg.v1+screentext.v1-ppocr.v1
+```
+
+`clipcap.v1-vlm.v1` — the pending dialect flip still has not happened. No service was
+restarted, killed or POSTed to this round.
+
+Phase 3 **not started**.

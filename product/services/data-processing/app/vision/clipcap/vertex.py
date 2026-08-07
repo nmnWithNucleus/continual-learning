@@ -6,7 +6,7 @@ per second of video → an 8 h screen day is 15.2 M prompt tokens → $30.4/user
 36–72× the self-hosted figure. Indefensible for continuous capture, so this module exists
 to prove the seam and record the verified call shape — it does not run.
 
-DELIBERATELY UNREGISTERED (DP rebuild): no stage constructs ``Backend("vertex", …)``, so
+DELIBERATELY UNREGISTERED: no stage constructs ``Backend("vertex", …)``, so
 the oracle can never appear in a ``pipeline_version`` by accident. Enabling it is a
 separately-budgeted decision made in code — build a one-off harness (or an ``.exp-``
 dialect stage) that calls this module; there is no env switch to flip (L4).

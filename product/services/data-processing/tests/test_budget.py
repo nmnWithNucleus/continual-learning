@@ -1,8 +1,8 @@
 """The character budget (D-11): span-parametric caps + deterministic truncation.
 
-Rebuilt for the DP rebuild (L4): the rates are explicit arguments now — the live
-values are code pins in the stage files (clipcap: 16, screentext: 6; the v0 22-total
-split), not env knobs. These tests exercise the math at those pinned rates.
+The rates are explicit arguments (L4): the live values are code pins in the stage
+files (clipcap 16, screentext 6, splitting 22 total), never env knobs. These tests
+exercise the math at those pinned rates.
 """
 from __future__ import annotations
 

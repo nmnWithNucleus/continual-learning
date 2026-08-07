@@ -34,7 +34,7 @@ class ModelBackend:
 
     def identity(self) -> dict:
         """What this server actually runs — model_name, weights (revision/hash),
-        frameworks (package versions), device. Only called after load."""
+        frameworks (package versions), device. Only called after load()."""
         raise NotImplementedError
 
     def infer(self, request: InferRequest) -> dict:

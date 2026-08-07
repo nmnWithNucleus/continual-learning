@@ -20,7 +20,7 @@ change events, capped — is ``clipprep``'s delta gate; here we run everything A
   6. render to ONE line (no ``\n`` ever — D-12; separator ``" · "``), truncated at the
      chars-per-second-of-life budget (D-11) on a WORD boundary.
 
-NO CONFIG (DP rebuild, L4): the thresholds arrive as EXPLICIT keyword arguments; the one
+NO CONFIG (L4): the thresholds arrive as EXPLICIT keyword arguments; the one
 live set of values is pinned in ``app/stages/video/screentext.py`` under that stage's
 backend version. Pure functions of their inputs — identical reads + pins → identical
 string on every worker.

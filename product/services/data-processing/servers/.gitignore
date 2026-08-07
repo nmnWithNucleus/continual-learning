@@ -1,7 +1,7 @@
 logs/
 .venv/
-# Side-by-side venvs from a rebuild-beside repair (.venv-rebuild, .venv-corrupt-<date>,
-# .venv-discard-*). Each is multi-GB; without this a `git add -A` stages the whole fleet.
+# Side-by-side venvs built next to the live one during a repair. Each is multi-GB;
+# without this pattern a `git add -A` stages the whole fleet's third-party packages.
 .venv-*/
 __pycache__/
 .pytest_cache/
