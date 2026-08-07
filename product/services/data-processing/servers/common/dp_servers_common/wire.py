@@ -1,6 +1,6 @@
 """Request/response schemas — the one wire contract all model servers speak.
 
-Inputs ride base64 in JSON (the OCR sidecar's proven posture); results are
+Inputs ride base64 in JSON (the v0 OCR service's proven posture); results are
 server-specific JSON under a common envelope. `params` carries the per-call
 operation parameters a stage pins in its own code (Stage C) — the server never
 reads behavior from env (L4).

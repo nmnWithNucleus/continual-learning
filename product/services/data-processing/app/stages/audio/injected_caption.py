@@ -10,7 +10,7 @@ knobs are dead (L4): INJECT_CAPTION_BACKEND died into the ``index`` backend
 name in the dialect segment, INJECT_CAPTION_INDEX became the constructor
 argument.
 
-Ported v0 semantics (the old sidecar, verbatim where it matters):
+Ported v0 semantics (the old injected-caption stage, verbatim where it matters):
   * THE JOIN IS WALL-CLOCK, and it has to be — a replayed chunk's ids are
     freshly-minted ULIDs, so the shared spine is the only join key. A chunk's
     captions are the index rows whose ``t_start`` falls inside the chunk's C1

@@ -1,6 +1,6 @@
 # DP Rebuild — Stage G worklog (Demolition & Docs)
 
-**Stage:** G — Demolition & docs · **Status:** IN_PROGRESS · *Dated:* 2026-08-07
+**Stage:** G — Demolition & docs · **Status:** DONE 2026-08-07 — the rebuild is history · *Dated:* 2026-08-07
 **Branch:** main (the rebuild is merged; `dp-rebuild-v1` is history) · **Plan:** [refactor_dp_service.md](refactor_dp_service.md) §8 Stage G, §9 file disposition, §10 condensed history
 **What this stage is:** the rebuild's last act — delete the dead v0 code the beside-build
 left standing, and rewrite the docs that still teach the v0 world. This is the D22 debt
@@ -206,3 +206,77 @@ rebuild pending on a branch; each is flipped to the live v1 world with the next 
 
 The rebuild is now history on every board; the next phase (client live-stream testing) is seeded as
 the forward-looking item on all five.
+
+## WP-G8 — style_check ratchet re-baselined
+
+`product/scripts/style_check.py --baseline` re-cut against the post-rewrite tree:
+**1183 findings across 78 files** (was 360 across 58; re-cut once more at the Stage G close after
+the worklog and the code scrubs settled — 1178 → 1183). The checker then reports no regressions.
+
+The number rose because the old baseline was stale since ~Stage A and never re-cut through the
+rebuild: the append-only stage worklogs alone dominate it (`refactor_stage_C.md` 159,
+`refactor_stage_F.md` 122, `refactor_stage_D.md` 114, `refactor_stage_E.md` 99, this
+`refactor_stage_G.md` 96, `refactor_stage_B.md` 63, the plan 54 — ≈ 700 of the 1178), where
+disposition prose uses caps verbs (`DELETE`/`KEEP`/`REWRITE`/`EXECUTED`) as the worklog idiom, plus
+the Stage-F deploy files (`ROLLBACK-stage-F.md`, server `PROVENANCE.md`) that were never previously
+baselined. The teaching surfaces are a small minority and barely moved (CHARTER 36, each board
+11–13). The ratchet's law — shrink, never grow — resumes from this honest floor; the worklogs are
+history and are not the place to spend the shrink.
+
+## WP-G9 — EXIT
+
+**Dead-vocabulary grep.** `discriminator|mutate|sidecar|best_effort|DIALECT_FREEZE|INGEST_ISOLATION|ProcessedUnit|emission law`
+over `product/` (venvs/caches excluded): **502 occurrences across 65 files**, every one in an
+allowed home. The split:
+
+- **360 occurrences — worklogs, the plan doc, and history** (`docs/refactor_stage_*.md`, the
+  plan `refactor_dp_service.md`, `handoff/*` worklogs, `product/onboarding/LEARN_LOOP.md`,
+  `style_baseline.json`): the exit's explicit allowance.
+- **142 occurrences — history in a live file, each a sanctioned form:**
+  - **Dead-concept lists + §Condensed history** naming a retired concept precisely to bury it:
+    the DP CHARTER (§Slot Law dead-concepts list, §Condensed history, §On C2 naming the absence),
+    `DECISIONS.md` (D23/D24 rows), `ARCHITECTURE.md` (the retired Vocabulary row + C2/C10 card
+    §How-it-got-here), and `app/stagegraph/stage.py`'s dead-concepts docstring.
+  - **The contract schemas** — the archived `c2_processed_record.v0.json` (which legitimately has
+    the discriminator) and `c2_processed_record.v1.json` (which names it only to say *do not
+    re-add it*, L3).
+  - **Storage's retained v0-parity reference** — `scripts/daylog_parity_diff.py`, `app/daylog.py`,
+    the storage CHARTER's C10 card and its tests, and continuum's `synth.py`/`test_daylog.py`
+    local parity path: the deliberately-kept v0 renderer reference the D20 bar is measured against.
+  - **Tests asserting the concept is gone** — `test_t2_one_record` ("no discriminator"),
+    `test_stage_registry` (asserts `R1_EXEMPT_SIDECARS` etc. are absent), `test_ocr_assemble`
+    ("the ppocr sidecar client died"), and peers.
+  - **In-code condensed history** — the `config.py` dead-knobs docstring, `main.py`'s
+    `DP_DIALECT_FREEZE`-died note, `pipeline.py`/`models.py`'s "no discriminator", `diarize.py`'s
+    "the v0 stage mutated in place" contrast — the L9/D26-sanctioned "what this replaced" notes
+    that stop a future reader re-adding the dead thing.
+  - **Generic English / unrelated** — `input`'s "does not mutate the message body",
+    `probes.py`'s "`.gold.jsonl` sidecar" (a companion file), continuum's Phase-3 historical
+    bridge scripts.
+
+  No hit teaches the retired v0 world as a live, current feature. The live DP code + docs were
+  scrubbed of the one word that read as still-present (`sidecar`) except where it names the
+  deletion; `discriminator`/`mutate`/`INGEST_ISOLATION`/`DP_DIALECT_FREEZE` survive only as the
+  tombstones that forbid their return.
+
+**All suites green (tails pasted):**
+
+```
+data-processing : 569 passed, 4 skipped   (.venv/bin/python -m pytest -q)
+storage         : 354 passed              (17.33s)
+continuum       : 264 passed, 7 skipped   (12.67s)
+servers/common  : 30 passed               (21.59s)
+```
+
+**Live fleet 200s.** Every port answered 200 before and after each Part-2 commit (checked inline at
+each commit); a final sweep at close: storage :8083, recording :8084, DP :8085, captioner :8161,
+and the eight model servers 8121–8152 all 200.
+
+**style_check ratchet** re-cut against the final tree (WP-G8; re-run at close after the worklog and
+the code scrubs settled) — the recorded floor is in that section.
+
+**Push at close (R1).** The Part-2 commits are pushed to `origin/main` at this close.
+
+Stage G is DONE — the rebuild is history. The v1 service runs; the paper describes the world that
+runs; the dead code and the dead vocabulary are gone from everywhere but the record of why they
+existed.

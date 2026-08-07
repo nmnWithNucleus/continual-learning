@@ -8,7 +8,7 @@ deterministic secret scrub, an access control not a knob).
 
 Dead with the rebuild (v0 → v1 dispositions):
 
-  * ``ppocr.py`` — the sidecar HTTP client (bespoke ``POST /ocr`` wire, per-process
+  * ``ppocr.py`` — the v0 OCR HTTP client (bespoke ``POST /ocr`` wire, per-process
     ``/health`` sha assertion). Superseded by ``servers/ocr`` + ``app/model_client.py``:
     the stage calls ``ctx.clients["ocr"].infer`` on the framework ``/infer`` envelope,
     and the det/rec sha pins moved into ``servers/manifest.json`` ``expected_identity``

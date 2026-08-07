@@ -22,7 +22,7 @@ RAISES (refusing a corpus with the majority of on-screen text lost) — now a ho
 heal instead of v0's redelivery.
 
 Identity: the det/rec model shas the v0 config pinned (``VIDEO_OCR_MODEL_SHA_DET/REC``
-asserted against the sidecar's ``/health``) now live in ``servers/manifest.json``
+asserted against the v0 OCR service's ``/health``) now live in ``servers/manifest.json``
 ``expected_identity.weights.det_sha256/rec_sha256``, verified by ``ModelClient``
 before a replica serves its first call — same guarantee, one home. The server's
 engine settings (PP-OCRv4 det+rec, cls off, 4 threads, CPU EP) are pinned in
@@ -40,7 +40,7 @@ Code pins below (L4) — the v0 env knobs they replace (v0 defaults carried forw
   =========================  ==================  =====
 
 Frame-time matching keeps v0's ``_MATCH_TOL_S = 0.25`` float-jitter tolerance.
-The old sidecar's 48 MB request-body cap is NOT carried forward: clipprep pins
+The v0 OCR service's 48 MB request-body cap is NOT carried forward: clipprep pins
 ``ocr_frame_width=1728``, so a frame JPEG is bounded well under 2 MB by construction
 and the cap is unreachable — a framework-level body limit would guard nothing.
 """

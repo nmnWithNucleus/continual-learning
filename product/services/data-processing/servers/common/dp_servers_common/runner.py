@@ -1,7 +1,7 @@
 """Process entrypoint helper: `serve(backend)` is each server.py's whole main.
 
 Reads ONLY operational env (L4): DP_SERVER_HOST (default 127.0.0.1 — loopback,
-the sidecar posture), DP_SERVER_PORT (required), DP_SERVER_LOG_LEVEL. A load
+the v0 OCR service's posture), DP_SERVER_PORT (required), DP_SERVER_LOG_LEVEL. A load
 failure exits the process non-zero (fail loud) so the supervisor sees a crash,
 not a zombie replica.
 """

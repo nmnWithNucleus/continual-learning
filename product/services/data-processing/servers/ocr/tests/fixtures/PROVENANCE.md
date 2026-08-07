@@ -33,7 +33,7 @@ in every run):
 }
 ```
 
-(These are the same det/rec shas the retiring sidecar serves — same bundled
+(These are the same det/rec shas the v0 OCR service served — same bundled
 ch_PP-OCRv4 ONNX pair.)
 
 ## Runs
