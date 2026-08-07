@@ -352,6 +352,172 @@ whole point; the flip happens there, not here. **E-3(b) board rows annotated
 resolved** (product/HANDOFF.md ×3 sites, platform and DP boards) per the gate
 ratification; the OQ3 charter edit rides Stage G's paper sweep.
 
+## WP-F2 — the drills (live stack; any failure stops the line)
+
+### Drill 1 — D16 redrive (the standing async-default gate, paid)
+
+`INGEST_ASYNC=1` added to learn.env (dated comment); DP restarted `05:56:31Z`;
+`/health` flipped to `ingest_mode: async`; fleet respawned 8/8 by `05:57:15Z`.
+First capture attempt used `POST /capture/run` — the M0 smoke door — and its 3
+chunks processed green (3×202, journal + storage confirmed) but wrote NO ledger
+rows: that door bypasses the durable capture ledger by design. Recorded as a
+lesson, not a failure: the drill re-ran through the durable door
+(`POST /capture/segments`), which is the path a real device drives.
+
+Durable capture `f2-d16` (user `u-f2-drill`): one 60 s + eight 10 s WAV segments
+→ 9 chunks, each 202-accepted by the async DP. **Honest disclosure on the crash
+shape:** the plan was SIGKILL mid-processing (in-flight loss); the worker queue
+outran the operator — at the moment all 9 were accepted the journal already
+showed every record processed. The kill (`SIGKILL pid 536333, 06:10:36Z`)
+therefore sprang the OTHER crash window: records durable, receipts unpropagated,
+recording holding 9 `accepted` rows against a fully-done journal — the exact
+reconciliation `dp_acked ⇔ C2-durable` exists for; the lost-in-flight shape
+remains covered by the committed kill-9 replay tests (T-5 §4). The SIGKILL
+orphaned the model-server fleet (teardown never ran) — ports cleared with
+`fuser -k` before relaunch, an operational note for the runbooks.
+
+DP relaunched (pid 545235, boot redrive found 0 pendings — correct, nothing was
+in flight); fleet 8/8 by `06:11:50Z`. Redrive, pasted verbatim:
+
+```
+redrive: 2026-08-07T06:12:04Z
+{"ok":true,"capture_id":"f2-d16","redriven":9,"confirmed":9,"still_accepted":0}
+--- ledger after redrive:        processed|9
+--- DP /ingest 200s (done-dedup hits) during redrive: 9
+--- updated_at diff vs pre-redrive snapshot:  IDENTICAL — no re-window, no new records
+--- records per chunk:           9|9
+```
+
+Every redelivery answered the D16 done-hit shape (200 + record_ids, zero 202s);
+both ledgers reconverged; the pre/post `updated_at` snapshot is byte-identical
+(the §5.1 no-op-upsert held on the live wire); exactly one record per chunk.
+**The gate is paid — async stays the operating mode.**
+
+### Drill 2 — version-forward (controlled vB bump, scratch dialect, live storage)
+
+Scratch user `u-f2-vfwd`, scratch mock dialect, LIVE storage — no fleet involvement,
+no real users. Two in-process scratch DP apps sharing one journal: app A at
+`asr.v1-mock.v1` landed R1 (`2a8e17b4…`); app B — the same stage with
+`Backend("mock", 2)`, distinct canned text — redelivered the SAME C1 and the
+journal's version-compare produced the version-forward verdict. Pasted:
+
+```
+[d2] A: POST /ingest (asr.v1-mock.v1) -> 200 record_ids=["2a8e17b4…"]
+[d2] R1 in live storage: pv=asr.v1-mock.v1 updated_at=2026-08-07T06:15:30Z
+[d2] B: redeliver under asr.v1-mock.v2 -> 200 record_ids=["bd3729b9…"]
+[d2] BESIDE: R1 2a8e17b4eb40… pv=asr.v1-mock.v1 updated_at=UNCHANGED
+[d2]         R2 bd3729b9b087… pv=asr.v1-mock.v2 (same chunk_id: True)
+[d2] window open -> 409 … "window end is not strictly greater than the floor"
+[d2] window open -> 200 window_id=w20260807T061534Z
+[d2] day-log stamps: contract=C10 version=2 format=2 recipe=consolidation-v2.0
+[d2] next-window content: v2-dialect lines=2, v1-dialect lines=0
+[d2] E-2 dry-run: records=2 by_pipeline_version={mock.v1:1, mock.v2:1} day_logs=1
+[d2] E-2 wet: identical counts; R2 GET -> 404; post-wet dry-run: records=0 day_logs=0
+[d2] window closed (operator abandon verb) -> 200 outcome=crashed
+[d2] DRILL 2 PASSED
+```
+
+Two live facts worth their ink: the first window open was REFUSED (409, "window
+end is not strictly greater than the floor") because the drill records' `updated_at`
+sat inside the settle lag — the D27 axis defending its own invariant on the live
+wire; twenty seconds later the same call returned 200. And the next-window proof is
+content-level: the rendered day-log carried the v2 dialect's lines only (2 v2 / 0
+v1) while R1 stayed durable beside — beside-semantics for lineage, latest-wins for
+training, exactly D27's bargain. Cleanup verified to zero; the scratch profile row
+remains (C12 rows are declared facts with no delete verb — noted, harmless).
+
+### Drill 3 — live heal (ast down, hole ships, heal on redelivery, skip)
+
+Against the LIVE fleet, user `u-f2-heal`. Both ast replicas SIGKILLed
+(`06:19:07Z`, pids 545274/545276); a real 10 s chunk shipped into the hole window
+one second later through the durable door. Pasted:
+
+```
+journal done-row: {"acoustic":"failed","asr":"ok","diarize":"ok","speaker_align":"ok"}
+record 30ca082e… slots: ['asr','diarization','transcript']        <- honest hole
+ast respawned by supervisor, both replicas healthy: 06:19:35Z     <- ~28 s, no operator hand
+redrive -> {"redriven":1,"confirmed":0,"still_accepted":1}        <- the HEAL claim (202), not a done-hit
+healed 06:19:48Z: {"acoustic":"ok",…} same record_id, updated_at 06:19:10Z -> 06:19:37Z
+acoustic slot: {"version":"acoustic.v1-ast.v1","values":["chirp tone","sine wave","singing bowl"],…}
+[d3] BYTE-CHECK healed vs clean-fleet twin slots: IDENTICAL
+[d3] confirming redrive -> {"redriven":1,"confirmed":1,"still_accepted":0}
+[d3] pure-skip re-POST of the ORIGINAL C1 -> 200 record_ids=["30ca082e…"]
+[d3] ast server-call counters across the skip: UNMOVED
+[d3] DRILL 3 PASSED
+```
+
+Every clause of the drill spec landed: the hole was honest (attempted, absent),
+the SUPERVISOR restarted ast (the restart-on-crash story proven live, ~28 s),
+the redelivery drew the heal claim not a skip, the healed record kept its
+record_id and bumped `updated_at` (D27's accepted double-training), the
+byte-check against a clean-fleet twin (same bytes, same C1 times, fresh
+chunk_id) came back IDENTICAL, the ledger reads all-ok, and the final
+redelivery was a pure skip — 200 + the healed record id with the ast
+server-call counters unmoved. The twin was retracted after the comparison
+(E-2, records=1). The AST's real tags for a synthetic tone WAV — "chirp tone,
+sine wave, singing bowl" — are the model being honest about test audio.
+
+### Drills 4 + 5 — the first real day-log, with a real-VLM Scene line
+
+One flow, deliberately: the committed video fixture was captured through
+recording's DURABLE door (`f2-video`, user `u-f2-drill`, `06:22:03Z`) so the
+first real day-log would carry both modalities. The video chunk processed
+through the live fleet — real clipprep, real ocr replicas, real Qwen3-VL on
+:8161 — and its redelivery confirmed as a done-hit
+(`{"redriven":1,"confirmed":1,"still_accepted":0}`). Then the window. Pasted:
+
+```
+[d4] window open -> 200 w20260807T062800Z [2026-08-07T06:04:00Z .. 2026-08-07T06:28:00Z] state=open
+[d4] GET /training/daylog -> 200; stamps: contract=C10 version=2 daylog_format_version=2 recipe_id=consolidation-v2.0
+c10_daylog.v2.json validation: CLEAN — 0 violations
+[d4] body: 1 segments, 1 blocks, fingerprint ae7cb8a452cb53b7…
+[d5] SCENE LINE, verbatim: 'Scene: an unidentified presentation application — switching between slides.'
+[d4] continuum pins: SUPPORTED_DAYLOG_FORMAT_VERSIONS=('2',) recipe_id=consolidation-v2.0
+[d4] CONTINUUM ACCEPTED THE STAMPS on a real fetch: DayLog(window_id='w20260807T062800Z',
+     segments=1, blocks=1, fingerprint=ae7cb8a452cb53b7…)
+[d4] fingerprints match storage's body — same day-log, both sides
+[d4][d5] DRILLS 4+5 PASSED
+```
+
+The rendered block, in full — the first real-VLM Scene line to reach a training
+corpus, with the C12 home-tz conversion doing its quiet work (06:22Z →
+23:22 the prior local day):
+
+```
+On 2026-08-06, around 23:22–23:22 local time:
+Scene: an unidentified presentation application — switching between slides.
+World text (OCR): +2s main: SLIDE42Q3revenue · +4s main:
+```
+
+Two honest notes. The day-log has no Heard lines and one segment: the drill's
+nine audio chunks are SYNTHETIC TONES — whisper correctly heard no speech, the
+transcripts are empty, and the v2 renderer renders absence as absence rather
+than inventing rows (the audio records are in-window on the `updated_at` axis;
+they simply contribute nothing hearable). Real speech arrives with the soak's
+pilot day. And the caption is byte-identical to the F0a smoke's caption — the
+pack-pinned decode params holding across two independent calls. The continuum
+acceptance ran under continuum's own venv through `HttpDayLogClient` over a real
+socket — the same class, same gate, same pins that will fetch tonight's window;
+the window is left OPEN for the soak night by design.
+
+## WP-F3 — soak setup (the stage stays open)
+
+The fleet is LEFT CAPTURING: recording :8084 (never restarted through any of
+this), storage :8083, DP :8085 (async — the paid D16 default), the eight model
+servers on their manifest ports, vLLM :8161. Nothing scheduled, per the brief.
+
+**Soak-exit definition (plan §8 Stage F exit, recorded verbatim as the bar):**
+one full pilot day captured → processed → day-log rendered → trained end-to-end
+on v1. Concretely for the verdict: (1) a real pilot day's chunks land through
+recording's durable door and every one reaches `dp_state=processed` with the
+gap-report clean; (2) the day's records are C2 v1, schema-clean, under the
+composed real pipeline_versions; (3) the day-log for the pilot's window renders
+under the v2 stamps and validates against `c10_daylog.v2.json`; (4) a continuum
+night consumes that window end-to-end — fetch accepted, corpus rendered,
+train + gate + publish per recipe consolidation-v2.0 — and the window closes
+`published` with the C5 lineage row present. The soak verdict closes this stage
+tomorrow; until then **Status stays IN_PROGRESS** and Stage G does not start.
+
 ## 2026-08-07 — GATE 1 verification round (founder, 3 lenses; fixes applied)
 
 > verification · an independent 3-lens round over the first GATE 1 post, the wipe
