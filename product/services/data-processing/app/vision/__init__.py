@@ -7,8 +7,7 @@ under ``app/stages/video/`` call into.
   * ``clipcap`` — the one-multi-image-call VLM wire (+ the vertex oracle stub) for
     the ``clipcap`` stage; ``prompts`` — the prompt pack whose aggregate digest the
     stage pins in code.
-  * ``parse`` — the tolerant caption parse ladder; ``budget`` — the char-budget math;
-    ``circuit`` — the endpoint breaker (present, unwired — see the module docstring).
+  * ``parse`` — the tolerant caption parse ladder; ``budget`` — the char-budget math.
 
 NO CONFIG anywhere in this package (L4): the v0 ``config.py``/``mode.py``/``version.py``
 env machinery is dead — every output-affecting knob is a code pin in a stage file, and

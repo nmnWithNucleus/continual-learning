@@ -79,3 +79,14 @@ safe — the design survives here and in git):**
 > 4. The storage-poison guard (`_forbid_storage`) and the scorers are still sound
 >    and can be lifted as-is; `DP_OFFLINE_EVAL` keeps its serving-guard role in
 >    `app/main.py` for whatever replaces this driver.
+
+### Commit — `app/vision/circuit.py` retired
+
+| Target | Disposition |
+|---|---|
+| `app/vision/circuit.py` (`CircuitBreaker`, `breaker_for`, `reset_all`, `CircuitOpenError`, the CLOSED/OPEN/HALF_OPEN state machine) | **RETIRE (delete).** Plan §9 listed it KEEP, but the brief overrides: it has been **wired nowhere through all five rebuild stages** (its own docstring said so — "present and tested, WIRED NOWHERE"). Its two v0 customers changed shape in v1: the OCR path rides `app/model_client.py` (replica rotation + bounded transient retry against the supervised fleet, which the supervisor restarts on crash), and the VLM endpoint is the optional `clipcap` stage whose failure is a hole healed by redrive (L7/L8). The one honest remaining use — fast-failing before `clipprep`'s ffmpeg during a sustained captioner outage — would have to live ABOVE the graph, not in this module, and nobody built that. The modern coverage is ModelClient rotation + heal; the breaker is dead weight. |
+| `tests/test_circuit.py` (7 breaker tests) | **DELETE** — they go with the module, exactly as the brief directs. |
+| `app/vision/__init__.py` | **EDITED** — the one docstring line naming `circuit` as "present, unwired" removed. |
+
+Evidence: `app.main` imports after removal; DP suite **569 passed, 4 skipped**
+(576 − the 7 `test_circuit.py` tests = 569, exactly as expected).
