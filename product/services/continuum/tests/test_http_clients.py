@@ -33,19 +33,19 @@ def _transport(handler):
 
 
 def _daylog_body(win: Window, *, segments=None, blocks=None,
-                 fingerprint="fp-from-storage", format_version="1",
-                 recipe_id=None) -> dict:
-    """A C10 v1 body as storage actually serves one.
+                 fingerprint="fp-from-storage", format_version="2",
+                 recipe_id=None, version="2") -> dict:
+    """A C10 v2 body as storage actually serves one (slot-walk renderer, Stage E).
 
     The two version stamps used to be invented here — `"daylog-v1"` and a recipe id
     nobody was pinned to — which was harmless only for as long as continuum ignored
     them. `daylog_format_version` is storage's `DAYLOG_FORMAT_VERSION`, the string
-    `"1"`; `recipe_id` defaults to whatever THIS run is pinned to, so the happy path
+    `"2"`; `recipe_id` defaults to whatever THIS run is pinned to, so the happy path
     stays true when the pin moves and only the tests that mean to disagree do.
     """
     from app.config import get_settings
     return {
-        "contract": "C10", "version": "1",
+        "contract": "C10", "version": version,
         "user_id": win.user_id, "window_id": win.window_id,
         "t_start": win.start_utc.isoformat().replace("+00:00", "Z"),
         "t_end": win.end_utc.isoformat().replace("+00:00", "Z"),
@@ -131,7 +131,7 @@ def test_http_daylog_rejects_a_body_of_the_wrong_contract():
     body = _daylog_body(win) | {"version": "0"}
     client = HttpDayLogClient(STORAGE, transport=_transport(
         lambda r: httpx.Response(200, json=body)))
-    with pytest.raises(ValueError, match="C10 v1"):
+    with pytest.raises(ValueError, match="C10 v2"):
         client.fetch_daylog(win)
 
 
@@ -175,7 +175,32 @@ def test_a_day_log_in_an_unknown_format_dialect_is_refused():
     dialect this build was never proven against must not reach the trainer."""
     win = make_window("u-h", 20, "UTC")
     client = HttpDayLogClient(STORAGE, transport=_transport(
-        lambda r: httpx.Response(200, json=_daylog_body(win, format_version="2"))))
+        lambda r: httpx.Response(200, json=_daylog_body(win, format_version="3"))))
+    with pytest.raises(DayLogDialectMismatch, match="format version"):
+        client.fetch_daylog(win)
+
+
+def test_a_v1_stamped_body_is_refused_at_the_contract_gate():
+    """Stage F cutover teaching: the wipe is fresh-forward, so no v1 day-log can
+    legitimately exist post-cutover — a body still stamped C10 v1 is a stale or
+    rolled-back storage, and training on it would re-open the exact dialect drift
+    the stamps exist to announce. The net that once refused v2 now refuses v1."""
+    win = make_window("u-h", 20, "UTC")
+    client = HttpDayLogClient(STORAGE, transport=_transport(
+        lambda r: httpx.Response(200, json=_daylog_body(
+            win, version="1", format_version="1"))))
+    with pytest.raises(ValueError, match="C10 v2"):
+        client.fetch_daylog(win)
+
+
+def test_a_v1_format_stamp_alone_is_refused_by_the_dialect_net():
+    """The format net, exercised on its own axis: even a body whose contract stamp
+    says v2, but whose `daylog_format_version` still says "1", is refused — "1" left
+    SUPPORTED_DAYLOG_FORMAT_VERSIONS at the cutover teaching, and the tuple (not the
+    contract check) is what guards the rendered BLOCK TEXT dialect."""
+    win = make_window("u-h", 20, "UTC")
+    client = HttpDayLogClient(STORAGE, transport=_transport(
+        lambda r: httpx.Response(200, json=_daylog_body(win, format_version="1"))))
     with pytest.raises(DayLogDialectMismatch, match="format version"):
         client.fetch_daylog(win)
 
@@ -190,7 +215,7 @@ def test_the_supported_dialect_set_is_code_and_not_an_env_knob():
 
     from app.clients import daylog_client as mod
 
-    assert mod.SUPPORTED_DAYLOG_FORMAT_VERSIONS == ("1",)
+    assert mod.SUPPORTED_DAYLOG_FORMAT_VERSIONS == ("2",)
     # Mechanical, so that prose about the policy cannot satisfy it: the set must be a
     # LITERAL tuple of literal strings at module level. A value assembled from an env
     # read, a settings field or a default-with-override could not parse as one.

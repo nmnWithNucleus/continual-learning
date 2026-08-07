@@ -123,7 +123,7 @@ def day_log_client(settings, recipe, *,
                 "time (t_start). This used to yield an EMPTY day-log and a "
                 "'skipped_no_data' night that had trained on nothing. Use "
                 "CONTINUUM_STORAGE_CLIENTS=http (storage materializes the day-log, "
-                "C10 v1), or pass an explicit record_provider if you genuinely have "
+                "C10 v2), or pass an explicit record_provider if you genuinely have "
                 "the records in hand.")
         return HttpDayLogClient(settings.storage_url, timeout=settings.http_timeout,
                                 recipe_id=recipe.recipe_id)

@@ -132,6 +132,12 @@ RFC3339 = "%Y-%m-%dT%H:%M:%SZ"
 # than trusting the note in the artifact.
 RECIPE_V10 = "consolidation-v1.0"
 RECIPE_V11 = "consolidation-v1.1"
+# The shipped default since the Stage F cutover teaching (2026-08-07): forks v1.1
+# with every knob byte-identical, so it inherits replay.source='rawlog' — the knob
+# the 7b blocker exists to check. 7b/7c still drive v1.0/v1.1 EXPLICITLY: the
+# night-one-stops fact and the two-night proof are properties of those recipes,
+# not of whatever the deployment default happens to be.
+RECIPE_V20 = "consolidation-v2.0"
 
 # Rare literal strings planted in STEP 7c's RECORD TEXT. They ride C2 -> storage's
 # renderer -> the C10 block text -> the replay pool -> the training corpus, so finding
@@ -859,8 +865,8 @@ def step5(st: Storage, win: Any, instants: dict) -> Any:
         R.check("GET /training/daylog", False, f"HTTP {code}: {json.dumps(body)[:500]}")
         R.end()
         raise StepAborted("no day-log to check")
-    R.check("body is a C10 v1 addressed to the window we asked for",
-            body.get("contract") == "C10" and str(body.get("version")) == "1"
+    R.check("body is a C10 v2 addressed to the window we asked for",
+            body.get("contract") == "C10" and str(body.get("version")) == "2"
             and body.get("user_id") == USER_OK
             and body.get("window_id") == win.window_id)
     R.check("the body stamps the SAME recipe_id continuum is training under",
@@ -1218,13 +1224,15 @@ def step7b(st: Storage, tmp: Path) -> None:
         print(f"  !! fork, i.e. a founder decision, not a code change. {RECIPE_V11} IS")
         print("  !! that fork and STEP 7c below runs two full nights under it. What is")
         pins = shipped_recipe_defaults()
-        unpinned = {k: v for k, v in pins.items() if v != RECIPE_V11}
+        # A default is fixed iff it pins a rawlog-source recipe; v2.0 forks v1.1
+        # with every knob byte-identical (D28), so both count.
+        unpinned = {k: v for k, v in pins.items() if v not in (RECIPE_V11, RECIPE_V20)}
         if unpinned:
             print("  !! left is a DEPLOYMENT re-pin, on BOTH services — still on the old")
             print(f"  !! recipe: {', '.join(f'{k}={v}' for k, v in unpinned.items())}")
         else:
-            print(f"  !! left is NOTHING: both services now ship {RECIPE_V11} as their")
-            print(f"  !! default ({', '.join(f'{k}={v}' for k, v in pins.items())}), so a")
+            print("  !! left is NOTHING: both services now ship a rawlog-source recipe as")
+            print(f"  !! their default ({', '.join(f'{k}={v}' for k, v in pins.items())}), so a")
             print("  !! fresh deployment runs nights 1..n. This banner documents what the")
             print("  !! v1.0 branch above still proves, not an outstanding action.")
         print("  " + "!" * 74)

@@ -12,7 +12,7 @@ Two implementations, one interface:
                       through the same `build_daylog` + renderer. Byte-identical
                       to the pre-2c inline path; the parity contract is unchanged.
   HttpDayLogClient    GETs the already-materialized day-log from storage
-                      (`GET /training/daylog?user_id=&window_id=`, C10 v1).
+                      (`GET /training/daylog?user_id=&window_id=`, C10 v2).
 
 The `RecordProvider` seam is why the local client can stand in for storage without
 continuum knowing which it is talking to: records→day-log is fully behind the
@@ -133,13 +133,22 @@ class DayLogUnavailable(RuntimeError):
 # Widening this set is a code edit, reviewed alongside a re-run of storage's M9
 # differential proof, and the set is a TUPLE rather than a single value so a
 # deliberate two-dialect transition can be expressed here and nowhere else.
-SUPPORTED_DAYLOG_FORMAT_VERSIONS: tuple[str, ...] = ("1",)
+# Widened "1" -> "2" at the Stage F cutover teaching (2026-08-07, the one licensed
+# continuum change of the DP rebuild): storage's slot-walk renderer ships
+# daylog_format_version "2" + recipe consolidation-v2.0 (D28), and the acceptance
+# evidence is the re-run of exactly the proof this comment demands — the D20/M9
+# differential re-baselined against the v2 renderer, 31 checks green over both
+# origins (storage/scripts/daylog_parity_diff.out.txt, committed at Stage E WP-E4).
+# "1" LEAVES the tuple in the same edit: the cutover wipe is fresh-forward (OD-2),
+# so a v1 body post-cutover can only be a stale or rolled-back storage — refusing
+# it is the net working, not a transition hazard.
+SUPPORTED_DAYLOG_FORMAT_VERSIONS: tuple[str, ...] = ("2",)
 
 
 class DayLogDialectMismatch(ValueError):
     """The fetched day-log was rendered under a recipe / format this night did not expect.
 
-    C10 v1 bodies carry `daylog_format_version` and `recipe_id` for one reason: so a
+    C10 bodies carry `daylog_format_version` and `recipe_id` for one reason: so a
     change in how the day-log is built is ANNOUNCED rather than silent. Reading them
     and refusing is what makes them announcements; ignoring them makes them
     decoration, and a format change then lands as a corpus change nobody sees.
@@ -225,7 +234,7 @@ class HttpDayLogClient:
         if status == 404:
             raise DayLogUnavailable(
                 f"storage has no day-log for user {win.user_id!r} window "
-                f"{win.window_id!r} — storage owns materialization (C10 v1); "
+                f"{win.window_id!r} — storage owns materialization (C10 v2); "
                 "this night cannot run and must retry, it is NOT an empty day")
         return self._to_daylog(win, body)
 
@@ -233,9 +242,9 @@ class HttpDayLogClient:
         # Contract check before anything is trusted: a body of the wrong contract or
         # version is a deployment mismatch, and training on a shape we did not agree
         # to is worse than not training tonight.
-        if body.get("contract") != "C10" or str(body.get("version")) != "1":
+        if body.get("contract") != "C10" or str(body.get("version")) != "2":
             raise ValueError(
-                f"expected a C10 v1 day-log body, got contract={body.get('contract')!r} "
+                f"expected a C10 v2 day-log body, got contract={body.get('contract')!r} "
                 f"version={body.get('version')!r} — refusing to build a night from it")
         if body.get("user_id") != win.user_id or body.get("window_id") != win.window_id:
             raise ValueError(
