@@ -169,3 +169,77 @@ the +2 are the new refusal proofs). `seam_check.py` compiles; its full live dril
 not re-run this WP — STEP 7c's refusal proof is recipe-axis and unaffected, and the
 real acceptance proof post-cutover is WP-F2 drill 4 (continuum accepts the stamps on a
 real fetch, not a test).
+
+## WP-F0c — the cutover kit (nothing executed)
+
+| File | Action | Why |
+|---|---|---|
+| `platform/deploy/cutover_wipe.py` | NEW | the OD-2 wipe with the mandatory dry-run as default mode; full KEEP/WIPE classification in code; structural refusals (below) |
+| `platform/deploy/learn.env.stage-f-unrepoint` | NEW | the staged un-repoint, applied at F1 by copy-over (learn.env itself is gitignored); every change annotated in the file |
+| `platform/deploy/ROLLBACK-stage-F.md` | NEW | the rollback runbook — restore services, not commits; every step named with its verification, nothing assumed |
+
+**The wipe script's safety story is structural, not prose:** every table in every DB
+must be classified KEEP or WIPE in code and every continuum `var/` subdir likewise —
+anything unknown aborts BOTH modes before a row is touched; the wet path can only run
+`DELETE FROM <allowlisted table>` (plus the one `dp_state` UPDATE under
+`--recording-claims reset`) — DDL, DROP and every KEEP table are unreachable; dry-run
+opens the DBs read-only (sqlite `mode=ro`); `--execute` refuses while `:8083`/`:8085`
+still answer (the freeze comes first); wet prints the same manifest code path before
+and after acting, so "wet matches dry" is checkable line by line. The classification:
+WIPE = `context_records`, `day_logs`, `training_windows`, reservoir files, DP journal
+(`pending`+`processed`), continuum learn-state subdirs (journal/state/cycles/adapters/
+model_directory/reservoir — all verified absent today). KEEP = `turns` (/sessions),
+`raw_blobs` + the raw_store tree, `user_profiles` (C12: declared facts, not derived
+data), `model_directory` (the C6 base seed), recording's entire capture ledger +
+spool, continuum's research dirs (diag/parity/phase3/slurm). `training_windows` is
+wiped deliberately: the D18 watermark is derived from published rows over windows
+that stop existing — fresh-forward resets both or the first post-cutover night would
+chase a watermark into a wiped corpus.
+
+**Evidence:** scratch-world test (throwaway sqlite files mimicking every real ledger
+shape, in the session scratchpad — an evidence script like the caption smoke):
+25/25 checks — dry-run mutates nothing; wet empties exactly the WIPE set with every
+KEEP row/byte intact (including raw_store bytes compared verbatim); `keep` preserves
+all `dp_state`, `reset` NULLs only `processed` and preserves `accepted` (the buffered
+redrive the cutover relies on); an unclassified table aborts both modes with nothing
+touched; an unclassified continuum subdir aborts; wet refuses while a freeze port
+listens. The LIVE dry-run manifest (read-only, services untouched) is pasted in the
+GATE 1 report: 4 `context_records` + 4 DP `processed` rows to wipe, `day_logs`/
+`training_windows`/reservoir/continuum-state all 0, recording ledger fully empty
+today — so the dp_state disposition question is about chunks captured between now
+and the freeze, not about existing rows.
+
+**Recording's 501-retry carry, verified (the Stage E carry asked; the answer is
+"no"):** the taxonomy does NOT treat 501 as non-retryable — `app/clients.py:64` sends
+everything ≥500 down the transient branch (bounded: 4 attempts with backoff, then the
+segment is marked `failed` with its spool file kept; `failed` is never auto-re-enqueued,
+so "loop forever" does not happen — the real cost is burnt retries and a manual
+`/retry` for the segment). Exposure today is dormant: recording demuxes only
+audio/video tracks, and both modalities have registered v1 pipelines, so no 501 can
+arise from the capture path. Disposition offered at GATE 1: accept as-is for the
+cutover (dormant + bounded), with the one-line taxonomy fix (501 → permanent, beside
+the 4xx branch, TDD) available as a licensed change if the founder prefers it closed
+before F1.
+
+**Un-repoint, staged (applied at F1 only):** `SERVICES_ROOT`/`DP_VAR_DIR` return to
+this tree; the five `STORAGE_*` pins retire (with one tree, run.sh's own defaults
+resolve to the same live data paths — the repoint moved code, never data);
+`ASR_BACKEND`/`ASR_LANGUAGE` retire (v0 knobs the rebuilt DP does not read);
+`DP_SUPERVISOR=1` and `VLM_URL=http://127.0.0.1:8161` are added. HF_TOKEN passthrough
+(Stage B carry): resolved by fact, not by env — the fleet reads hub auth from
+`~/.cache/huggingface/token` (verified present); no secret enters the committed
+staging file. The recipes/policies live↔branch coupling dissolves with this apply +
+the worktree retirement (`git worktree remove /home/ubuntu/nmn/dp-v0-live` after the
+old fleet stops; the storage `.venv` symlink dies with it), closing the Stage E
+checklist item. Circuit.py's wire-or-retire (Stage C/D carry): NOT wired into the
+deploy — the Stage D reasoning stands at cutover (heal-on-redrive removed the
+correctness need; the one honest use is a fleet-cost optimization) — retire lands
+with Stage G demolition unless the founder rules otherwise at the gate.
+
+**Merge preflight (2026-08-07):** `main` = merge-base = `9307b7e` — the branch is 41
+commits strictly ahead, zero divergence, so the planned `git merge --no-ff
+dp-rebuild-v1` is conflict-free by construction (strategy: no-ff, per the brief; the
+push, if any, is gated with the cutover approval). Cross-suite at the branch tip:
+DP **576 passed, 4 skipped** · servers/common **30 passed** · storage **354 passed**
+· continuum (post-teaching) **264 passed, 7 skipped**. The two onboarding strays
+remain uncommitted.
