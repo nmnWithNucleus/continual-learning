@@ -53,3 +53,29 @@ replicas are never restarted — only docstrings/comments are touched, not behav
 
 Evidence: `servers/ocr/server.py` parses and `app.main` imports; DP suite collection
 unchanged at **580** (576+4); OCR replicas 8151/8152 held 200 across the edit.
+
+### Commit — `smoke_audio_backends.py` + the offline-eval harness
+
+| Target | Disposition |
+|---|---|
+| `scripts/smoke_audio_backends.py` | **DELETE.** Superseded by `servers/*/drill_stage_b.py` and the per-server golden smokes. It imports the v0 packages the rebuild deleted at Stage C (`app.asr`, `app.audio.diarize`, `app.audio.translate`, `app.audio.acoustic`) — its top-level imports fail immediately, so it has been dead since Stage C. Real audio backends are now smoked as model servers (Stage B). |
+| `scripts/prompt_ab.py` | **DELETE.** The offline prompt-A/B harness, parked-and-broken since Stage C (WP-C5): `main()` refuses to run, and it is built on machinery the rebuild deleted (`VIDEO_PROMPT_DIR`/`VIDEO_CLIP_PROMPT` env forks, `cfg_tag`/`prompt_dir_fingerprint` dialects, the v0 `resolve`/per-unit `run_graph`/4-arg `build_c2` signatures, the `keyframe` legacy pipeline). A parked corpse invites rot; its 4-point rebuild checklist is preserved below and in git. The `DP_OFFLINE_EVAL` boot-guard in `app/main.py` (`_assert_not_offline_eval`) STAYS — it is a standing latch for whatever offline driver replaces this one, and `test_t1_determinism.py` keeps it in the operational-env allowlist. |
+| `scripts/capture_chunkset.py` + `scripts/oracle_gemini.py` | **DELETE** (with the rebuild path named — the `build_vision_settings` breakage is not fixed, it is retired). These exist only to feed `prompt_ab`: `capture_chunkset.load_chunkset` is imported by both `prompt_ab` and `oracle_gemini`, and both call the deleted `clip.build_vision_settings()` (`capture_chunkset.py:500` ocr-truth mode; `oracle_gemini.py:156` frame prep), which the rebuild replaced with the frozen `ClipSettings` dataclass + the `CLIP_SETTINGS` code pin in `clipprep.py`. Fixing that one call would resurrect an eval harness whose driver is gone — a half-fix worse than a clear break. Deleted as a unit with `prompt_ab`. |
+| `tests/fixtures/chunksets/` (`README.md` + `smoke-v1/`) | **DELETE.** The committed eval corpus `prompt_ab` scored arms over, built by `capture_chunkset.py` and read by `capture_chunkset.load_chunkset()`. No surviving test reads it (`test_eval_scorers.py` was deleted at Stage C; nothing under `tests/` imports the harness), so it is orphaned with its driver. |
+
+**`prompt_ab.py`'s 4-point rebuild checklist, preserved verbatim (the reason a delete is
+safe — the design survives here and in git):**
+
+> 1. Arms become IN-CODE stage constructions: `ClipcapStage(backend=Backend("vlm", n),
+>    experiment="<arm>")` (the `.exp-<code>` dialect) — experimental packs load via
+>    `prompts.load_registry(<arm dir>)` handed to an arm-specific describe(), or the
+>    arm pack is temporarily added to the packaged registry on an experiment branch
+>    (the digest pin + vB bump make it visible by construction).
+> 2. Drive `resolve("video", [clipprep, screentext_fake_or_real, clipcap_arm])` +
+>    `run_graph(resolved, c1=..., blob=..., span_seconds=..., clients=...)` and score
+>    `GraphResult.slots` (one record; the old per-unit loop is gone).
+> 3. The OCR truth/corrupt30 arms become client-level fakes handed via `clients`
+>    (no `VIDEO_OCR_BACKEND`).
+> 4. The storage-poison guard (`_forbid_storage`) and the scorers are still sound
+>    and can be lifted as-is; `DP_OFFLINE_EVAL` keeps its serving-guard role in
+>    `app/main.py` for whatever replaces this driver.
