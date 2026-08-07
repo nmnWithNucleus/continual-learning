@@ -3,12 +3,11 @@
 #
 # Installs into THIS server's own venv (servers/ocr/.venv) and never into the
 # shared DP venv: the PP-OCR stack (onnxruntime, opencv, shapely, pyclipper)
-# stays quarantined exactly as it was in the retiring sidecar (D-06).
+# stays quarantined exactly as the v0 OCR service kept it (D-06).
 #
-# Engine pins are copied VERBATIM from the validated sidecar stack
-# (sidecars/ocr/requirements.txt, CPU, Python 3.12). onnxruntime is pinned
-# because its version is reported in /health identity and ORT is not
-# guaranteed bit-exact across releases/providers.
+# Engine pins are copied VERBATIM from the validated v0 OCR stack
+# (CPU, Python 3.12). onnxruntime is pinned because its version is reported in
+# /health identity and ORT is not guaranteed bit-exact across releases/providers.
 #
 # Set up the venv:
 #   cd servers/ocr

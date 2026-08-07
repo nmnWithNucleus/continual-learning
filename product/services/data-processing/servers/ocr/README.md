@@ -1,22 +1,22 @@
 # servers/ocr — PP-OCR model server (Stage B · WP-B5)
 
-The retiring OCR sidecar's engine (`sidecars/ocr/app.py` `PPOCREngine` — PP-OCRv4
-det+rec ONNX on CPU via rapidocr-onnxruntime) relocated into the shared
-model-server framework (`servers/common`). Same engine, same models, same region
-semantics — different wire and different configuration posture:
+The v0 OCR service's engine (`PPOCREngine` — PP-OCRv4 det+rec ONNX on CPU via
+rapidocr-onnxruntime) relocated into the shared model-server framework
+(`servers/common`). Same engine, same models, same region semantics — different
+wire and different configuration posture:
 
 - **Wire**: the framework contract (`GET /health` with identity, `POST /infer`
-  `{input_b64, codec, params}` → `{ok, result}`), not the sidecar's bespoke
+  `{input_b64, codec, params}` → `{ok, result}`), not v0's bespoke
   `/ocr`. Error split: deterministic bad input → `422 transient:false`; replica
   hiccup / not warm → `503 transient:true`; unexpected crash → `500 transient:true`.
-- **No env knobs (L4)**: the sidecar's `OCR_MODE/OCR_EP/OCR_THREADS/OCR_*_MODEL`
+- **No env knobs (L4)**: v0's `OCR_MODE/OCR_EP/OCR_THREADS/OCR_*_MODEL`
   are gone. Engine settings are pinned in `server.py`: 4 intra-op threads, angle
   classifier off (screen text is upright), CPU-only, models discovered from the
   installed rapidocr-onnxruntime package and sha256-hashed at load. A model swap
   is a code change. Operational env only (`DP_SERVER_HOST/PORT/LOG_LEVEL`).
-- **This is a NEW deployment beside the sidecar, not a migration of it.** The
-  sidecar keeps serving v0 untouched (there is a live process on 8097); this
-  server runs on the manifest's CPU replicas (ports 8151/8152, `gpu: null`).
+- **This was built beside the v0 OCR service, not migrated from it.** At the Stage
+  F cutover the v0 process was stopped and its tree removed at Stage G; this server
+  runs on the manifest's CPU replicas (ports 8151/8152, `gpu: null`).
 
 `/infer` result: `{"regions": [{"text", "bbox": [x0,y0,x1,y1], "conf"}, ...]}` —
 bbox in pixels of the submitted image, origin top-left; text **verbatim and
@@ -48,7 +48,7 @@ python3 -m venv .venv
 }
 ```
 
-Same det/rec shas the sidecar serves — the same bundled ch_PP-OCRv4 ONNX pair.
+Same det/rec shas v0 served — the same bundled ch_PP-OCRv4 ONNX pair.
 
 ## Determinism
 

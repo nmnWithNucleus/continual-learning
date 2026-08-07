@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """servers/ocr -- PP-OCR det+rec ONNX on CPU, inside the model-server framework.
 
-The PPOCREngine from the retiring sidecar (sidecars/ocr/app.py), ported faithfully
+The PPOCREngine from the v0 OCR service (retired at Stage G), ported faithfully
 onto dp_servers_common: same engine construction, same model discovery, same
 region shape -- but the framework wire (/health identity + /infer envelope)
-instead of the sidecar's bespoke /ocr, and NO OCR_* env knobs (L4: engine
+instead of v0's bespoke /ocr, and NO OCR_* env knobs (L4: engine
 settings are pinned in code below; a model swap is a code change now, not an
 env override).
 
-Engine pins (the sidecar's measured operating point, now code constants):
+Engine pins (the v0 service's measured operating point, now code constants):
   intra_op_num_threads = 4      -- measured op point on CPU
   use_cls              = False  -- angle classifier off: screen text is upright
   *_use_cuda           = False  -- CPU-only; never spin up CUDA
@@ -18,7 +18,7 @@ Engine pins (the sidecar's measured operating point, now code constants):
 
 /infer contract:
   input_b64 -- one JPEG frame, base64 (decoded PIL -> RGB -> BGR numpy exactly
-               like the sidecar). Invalid base64 / undecodable image -> BackendError
+               as v0 did). Invalid base64 / undecodable image -> BackendError
                (deterministic 422: every replica fails it identically).
   codec     -- optional; if given, must be "image/jpeg".
   params    -- none accepted; any key -> BackendError (behavior is pinned here,
@@ -29,7 +29,7 @@ Engine pins (the sidecar's measured operating point, now code constants):
                redaction; that is DP-side post-processing (D-07). regions may
                be [] (ran-and-empty honesty).
 
-Concurrency: the sidecar guarded self._ocr with a per-call lock; here the
+Concurrency: v0 guarded self._ocr with a per-call lock; here the
 framework already serializes /infer (app.py's infer_lock -- backends are not
 assumed thread-safe), so this backend keeps no lock of its own and relies on
 that serialization.
@@ -47,7 +47,7 @@ from dp_servers_common.runner import serve
 from dp_servers_common.wire import InferRequest
 
 # ---- engine settings: PINNED IN CODE (L4) -----------------------------------
-_THREADS = 4                     # ORT intra-op threads (sidecar's measured op point)
+_THREADS = 4                     # ORT intra-op threads (v0's measured op point)
 _EP = "CPUExecutionProvider"     # CPU-only deployment (manifest: gpu null)
 _CODEC = "image/jpeg"
 
@@ -61,7 +61,7 @@ def _sha256_file(path: str) -> str:
 
 
 def _strip_data_uri(b64: str) -> str:
-    """Tolerate a `data:image/jpeg;base64,....` prefix (sidecar decode posture)."""
+    """Tolerate a `data:image/jpeg;base64,....` prefix (v0 decode posture)."""
     if b64.startswith("data:"):
         comma = b64.find(",")
         if comma != -1:
@@ -71,7 +71,7 @@ def _strip_data_uri(b64: str) -> str:
 
 def _decode_b64_jpeg(image_b64: str) -> bytes:
     """Strict base64 decode: genuinely non-base64 garbage RAISES (-> 422), never
-    silently decodes junk to empty bytes. Same posture as the sidecar."""
+    silently decodes junk to empty bytes. Same posture as v0."""
     raw = "".join(_strip_data_uri(image_b64.strip()).split())
     try:
         return base64.b64decode(raw, validate=True)
@@ -80,7 +80,7 @@ def _decode_b64_jpeg(image_b64: str) -> bytes:
 
 
 class OcrBackend(ModelBackend):
-    """PP-OCR det+rec ONNX on CPU via rapidocr-onnxruntime (the sidecar's
+    """PP-OCR det+rec ONNX on CPU via rapidocr-onnxruntime (v0's
     PPOCREngine inside the framework seam)."""
 
     name = "ocr"
@@ -120,8 +120,8 @@ class OcrBackend(ModelBackend):
     @staticmethod
     def _resolve_model_paths() -> tuple[str, str]:
         """Discover the det/rec ONNX files bundled with the installed
-        rapidocr-onnxruntime package (its models/ dir), exactly like the
-        sidecar's _resolve_model_paths -- minus its OCR_DET_MODEL/OCR_REC_MODEL
+        rapidocr-onnxruntime package (its models/ dir), exactly like v0's
+        _resolve_model_paths -- minus its OCR_DET_MODEL/OCR_REC_MODEL
         env overrides: a model swap is a code change now (L4)."""
         import rapidocr_onnxruntime as _r
 
