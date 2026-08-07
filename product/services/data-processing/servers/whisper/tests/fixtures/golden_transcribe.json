@@ -1,0 +1,16 @@
+{
+  "language": "en",
+  "segments": [
+    {
+      "end_s": 2.34,
+      "start_s": 0.0,
+      "text": "The quick brown fox jumps over the lazy dog."
+    },
+    {
+      "end_s": 6.14,
+      "start_s": 3.26,
+      "text": "Machine learning models run as long-lived server processes."
+    }
+  ],
+  "text": "The quick brown fox jumps over the lazy dog. Machine learning models run as long-lived server processes."
+}

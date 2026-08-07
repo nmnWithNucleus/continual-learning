@@ -1,64 +1,82 @@
-"""Audio SIDECAR stage: translation (whisper task=translate → English).
+"""translate — speech translation to English: built + tested, NOT REGISTERED.
 
-Byte-identical transplant of the monolithic ``_translate`` stage: when a target language
-differs from the detected one, append a ``discriminator="translation"`` transcript unit —
-a stable, distinct record beside the original, never a mutation of it. Reads only the
-immutable ``asr`` result (NOT the diarized segments), so it runs safely in parallel with
-the diarize mutate stage. Off (default) / nothing to translate → no unit.
+NO ``@register_stage`` on purpose: the ratified plan-§2 example dialect
+excludes translation, v0's beta fleet ran TRANSLATE_BACKEND=off, and C2 v1 has
+no ``translation`` slot — its sub-schema lands ADDITIVELY when this producer
+ships into a dialect (an emitted translation slot fails today's contract gate,
+by design: unknown slots fail closed). Enabling it is a code change: add the
+decorator + the contract slot + the dialect bump, one ceremony.
 
-``policy='required'`` preserves today's contract: a translate-backend failure fails the
-chunk (redelivery retries), it does not silently drop the sidecar.
+Thin client over the SAME ``servers/whisper`` pool as asr (v0 parity: one
+loaded model serves both tasks). Semantics (v0 stage + plan):
+  * asr value empty OR detected language already "en" -> NO server call, emit
+    ``{"value": ""}`` — the honest nothing-to-translate claim (L11). v0's
+    TRANSLATE_TARGET knob is dead: the target is the code pin "en" (whisper's
+    task=translate is X->English only — v0 enforced exactly this).
+  * otherwise call whisper with task=translate: the SOURCE is auto-detected
+    (``language: None`` — deliberately NOT asr's "en" pin, the v0 design
+    point), same beam/VAD pins as asr; the RESULT language is hardcoded "en"
+    (task=translate output is always English — v0 hardcoded it, the server
+    does too).
+  * splits ride the same absolute mapping as asr's (shared helper — one
+    definition of the 3-key split shape); omitted when no segments came back;
+    an empty translation text still emits (honest empty claim, a deliberate
+    change from v0's emit-no-record).
 """
 from __future__ import annotations
 
-from ...audio import translate
-from ...audio.config import get_audio_config
-from ...processing.base import ProcessedContent, ProcessedUnit, empty_enrichments
-from ...stagegraph import Stage, StageContext, StageResult, register_stage
-from ...timeutil import parse_rfc3339
-from .asr import _absolute_segments
+import base64
+from typing import Any
+
+from ...stagegraph.stage import Backend, Stage, StageContext, StageOutput
+from .asr import absolute_splits, require_client
+
+TRANSLATE_PARAMS: dict[str, Any] = {
+    "task": "translate",
+    "beam_size": 1,
+    "language": None,   # auto-detect the SOURCE (translation implies non-en)
+    "vad": True,
+}
+TARGET_LANGUAGE = "en"  # whisper task=translate is X->English only (v0 pin)
 
 
-@register_stage
 class TranslateStage(Stage):
     name = "translate"
     modality = "audio"
-    kind = "sidecar"
+    slot = "translation"
+    stage_version = 1
+    backend = Backend("fw", 1)
     needs = ("asr",)
-    order = 20
+    required = False  # DELIBERATE FLIP vs v0 (policy='required'): under L7/L8 a
+                      # translate outage should hole-and-heal, not dead-letter the
+                      # chunk. Revisit at the enable ceremony (registration + the
+                      # additive 'translation' contract slot land together).
+    byte_budget = 32768     # same shape + scale as the asr slot
+    server = "whisper"
+    # L10: unregistered today; a non-English dogfood would route it to Heard.
+    consumer = "speculative:non_english_dogfood"
 
-    def enabled(self, settings) -> bool:
-        return translate.select(get_audio_config()) is not None
+    async def run_async(self, ctx: StageContext) -> StageOutput:
+        asr_value = ctx.inputs["asr"].value or {}
+        text = (asr_value.get("value") or "").strip()
+        detected = (asr_value.get("language") or "").strip().lower()
+        if not text or detected == TARGET_LANGUAGE:
+            # Nothing to translate — no server call, honest empty claim.
+            return StageOutput(value={"value": ""})
 
-    def run_sync(self, ctx: StageContext) -> StageResult:
-        cfg = get_audio_config()
-        backend = translate.select(cfg)  # None when off (incl. whisper+non-'en' degrade)
-        if backend is None:
-            return StageResult()
-        asr_result = ctx.slots["asr"]
-        if not asr_result.text.strip():  # silence / all-ambient → nothing to translate
-            return StageResult()
-        target = cfg.translate_target
-        detected = (asr_result.language or "").strip().lower()
-        if detected and detected == target:  # already in the target language
-            return StageResult()
-        result = backend.translate(
-            ctx.settings, ctx.blob, ctx.span_seconds, asr_result, target
-        )
-        if not result.text.strip():
-            return StageResult()
-        base = parse_rfc3339(ctx.c1["t_start"])
-        segments = _absolute_segments(base, ctx.span_seconds, result.segments)
-        content = ProcessedContent(
-            kind="transcript",
-            text=result.text,
-            language=result.language or None,
-            segments=segments or None,
-        )
-        return StageResult(units=[
-            ProcessedUnit(
-                content=content,
-                enrichments=empty_enrichments(),  # own empty block; NOT the diarized one
-                discriminator="translation",
-            )
-        ])
+        client = require_client(ctx, self)
+        result = await client.infer({
+            "input_b64": base64.b64encode(ctx.blob).decode("ascii"),
+            "codec": ctx.c1["codec"],
+            "params": dict(TRANSLATE_PARAMS),
+        })
+
+        value: dict[str, Any] = {
+            "language": TARGET_LANGUAGE,
+            "value": result.get("text", ""),
+        }
+        splits = absolute_splits(ctx.c1, ctx.span_seconds,
+                                 result.get("segments") or [])
+        if splits:
+            value["splits"] = splits
+        return StageOutput(value=value)

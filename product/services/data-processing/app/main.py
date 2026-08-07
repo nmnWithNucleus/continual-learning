@@ -1,10 +1,10 @@
 """data-processing service HTTP surface (FastAPI, :8085) — MODALITY-AGNOSTIC core.
 
 POST /ingest  — body = a pushed C1 raw-stream envelope. Validate C1 -> dedup on
-                chunk_id -> pull the blob by ref from storage -> dispatch to the
-                Processor registered for envelope.modality -> for EACH ProcessedUnit
-                it returns, assemble a C2 record and POST it to storage /context ->
-                return {ok, record_ids:[...]}. This is the C1 push receiver.
+                chunk_id -> pull the blob by ref from storage -> run the modality's
+                stage graph -> assemble the ONE C2 v1 record from its slots ->
+                ONE atomic POST to storage /context -> return
+                {ok, record_ids:[<the one id>]}. This is the C1 push receiver.
 
                 Two processing modes (INGEST_ASYNC, FROZEN once at startup):
                   * INLINE (default): process inside the request, return
@@ -16,7 +16,7 @@ POST /ingest  — body = a pushed C1 raw-stream envelope. Validate C1 -> dedup o
                     in-flight redelivery re-ACKs 202; a full queue is 503 backpressure.
                 Deterministic C1/modality rejections (400/422/501) resolve
                 SYNCHRONOUSLY in BOTH modes — never deferred into a silent dead-letter.
-GET  /health  — liveness + effective ASR backend + ingest mode.
+GET  /health  — liveness + per-modality resolved dialects + ingest mode.
 GET  /metrics — Prometheus text exposition (D9 observability; METRICS_ENABLED).
 GET  /continuity              — per-stream break/dup report (ContinuityTracker),
                 the check behind "zero silent loss": recording's gap report
@@ -26,16 +26,21 @@ GET  /continuity              — per-stream break/dup report (ContinuityTracker
 GET  /continuity/{stream_id}  — one stream's entry (404 unknown).
 
 The core knows nothing about audio/image/video/text: modality behavior lives in
-disjoint plugin files under ``processing/processors/`` (see ``processing/``), so a
-future session owns a modality by dropping in one file. One chunk MAY yield many
-records (e.g. video keyframes); audio/image/text yield a single-element list.
+disjoint stage files under ``app/stages/<modality>/`` (the stage registry), so a
+future session owns a stage by dropping in one file. One chunk yields exactly ONE
+C2 v1 record built from slots (L2/L5, D24); ``pipeline_version`` is resolved from
+code alone before any stage runs (L4 — no output-affecting env knob exists).
 
-The whole loop runs headless on any box: ASR_BACKEND defaults to `mock` (no GPU),
-INGEST_ASYNC defaults off (inline), METRICS_ENABLED is dependency-free.
+Model servers (L9): ``app.state.model_clients`` carries one ModelClient per
+manifest server (timeouts from the manifest's ``client_timeout_s``); the
+supervisor that owns the fleet processes is started by this app's lifespan when
+``DP_SUPERVISOR=1`` (operational opt-in — deploys set it; tests never spawn GPUs
+by accident).
 """
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -48,14 +53,17 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from . import schemas
 from .config import get_settings
 from .continuity import ContinuityTracker
-from .dedup import DedupStore
-from .ingest_core import ProcessingError, process_chunk
+from .dedup import Claim, DedupStore
+from .ingest_core import ProcessingError, heal_chunk, process_chunk
 from .ingest_queue import IngestQueue, QueueFull
 from .journal import Journal
 from .metrics import MetricsASGIMiddleware, Metrics
+from .model_client import ModelClient
 from .models import C1Envelope
-from .processing.registry import get_processor, registered_modalities
+from .stagegraph.processor import graph_processor
+from .stagegraph.stage import registered_modalities, stages_for
 from .storage_client import StorageClient
+from .supervisor import Supervisor
 from .timeutil import now_iso
 
 logger = logging.getLogger("data-processing")
@@ -63,29 +71,93 @@ logger = logging.getLogger("data-processing")
 # Prometheus text exposition content type (format version 0.0.4).
 _PROM_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
 
+# (DP_DIALECT_FREEZE and its flip-window logic died with the env-flippable
+# dialect model — D26. Dialects live in code; a deploy IS the flip.)
 
-def _dialect_frozen() -> bool:
-    """``DP_DIALECT_FREEZE=1`` — the drain-and-replace flip-window mitigation (design
-    D-14). Read fresh per call from the environment (the house posture, mirroring
-    ``vision/mode.resolve_pipeline``), NOT frozen at startup, so an operator can arm /
-    disarm the freeze on a live process during the cutover without a redeploy. When set,
-    ``_current_pv`` returns ``None`` so a stale-dialect receipt is SERVED rather than
-    reprocessed — capping the mass-reprocess-on-redelivery hazard while a two-dialect
-    fleet drains."""
-    return os.getenv("DP_DIALECT_FREEZE", "").strip().lower() not in ("", "0", "false", "no", "off")
+
+def _default_manifest_path() -> Path:
+    """<service>/servers/manifest.json — the L9 fleet manifest."""
+    return Path(__file__).resolve().parents[1] / "servers" / "manifest.json"
+
+
+def _manifest_path() -> Path:
+    return Path(os.getenv("DP_MANIFEST", str(_default_manifest_path())))
+
+
+def _supervisor_enabled() -> bool:
+    """Operational opt-in: run.sh / deploy set DP_SUPERVISOR=1 so the service owns
+    the fleet; tests and ad-hoc runs never spawn model servers by accident."""
+    return os.getenv("DP_SUPERVISOR", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+async def _assert_vlm_identity() -> None:
+    """Boot-time VLM identity probe (Stage C carry, built at Stage F).
+
+    clipcap's endpoint sits OUTSIDE the manifest identity scheme — it speaks the
+    OpenAI wire, not the fleet /infer envelope — so the pinned model NAME is the
+    only identity DP can assert about it. Assert it before serving: a deploy
+    pointed at the wrong endpoint must fail its boot loudly, not caption the
+    corpus with an unpinned model. Runs only under the DP_SUPERVISOR opt-in (the
+    deploy shape); unit tests construct apps freely and never want a VLM. Uses
+    clipcap's own env reads and the patchable ``vlm.make_async_client`` factory,
+    so the probe and the stage can never disagree about which endpoint is real.
+    """
+    from app.stages.video.clipcap import MODEL, _vlm_timeout_s
+    from app.vision.clipcap import vlm
+
+    url = os.getenv("VLM_URL", "http://127.0.0.1:8000").rstrip("/")
+    headers = {}
+    api_key = os.getenv("VLM_API_KEY", "")
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    try:
+        async with vlm.make_async_client(_vlm_timeout_s()) as client:
+            resp = await client.get(f"{url}/v1/models", headers=headers)
+            resp.raise_for_status()
+            served = sorted(
+                str(m.get("id")) for m in resp.json().get("data", []) if m.get("id")
+            )
+    except Exception as exc:
+        raise RuntimeError(
+            f"VLM identity probe: GET {url}/v1/models failed ({exc!r}) — clipcap "
+            f"is pinned to {MODEL!r} and cannot verify the endpoint serves it; "
+            "refusing to boot (is the VLM up? is VLM_URL pointing at it?)"
+        ) from exc
+    if MODEL not in served:
+        raise RuntimeError(
+            f"VLM identity probe: {url}/v1/models serves {served!r}, which does "
+            f"not include clipcap's pinned model {MODEL!r} — wrong endpoint or "
+            "wrong weights; refusing to boot"
+        )
+
+
+def _build_model_clients(manifest_path: Path, metrics=None) -> dict[str, ModelClient]:
+    """One ModelClient per manifest server. ``client_timeout_s`` is wired from the
+    manifest (it was parsed by nothing before Stage C); remember client call
+    timeouts include queue wait — replicas serialize inference. ``metrics`` is
+    the app registry (server-call families, WP-D3) — declared before the clients
+    are built so each client can seed its zeros."""
+    if not manifest_path.exists():
+        return {}
+    manifest = json.loads(manifest_path.read_text())
+    host = manifest.get("host", "127.0.0.1")
+    clients: dict[str, ModelClient] = {}
+    for server, spec in manifest.get("servers", {}).items():
+        endpoints = [f"http://{host}:{r['port']}" for r in spec.get("replicas", [])]
+        if not endpoints:
+            continue
+        clients[server] = ModelClient(
+            server, endpoints, spec.get("expected_identity"),
+            call_timeout_s=float(spec.get("client_timeout_s", 120.0)),
+            metrics=metrics,
+        )
+    return clients
 
 
 # content.text char-length distribution (dp_content_chars): captions land ~150-350,
 # an OCR digest 0-~1300, the whole-block budget caps ~1320 @60s — so bucket edges span
 # short caption → full-budget OCR.
 _CHAR_BUCKETS: tuple[float, ...] = (0, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096)
-# Per-chunk frame-delta peak (0..255): edges pinned to the design's class thresholds —
-# the deterministic floor (2), IDLE ceiling (8), LAYOUT floor (40) — so the histogram
-# directly validates the idle assumption from day one (design D-04 / D-07).
-_DELTA_BUCKETS: tuple[float, ...] = (2, 4, 8, 16, 24, 40, 64, 128, 255)
-# OCR read events selected per chunk — a small integer distribution (cap is
-# VIDEO_OCR_MAX_EVENTS, default 3).
-_OCR_EVENT_BUCKETS: tuple[float, ...] = (0, 1, 2, 3, 4, 6, 8, 12)
 
 
 def _dp_route_template(path: str) -> str:
@@ -127,16 +199,53 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
         ["modality", "stage", "reason"],
     )
 
+    # ---- Ledger v2 / heal observability (L8, WP-D3) ---------------------------------
+    metrics.declare_counter(
+        "dp_heal_attempts_total",
+        "Heal attempts: full-graph re-runs on redelivery of a holey chunk, success "
+        "or failure (the ledger's heal_attempts column counts only non-green ones).",
+        ["modality"],
+    )
+    metrics.declare_counter(
+        "dp_records_finalized_with_permanent_holes_total",
+        "Records finalized (done_final) with their holes now permanent, by holed "
+        "stage — fires once per finalization per non-ok stage.",
+        ["stage"],
+    )
+    # ---- Server-call observability (model_client; Stage C cleanup §C assignment) ----
+    metrics.declare_counter(
+        "dp_server_calls_total",
+        "Model-server calls by outcome (ok | deterministic_error | unavailable | "
+        "identity_mismatch), one per completed ModelClient.infer call.",
+        ["server", "outcome"],
+    )
+    metrics.declare_counter(
+        "dp_server_call_transient_retries_total",
+        "Transient replica presentations (transport error or 5xx-transient body) "
+        "retried on another replica.",
+        ["server"],
+    )
+    metrics.declare_counter(
+        "dp_server_identity_failures_total",
+        "Replica identity verifications that failed (wrong model — L4).",
+        ["server"],
+    )
+    metrics.declare_histogram(
+        "dp_server_call_seconds",
+        "Per-attempt /infer latency by server (HTTP-answered attempts only; "
+        "includes replica queue wait — replicas serialize inference).",
+        ["server"],
+    )
+
     # ---- WS-VC screen-video observability (§8) --------------------------------------
-    # The metric NAMES + label sets are frozen by §8 so WS-B/C/D emit against them from
-    # day one; this is the single declaration site (as it already is for the graph-stage
-    # families above). Two tiers:
-    #   * PARENT-side — emitted by ingest_core's per-unit loop, where `metrics` is in
-    #     scope even under INGEST_ISOLATION=subprocess (finding #15). Seeded to zero
-    #     below so rate() is well-defined from process start (no missing-series gap).
-    #   * STAGE-side — emitted from inside the clip stages; blind under subprocess
-    #     isolation by design. Declared here so the families exist from t=0; the labelled
-    #     ones surface on first emit (their label values are the stages' to choose).
+    # The metric NAMES + label sets stay §8's; this is the single declaration
+    # site (as it already is for the graph-stage families above). Two tiers:
+    #   * PARENT-side — emitted by ingest_core's per-slot accounting on the one
+    #     durably-written record. Seeded to zero below so rate() is well-defined
+    #     from process start (no missing-series gap).
+    #   * STAGE-side — emitted from inside the clip stages via ctx.metrics.
+    #     Declared here so the families exist from t=0; the labelled ones
+    #     surface on first emit (their label values are the stages' to choose).
     metrics.declare_counter(
         "dp_units_total", "C2 units durably written, by modality + content kind.",
         ["modality", "kind"],
@@ -151,12 +260,8 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
         "screens, VAD-silent audio, an OCR pass that found nothing legible).",
         ["modality", "kind"],
     )
-    metrics.declare_counter(
-        "dp_partial_write_total",
-        "Chunks that failed a /context write AFTER >=1 sibling unit was durably written "
-        "(a caption may sit without its OCR record until the retry lands — caveat A-4).",
-        ["modality"],
-    )
+    # (dp_partial_write_total is gone: ONE atomic POST per chunk (L6) makes a
+    # partial write structurally impossible — the counter had nothing to count.)
     # Stage-side families (label sets verbatim from §8; bare where §8 lists them bare).
     metrics.declare_counter(
         "dp_video_parse_fallback_total",
@@ -167,61 +272,43 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
         "dp_video_truncated_total",
         "Outputs truncated at the char/token budget, by pass (caption | ocr).", ["pass"],
     )
-    metrics.declare_histogram(
-        "dp_video_delta_peak",
-        "Per-chunk frame-delta peak cell value (0..255) — validates the idle assumption.",
-        buckets=_DELTA_BUCKETS,
-    )
-    metrics.declare_histogram(
-        "dp_video_ocr_events", "OCR read events selected per chunk.",
-        buckets=_OCR_EVENT_BUCKETS,
-    )
-    metrics.declare_counter(
-        "dp_caption_ungrounded_quote_total",
-        "Caption named-string spans absent from the chunk's OCR text (the grounding "
-        "safety counter, D-09). NOTE: WS-H owns the scorer + the widening to all named "
-        ">=4-char strings — coordinate the name there before it forks.",
-    )
     metrics.declare_counter(
         "dp_ocr_redactions_total", "OCR spans deterministically redacted as secrets (D-07).",
-    )
-    metrics.declare_counter(
-        "dp_video_scenario_mismatch_total",
-        "device_id prefix disagreed with the configured VIDEO_SCENARIO (D-13).",
-        ["expected", "seen"],
     )
     metrics.declare_counter(
         "dp_ocr_frame_errors_total",
         "Per-frame OCR errors absorbed (>50% of a chunk's frames erroring raises).",
     )
+    # (Cleanup round: the declared-but-producerless families are gone —
+    # dp_video_delta_peak, dp_video_ocr_events, dp_video_scenario_mismatch_total
+    # (their v0 producers died with the legacy graph / the VIDEO_SCENARIO knob)
+    # and dp_caption_ungrounded_quote_total (WS-H's scorer owns it; re-declare
+    # WITH the producer). A declared series with no producer is the same lying
+    # zero that killed dp_partial_write_total.)
 
-    # Seed the PARENT-side counters to zero for every registered modality's primary
-    # content kind, so a scrape before any traffic already shows the series (a missing
-    # series reads as "never happened"; a 0 reads as "0 so far" — the honest state, and
-    # it keeps rate() gap-free at process start). Secondary kinds (e.g. video's 'ocr')
-    # surface on their first real emit.
+    # Seed the PARENT-side counters to zero for every registered stage's slot, so
+    # a scrape before any traffic already shows the series (a missing series reads
+    # as "never happened"; a 0 reads as "0 so far" — the honest state, and it
+    # keeps rate() gap-free at process start). ``kind`` now labels the SLOT name
+    # (the per-kind record model died with C2 v0).
     for modality in registered_modalities():
         try:
-            kind = get_processor(modality).content_kind
+            slot_names = [s.slot_name for s in stages_for(modality)]
         except Exception:  # a modality that can't be introspected right now — skip it
             continue
-        if not kind:
-            continue
-        metrics.inc("dp_units_total", {"modality": modality, "kind": kind}, amount=0.0)
-        metrics.inc("dp_empty_output_total", {"modality": modality, "kind": kind}, amount=0.0)
-        metrics.inc("dp_partial_write_total", {"modality": modality}, amount=0.0)
+        for slot_name in slot_names:
+            metrics.inc("dp_units_total", {"modality": modality, "kind": slot_name},
+                        amount=0.0)
+            metrics.inc("dp_empty_output_total",
+                        {"modality": modality, "kind": slot_name}, amount=0.0)
 
-    # The UNLABELLED stage-side counters carry a single series each — no label values to
-    # guess — so they too can be shown at zero from t=0 (WS-F EXIT: "all new counters
-    # visible on /metrics at zero before any traffic"; a declared-but-never-inc'd counter
-    # renders NOTHING in this registry). Under INGEST_ISOLATION=subprocess the real
-    # increments happen in the child and are blind here, so the parent-side value stays
-    # 0 — documented, and still the honest parent view. The LABELLED stage-side families
-    # (parse_fallback{pack,step}, truncated{pass}, scenario_mismatch{expected,seen})
-    # genuinely cannot be pre-seeded and surface on their first real emit; the histograms
-    # (content_chars, delta_peak, ocr_events) render only once observed, by construction.
-    for name in ("dp_caption_ungrounded_quote_total", "dp_ocr_redactions_total",
-                 "dp_ocr_frame_errors_total"):
+    # The UNLABELLED stage-side counters carry a single series each — no label
+    # values to guess — so they can be shown at zero from t=0 (a declared-but-
+    # never-inc'd counter renders NOTHING in this registry; both now have real
+    # producers in the screentext stage). The LABELLED families
+    # (parse_fallback{pack,step}, truncated{pass}) surface on their first real
+    # emit; the content_chars histogram renders only once observed.
+    for name in ("dp_ocr_redactions_total", "dp_ocr_frame_errors_total"):
         metrics.inc(name, amount=0.0)
 
     # ---- Pull-time gauges: live state owned by the queue + continuity tracker ------
@@ -302,11 +389,10 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
     # (never rolling) signal, D-14. Per-modality resolution is guarded: a modality that
     # cannot resolve right now is simply absent, never hiding the others.
     def _pipeline_dialects():
-        settings = get_settings()
         out = []
         for modality in registered_modalities():
             try:
-                pv = get_processor(modality).pipeline_version(settings)
+                pv = graph_processor(modality).pipeline_version()
             except Exception:
                 continue  # unresolvable right now (misconfig / half-built graph) — omit
             out.append(((modality, pv), 1))
@@ -340,8 +426,9 @@ def _assert_not_offline_eval() -> None:
 
 
 def create_app() -> FastAPI:
-    """App factory. Reads env at call time so tests can point STORAGE_URL / flip
-    ASR_BACKEND before construction and inject a mock storage transport after."""
+    """App factory. Reads env at call time so tests can point STORAGE_URL at a
+    stub before construction and inject a mock storage transport after (backend
+    selection is code — there is no backend env to flip)."""
     _assert_not_offline_eval()
     settings = get_settings()
 
@@ -360,27 +447,38 @@ def create_app() -> FastAPI:
             c1, epoch = row["c1"], row["epoch"]
             chunk_id = c1["chunk_id"]
             try:
-                processor = get_processor(c1["modality"])
+                processor = graph_processor(c1["modality"])
             except KeyError:
-                # Plugin gone across a restart / mode-switch. Leaving the row 'accepted'
-                # would read as PERPETUAL 'recording' (never re-driven, never converges);
-                # dead-letter it so recording sees honest 'gaps' + a redelivery re-arms it.
-                logger.error("re-drive: no processor for %r (chunk %s) — dead-lettering",
+                # Stage set gone across a restart / mode-switch. Leaving the row
+                # 'accepted' would read as PERPETUAL 'recording' (never re-driven,
+                # never converges); dead-letter it so recording sees honest 'gaps'
+                # + a redelivery re-arms it.
+                logger.error("re-drive: no stage set for %r (chunk %s) — dead-lettering",
                              c1["modality"], chunk_id)
                 await _tp(app.state.journal.mark_dead_letter, chunk_id,
                           f"no processor for modality {c1['modality']!r}", now_iso(), epoch)
                 app.state.continuity.note_dead_letter(c1["stream_id"], c1["sequence"])
                 skipped += 1
                 continue
-            claim = await app.state.dedup.claim_for_async(chunk_id)
-            if claim != "claimed":  # already done (journal backstop) or in flight
+            claim = await app.state.dedup.claim_for_async(
+                chunk_id, processor.pipeline_version()
+            )
+            if claim.verdict == "skip":
+                # Review round: the skip verdict is proof the ledger says done —
+                # reconcile the stale pending row this re-drive was launched to
+                # resolve (epoch-guarded on the snapshot; a row a live delivery
+                # re-accepted since survives for that delivery's worker).
+                await _tp(app.state.journal.clear_pending, chunk_id, epoch)
+                continue
+            if claim.verdict == "inflight":  # a live delivery owns it
                 continue
             try:
                 await queue.submit_wait({
                     "c1": c1, "settings": settings, "processor": processor,
-                    "pipeline_version": processor.pipeline_version(settings),
+                    "pipeline_version": processor.pipeline_version(),
                     "epoch": epoch,
                     "redrive": True,  # worker charges a per-chunk re-drive attempt
+                    "heal": claim.verdict == "heal",  # a crashed heal re-drives as one
                 })
             except asyncio.CancelledError:
                 app.state.dedup.release_inflight(chunk_id)  # shutdown mid-re-drive
@@ -402,11 +500,43 @@ def create_app() -> FastAPI:
         #      re-driven), with the cap-flips from step 1 already visible as dead;
         #   3. async mode: start workers, then re-drive as a background task (pure
         #      enqueue; waits for queue capacity instead of stranding a large backlog).
+        # Model-server fleet (L9): the supervisor is an operational opt-in
+        # (DP_SUPERVISOR=1 — deploys set it; unit tests never spawn model
+        # servers). Clients exist whenever a manifest does — an externally-run
+        # fleet (drills) is reachable either way.
+        supervisor: Supervisor | None = None
+        supervisor_task: asyncio.Task | None = None
+        if _supervisor_enabled():
+            # Before the fleet, before serving: the cheapest check with the
+            # loudest failure. See _assert_vlm_identity.
+            await _assert_vlm_identity()
+        if _supervisor_enabled() and _manifest_path().exists():
+            supervisor = Supervisor.from_file(_manifest_path())
+            await supervisor.start()
+            supervisor_task = asyncio.get_running_loop().create_task(supervisor.run())
+            app.state.supervisor = supervisor
+
         redrive_rows: list = []
         if app.state.ingest_async:
-            redrive_rows = await _tp(
+            redrive_rows, finalized = await _tp(
                 journal.pending_for_redrive, settings.redrive_max_attempts, now_iso()
             )
+            for f in finalized:
+                # Heal containment at the crash-loop cap (L8): a chunk WITH a durable
+                # record is finalized (holes permanent), never dead-lettered — its
+                # record must not read as a gap. Loud: this is budget force-spent.
+                logger.error(
+                    "crash-loop cap: chunk %s has a durable record — finalized with "
+                    "permanent holes (stage_status=%s) instead of dead-letter",
+                    f["chunk_id"], f["stage_status"],
+                )
+                if app.state.metrics is not None and f["newly_final"]:
+                    for stage, status in (f["stage_status"] or {}).items():
+                        if status != "ok":
+                            app.state.metrics.inc(
+                                "dp_records_finalized_with_permanent_holes_total",
+                                {"stage": stage},
+                            )
         app.state.continuity.rehydrate(await _tp(journal.rehydration))
         redrive_task: asyncio.Task | None = None
         if app.state.ingest_async:
@@ -434,6 +564,13 @@ def create_app() -> FastAPI:
             if queue is not None:
                 await queue.drain_and_close(settings.ingest_drain_timeout)
                 app.state.ingest_queue = None
+        if supervisor is not None:
+            if supervisor_task is not None and not supervisor_task.done():
+                supervisor_task.cancel()
+                await asyncio.gather(supervisor_task, return_exceptions=True)
+            await supervisor.stop()
+        for client in app.state.model_clients.values():
+            await client.aclose()
 
     app = FastAPI(
         title="Nucleus data-processing service",
@@ -445,35 +582,29 @@ def create_app() -> FastAPI:
     # transport AFTER create_app() but BEFORE the TestClient `with` block, and
     # process_chunk reads app.state.storage per call — so the fake transport is honored.
     app.state.storage = StorageClient(settings.storage_url, timeout=settings.http_timeout)
-    # Journal is LAZY (no filesystem touch until first use) — safe at module import.
-    app.state.journal = Journal(Path(settings.dp_var_dir) / "dp.db")
-    # The journal's processed table backs dedup misses: a redelivery after a restart is
-    # answered with the prior record_ids (200) — UNLESS the pipeline dialect for that
-    # modality has since changed, in which case the receipt is stale and the honest
-    # answer is a reprocess under the new version (version-forward; old records stay).
-    def _current_pv(modality: str):
-        if _dialect_frozen():
-            # Flip window (D-14): DON'T judge the receipt's dialect against the current
-            # one — serve the stored record_ids so a redelivery is answered from the
-            # journal instead of reprocessing under the just-flipped version. Caps the
-            # mass-reprocess-on-redelivery hazard while a two-dialect fleet drains.
-            return None
-        try:
-            return get_processor(modality).pipeline_version(get_settings())
-        except Exception:  # unknown modality / plugin gone — can't judge, serve the receipt
-            return None
-
-    app.state.dedup = DedupStore(
-        done_fallback=lambda cid: app.state.journal.processed_record_ids(cid, _current_pv)
-    )
-    app.state.continuity = ContinuityTracker()
-    app.state.ingest_async = settings.ingest_async   # FROZEN at startup (no per-request read)
-    app.state.ingest_queue = None
+    # Metrics BEFORE the model clients: the server-call families (WP-D3) must be
+    # declared when the clients construct and seed their zeros.
     app.state.metrics = Metrics() if settings.metrics_enabled else None
     if app.state.metrics is not None:
         _setup_metrics(app, app.state.metrics)
         app.add_middleware(MetricsASGIMiddleware, metrics=app.state.metrics,
                            prefix="dp", templatizer=_dp_route_template)
+    # Model clients (L9): one per manifest server; timeouts from the manifest.
+    app.state.model_clients = _build_model_clients(_manifest_path(),
+                                                   metrics=app.state.metrics)
+    # Journal is LAZY (no filesystem touch until first use) — safe at module import.
+    app.state.journal = Journal(Path(settings.dp_var_dir) / "dp.db")
+    # The L8 claim tree (Stage D): every delivery is judged from the journal's
+    # done-row — fresh / version-forward / skip / heal / in-flight — with the
+    # caller's freshly-resolved pipeline_version as the version-compare input.
+    # The tree lives in dedup.classify; the row comes from HERE and only here
+    # (DP's own ledger, never a storage read).
+    app.state.dedup = DedupStore(
+        row_lookup=lambda cid: app.state.journal.done_row(cid)
+    )
+    app.state.continuity = ContinuityTracker()
+    app.state.ingest_async = settings.ingest_async   # FROZEN at startup (no per-request read)
+    app.state.ingest_queue = None
 
     def _metrics_inc(name: str, labels: dict | None = None) -> None:
         if app.state.metrics is not None:
@@ -481,22 +612,23 @@ def create_app() -> FastAPI:
 
     @app.get("/health")
     def health() -> dict:
-        # /health is a liveness probe, not a frozen contract — it additively reports the
-        # effective config. WS-VC adds dialect visibility: the CURRENT video dialect (so
-        # a deploy can confirm which pipeline_version a replica serves before it takes
-        # traffic — the drain-and-replace check, D-14) and whether the flip-window
-        # DP_DIALECT_FREEZE is armed. Video pv resolution is guarded so a half-built /
-        # misconfigured video graph degrades /health to None, never 500s the probe.
-        try:
-            video_pv = get_processor("video").pipeline_version(get_settings())
-        except Exception:
-            video_pv = None
+        # /health is a liveness probe, not a frozen contract — it additively reports
+        # the effective state: the resolved dialect per modality (so a deploy can
+        # confirm which pipeline_version a replica serves before it takes traffic)
+        # and whether this process owns the model-server fleet. Per-modality pv
+        # resolution is guarded so a half-built graph degrades to None, never 500s
+        # the probe.
+        versions: dict[str, str | None] = {}
+        for modality in registered_modalities():
+            try:
+                versions[modality] = graph_processor(modality).pipeline_version()
+            except Exception:
+                versions[modality] = None
         return {
             "ok": True,
-            "asr_backend": get_settings().asr_backend,
             "ingest_mode": "async" if app.state.ingest_async else "inline",
-            "video_pipeline_version": video_pv,
-            "dialect_frozen": _dialect_frozen(),
+            "pipeline_versions": versions,
+            "supervisor": getattr(app.state, "supervisor", None) is not None,
         }
 
     @app.get("/metrics")
@@ -540,46 +672,64 @@ def create_app() -> FastAPI:
             now_iso=now_iso(),
         )
 
-        # ---- Select the Processor for this modality (SYNCHRONOUS 501, pre-claim) ----
+        # ---- Select the stage graph for this modality (SYNCHRONOUS 501, pre-claim) --
         # C1 schema already restricts modality to the enum; a valid modality with no
-        # registered plugin is a clean 501, not a crash / a silent dead-letter.
+        # registered stage set is a clean 501, not a crash / a silent dead-letter.
         try:
-            processor = get_processor(modality)
+            processor = graph_processor(modality)
         except KeyError:
             raise HTTPException(
                 status_code=501,
-                detail={"error": f"no processor registered for modality {modality!r}"},
+                detail={"error": f"no stage set registered for modality {modality!r}"},
             )
-        pipeline_version = processor.pipeline_version(settings)
+        pipeline_version = processor.pipeline_version()
 
         if request.app.state.ingest_async:
             return await _ingest_async(request, c1, settings, processor, pipeline_version)
         return await _ingest_inline(request, c1, settings, processor, pipeline_version)
 
     async def _ingest_inline(request, c1, settings, processor, pipeline_version) -> JSONResponse:
-        """M0 behaviour, byte-identical: process inside the request, return record_ids."""
+        """Process inside the request, return record_ids — the wire shape is
+        byte-identical to M0; the redelivery verdict now comes from the L8 tree."""
         dedup: DedupStore = request.app.state.dedup
         chunk_id = c1["chunk_id"]
         metrics = request.app.state.metrics
 
-        # Dedup (fast path): already-processed chunk_id -> prior record_ids.
-        prior = dedup.get(chunk_id)
-        if prior is not None:
-            logger.info("dedup hit (processed) chunk_id=%s -> %s", chunk_id, prior)
+        def _skip_response(claim: Claim) -> JSONResponse:
+            logger.info("dedup hit (skip) chunk_id=%s -> %s", chunk_id, claim.record_ids)
             _metrics_inc("dp_dedup_hits_total")
             _metrics_inc("dp_ingest_total", {"modality": c1["modality"], "result": "deduped"})
-            return JSONResponse(content={"ok": True, "record_ids": prior})
+            return JSONResponse(content={"ok": True, "record_ids": claim.record_ids})
+
+        # Fast path (no lock): a stable skip answers immediately (L8 case 3).
+        claim = await dedup.classify(chunk_id, pipeline_version)
+        if claim.verdict == "skip":
+            return _skip_response(claim)
 
         # Serialize concurrent redeliveries of the same in-flight chunk_id.
         lock = await dedup.lock_for(chunk_id)
         async with lock:
-            prior = dedup.get(chunk_id)
-            if prior is not None:  # resolved while we waited on the lock (in-flight)
-                logger.info("dedup hit (in-flight) chunk_id=%s -> %s", chunk_id, prior)
-                _metrics_inc("dp_dedup_hits_total")
-                _metrics_inc("dp_ingest_total", {"modality": c1["modality"], "result": "deduped"})
-                return JSONResponse(content={"ok": True, "record_ids": prior})
+            claim = await dedup.classify(chunk_id, pipeline_version)  # re-judge under the lock
+            if claim.verdict == "skip":
+                return _skip_response(claim)
 
+            if claim.verdict == "heal":
+                # L8 case 4, contained: heal_chunk NEVER raises a chunk failure —
+                # a failed heal keeps the durable record and answers 200 with the
+                # existing id (dp_acked ⇔ durably written holds: it IS written).
+                record_ids = await heal_chunk(
+                    c1=c1, settings=settings, processor=processor,
+                    pipeline_version=pipeline_version,
+                    storage=request.app.state.storage, dedup=dedup, metrics=metrics,
+                    journal=request.app.state.journal, app_state=request.app.state,
+                    prior_record_ids=claim.record_ids or [],
+                )
+                request.app.state.continuity.note_processed(c1["stream_id"], c1["sequence"])
+                _metrics_inc("dp_ingest_total",
+                             {"modality": c1["modality"], "result": "processed"})
+                return JSONResponse(content={"ok": True, "record_ids": record_ids})
+
+            # fresh | version_forward: a full run under the current dialect.
             try:
                 record_ids = await process_chunk(
                     c1=c1, settings=settings, processor=processor,
@@ -597,25 +747,27 @@ def create_app() -> FastAPI:
             return JSONResponse(content={"ok": True, "record_ids": record_ids})
 
     async def _ingest_async(request, c1, settings, processor, pipeline_version) -> JSONResponse:
-        """ACK 202 the moment the chunk is claimed; a worker processes it."""
+        """ACK 202 the moment the chunk is claimed; a worker processes it. The L8
+        tree routes the verdicts; a heal claim rides the queue like any job."""
         dedup: DedupStore = request.app.state.dedup
         chunk_id = c1["chunk_id"]
 
-        claim = await dedup.claim_for_async(chunk_id)
-        if claim == "done":  # redelivery of a completed chunk -> known record_ids
-            record_ids = dedup.get(chunk_id) or []
-            logger.info("dedup hit (processed) chunk_id=%s -> %s", chunk_id, record_ids)
+        claim = await dedup.claim_for_async(chunk_id, pipeline_version)
+        if claim.verdict == "skip":  # redelivery of a done chunk -> known record_ids
+            record_ids = claim.record_ids or []
+            logger.info("dedup hit (skip) chunk_id=%s -> %s", chunk_id, record_ids)
             _metrics_inc("dp_dedup_hits_total")
             _metrics_inc("dp_ingest_total", {"modality": c1["modality"], "result": "deduped"})
             return JSONResponse(content={"ok": True, "record_ids": record_ids})
-        if claim == "inflight":  # already queued/processing -> don't double-enqueue
+        if claim.verdict == "inflight":  # already queued/processing -> no double-enqueue
             _metrics_inc("dp_ingest_total", {"modality": c1["modality"], "result": "duplicate"})
             return JSONResponse(
                 status_code=202,
                 content={"ok": True, "accepted": True, "chunk_id": chunk_id, "duplicate": True},
             )
 
-        # claimed by us -> journal (durable accept receipt) THEN enqueue for a worker.
+        # fresh | version_forward | heal: claimed by us -> journal (durable accept
+        # receipt) THEN enqueue for a worker (a heal claim rides like any job).
         queue: IngestQueue | None = getattr(request.app.state, "ingest_queue", None)
         if queue is None:  # async configured but pool not up (no lifespan) — honest 503
             dedup.release_inflight(chunk_id)
@@ -643,6 +795,7 @@ def create_app() -> FastAPI:
                     "c1": c1, "settings": settings,
                     "processor": processor, "pipeline_version": pipeline_version,
                     "epoch": epoch,
+                    "heal": claim.verdict == "heal",
                 })
                 enqueued = True
             except QueueFull:

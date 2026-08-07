@@ -13,8 +13,13 @@ import argparse
 import sys
 
 from ..budget import caption_word_bounds
-from ..config import get_vision_settings
 from . import PACK_DIGEST, PACK_VERSION, all_packs, get, render, scenario_label
+
+# Mirrors of the stage-file code pins (app/stages/video/clipcap.py /
+# screentext.py) so the preview renders what a real request sends. Display-only.
+_CAPTION_RATE = 16     # chars/second-of-life, the clipcap pin
+_SCENARIO = "screen-mac"
+_MAX_REGIONS = 3       # the screentext ocr_max_events pin (vlm-OCR packs only)
 
 _SAMPLE_OCR = (
     "+0.0s [titlebar] Inbox — Mail · [message] Re: Q3 deck — Sarah Chen · "
@@ -34,8 +39,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--pack", default="screen-clip-v1")
     ap.add_argument("--frames", type=int, default=12)
     ap.add_argument("--span", type=float, default=60.0)
-    ap.add_argument("--scenario", default=None,
-                    help="scenario whose [[scenario_label]] to render (default: VIDEO_SCENARIO)")
+    ap.add_argument("--scenario", default=_SCENARIO,
+                    help=f"scenario whose [[scenario_label]] to render (default: {_SCENARIO})")
     ap.add_argument("--ocr", default=_SAMPLE_OCR, help="sample injected on-screen text")
     args = ap.parse_args(argv)
 
@@ -45,21 +50,17 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     spec = get(args.pack)
-    vs = get_vision_settings()
     n = max(1, args.frames)
-    lo, hi = caption_word_bounds(args.span, vs)
-    # Render the label for the deployment's scenario (what a real request sends), overridable
-    # with --scenario so any scenario's exact wire text can be inspected.
-    label_scenario = args.scenario or vs.scenario
+    lo, hi = caption_word_bounds(args.span, _CAPTION_RATE)
     context = {
         "span_s": f"{args.span:.0f}",
-        "scenario_label": scenario_label(label_scenario),
+        "scenario_label": scenario_label(args.scenario),
         "n": n,
         "offsets": ", ".join(f"{t:.1f}" for t in _offsets(args.span, n)),
         "ocr_block": args.ocr or "(none)",
         "words_lo": lo,
         "words_hi": hi,
-        "max_regions": vs.ocr_max_events,
+        "max_regions": _MAX_REGIONS,
     }
     rendered = render(spec, **context)
 
@@ -67,7 +68,8 @@ def main(argv: list[str] | None = None) -> int:
     print(bar)
     print(f"pack {spec.id!r}  role={spec.role}  schema={spec.schema_name or '(none)'}  "
           f"max_tokens={spec.max_tokens}  temperature={spec.temperature}")
-    print(f"prompt dialect tag: @{spec.id}.p{PACK_VERSION}.{PACK_DIGEST}")
+    print(f"pack_version p{PACK_VERSION} · aggregate PACK_DIGEST {PACK_DIGEST} "
+          "(pinned in app/stages/video/clipcap.py — an edit here needs a vB bump there)")
     print(bar)
     print("[system]")
     print(rendered.system)

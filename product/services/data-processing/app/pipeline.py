@@ -1,52 +1,55 @@
-"""C1 envelope + a ProcessedUnit -> a C2 processed record. MODALITY-AGNOSTIC.
+"""C1 envelope + one chunk's slots -> the ONE C2 v1 record. MODALITY-AGNOSTIC.
 
-Pure functions (no I/O), reusable across the batch path and, later, the C8
-synchronous path. This module knows nothing about audio/image/video/text — a
-Processor (see ``processing/``) has already produced the modality's content; here
-we only assemble the C2 envelope around it.
+Pure functions (no I/O). The stage graph has already produced the slots map
+(each value stamped with its producer's dialect segment by the executor); here
+we only assemble the C2 v1 envelope around it (plan §2, D24).
 
-``record_id`` is a deterministic function of ``(chunk_id, pipeline_version,
-discriminator)`` — a hex SHA-256 of the components joined by NUL:
+``record_id`` = sha256(chunk_id NUL pipeline_version) — NUL-joined, lowercase
+hex, EXACTLY TWO components (L3). One record per (chunk_id, pipeline_version)
+(L2) is why dropping the v0 discriminator is safe: same pair -> byte-identical
+id, so a redelivery/reprocess/heal re-POST is an idempotent /context upsert; a
+``pipeline_version`` bump forks a new record BESIDE the old (version-forward,
+L8 case 2).
 
-  * same (chunk_id, pipeline_version, discriminator) -> byte-identical id, so a
-    redelivery/reprocess is an idempotent /context upsert for EVERY record;
-  * a ``pipeline_version`` bump forks new records (version-forward reprocessing);
-  * the within-chunk ``discriminator`` (e.g. a video keyframe index) makes each of
-    a chunk's many records stable AND distinct.
+``t_start``/``t_end`` are the C1 span strings carried VERBATIM (the D-05 rule,
+ported from the retired vision/emit.py): never reparsed, reformatted or
+normalized — a re-rendered timestamp is how a record silently moves out of its
+day-log window. ``source{}`` is provenance verbatim from C1 minus ``modality``
+(lifted to the record root — a C1 chunk is strictly single-modality) and minus
+the transport-only fields (sequence, codec, blob_sha256, blob_bytes), exactly
+as in v0. The D17 civil-time trio (device_tz, device_utc_offset_minutes,
+device_clock) + device_location ride verbatim when present, omitted when absent
+— we derive nothing, validate nothing, infer nothing.
 
-The ``discriminator`` is folded in ONLY when non-empty, so a 1:1 modality
-(``discriminator=''``) keeps the exact v0 two-component id — a re-delivery of a
-chunk processed before this seam landed still upserts the SAME record, not a fork.
+No wall-clock field exists inside the record (``processed_at`` dropped, ruled
+2026-08-06): a full reprocess under fixed versions is byte-identical (§4, T-1).
 """
 from __future__ import annotations
 
 import hashlib
-from typing import Any
+from typing import Any, Mapping
 
-from .processing.base import ProcessedUnit
 from .timeutil import parse_rfc3339
 
 # NUL separator between id components so no combination can collide by concatenation.
 _ID_SEP = b"\x00"
 
+# D17 provenance passthrough: carried verbatim when the device reported them.
+_SOURCE_OPTIONAL = ("device_tz", "device_utc_offset_minutes", "device_clock",
+                    "device_location")
 
-def compute_record_id(
-    chunk_id: str, pipeline_version: str, discriminator: str = ""
-) -> str:
-    """Deterministic, URL-safe (hex) record id for (chunk_id, pipeline_version,
-    discriminator). ``discriminator=''`` (the 1:1 case) reproduces the v0
-    two-component id."""
+
+def compute_record_id(chunk_id: str, pipeline_version: str) -> str:
+    """Deterministic, URL-safe (hex) record id for (chunk_id, pipeline_version) —
+    the L3 two-component identity. Blind upsert key; no discriminator."""
     digest = hashlib.sha256()
     digest.update(chunk_id.encode("utf-8"))
     digest.update(_ID_SEP)
     digest.update(pipeline_version.encode("utf-8"))
-    if discriminator:  # fold in only for 1:many; 1:1 keeps the v0 id byte-for-byte
-        digest.update(_ID_SEP)
-        digest.update(discriminator.encode("utf-8"))
     return digest.hexdigest()
 
 
-def chunk_span_seconds(c1: dict[str, Any]) -> float:
+def chunk_span_seconds(c1: Mapping[str, Any]) -> float:
     """Wall-clock duration of the chunk from its C1 t_start/t_end (>= 0)."""
     start = parse_rfc3339(c1["t_start"])
     end = parse_rfc3339(c1["t_end"])
@@ -54,83 +57,36 @@ def chunk_span_seconds(c1: dict[str, Any]) -> float:
 
 
 def build_c2(
-    c1: dict[str, Any],
-    unit: ProcessedUnit,
+    c1: Mapping[str, Any],
+    slots: dict[str, Any],
     pipeline_version: str,
-    processed_at: str,
 ) -> dict[str, Any]:
-    """Assemble a C2 record from the C1 envelope and one ProcessedUnit.
+    """Assemble the ONE C2 v1 record for a chunk from its slots map (L2/L5).
 
-    - source provenance (device/stream/chunk/blob/modality) carried from C1;
-    - t_start/t_end: the unit's optional per-unit sub-span when it set one, else
-      carried VERBATIM from C1 (the time-spine axis storage indexes on). Defaulting
-      to the C1 span keeps every 1:1 modality byte-identical; a video keyframe that
-      knows its own timing supplies a sub-span so a chunk's many records no longer
-      collide on the shared chunk span (CHARTER OQ14a). No C2 schema change — C2
-      already carries per-record timestamps;
-    - content is the unit's content, exactly as the Processor emitted it (segments,
-      when present, already carry absolute RFC3339 times);
-    - enrichments carried from the unit (present-but-empty in v0);
-    - record_id folds in the unit's within-chunk discriminator, and (2026-07-27)
-      that same discriminator is EMITTED as a top-level field so a reader can see
-      it instead of only hashing it.
+    ``slots`` is the executor's GraphResult.slots — every value already carries
+    its producer's segment as ``version``. An empty map is legal and honest
+    (all-optional-failure under L7: the dialect states what was attempted).
     """
-    record_id = compute_record_id(c1["chunk_id"], pipeline_version, unit.discriminator)
-
-    # Per-unit sub-span when the Processor set one; otherwise the chunk's C1 span.
-    t_start = unit.t_start if unit.t_start is not None else c1["t_start"]
-    t_end = unit.t_end if unit.t_end is not None else c1["t_end"]
-
-    content: dict[str, Any] = {"kind": unit.content.kind, "text": unit.content.text}
-    if unit.content.language:
-        content["language"] = unit.content.language
-    if unit.content.segments:
-        content["segments"] = unit.content.segments
-
-    # D17 civil-time context: carried VERBATIM from the envelope. We derive
-    # nothing, validate nothing, infer nothing — a timezone is a fact about where
-    # the user physically was, knowable only at the capturing device at capture
-    # time; anything reconstructed here would be a guess dressed as data. This is
-    # provenance passthrough (like device_id/blob_ref), NOT a signal we produce,
-    # so the record-emission law's T2 "reachable consumer" test does not gate it.
-    # Absent on the envelope => absent on the record => consumers fall back to the
-    # user's profile home_tz.
     source: dict[str, Any] = {
         "device_id": c1["device_id"],
         "stream_id": c1["stream_id"],
         "chunk_id": c1["chunk_id"],
         "blob_ref": c1["blob_ref"],
-        "modality": c1["modality"],
     }
-    for field in ("device_tz", "device_utc_offset_minutes", "device_location"):
+    for field in _SOURCE_OPTIONAL:
         value = c1.get(field)
         if value is not None:
             source[field] = value
 
-    record: dict[str, Any] = {
+    return {
         "contract": "C2",
-        "version": "0",
-        "record_id": record_id,
+        "version": "1",
+        "record_id": compute_record_id(c1["chunk_id"], pipeline_version),
         "user_id": c1["user_id"],
+        "modality": c1["modality"],
         "source": source,
-        "t_start": t_start,
-        "t_end": t_end,
-        "content": content,
-        "enrichments": unit.enrichments,
+        "t_start": c1["t_start"],   # VERBATIM C1 strings — the D-05 rule
+        "t_end": c1["t_end"],
         "pipeline_version": pipeline_version,
+        "content": {"slots": slots},
     }
-
-    # The within-chunk discriminator, SURFACED (2026-07-27, D18 follow-through).
-    # It has fed record_id since v0 but lived only inside the hash, so a reader
-    # holding two records of one chunk could not tell "two units" from "two
-    # dialects of one unit" — the distinction C10's day-log materialization keys
-    # its one-dialect-per-record rule on. Emitted ONLY when non-empty: the 1:1 case
-    # is ABSENCE, not "" (same shape rule as the D17 civil-time passthrough), which
-    # is what keeps a 1:1 record byte-identical to its pre-seam self. This adds NO
-    # id input — compute_record_id already folded the same value in, and it already
-    # skips an empty one — so no existing record re-keys.
-    if unit.discriminator:
-        record["discriminator"] = unit.discriminator
-
-    record["processed_at"] = processed_at
-    return record

@@ -13,7 +13,8 @@
 > Read this first in any founders' session, then the aspect file you're working. Service-level state
 > lives in each service's own `HANDOFF.md` — this board links, it does not restate.
 
-**Stage: PROTOTYPE** (D19) · **Last updated:** 2026-07-27
+**Stage: PROTOTYPE** (D19) · **Last updated:** 2026-08-06 (DP-A resolved — the DP rebuild's
+Stage A ratified as D23–D28)
 
 ---
 
@@ -32,7 +33,8 @@
   `services/inference/serve_vllm.sh` when needed.
 - **Learn fleet is up on node-7** (storage 8083 · recording 8084 · data-processing 8085);
   `INGEST_ASYNC` and `INGEST_ISOLATION` stay off by default.
-- **Nothing is blocking.** Every item in §Next is a follow-up, not a gate.
+- **Nothing is blocking.** The DP rebuild's Stage A is ratified (D23–D28, 2026-08-06); its next
+  act is Stage B (machinery), not started. Every open §Next item is a follow-up, not a gate.
 
 ---
 
@@ -142,9 +144,9 @@ Each thread carries its own reasoning and a newest-first worklog. The board does
 
 ## Escalations (open items needing a founders' decision)
 
-Opened 2026-07-24 by the data-processing screen-video design session (WS-VC). The build is done and
-integrated (2026-07-25), so these are cutover gates and founders' calls, not build blockers. Full
-write-ups, with the measured numbers behind each, in
+Opened 2026-07-24 by the data-processing screen-video design session (WS-VC). The build is done
+and integrated (2026-07-25), so these are cutover gates and founders' calls, not build blockers.
+Full write-ups, with the measured numbers behind each, in
 [services/data-processing/handoff/ws-video-clip.md](services/data-processing/handoff/ws-video-clip.md)
 §10.
 
@@ -154,6 +156,12 @@ write-ups, with the measured numbers behind each, in
 | **E-5** | The parked additive C2 edit — the ask is to *not* take it yet | founders → storage + data-processing | nothing | when triggered [↓](#e-5--the-parked-additive-c2-edit) |
 | **E-2** | A kind-aware retraction primitive; demoted by D18 | storage | nothing | service-level [↓](#e-2--the-retraction-primitive) |
 | **E-1 · E-4 · E-6** | Sibling-service asks with no contract surface | recording · continuum | cost figure · RWT granularity | no [↓](#e-1--e-4--e-6--sibling-service-asks) |
+
+**Resolved 2026-08-06: DP-A** — the DP rebuild's Stage A sign-off. The founder ratified the
+Stage A paper as amended by the cleanup round; the six drafted rows entered the register as
+**D23–D28**, E-2's whole-record redesign is ratified with D28 (the E-2 row below keeps its
+priority), and Stage A is complete on branch `dp-rebuild-v1`. Stage B (machinery) is the
+rebuild's next act and has not started.
 
 **Resolved during the build: E-3(a)** — the `--limit-mm-per-prompt` serving-flag ask. WS-A's probe
 verified vLLM 0.24.0 defaults the image cap to 999 and clamps nothing at 768×480, so the

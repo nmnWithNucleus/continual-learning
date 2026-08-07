@@ -9,7 +9,9 @@ in both the request path and the tests.
 from __future__ import annotations
 
 import json
+import math
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -20,20 +22,26 @@ from referencing import Registry, Resource
 # product/services/storage/app/schemas.py -> parents[3] == product/
 _DEFAULT_CONTRACTS_DIR = Path(__file__).resolve().parents[3] / "contracts"
 
-C2_ID = "https://nucleus.ai/contracts/c2_processed_record.v0.json"
+# C2 is v1 (the DP rebuild, D24): the branch validates v1 EXCLUSIVELY (founder ruling
+# R1, 2026-08-06). The v0 file stays in contracts/ — it is the running wire on the live
+# worktree service until the Stage F cutover, and the OD-2 wipe means no stored v0
+# record survives into this code's world.
+C2_ID = "https://nucleus.ai/contracts/c2_processed_record.v1.json"
 C3_ID = "https://nucleus.ai/contracts/c3_userprompt.v0.json"
 C4_ID = "https://nucleus.ai/contracts/c4_turn_record.v0.json"
 C6_ID = "https://nucleus.ai/contracts/c6_resolve.v0.json"
-# C10 is v1, not v0: it EVOLVED in place (D18) from a raw C2 range read into the day-log
-# fetch, keeping its number because its direction and peers are unchanged.
+# C10's day-log body is v2 on this branch (D28: the slot-walk renderer over C2 v1; the
+# v1 file stays in contracts/ as the live worktree service's running read until the
+# Stage F cutover). It EVOLVED in place at D18 from a raw C2 range read, keeping its
+# number because its direction and peers are unchanged.
 #
 # C10 is TWO schemas for the same reason C13 is: a contract is a family of OPERATIONS,
 # and the day-log body and the training-window ledger row are different bodies on
 # different endpoints. One file could only carry both behind a `oneOf` that hides exactly
-# the distinction the contract is about, and `c10_daylog.v1.json`'s $id names the day-log
+# the distinction the contract is about, and `c10_daylog.v2.json`'s $id names the day-log
 # specifically — a consumer validating "a C10 day-log" against a root that had quietly
 # become a union would be checking nothing.
-C10_ID = "https://nucleus.ai/contracts/c10_daylog.v1.json"
+C10_ID = "https://nucleus.ai/contracts/c10_daylog.v2.json"
 C10_WINDOW_ID = "https://nucleus.ai/contracts/c10_training_window.v1.json"
 C12_ID = "https://nucleus.ai/contracts/c12_user_profile.v0.json"
 # C13 is TWO schemas, not one, and that is the contract rather than a filing choice: the
@@ -82,7 +90,49 @@ def errors(schema_id: str, payload: Any) -> list[dict[str, str]]:
 
 
 def validate_c2(payload: Any) -> list[dict[str, str]]:
-    return errors(C2_ID, payload)
+    """C2 v1, plus the fullmatch the contract itself demands of enforcing
+    implementations.
+
+    ``pipeline_version`` and each slot's ``version`` are variable-width, so the
+    fixed-length trap closure used on ``record_id`` (and on ``window_id``) is
+    unavailable — and in the Python validator these schemas are enforced by, ``$``
+    also matches just before a trailing newline, so the schema's ``pattern`` alone
+    would admit ``"asr.v1-mock.v1\\n"``. The patterns are read from the loaded schema
+    (the source of truth), never restated here; the fullmatch runs only on a payload
+    the schema already accepted, so the shape reads below cannot miss.
+    """
+    out = errors(C2_ID, payload)
+    if out:
+        return out
+    _registry, schemas_by_id = _load()
+    schema = schemas_by_id[C2_ID]
+    pv_pattern = schema["properties"]["pipeline_version"]["pattern"]
+    if not re.fullmatch(pv_pattern, payload["pipeline_version"]):
+        out.append({
+            "path": "pipeline_version",
+            "message": "must fullmatch the contract pattern (Python's `$` admits a "
+                       "trailing newline; the contract requires fullmatch)",
+        })
+    slot_pattern = schema["$defs"]["slot_version"]["pattern"]
+    for name, slot in payload["content"]["slots"].items():
+        if not re.fullmatch(slot_pattern, slot["version"]):
+            out.append({
+                "path": f"content/slots/{name}/version",
+                "message": "must fullmatch the contract slot_version pattern",
+            })
+    # One more Python-validator trap (review round): the json parser admits the
+    # non-standard NaN/Infinity literals, and jsonschema's minimum/maximum are
+    # VACUOUSLY TRUE for NaN — which the pydantic mirror then rejects, turning a bad
+    # request into a 500. Closed here, where the other trap closures live.
+    acoustic = payload["content"]["slots"].get("acoustic") or {}
+    confidence = acoustic.get("confidence")
+    if isinstance(confidence, float) and not math.isfinite(confidence):
+        out.append({
+            "path": "content/slots/acoustic/confidence",
+            "message": "must be a finite number (NaN/Infinity are json-parser "
+                       "extensions the schema's bounds cannot exclude)",
+        })
+    return out
 
 
 def validate_c4(payload: Any) -> list[dict[str, str]]:

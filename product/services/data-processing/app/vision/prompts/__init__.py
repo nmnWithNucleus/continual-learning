@@ -5,41 +5,31 @@ One ``.prompt.md`` file per prompt (front-matter + ``[system]`` / ``[user]``), p
 (the guided-decoding JSON Schemas), and ``LOCK.json`` (the hand-bumped ``PACK_VERSION`` +
 the last-locked digest). This module loads, validates, resolves and hashes them.
 
-Two derived tokens compose the clip dialect:
-
-  * ``PACK_DIGEST`` — sha8 over the NORMALISED specs (id + role + decode params + output
-    schema + system + user, with line endings normalised and trailing whitespace stripped
-    per line) plus the canonical ``routes.json``. A reflow / CRLF checkout / trailing
-    newline does NOT fork the corpus; every model-facing byte, decode parameter and the
-    schema DO. So editing one byte of a prompt forks the dialect automatically — there is
-    no version bump to forget.
-  * ``version_tag(vs)`` — ``@{pack}.p{PACK_VERSION}.{PACK_DIGEST}``, the suffix the vlm/
-    vertex captioner backend adds to its ``pipeline_version`` (the mock backend adds ``""``
-    so a prompt edit never re-keys the headless corpus). Both ``select`` and ``version_tag``
-    derive from one ``_resolve_pack_id`` whose unknown → pinned default, so an unrecognised
-    ``VIDEO_CLIP_PROMPT`` can neither render a bogus pack nor stamp a colliding dialect
-    (the audio ``diarize.select``/``version_tag`` idiom, transposed).
+Identity under the DP rebuild (L4): ``PACK_DIGEST`` — sha8 over the NORMALISED specs
+(id + role + decode params + output schema + system + user, with line endings normalised
+and trailing whitespace stripped per line) plus the canonical ``routes.json``. A reflow /
+CRLF checkout / trailing newline does NOT move it; every model-facing byte, decode
+parameter and the schema DO. The ``clipcap`` stage pins the expected digest as a code
+constant and registration FAILS LOUD on a mismatch — so a ``.prompt.md`` edit without a
+backend-version (vB) bump is impossible to ship silently. The v0 ``version_tag`` suffix
+machinery is gone: identity is the stage's ``<stage>.v<S>-<backend>.v<B>`` segment, and a
+prompt change is a vB bump (enforced by the digest pin), never a self-composing tag.
 
 **Loading discipline (D-13 TOCTOU note).** Packs are read ONCE per process at import and
-never re-stat'd: ``pipeline_version`` is computed at ACCEPT and the prompt is rendered at
-RUN in a worker (or a different process under subprocess isolation); an ``mtime`` cache
-would stamp prompt A's digest onto text produced by prompt B while a backlog drains.
-Production bakes prompts into the image; ``VIDEO_PROMPT_DIR`` set ⇒ a startup WARN and
-``PROMPT_SOURCE == "dir"``.
+never re-stat'd. Prompts are baked into the image; the v0 ``VIDEO_PROMPT_DIR`` override
+and the ``VIDEO_CLIP_PROMPT`` pack override are DEAD (output-affecting env knobs, L4) —
+the registry loads from this package directory, full stop. Experiments construct an
+experimental stage in code (``experiment=`` → ``.exp-<code>`` in the dialect).
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
-import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:  # avoid a runtime import cycle — vs is duck-typed (.scenario) at call time
-    from ..config import VisionSettings
+from typing import Any
 
 logger = logging.getLogger("data-processing.vision.prompts")
 
@@ -227,19 +217,11 @@ def _load_lock_version(source_dir: Path) -> str:
 
 
 # --------------------------------------------------------------------------------------
-# Load ONCE at import (never re-stat'd — the D-13 TOCTOU discipline)
+# Load ONCE at import (never re-stat'd — the D-13 TOCTOU discipline). Packaged dir ONLY:
+# the v0 VIDEO_PROMPT_DIR override was an output-affecting env knob and is dead (L4).
 # --------------------------------------------------------------------------------------
-_override = (os.getenv("VIDEO_PROMPT_DIR") or "").strip()
-if _override:
-    _SOURCE_DIR = Path(_override)
-    PROMPT_SOURCE = "dir"
-    logger.warning(
-        "VIDEO_PROMPT_DIR=%s overrides the packaged prompt pack (prompt_source=dir); "
-        "production bakes prompts into the image — D-13", _override,
-    )
-else:
-    _SOURCE_DIR = _PACKAGE_DIR
-    PROMPT_SOURCE = "packaged"
+_SOURCE_DIR = _PACKAGE_DIR
+PROMPT_SOURCE = "packaged"
 
 _PACKS, _ROUTES, _SCHEMAS = load_registry(_SOURCE_DIR)
 PACK_VERSION: str = _load_lock_version(_SOURCE_DIR)
@@ -264,42 +246,31 @@ def family_default(role: str) -> str:
 
 
 def _is_clip(pack_id: str) -> bool:
-    """A pack the clip primary may render (never an ``ocr`` pack, never the ``legacy``
-    fingerprint record) — so a misconfigured VIDEO_CLIP_PROMPT can't hand the captioner an
-    OCR template. Idle/single variants are role ``clip`` and remain selectable."""
+    """A pack the clip captioner may render (never an ``ocr`` pack, never the ``legacy``
+    fingerprint record). Idle/single variants are role ``clip`` and remain selectable."""
     return pack_id in _PACKS and _PACKS[pack_id].role == "clip"
 
 
-def _resolve_pack_id(vs: "VisionSettings") -> str:
-    """VIDEO_CLIP_PROMPT (explicit pack override) → routes[scenario] → pinned family
-    default. Unknown — or a non-clip pack — at every step resolves to the default: never
-    fork, never collide, never render the wrong family."""
-    explicit = (os.getenv("VIDEO_CLIP_PROMPT") or "").strip()
-    if _is_clip(explicit):
-        return explicit
-    by_scenario = _ROUTES.get("scenarios", {}).get(getattr(vs, "scenario", ""), "")
+def _resolve_pack_id(scenario: str) -> str:
+    """``routes[scenario]`` → pinned family default. ``scenario`` is a CODE PIN in the
+    ``clipcap`` stage file (the v0 ``VIDEO_SCENARIO``/``VIDEO_CLIP_PROMPT`` env knobs are
+    dead, L4). An unknown scenario — or a route to a non-clip pack — resolves to the
+    default: never render the wrong family, never crash on a route gap."""
+    by_scenario = _ROUTES.get("scenarios", {}).get(scenario, "")
     if _is_clip(by_scenario):
         return by_scenario
     return family_default("clip")
 
 
-def select(vs: "VisionSettings") -> PromptSpec:
-    """The active clip pack for this deployment (scenario / override resolved)."""
-    return _PACKS[_resolve_pack_id(vs)]
+def select(scenario: str) -> PromptSpec:
+    """The active clip pack for a code-pinned scenario."""
+    return _PACKS[_resolve_pack_id(scenario)]
 
 
 def get(pack_id: str) -> PromptSpec:
     """Direct lookup by id (e.g. the idle / single runtime variant). Raises ``KeyError``
-    for a truly-unknown id — a code bug, distinct from an env-driven unknown which
-    ``select`` / ``version_tag`` coerce to the default."""
+    for a truly-unknown id — a code bug, loud."""
     return _PACKS[pack_id]
-
-
-def version_tag(vs: "VisionSettings") -> str:
-    """The prompt dialect suffix for the vlm/vertex backend: ``@{pack}.p{V}.{DIGEST}``.
-    Coerced through ``_resolve_pack_id`` so an unknown ``VIDEO_CLIP_PROMPT`` stamps the
-    default pack's tag, never a bogus one."""
-    return f"@{_resolve_pack_id(vs)}.p{PACK_VERSION}.{PACK_DIGEST}"
 
 
 def scenario_label(scenario: str) -> str:

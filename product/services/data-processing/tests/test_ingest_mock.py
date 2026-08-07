@@ -1,30 +1,30 @@
 """End-to-end mock-loop tests for POST /ingest.
 
-Hermetic: mock ASR (no GPU), storage faked via an httpx MockTransport. Drives the
-app in-process with FastAPI's TestClient. Every assertion is on real behavior:
-the C1 gate, the emitted C2 (schema-valid + provenance carried), record_id
-determinism, dedup (storage POSTed at most once), and segment-times-within-span.
+Hermetic: the mock audio dialect (client-level fake, no GPU), storage faked via
+an httpx MockTransport. Drives the app in-process with FastAPI's TestClient.
+Every assertion is on real behavior: the C1 gate, the emitted C2 v1 (schema-valid
++ provenance carried), record_id determinism, dedup (storage POSTed at most
+once), and split-times-within-span.
 """
 from __future__ import annotations
 
 from app import schemas
-from app.asr import mock as mock_asr
 from app.pipeline import compute_record_id
 from app.timeutil import parse_rfc3339
-from tests.conftest import make_c1
+from tests.conftest import MOCK_AUDIO_PV, make_c1
 
 
 # ---- Health ------------------------------------------------------------------
 
-def test_health_reports_mock_backend(client):
+def test_health_reports_dialects(client):
     resp = client.get("/health")
     assert resp.status_code == 200
     # /health is a liveness probe (not a frozen contract); it additively reports the
-    # effective ASR backend + the ingest mode (inline by default) + the WS-VC dialect
-    # visibility fields (current video dialect + the flip-window freeze flag).
+    # ingest mode + the resolved dialect per modality + fleet ownership.
     assert resp.json() == {
-        "ok": True, "asr_backend": "mock", "ingest_mode": "inline",
-        "video_pipeline_version": "vidproc-mock-v0", "dialect_frozen": False,
+        "ok": True, "ingest_mode": "inline",
+        "pipeline_versions": {"audio": MOCK_AUDIO_PV},
+        "supervisor": False,
     }
 
 
@@ -54,26 +54,27 @@ def test_ingest_validates_c1_and_writes_c2(client):
     # record_id echoed to the caller == the one persisted.
     assert c2["record_id"] == record_id
 
-    # Provenance + time-spine carried from C1.
-    assert c2["contract"] == "C2" and c2["version"] == "0"
+    # Provenance + time-spine carried from C1; modality is root-level in v1.
+    assert c2["contract"] == "C2" and c2["version"] == "1"
     assert c2["user_id"] == c1["user_id"]
+    assert c2["modality"] == c1["modality"]
     assert c2["source"] == {
         "device_id": c1["device_id"],
         "stream_id": c1["stream_id"],
         "chunk_id": c1["chunk_id"],
         "blob_ref": c1["blob_ref"],
-        "modality": c1["modality"],
     }
     assert c2["t_start"] == c1["t_start"]  # carried verbatim
     assert c2["t_end"] == c1["t_end"]
 
-    # Content is an ASR transcript that references the chunk_id; enrichments empty.
-    assert c2["content"]["kind"] == "transcript"
-    assert c1["chunk_id"] in c2["content"]["text"]
-    assert c2["content"]["language"] == "en"
-    assert c2["enrichments"] == {"speakers": [], "faces": [], "places": [], "objects": []}
-    assert c2["pipeline_version"] == mock_asr.PIPELINE_VERSION
-    assert c2["processed_at"]
+    # The one record is built from slots; the asr slot references the chunk_id.
+    assert c2["pipeline_version"] == MOCK_AUDIO_PV
+    asr = c2["content"]["slots"]["asr"]
+    assert asr["version"] == MOCK_AUDIO_PV
+    assert c1["chunk_id"] in asr["value"]
+    # Dead concepts never ride the wire.
+    for dead in ("enrichments", "discriminator", "processed_at"):
+        assert dead not in c2
 
     # The blob was pulled by ref (query param), exactly once.
     assert fs.blob_gets == [c1["blob_ref"]]
@@ -117,16 +118,16 @@ def test_bad_c1_rejected_422_and_nothing_written(client):
 
 def test_record_id_determinism_and_version_sensitivity():
     # Same (chunk_id, pipeline_version) -> byte-identical id, every time.
-    a = compute_record_id("chunk-xyz", "asr-mock-v0")
-    b = compute_record_id("chunk-xyz", "asr-mock-v0")
+    a = compute_record_id("chunk-xyz", "asr.v1-mock.v1")
+    b = compute_record_id("chunk-xyz", "asr.v1-mock.v1")
     assert a == b
 
     # A pipeline_version bump forks a NEW id (version-forward reprocessing).
-    c = compute_record_id("chunk-xyz", "asr-fw-v0")
+    c = compute_record_id("chunk-xyz", "asr.v1-fw.v1")
     assert c != a
 
     # A different chunk_id also yields a different id.
-    d = compute_record_id("chunk-other", "asr-mock-v0")
+    d = compute_record_id("chunk-other", "asr.v1-mock.v1")
     assert d != a
 
     # URL-safe: hex only.
@@ -137,7 +138,7 @@ def test_emitted_record_id_matches_deterministic_function(client):
     c1 = make_c1(client.fake_storage, chunk_id="chunk-determ")
     resp = client.post("/ingest", json=c1)
     assert resp.status_code == 200
-    expected = compute_record_id("chunk-determ", mock_asr.PIPELINE_VERSION)
+    expected = compute_record_id("chunk-determ", MOCK_AUDIO_PV)
     assert resp.json()["record_ids"] == [expected]
 
 
@@ -172,13 +173,12 @@ def test_segment_times_within_chunk_span(client):
     assert resp.status_code == 200
 
     c2 = client.fake_storage.record_posts[0]
-    segments = c2["content"]["segments"]
-    assert len(segments) >= 1
+    splits = c2["content"]["slots"]["asr"]["splits"]
+    assert len(splits) >= 1
 
     chunk_start = parse_rfc3339(c1["t_start"])
     chunk_end = parse_rfc3339(c1["t_end"])
-    for seg in segments:
-        seg_start = parse_rfc3339(seg["t_start"])
-        seg_end = parse_rfc3339(seg["t_end"])
-        assert chunk_start <= seg_start <= seg_end <= chunk_end
-        assert seg["speaker"] is None  # required-nullable, always null in v0
+    for split in splits:
+        s_start = parse_rfc3339(split["t_start"])
+        s_end = parse_rfc3339(split["t_end"])
+        assert chunk_start <= s_start <= s_end <= chunk_end

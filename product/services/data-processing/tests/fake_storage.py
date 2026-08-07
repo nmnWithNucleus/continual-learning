@@ -22,6 +22,7 @@ class FakeStorage:
         self.records: dict[str, dict[str, Any]] = {}  # record_id -> C2 (upsert)
         self.blob_gets: list[str] = []             # every ref fetched, in order
         self.record_posts: list[dict[str, Any]] = []  # every C2 posted, in order
+        self.record_posts_raw: list[bytes] = []    # the exact wire bytes (T-1)
         # Transient-failure injection: ref -> how many more GETs return 503 before the
         # bytes are served. Lets a test exercise the async worker's transient retry.
         self.blob_fail_times: dict[str, int] = {}
@@ -51,6 +52,7 @@ class FakeStorage:
         if request.method == "POST" and path == "/context/records":
             body = json.loads(request.content)
             self.record_posts.append(body)
+            self.record_posts_raw.append(bytes(request.content))
             record_id = body["record_id"]
             self.records[record_id] = body  # idempotent upsert
             return httpx.Response(200, json={"ok": True, "record_id": record_id})

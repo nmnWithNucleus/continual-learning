@@ -1,50 +1,77 @@
-"""Audio PRIMARY stage: ASR (mock | faster_whisper, VAD-gated) + absolute-time mapping.
+"""asr — the audio primary: thin client over ``servers/whisper`` (L9).
 
-Byte-identical transplant of the monolithic processor's ``_asr`` stage + final assembly:
-transcribe via the selected backend, lift chunk-relative segment offsets to absolute
-RFC3339 clamped into the chunk span, and (in ``assemble``, after every other stage ran)
-emit the primary transcript unit — ``discriminator=''``, so its record_id stays
-byte-for-byte the pre-seam v0 id.
+Loop-native (``run_async``): prepare the /infer envelope, await the whisper
+pool, post-process the result into the ``asr`` slot. No model code, no env
+reads — every output-affecting choice is a code pin below (L4).
 
-``version_fragment`` is the BASE audio dialect (``asr-mock-v0`` / ``asr-fw-v1``),
-delegating to the selected backend exactly as ``pipeline_version`` always has. The
-``segments`` + ``enrichments`` slots are declared mutable — the diarize stage fills
-speakers into them in place; the executor's SlotView keeps everyone else out (a
-sidecar is never even handed a reference to them).
+Params pinned to the Stage B golden (servers/whisper PROVENANCE.md):
+``task=transcribe, beam_size=1, language="en", vad=true``. DELIBERATE DIALECT
+CHANGE vs v0: fw.v1 means large-v3 / cuda / fp16 / beam 1 / language pinned en /
+VAD on — v0's env-DEFAULT was base / cpu / int8 with auto-detect language
+(ASR_MODEL/ASR_DEVICE/ASR_COMPUTE_TYPE/ASR_LANGUAGE knobs, all dead), while the
+beta fleet actually ran the en pin. The Stage B carry-over says vB=1 reflects
+this server-pinned identity; any future change to these params (or the server's
+pinned model) is a vB bump.
+
+Slot value (C2 v1 ``asr`` sub-schema):
+  * ``value`` — the full transcript text; ``""`` is the honest VAD-silence
+    empty claim (L11), always emitted.
+  * ``language`` — the detected/pinned language; omitted ONLY when the server
+    returned nothing truthy (the contract has it optional).
+  * ``splits`` — chunk-relative segment times lifted to absolute RFC3339
+    (chunk t_start + offset, clamped into [0, span_seconds] — the exact v0
+    ``_absolute_segments`` mapping, minus the speaker field which now lives in
+    the ``transcript`` slot); omitted when the server returned no segments.
 """
 from __future__ import annotations
 
-from datetime import datetime
+import base64
 from typing import Any
 
-from ...asr import select as select_asr
-from ...asr.result import AsrSegment
-from ...processing.base import ProcessedContent, ProcessedUnit, empty_enrichments
-from ...stagegraph import Stage, StageContext, StageResult, register_stage
 from ...timeutil import abs_time, parse_rfc3339
+from ...stagegraph.stage import Backend, Stage, StageContext, StageOutput, register_stage
+
+# The /infer params, pinned in code — exactly the Stage B golden's params.
+TRANSCRIBE_PARAMS: dict[str, Any] = {
+    "task": "transcribe",
+    "beam_size": 1,
+    "language": "en",   # pinned, not auto-detect: faint ambient audio guesses
+                        # wrong scripts and hallucinates (v0 beta finding)
+    "vad": True,        # Silero VAD gate: silence transcribes EMPTY, not invented
+}
 
 
-def _absolute_segments(
-    base: datetime, span_seconds: float, segments: list[AsrSegment]
-) -> list[dict[str, Any]]:
-    """Lift chunk-relative ASR/translation segments to absolute-time C2 segment dicts.
+def require_client(ctx: StageContext, stage: Stage):
+    """The stage's server pool, or a loud RuntimeError — a missing client is an
+    operational wiring bug, never something to catch-and-fake."""
+    client = ctx.clients.get(stage.server)
+    if client is None:
+        raise RuntimeError(
+            f"stage {stage.name!r} needs a model client for server "
+            f"{stage.server!r} but ctx.clients has {sorted(ctx.clients)!r}"
+        )
+    return client
 
-    Each offset is clamped into ``[0, span_seconds]`` and mapped to ``base + offset``.
-    ``speaker`` is ``None`` here (the diarize stage fills the transcript's in place; a
-    translation's segments stay null). Shared by the asr + translate stages so both speak
-    exactly the 4-key C2 segment shape ``{t_start, t_end, text, speaker}``."""
+
+def absolute_splits(c1, span_seconds: float, segments) -> list[dict[str, Any]]:
+    """Lift chunk-relative server segments to absolute-time split dicts.
+
+    The exact v0 ``_absolute_segments`` semantics: each offset clamped into
+    ``[0, span_seconds]`` (end additionally floored at start), mapped to
+    ``chunk t_start + offset`` as RFC3339 UTC. Shared with the translate stage
+    so both speak the same 3-key split shape ``{t_start, t_end, value}`` — a
+    change here changes BOTH dialects (bump both stages' versions).
+    """
+    base = parse_rfc3339(c1["t_start"])
     out: list[dict[str, Any]] = []
     for seg in segments:
-        start = min(max(seg.start_s, 0.0), span_seconds)
-        end = min(max(seg.end_s, start), span_seconds)
-        out.append(
-            {
-                "t_start": abs_time(base, start),
-                "t_end": abs_time(base, end),
-                "text": seg.text,
-                "speaker": None,
-            }
-        )
+        start = min(max(float(seg["start_s"]), 0.0), span_seconds)
+        end = min(max(float(seg["end_s"]), start), span_seconds)
+        out.append({
+            "t_start": abs_time(base, start),
+            "t_end": abs_time(base, end),
+            "value": seg["text"],
+        })
     return out
 
 
@@ -52,38 +79,32 @@ def _absolute_segments(
 class AsrStage(Stage):
     name = "asr"
     modality = "audio"
-    kind = "primary"
-    order = 0
-    provides = ("asr", "segments", "enrichments")
-    mutable_slots = ("segments", "enrichments")
+    stage_version = 1
+    backend = Backend("fw", 1)
+    needs = ()
+    required = True          # no transcript claim -> no record (L7)
+    # L10: C10 v2's ruled Heard-lines fallback reads slots.asr when transcript
+    # holes; speaker_align consumes it in-run. ~15 chars/s of life.
+    consumer = "daylog:heard"
+    byte_budget = 32768      # real 17.8 s golden emits 564 B; a dense 60 s chunk
+                             # stays ~4 KB (text rides twice: value + splits)
+    server = "whisper"
 
-    def version_fragment(self, settings) -> str:
-        # The base audio dialect — exactly the old pipeline_version's base term.
-        return select_asr(settings).PIPELINE_VERSION
-
-    def run_sync(self, ctx: StageContext) -> StageResult:
-        asr_result = select_asr(ctx.settings).transcribe(
-            ctx.settings, ctx.blob, ctx.c1["codec"], ctx.span_seconds, ctx.c1["chunk_id"]
-        )
-        base = parse_rfc3339(ctx.c1["t_start"])
-        return StageResult(slots={
-            "asr": asr_result,
-            "segments": _absolute_segments(base, ctx.span_seconds, asr_result.segments),
-            "enrichments": empty_enrichments(),
+    async def run_async(self, ctx: StageContext) -> StageOutput:
+        client = require_client(ctx, self)
+        result = await client.infer({
+            "input_b64": base64.b64encode(ctx.blob).decode("ascii"),
+            "codec": ctx.c1["codec"],
+            "params": dict(TRANSCRIBE_PARAMS),
         })
 
-    def assemble(self, ctx: StageContext) -> list[ProcessedUnit]:
-        asr_result = ctx.slots["asr"]
-        content = ProcessedContent(
-            kind="transcript",
-            text=asr_result.text,
-            language=asr_result.language or None,
-            segments=ctx.slots["segments"] or None,
-        )
-        return [
-            ProcessedUnit(
-                content=content,
-                enrichments=ctx.slots["enrichments"],
-                discriminator="",  # the chunk's primary record; sidecars carry their own
-            )
-        ]
+        value: dict[str, Any] = {}
+        language = result.get("language") or ""
+        if language:
+            value["language"] = language
+        value["value"] = result.get("text", "")
+        splits = absolute_splits(ctx.c1, ctx.span_seconds,
+                                 result.get("segments") or [])
+        if splits:
+            value["splits"] = splits
+        return StageOutput(value=value)

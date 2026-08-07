@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nucleus.ai/contracts/c10_daylog.v2.json",
+  "title": "C10 DayLog v2 — the day-log fetch over C2 v1 slots (storage -> continuum)",
+  "description": "The rendered segment/block day-log for one training window, served by GET /training/daylog?user_id=&window_id=. VERSION 2 (DP rebuild; ratified 2026-08-06 as D28 with D27; plan: services/data-processing/docs/refactor_dp_service.md §5; renderer built at rebuild Stage E): the renderer walks C2 v1 content.slots instead of per-kind records — slots.caption -> Scene lines, slots.ocr -> World text (OCR) lines, slots.transcript -> speaker-bucketed transcript lines via its splits[]. Speech lines render from slots.transcript; when that slot is absent they fall back to slots.asr, speakers unlabeled (ruled 2026-08-06; built at Stage E). Dedup key: latest updated_at per (chunk_id), rowid tiebreak — one record per chunk (Slot Law L2) collapses v1's (chunk_id, content.kind, discriminator) key, and updated_at replaces ingest_time as the axis (D27: created_at = first landing of a record_id, updated_at bumps only when record_json byte-compares different, so a no-op redelivery never re-windows a record, while a heal that lands a byte-different record flows into the next window). Training-window membership moves to updated_at with it. daylog_format_version and recipe_id bump at the transition; continuum's stamp-refusal (built, F3) is the safety net. The raw range read GET /context/records?user_id=&from=&to= is NOT retired and remains first-class. WIRE STATUS: v1 remains the running read until the Stage F cutover; nothing serves v2 before then — this file exists now because contracts precede fan-out (ORG.md), so rebuild Stage E builds and validates against it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "version",
+    "user_id",
+    "window_id",
+    "t_start",
+    "t_end",
+    "daylog_format_version",
+    "recipe_id",
+    "home_tz",
+    "segments",
+    "blocks",
+    "content_fingerprint"
+  ],
+  "properties": {
+    "contract": { "const": "C10" },
+    "version": { "const": "2" },
+    "user_id": { "type": "string", "minLength": 1 },
+    "window_id": {
+      "type": "string",
+      "pattern": "^w\\d{8}T\\d{6}Z$",
+      "minLength": 17,
+      "maxLength": 17,
+      "description": "The training window this day-log renders. OPAQUE, path-safe, lexicographically ordered, derived from the window's END instant in UTC and minted in exactly one place. THE LENGTH BOUNDS ARE NOT REDUNDANT WITH THE PATTERN: in the Python validator this contract is enforced by, `$` also matches just BEFORE A TRAILING NEWLINE, so `w20260722T035900Z\\n` satisfies the regex alone -- and that string is a different filesystem path from the id it looks like. Storage's own validator closes the same hole by using fullmatch rather than match; pinning the width to exactly 17 closes it here, and states the fixed-width property the lexicographic-ordering guarantee rests on. Consumers may rely on < / >= and on NOTHING else — it is not parsed back into a date, because under a [last_trained_t, now-delta) window there is no local date to name (a window can span 23 h, 25 h or 47 h). It is a PER-USER token, which is why user_id rides beside it here and on every window-addressing surface."
+    },
+    "t_start": {
+      "type": "string",
+      "description": "The window's lower bound on storage's UPDATED_AT axis (v2; was ingest_time in v1 — D27), RFC3339 UTC, inclusive. NOTE what this is not: the extent of the rendered content. Membership is by updated_at, so a chunk captured Tuesday and uploaded (or healed to a byte-different record) on Friday belongs to Friday's window and renders in a block anchored to Tuesday; segment/block timestamps can and do precede this value."
+    },
+    "t_end": {
+      "type": "string",
+      "description": "The window's upper bound on the updated_at axis, RFC3339 UTC, exclusive. Sits `delta` behind the wall clock at open time so an in-flight write cannot be assigned an updated_at below it yet commit after materialization read the range."
+    },
+    "daylog_format_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The renderer + row shape this body was produced under. Distinct from `version` (the contract's) and from `recipe_id` (the consolidation recipe's): it bumps when the segment/block shape or the rendered block text changes, and a bump re-materializes every cached day-log rather than serving an old dialect. It BUMPS at the v1 -> v2 transition (slot-walk renderer), which is what makes continuum's stamp-refusal the transition safety net rather than a formality."
+    },
+    "recipe_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The consolidation recipe whose `corpus` knobs (segment_seconds, block_segments) shaped this day-log. GLOBAL and versioned (recipe_id == filename stem in the C13 registry), never per-user — a per-user recipe id would fork the id per user and destroy artifact comparability. The gate policy is a SEPARATE artifact with its own id and is deliberately not here. Bumps at the v1 -> v2 transition alongside daylog_format_version."
+    },
+    "home_tz": {
+      "type": "string",
+      "minLength": 1,
+      "description": "THE FALLBACK ZONE ACTUALLY USED when a record carried no device_tz — the user's C12 home_tz at materialization time. Recorded on the body because that is what makes a wrong-timezone adapter falsifiable after the fact (the D17 follow-up this field closes). It is NOT the zone every block rendered in: a block prefers the capturing device's own device_tz, so a travelling user's blocks carry different zones and different local dates within one day-log."
+    },
+    "segments": {
+      "type": "array",
+      "description": "Segment rows, ascending by t_start. One row per ~segment_seconds bucket on a GLOBAL epoch grid (floor(t_start / segment_seconds)) — not relative to the window start, which would go negative once membership is on a storage-clock axis, and which would also make a bucket depend on which window happened to collect it. Sources are C2 v1 slots of the deduped record set: latest updated_at per (chunk_id), rowid tiebreak.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["seg_id", "t_start", "t_end", "caption", "asr", "ocr", "quality", "tz"],
+        "properties": {
+          "seg_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "`{window_id}_s{ordinal:05d}` where ordinal is the row's position in this array. The ORDINAL, not the epoch bucket index — the latter is a nine-digit number at 10 s buckets. Regenerated per window; nothing persists it."
+          },
+          "t_start": { "type": "string", "description": "Bucket start, RFC3339 UTC." },
+          "t_end": { "type": "string", "description": "Bucket end, RFC3339 UTC, exclusive." },
+          "caption": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Visual caption texts whose record t_start fell in this bucket — C2 v1 slots.caption.value (v2 routing; was content.kind caption|text in v1)."
+          },
+          "asr": {
+            "type": "array",
+            "description": "Speech lines whose t_start fell in this bucket — C2 v1 slots.transcript.splits[] (v2 routing): one entry PER SPLIT, each bucketed by the split's own t_start rather than the parent chunk's, so a 30 s chunk's speech is anchored where it was said. When the transcript slot is absent (a hole, or a dialect that never attempted it), speech lines fall back to slots.asr with spk null — speakers unlabeled (ruled 2026-08-06; Stage E builds it).",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["spk", "text", "t"],
+              "properties": {
+                "spk": { "type": ["string", "null"], "description": "The split's aligned speaker label (slots.transcript.splits[].speaker); null where alignment found no turn." },
+                "text": { "type": "string", "description": "The split's value." },
+                "t": { "type": "string", "description": "The split's own t_start." }
+              }
+            }
+          },
+          "ocr": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "World-text reads whose record t_start fell in this bucket — C2 v1 slots.ocr.value (v2 routing). An empty-string value (the honest empty claim: OCR ran, no legible text) contributes no line; an absent slot (a hole) likewise contributes nothing — the two are distinguishable in the record, not in the day-log."
+          },
+          "quality": {
+            "type": ["number", "null"],
+            "description": "Segment quality score, or null == NOT SCORED. C2 v1 carries no quality field, so this is null throughout v2; unscored is not the same as zero and must never be treated as failing the amplification gate."
+          },
+          "tz": {
+            "type": ["string", "null"],
+            "description": "The IANA zone the CAPTURING DEVICE reported for this bucket (C2 source.device_tz, first contributing record wins — a ~10 s bucket cannot straddle a real zone change). null when no contributing record carried one, which is what makes the renderer fall back to home_tz."
+          }
+        }
+      }
+    },
+    "blocks": {
+      "type": "array",
+      "description": "Scene blocks: runs of TEMPORALLY ADJACENT non-empty segments (gap > 6*segment_seconds starts a new block, and a block holds at most block_segments segments). Adjacency is what keeps a late-uploaded backlog honest — it is temporally distant from today's capture, so it forms its own blocks with its own anchors rather than being welded onto them.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["block_id", "seg_ids", "text", "anchors", "quality"],
+        "properties": {
+          "block_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "`{window_id}_b{ordinal:04d}`. Regenerated per window; nothing persists it."
+          },
+          "seg_ids": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "The seg_ids this block was rendered from, in order."
+          },
+          "text": {
+            "type": "string",
+            "description": "The rendered block: an anchor line (`On <local-date>, around <HH:MM>-<HH:MM> local time:`) followed by the optional `Scene: `, `Heard: ` and `World text (OCR): ` lines — the line labels are UNCHANGED from v1 (D20: the block text is contract, and the v2 re-baseline is the differential proof re-run at Stage E WP-E4, not a label change). THE ANCHOR IS IN THE TEXT, never metadata-only, because this string is what the model trains on. Wall-clock readings are in the block's own zone — pairing a local date with UTC clock readings would anchor a moment up to a day away from the event."
+          },
+          "anchors": {
+            "type": "object",
+            "required": ["date"],
+            "description": "The anchors woven into `text`, exposed structurally too. Open to additive keys (a `place` filled in once geo enrichment lands).",
+            "properties": {
+              "date": { "type": "string", "description": "The block's LOCAL date in the zone it rendered in — which is the device's zone when it reported one, so two blocks in one day-log can legitimately carry different dates." },
+              "place": { "type": ["string", "null"], "description": "Null in v2; no geo slot exists in the v1 slot set (world-data enrichment remains deferred)." }
+            }
+          },
+          "quality": {
+            "type": ["number", "null"],
+            "description": "min() over the block's SCORED segments, or null when none is scored. The amplification quality gate lives in continuum, not here: the day log keeps everything and low-quality rows are excluded from training, never from the record."
+          }
+        }
+      }
+    },
+    "content_fingerprint": {
+      "type": "string",
+      "minLength": 1,
+      "description": "A stable content hash over (window_id, user_id, segments, blocks). Computed BY WHOEVER RENDERS and only ever compared to ITSELF across runs — it is continuum's day-log stage key, not a cross-backend equality claim. At the v1 -> v2 renderer transition it changes once and that night re-runs, which is correct: the input genuinely changed."
+    }
+  }
+}

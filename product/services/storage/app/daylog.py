@@ -1,42 +1,40 @@
-"""Day-log materialization: C2 records → segment rows → scene blocks (C10 evolved, D18).
+"""Day-log materialization: C2 v1 records → segment rows → scene blocks (C10 v2, D28).
 
-LIFTED, deliberately, from ``services/continuum/app/daylog.py`` — ``build_daylog`` +
-``_render_block`` + ``_block_zone``, the **product** renderer over C2 records. It is NOT
-continuum's ``morpheus/profiles/*.py`` ``Profile.render_block``, which is the
-research-parity surface, is recipe-coupled, and stays with the amplifier. Field names
-here match the day-log schema exactly (segment rows: seg_id / t_start / t_end / caption /
-asr / ocr / quality / tz; block rows: block_id / seg_ids / text / anchors / quality),
-because the day log is the ONLY interface between ingest and consolidation.
+LINEAGE: lifted at D18 from ``services/continuum/app/daylog.py`` — ``build_daylog`` +
+``_render_block`` + ``_block_zone``, the **product** renderer over C2 records (never
+``morpheus/profiles/*.py``'s recipe-coupled research-parity surface). Rebuilt at the DP
+rebuild's Stage E (D28) as the **v2 slot-walk**: C2 v1 carries exactly one record per
+chunk whose content is a slots map, and the renderer walks ``content.slots`` instead of
+per-kind records. Field names still match the day-log schema exactly (segment rows:
+seg_id / t_start / t_end / caption / asr / ocr / quality / tz; block rows: block_id /
+seg_ids / text / anchors / quality) and the BLOCK TEXT IS CONTRACT (D20): the labels
+and anchor line are unchanged from v1, re-proven by the WP-E4 parity re-baseline.
 
-THREE RULES CHANGE vs the continuum original. All three are forced by the watermark
-window; everything else is preserved byte-for-byte on purpose.
+THE RULES, v2 (D27/D28 over the D18 watermark philosophy):
 
-  1. MEMBERSHIP IS BY ``ingest_time``, BUCKETING IS BY ``t_start``. A window holds every
-     C2 record whose ``ingest_time`` falls in ``[t_start, t_end)``, whatever its event
-     time — so a chunk captured Tuesday and uploaded Friday trains in Friday's window and
-     renders in a block anchored "On [Tuesday]". That is correct, not a bug: content
-     stays event-time-correct because blocks are formed by temporal ADJACENCY and carry
-     their own local anchors, so a backlog simply forms its own blocks. Consequence:
-     continuum's ``in_window(t_start, win)`` filter is not ported, it is DELETED — the
-     range query on the ingest axis already decided membership, and re-filtering on the
-     event axis would throw away exactly the backlog this design exists to train. The
-     sub-span guard that went with it (a VAD chunk straddling the boundary must not drag
-     its in-window speech out) is gone for the same reason: there is no event-time
-     boundary left to straddle.
+  1. MEMBERSHIP IS BY ``updated_at``, BUCKETING IS BY ``t_start``. A window holds every
+     record whose ``updated_at`` falls in ``[t_start, t_end)``, whatever its event time
+     — a chunk captured Tuesday and uploaded (or healed to a byte-different record) on
+     Friday trains in Friday's window, rendered in a block anchored "On [Tuesday]".
+     There is no event-time filter here, and no sub-span guard: the range query on the
+     window axis already decided membership.
   2. SEGMENT BUCKETS SIT ON A GLOBAL EPOCH GRID — ``floor(t_start / segment_seconds)``,
-     not ``floor((t_start - window_start) / segment_seconds)``. Required: window-relative
-     indices go NEGATIVE the moment membership is on the ingest axis (a Tuesday record in
-     Friday's window starts days before the window does). Also better: a bucket is then
-     stable across re-materialization, because it no longer depends on which window
-     happened to pick the record up.
-  3. ONE DIALECT PER RECORD, LATEST WINS. Among records sharing
-     ``(chunk_id, content.kind, discriminator)`` the materializer keeps the one with the
-     latest ``ingest_time`` and drops the rest. Keyed on ``ingest_time`` because
-     ``pipeline_version`` is a COMPOSED string (a mutate stage's enabledness is a version
-     fragment) and therefore not orderable; keyed on ``content.kind`` because captions and
-     transcripts can share one ``pipeline_version``, so a kind-blind rule would drop
-     transcripts in order to drop captions. This is what fixes the re-consolidation
-     double-count — ``daylog.py`` filters on neither field today.
+     never window-relative (a backlog record's index would go negative, and a bucket
+     must not depend on which window collected it).
+  3. ONE RECORD PER CHUNK, LATEST ``updated_at`` WINS, rowid tiebreak (D28). L2 makes
+     ``(chunk_id)`` the whole dedup key — the v0 ``(chunk_id, kind, discriminator)``
+     key collapses with the per-kind record model. A version-forward reprocess lands
+     BESIDE the old record under a new record_id; the day-log renders exactly one.
+
+  Slot routing (D28 + the 2026-08-06 Heard-lines ruling): ``slots.caption`` → Scene ·
+  ``slots.ocr`` → World text (OCR) · ``slots.transcript`` → speaker-bucketed speech
+  lines via its ``splits[]``, each bucketed by its OWN ``t_start``; when the transcript
+  slot is ABSENT (a hole, or a dialect that never attempted it), speech falls back to
+  ``slots.asr`` with ``spk`` null. Holes render as absence and empty values are honest
+  empty claims that contribute no line (L11: never fabricate, never infer); an empty
+  slots map renders nothing and is legal. ``slots.acoustic`` and ``slots.diarization``
+  have NO route: the C10 v2 contract names none for acoustic (its consumer marker stays
+  honestly speculative), and diarization's aligned view IS the transcript slot.
 
 Segmentation is RECIPE-VERSIONED: ``segment_seconds`` / ``block_segments`` are the
 ``corpus`` knobs of the pinned consolidation recipe, and the body carries ``recipe_id``
@@ -70,11 +68,14 @@ from . import registry
 if TYPE_CHECKING:  # pragma: no cover - typing only, avoids an import cycle with db
     from .db import Store
 
-# The renderer + row shape this module produces. It is NOT the C10 body version (which is
-# "1") and NOT the recipe id: it names the DAY-LOG FORMAT — bump it whenever the segment/
-# block shape or the rendered block text changes, and every cached day-log re-materializes
-# on next fetch (see materialize_daylog) instead of silently serving an old dialect.
-DAYLOG_FORMAT_VERSION = "1"
+# The renderer + row shape this module produces. It is NOT the C10 body version and NOT
+# the recipe id: it names the DAY-LOG FORMAT — bump it whenever the segment/block shape
+# or the rendered block text changes, and every cached day-log re-materializes on next
+# fetch (see materialize_daylog) instead of silently serving an old dialect. "2" is the
+# D28 slot-walk renderer (bumped with recipe_id at the v1 -> v2 transition; continuum
+# must be TAUGHT both stamps before the Stage F cutover or its correct stamp-refusal
+# blocks every window — a cutover gate, not a bug).
+DAYLOG_FORMAT_VERSION = "2"
 
 # The `corpus` knobs of consolidation-v1.0 (recipes/consolidation-v1.0.json), as
 # ``build_daylog``'s signature defaults ONLY. ``materialize_daylog`` never reads them: it
@@ -84,7 +85,9 @@ DAYLOG_FORMAT_VERSION = "1"
 DEFAULT_SEGMENT_SECONDS = 10
 DEFAULT_BLOCK_SEGMENTS = 12
 
-_DEFAULT_RECIPE_ID = "consolidation-v1.1"
+# v2.0 forks v1.1 with every knob byte-identical (D28: recipe_id bumps alongside
+# daylog_format_version at the renderer transition — see the recipe's own note).
+_DEFAULT_RECIPE_ID = "consolidation-v2.0"
 
 
 def daylog_recipe_id() -> str:
@@ -247,51 +250,49 @@ def _bucket_index(t: datetime, segment_seconds: int) -> int:
     return int(t.timestamp() // segment_seconds)
 
 
-# --- CHANGE 3: one dialect per record, latest ingest_time wins ---------------------
+# --- CHANGE 3 (v2): one record per chunk, latest updated_at wins (D28) -------------
 
 
-def dialect_key(record: dict[str, Any]) -> tuple[str, str, str]:
-    """The identity of the UNIT a record is a dialect OF: ``(chunk_id, kind, discriminator)``.
+def dialect_key(record: dict[str, Any]) -> str:
+    """The chunk a record is THE rendering of — ``(chunk_id)`` alone.
 
-    ``discriminator`` is the within-chunk discriminator surfaced on C2 (2026-07-27) —
-    which of a chunk's several records this is (a keyframe index, an ocr record beside its
-    caption). Absent and ``""`` are the same 1:1 case and must key identically, or a
-    producer that starts emitting the field would double-count against its own earlier
-    records.
+    One record per chunk (Slot Law L2) collapses the v0 ``(chunk_id, kind,
+    discriminator)`` key: kinds died with the per-kind record model and the
+    discriminator is on the charter's dead-concepts list. What still needs deduping is
+    the version-forward reprocess — a new dialect lands BESIDE the old record under a
+    new ``record_id`` (L8 case 2), and the day-log must render exactly one of them.
 
     A record with no ``source.chunk_id`` cannot be grouped with anything, so it keys on
-    its own ``record_id`` and always survives. Schema-valid C2 always has a chunk_id; this
-    is here so that a defect upstream loses a GROUPING, never a record.
+    its own ``record_id`` and always survives. Schema-valid C2 v1 always has a
+    chunk_id; this exists so a defect upstream loses a GROUPING, never a record.
     """
-    source = record.get("source") or {}
-    chunk_id = source.get("chunk_id")
-    kind = (record.get("content") or {}).get("kind") or ""
-    discriminator = record.get("discriminator") or ""
+    chunk_id = (record.get("source") or {}).get("chunk_id")
     if not chunk_id:
-        return (f"\x00record_id:{record.get('record_id')}", kind, discriminator)
-    return (chunk_id, kind, discriminator)
+        return f"\x00record_id:{record.get('record_id')}"
+    return chunk_id
 
 
 def select_dialects(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Keep one record per ``(chunk_id, kind, discriminator)`` — the latest-ingested.
+    """Keep one record per ``(chunk_id)`` — latest ``updated_at`` wins, rowid tiebreak
+    (D28 verbatim).
 
-    ``rows`` are the store's ingest-range rows: ``{"seq", "ingest_time", "record"}``.
-    ``seq`` (the sqlite rowid) is the TIEBREAK and it is not optional: ``ingest_time`` is
-    minted at second granularity, so a whole data-processing flush lands inside one second
-    and "latest wins" would otherwise be decided by dict iteration order. rowid is the
-    same stable tiebreak every other ordered read in this service uses, and it is
-    monotone in landing order for the rows that matter (a reprocess upsert keeps its
-    original rowid, but it also keeps its original ingest_time, so it does not race).
+    ``rows`` are the store's window-range rows: ``{"seq", "updated_at", "record"}``.
+    ``seq`` (the sqlite rowid) is the TIEBREAK and it is LOAD-BEARING, not decorative:
+    ``updated_at`` is minted at second granularity, so a whole data-processing flush —
+    or two consecutive heals of one chunk under two dialects — lands inside one value,
+    and "latest wins" would otherwise be decided by dict iteration order. The D27
+    upsert keeps rowids stable across re-POSTs for exactly this reason (never
+    ``INSERT OR REPLACE``).
 
     Input order is PRESERVED for the survivors — the caller hands rows in event-time order
     and the renderer's within-bucket list order depends on it.
     """
-    winner: dict[tuple[str, str, str], dict[str, Any]] = {}
+    winner: dict[str, dict[str, Any]] = {}
     for row in rows:
         key = dialect_key(row["record"])
         current = winner.get(key)
-        if current is None or (row["ingest_time"], row["seq"]) > (
-            current["ingest_time"], current["seq"]
+        if current is None or (row["updated_at"], row["seq"]) > (
+            current["updated_at"], current["seq"]
         ):
             winner[key] = row
     kept = {row["seq"] for row in winner.values()}
@@ -310,14 +311,14 @@ def build_daylog(
     segment_seconds: int = DEFAULT_SEGMENT_SECONDS,
     block_segments: int = DEFAULT_BLOCK_SEGMENTS,
 ) -> DayLog:
-    """Bucket C2 records into ~10 s segment rows, then group consecutive non-empty
+    """Bucket C2 v1 records into ~10 s segment rows, then group consecutive non-empty
     segments into ~2 min scene blocks.
 
-    Every record handed in is a MEMBER — membership was decided on the ingest axis by the
-    range query, and there is no event-time filter here (CHANGE 1). Records are still
-    ATTRIBUTED by ``t_start``: the join is a time-window join, not a per-chunk one,
-    because audio chunks are VAD-carved (5–30 s) and video captions are per-keyframe, so
-    one bucket gathers every record (or diarized sub-span) whose ``t_start`` lands in it.
+    Every record handed in is a MEMBER — membership was decided on the window axis
+    (``updated_at``) by the range query, and there is no event-time filter here
+    (CHANGE 1). Records are still ATTRIBUTED by ``t_start``: the join is a time-window
+    join, not a per-chunk one — audio chunks are VAD-carved (5–30 s), so one bucket
+    gathers every record (or transcript split) whose ``t_start`` lands in it.
     """
     buckets: dict[int, Segment] = {}
 
@@ -347,32 +348,78 @@ def build_daylog(
         return seg
 
     for rec in records:
-        content = rec.get("content", {})
-        kind = content.get("kind")
-        text = (content.get("text") or "").strip()
-        subsegs = content.get("segments") or []
-        if kind == "transcript" and subsegs:
-            # Diarized sub-spans land in their OWN buckets by their OWN t_start, never by
-            # the parent chunk's — a 30 s VAD chunk spans three buckets and its speech
-            # must be anchored where it was actually said.
-            for sub in subsegs:
-                sub_text = (sub.get("text") or "").strip()
-                if not sub_text:
+        slots = (rec.get("content") or {}).get("slots") or {}
+
+        # Scene — slots.caption (D28 routing), bucketed by the RECORD's t_start. An
+        # empty/whitespace value renders no line (the honest empty claim, same posture
+        # as ocr's); an absent slot is a hole and renders as absence (L11).
+        caption = slots.get("caption")
+        if caption is not None:
+            text = (caption.get("value") or "").strip()
+            if text:
+                t0 = _parse_ts(rec["t_start"])
+                note_tz(seg_for(_bucket_index(t0, segment_seconds)), rec).caption.append(text)
+
+        # World text (OCR) — slots.ocr. `value: ""` is ran-and-empty (OCR ran, the
+        # screen had no legible text) and contributes no line; an absent slot (a hole)
+        # likewise contributes nothing — the two are distinguishable in the RECORD,
+        # deliberately not in the day-log (L11). The ocr text keeps its chunk-relative
+        # `+Ns` stamps inside the value; the bucket is the record's t_start.
+        ocr = slots.get("ocr")
+        if ocr is not None:
+            text = (ocr.get("value") or "").strip()
+            if text:
+                t0 = _parse_ts(rec["t_start"])
+                note_tz(seg_for(_bucket_index(t0, segment_seconds)), rec).ocr.append(text)
+
+        # Heard — slots.transcript.splits[] (the speaker-aligned view). Each split
+        # lands in its OWN bucket by its OWN t_start, never the parent chunk's — a 30 s
+        # chunk's speech is anchored where it was actually said. Both split spellings
+        # arrive (verbatim C1 root spans AND abs_time's +00:00-microsecond form, the
+        # Stage C carry); _parse_ts reads both. `speaker` may be null per split
+        # (alignment found no turn) and renders as an unlabeled line.
+        #
+        # FALLBACK, ruled 2026-08-06: when the transcript slot is ABSENT — a hole
+        # (including a heal-budget-exhausted permanent one) or a dialect that never
+        # attempted speaker_align — speech renders from slots.asr with spk null.
+        # Present-with-empty-splits is an aligned-and-EMPTY claim, not a hole: no
+        # fallback, or the renderer would second-guess a slot the record does carry.
+        # The parent asr text is never rendered ON TOP of transcript splits — one
+        # witness on two channels is one voice in the day-log (L11 corollary).
+        transcript = slots.get("transcript")
+        if transcript is not None:
+            for split in transcript.get("splits") or []:
+                text = (split.get("value") or "").strip()
+                if not text:
                     continue
-                st = _parse_ts(sub["t_start"])
+                st = _parse_ts(split["t_start"])
                 note_tz(seg_for(_bucket_index(st, segment_seconds)), rec).asr.append(
-                    {"spk": sub.get("speaker"), "text": sub_text, "t": sub["t_start"]})
-            continue
-        if not text:
-            continue
-        t0 = _parse_ts(rec["t_start"])
-        seg = note_tz(seg_for(_bucket_index(t0, segment_seconds)), rec)
-        if kind == "transcript":
-            seg.asr.append({"spk": None, "text": text, "t": rec["t_start"]})
-        elif kind == "ocr":
-            seg.ocr.append(text)
-        else:  # caption | text
-            seg.caption.append(text)
+                    {"spk": split.get("speaker"), "text": text, "t": split["t_start"]})
+        else:
+            asr = slots.get("asr")
+            if asr is not None:
+                splits = asr.get("splits") or []
+                if splits:
+                    for split in splits:
+                        text = (split.get("value") or "").strip()
+                        if not text:
+                            continue
+                        st = _parse_ts(split["t_start"])
+                        note_tz(seg_for(_bucket_index(st, segment_seconds)), rec).asr.append(
+                            {"spk": None, "text": text, "t": split["t_start"]})
+                else:
+                    # The whole-chunk shape: a transcript with no finer timing renders
+                    # one line at the record's own t_start. "" is VAD-gated silence.
+                    text = (asr.get("value") or "").strip()
+                    if text:
+                        t0 = _parse_ts(rec["t_start"])
+                        note_tz(seg_for(_bucket_index(t0, segment_seconds)), rec).asr.append(
+                            {"spk": None, "text": text, "t": rec["t_start"]})
+
+        # slots.acoustic and slots.diarization: NO route, deliberately. The C10 v2
+        # contract names none for acoustic (the stage's consumer marker stays honestly
+        # `speculative` — routing it here without a contract edit would fabricate a
+        # consumer), and diarization's aligned view IS the transcript slot.
 
     segments = [buckets[i] for i in sorted(buckets)]
     for ordinal, seg in enumerate(segments):
@@ -489,11 +536,11 @@ def daylog_fingerprint(daylog: DayLog) -> str:
 
 
 def daylog_body(daylog: DayLog, *, window: dict[str, Any], recipe_id: str) -> dict[str, Any]:
-    """The C10 v1 day-log fetch body.
+    """The C10 v2 day-log fetch body.
 
-    ``t_start``/``t_end`` are the WINDOW's bounds — i.e. the ingest-time range that
-    decided membership, not the extent of the rendered content, which can start days
-    earlier. ``home_tz`` records THE FALLBACK ZONE ACTUALLY USED, which is the D17
+    ``t_start``/``t_end`` are the WINDOW's bounds — i.e. the ``updated_at`` range that
+    decided membership (D27), not the extent of the rendered content, which can start
+    days earlier. ``home_tz`` records THE FALLBACK ZONE ACTUALLY USED, which is the D17
     follow-up this field closes: without it, a night rendered under the wrong profile zone
     is unfalsifiable after the fact.
 
@@ -514,7 +561,7 @@ def daylog_body(daylog: DayLog, *, window: dict[str, Any], recipe_id: str) -> di
     """
     return {
         "contract": "C10",
-        "version": "1",
+        "version": "2",
         "user_id": daylog.user_id,
         "window_id": daylog.window_id,
         "t_start": window["t_start"],
@@ -600,7 +647,7 @@ def materialize_daylog(
     # Resolved HERE and not above the cache check, on the same terms as the profile: the
     # registry is required to BUILD, not to SERVE.
     segment_seconds, block_segments = recipe_segmentation(recipe_id)
-    rows = store.list_context_by_ingest(user_id, window["t_start"], window["t_end"])
+    rows = store.list_context_by_updated(user_id, window["t_start"], window["t_end"])
     kept = select_dialects(rows)
     daylog = build_daylog(
         [row["record"] for row in kept],

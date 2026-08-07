@@ -13,8 +13,9 @@ Four rules carry the whole design and each has its own test below:
   3. A WINDOW'S END MUST BE STRICTLY GREATER than every prior window end for that user.
      This is what makes a second-granularity id collision impossible by construction
      rather than by luck.
-  4. MEMBERSHIP IS ON THE INGEST AXIS. A never-trained user's first window starts at
-     their earliest ingest_time, not at any event time and not at any local midnight.
+  4. MEMBERSHIP IS ON THE `updated_at` AXIS (D27 moved it off `ingest_time`; the
+     watermark philosophy is unchanged). A never-trained user's first window starts at
+     their earliest updated_at, not at any event time and not at any local midnight.
 
 Time is injected (`now=` / `delta_seconds=`) for everything the wall clock would
 otherwise make flaky; the HTTP surface tests use the real clock and backdated records.
@@ -58,30 +59,32 @@ def _ago(**kwargs) -> str:
     return _stamp(datetime.now(UTC) - timedelta(**kwargs))
 
 
-def _land(store: Store, user_id: str, ingest_time: str, **kwargs) -> dict:
-    """Land a C2 record and force its storage-assigned ingest_time.
+def _land(store: Store, user_id: str, updated_at: str, **kwargs) -> dict:
+    """Land a C2 record and force its storage-assigned `updated_at` (and `created_at`,
+    which on a first landing equals it).
 
-    ingest_time is minted by storage at write and is deliberately not a C2 field, so a
-    test that needs a deterministic watermark floor sets it on the column directly —
+    Both stamps are minted by storage at write and are deliberately not C2 fields, so a
+    test that needs a deterministic watermark floor sets them on the columns directly —
     the same 'reach into the columns' idiom tests/test_civil_time.py uses.
     """
     record = make_c2(user_id=user_id, **kwargs)
     store.put_context(record)
     with store._connect() as conn:
         conn.execute(
-            "UPDATE context_records SET ingest_time = ? WHERE record_id = ?",
-            (ingest_time, record["record_id"]),
+            "UPDATE context_records SET created_at = ?, updated_at = ? "
+            "WHERE record_id = ?",
+            (updated_at, updated_at, record["record_id"]),
         )
         conn.commit()
     return record
 
 
-# --- rule 4: the window starts on the ingest axis --------------------------------
+# --- rule 4: the window starts on the updated_at axis ------------------------------
 
 
-def test_a_never_trained_users_window_starts_at_their_earliest_ingest_time(store):
+def test_a_never_trained_users_window_starts_at_their_earliest_updated_at(store):
     _land(store, "u1", "2026-07-20T04:00:00Z")
-    _land(store, "u1", "2026-07-19T09:30:00Z")   # earlier ingest, landed second
+    _land(store, "u1", "2026-07-19T09:30:00Z")   # earlier updated_at, landed second
     _land(store, "u1", "2026-07-21T23:00:00Z")
 
     window = store.open_training_window("u1", now=_at(2026, 7, 22, 4, 0, 0))
@@ -187,11 +190,11 @@ def test_bounds_are_immutable_once_opened(store):
 
 
 def test_records_landing_after_the_open_do_not_move_the_bounds(store):
-    """The window is OPENED, not COMPUTED. New ingest joins the window's range on read;
-    it does not re-derive the range."""
+    """The window is OPENED, not COMPUTED. A new landing joins the window's range on
+    read; it does not re-derive the range."""
     _land(store, "u1", "2026-07-20T04:00:00Z")
     first = store.open_training_window("u1", now=_at(2026, 7, 22, 4, 0, 0))
-    _land(store, "u1", "2026-07-19T00:00:00Z")   # an EARLIER ingest lands late
+    _land(store, "u1", "2026-07-19T00:00:00Z")   # an EARLIER updated_at lands late
     again = store.open_training_window("u1", now=_at(2026, 7, 22, 5, 0, 0))
     assert again == first
 
@@ -691,10 +694,13 @@ def test_no_contract_accepts_a_window_id_with_a_trailing_newline():
          "t_end": "2026-07-22T03:59:00Z", "state": "open", "outcome": None,
          "opened_at": "2026-07-22T04:00:00Z", "closed_at": None}
     )
+    # The c10 v2 day-log file is the FOURTH carrier of the width-bounds trap closure
+    # (Stage A carry): valid v2 in every other respect, so the rejection is about the
+    # forged id and nothing else.
     assert schemas.validate_c10(
-        {"contract": "C10", "version": "1", "user_id": "u1", "window_id": forged,
+        {"contract": "C10", "version": "2", "user_id": "u1", "window_id": forged,
          "t_start": "2026-07-20T00:00:00Z", "t_end": "2026-07-22T03:59:00Z",
-         "daylog_format_version": "daylog-v1", "recipe_id": "consolidation-v1.0",
+         "daylog_format_version": "2", "recipe_id": "consolidation-v2.0",
          "home_tz": "UTC", "segments": [], "blocks": [], "content_fingerprint": "f"}
     )
     assert schemas.validate_c14(
@@ -721,9 +727,10 @@ def test_every_field_is_required_including_the_nullable_ones(client, store, miss
 # --- migration ---------------------------------------------------------------------
 
 
-def test_migration_adds_the_ledger_and_the_ingest_index_to_a_preexisting_db(tmp_path):
-    """A live DB predates D18 and has no ingest_time index — membership on the ingest
-    axis needs one, and a new index (unlike a new column) is handled by _SCHEMA alone."""
+def test_migration_adds_the_ledger_and_the_updated_index_to_a_preexisting_db(tmp_path):
+    """A DB predating D18 *and* D27: no ledger, no window axis. The ladder gives it the
+    training_windows table, renames ingest_time to created_at, adds updated_at
+    (backfilled equal — a landing is its own last change), and indexes the new axis."""
     db = tmp_path / "legacy.db"
     with sqlite3.connect(db) as conn:  # the post-D17 / pre-D18 shape
         conn.execute(
@@ -748,17 +755,16 @@ def test_migration_adds_the_ledger_and_the_ingest_index_to_a_preexisting_db(tmp_
         indexes = {r["name"] for r in conn.execute(
             "SELECT name FROM sqlite_master WHERE type = 'index'")}
     assert "training_windows" in tables
-    assert "idx_context_user_ingest" in indexes
+    assert "idx_context_user_updated" in indexes
 
-    # The legacy row is visible on the ingest axis — no backfill was needed, the column
-    # was always there; what D18 added is the index over it.
-    assert store.earliest_ingest_time("u1") == "2026-07-01T00:00:01Z"
+    # The legacy row is visible on the new axis — the rename carried its stamp over.
+    assert store.earliest_updated_at("u1") == "2026-07-01T00:00:01Z"
     window = store.open_training_window("u1", now=_at(2026, 7, 2, 0, 0, 0))
     assert window["t_start"] == "2026-07-01T00:00:01Z"
 
 
-def test_the_ingest_index_is_on_user_and_ingest_time(store):
+def test_the_window_axis_index_is_on_user_and_updated_at(store):
     with store._connect() as conn:
         cols = [r["name"] for r in conn.execute(
-            "PRAGMA index_info(idx_context_user_ingest)")]
-    assert cols == ["user_id", "ingest_time"]
+            "PRAGMA index_info(idx_context_user_updated)")]
+    assert cols == ["user_id", "updated_at"]

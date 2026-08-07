@@ -10,6 +10,8 @@ selftest/fake/__pycache__/
 learn.env
 .venv-learn/
 run-learn/
+.venv-vllm/
+run-vllm/
 sample/
 selftest/.run-learn/
 selftest/fake_learn/__pycache__/

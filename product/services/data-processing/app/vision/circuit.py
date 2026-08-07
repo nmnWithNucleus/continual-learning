@@ -1,10 +1,22 @@
-"""VLM/OCR endpoint circuit breaker — fast-fail BEFORE the ffmpeg passes (WS-F).
+"""VLM/OCR endpoint circuit breaker — fast-fail BEFORE the ffmpeg passes.
 
-Design §8 / caveat A-10: *N* consecutive connect-refused failures against a captioner
-(or the OCR sidecar) trip the breaker OPEN, so subsequent chunks fast-fail at ~0 CPU
-cost *before* the two ffmpeg prep passes run — instead of paying the full decode +
-delta + extract on every chunk only to hit the same dead socket. A sustained endpoint
-outage then stops silently burning each chunk's retry budget on futile prep.
+STATUS (DP rebuild Stage C, per plan §9 KEEP): present and tested, WIRED NOWHERE — the
+same state it shipped in under v0 (nothing ever imported it). In the v1 world its two
+v0 customers changed shape: the OCR path now rides ``app/model_client.py`` (replica
+rotation + bounded transient retry against the supervised fleet — a breaker adds
+little for a supervisor-restarted local server), and the VLM endpoint is called by the
+optional ``clipcap`` stage, whose failure is a HOLE healed by redrive (L7/L8). The
+remaining honest use is the original one: fast-failing a chunk BEFORE ``clipprep``'s
+ffmpeg passes during a sustained captioner outage — but that gate must live ABOVE the
+graph (the worker/ingest layer), since inside the graph clipprep has already run by
+the time clipcap touches the endpoint. Left for the ledger/cutover stages to wire or
+retire; the state machine below is unchanged and covered by ``tests/test_circuit.py``.
+
+Original design (§8 / caveat A-10): *N* consecutive connect-refused failures against a
+captioner trip the breaker OPEN, so subsequent chunks fast-fail at ~0 CPU cost
+*before* the two ffmpeg prep passes run — instead of paying the full decode + delta +
+extract on every chunk only to hit the same dead socket. A sustained endpoint outage
+then stops silently burning each chunk's retry budget on futile prep.
 
 State machine (per endpoint key):
 
@@ -137,7 +149,7 @@ def breaker_for(key: str, *, threshold: int = 5, cooldown_s: float = 30.0,
     """The shared breaker for ``key`` (e.g. a VLM / OCR base URL). Constructed once, with
     the first caller's params; later callers get the SAME instance so breaker state is
     shared across every worker thread. Keyed by endpoint so a captioner outage never
-    trips the OCR sidecar's breaker and vice-versa."""
+    trips the ocr server's breaker and vice-versa."""
     with _registry_lock:
         breaker = _breakers.get(key)
         if breaker is None:

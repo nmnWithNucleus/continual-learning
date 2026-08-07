@@ -5,7 +5,9 @@
 > This is an evolving first version, not a frozen spec — changes to §Contracts route through
 > a founders' session and a note in [HANDOFF.md](HANDOFF.md).
 
-**Last updated:** 2026-07-28 (§Contracts restructured into per-contract cards, per [STYLE.md](STYLE.md))
+**Last updated:** 2026-08-06 (C2 v1 + C10 v2 cut on branch `dp-rebuild-v1` at rebuild Stage A;
+decision rows ratified 2026-08-06, [D24](DECISIONS.md)/[D28](DECISIONS.md); C10 card's heal
+sentence aligned to the contract's byte-different phrasing at the Stage D close-out)
 
 ---
 
@@ -156,7 +158,7 @@ Terms this repo coined. Nobody arrives knowing them.
 | ID | Producer → Consumer | Carries | Status | Card |
 |---|---|---|---|---|
 | **C1** | recording → data-processing | Every captured chunk's metadata, and where its bytes landed | `built` | [↓](#c1--the-raw-stream-envelope) |
-| **C2** | data-processing → storage `/context` | One processed record: what was said, seen or read, and when | `built` | [↓](#c2--the-processed-record) |
+| **C2** | data-processing → storage `/context` | One processed record: what was said, seen or read, and when | `built` (v0) · v1 `designed` | [↓](#c2--the-processed-record) |
 | **C3** | input (QueryBuilder) → inference | A user's request, turned into model input | `built` | [↓](#c3--the-userprompt) |
 | **C4** | inference → storage `/sessions` | The full record of one turn, traces included | `built` | [↓](#c4--the-turn-record) |
 | **C5** | continuum → model directory | A newly trained adapter, and whether it may serve | `built` | [↓](#c5--the-adapter-publish) |
@@ -164,7 +166,7 @@ Terms this repo coined. Nobody arrives knowing them.
 | **C7** | inference ↔ mentors | Questions to frontier models, and everything they answer with | `designed` | [↓](#c7--the-mentor-protocol) |
 | **C8** | QueryBuilder ↔ data-processing | The capture pipeline, offered synchronously to a live request | `designed` | [↓](#c8--the-shared-pipeline-api) |
 | **C9** | inference → output | The answer, streaming, and what happened at the end of the turn | `built` | [↓](#c9--the-response-stream) |
-| **C10** | storage → continuum | Tonight's training window, and the day-log rendered over it | `built` | [↓](#c10--the-training-window-read) |
+| **C10** | storage → continuum | Tonight's training window, and the day-log rendered over it | `built` (v1) · v2 `designed` | [↓](#c10--the-training-window-read) |
 | **C11** | storage → input (QueryBuilder) | What the user did today, before tonight's training reaches the weights | `designed` | [↓](#c11--the-recent-context-read) |
 | **C12** | storage → continuum | Per-user policy the system reads to decide its own behaviour | `built` | [↓](#c12--the-user-profile-read) |
 | **C13** | storage → continuum + inference | Versioned recipes and gate policies, fetched by id | `built` | [↓](#c13--the-recipe-registry) |
@@ -243,62 +245,92 @@ Envelope leg  recording ──push──▶ data-processing
 
 ### C2 — the processed record
 
-> **data-processing → storage `/context`** · `built` · learn-loop v0.0
-> · [D10](DECISIONS.md) · [D17](DECISIONS.md) · [D19](DECISIONS.md)
-> · schema [c2_processed_record.v0.json](contracts/c2_processed_record.v0.json)
+> **data-processing → storage `/context`** · v1 `designed`, ratified 2026-08-06
+> ([D24](DECISIONS.md)) · v0 `built`, the running wire until the
+> Stage F cutover · [D10](DECISIONS.md) · [D17](DECISIONS.md) · [D19](DECISIONS.md)
+> · schemas [c2_processed_record.v1.json](contracts/c2_processed_record.v1.json) ·
+> [c2_processed_record.v0.json](contracts/c2_processed_record.v0.json)
 
 **In one line.** Data-processing writes down what a chunk actually contained — the words spoken, the
 scene described, the text on screen, with the timestamps that let separate devices be lined up
 against each other.
 
-**Shape**
+**Shape** — v1, the pinned target the rebuild builds against. The v0 wire the running service
+still emits is its schema plus §How it got here.
 
 ```
-{contract:"C2", version:"0", record_id, user_id,
- source:{device_id, stream_id, chunk_id, blob_ref, modality,
-         device_tz?, device_utc_offset_minutes?, device_location?},
- t_start, t_end,
- content:{kind:"transcript", text, language?,
-          segments?:[{t_start, t_end, text, speaker}]},
- enrichments:{speakers:[], faces:[], places:[], objects:[]},
- pipeline_version, discriminator?, processed_at}
+{contract:"C2", version:"1", record_id, user_id, modality,
+ source:{device_id, stream_id, chunk_id, blob_ref,
+         device_tz?, device_utc_offset_minutes?, device_clock?, device_location?},
+ t_start, t_end, pipeline_version,
+ content:{slots:{<slot_name>:{version, …per-slot fields…}, …}}}
 ```
 
 **Rules**
 
-- `record_id` is a **deterministic function of `(chunk_id, pipeline_version, discriminator)`**, so
-  reprocessing is an idempotent `/context` upsert.
-- A `pipeline_version` bump **forks** a new record rather than rewriting the old one. Reprocessing is
-  version-forward; records are never edited in place.
-- The **discriminator** keeps a chunk's several records distinct and individually stable — video
-  keyframes, an `ocr` record beside a `caption`, an original beside its translation. It is `""` in
-  the 1:1 case.
-- `enrichments` is **present-but-empty** in v0, so diarization and world data never reshape the
-  record when they land.
-- `source.device_tz`, `source.device_utc_offset_minutes` and `source.device_location` are carried
-  **verbatim** from the C1 envelope. Data-processing performs *no timezone logic whatsoever* — it
-  does not derive, validate, normalize or infer a zone.
-- `t_start`/`t_end` stay UTC-canonical and are the sole ordering and range-query axis. The zone is
-  context stored *beside* the instant, never instead of it.
-- Storage assigns `ingest_time`. It is **not** carried in C2.
+- Exactly **one** record per `(chunk_id, pipeline_version)` — Slot Law L2, schema-hard.
+  `record_id = sha256(chunk_id ␀ pipeline_version)`, NUL-joined, hex, a blind `/context` upsert.
+  There is no discriminator; one-record-per-chunk is why dropping it is safe.
+- A `pipeline_version` bump **forks** a new record rather than rewriting the old one. Reprocessing
+  is version-forward; records are never edited in place.
+- `content.slots` is a map keyed by slot name: one producing stage per slot, written once, never
+  edited. A slot type's sub-schema is added to the contract *additively* when its first producer
+  ships; an unknown slot name fails closed.
+- `modality` sits at the record root — C1 chunks are strictly single-modality. `source{}` is
+  provenance carried **verbatim** from the C1 envelope (minus `modality` and the transport
+  fields — see the schema's `source` description); data-processing still performs no timezone
+  or clock logic whatsoever (D17 unchanged).
+- `t_start`/`t_end` are the C1 span strings carried verbatim, UTC-canonical, and remain the sole
+  ordering and range-query axis. Sub-slot `splits[]` carry absolute RFC3339 times for C10's
+  sub-span bucketing.
+- Storage-side timestamps are **not** in C2, and no DP wall-clock is either: storage assigns
+  `created_at`/`updated_at` ([D27](DECISIONS.md); `ingest_time` under the running v0), and
+  `processed_at` was dropped (ruled 2026-08-06) because a wall-clock field inside the record
+  breaks the byte-compare and T-1. Processing latency is a `/metrics` matter.
+- Reading a record is Slot Law L11: stage in the dialect + slot absent = attempted and failed;
+  slot present with empty value = honest empty claim; stage not in the dialect = never attempted.
+- **v0 remains the wire today.** The running service emits v0 until the Stage F cutover (OD-1
+  beside-build); nothing emits v1 before then.
 
 **Why it's this way**
 
 - **Timestamps are the spine.** Concurrent activity captured by different devices has to be
   alignable, which is what makes a day-log possible at all.
-- **The empty `enrichments` block is deliberate**, mirroring C4's empty trace arrays: shipping the
-  shape before the content means the contract does not move when the content arrives.
-- **Forwarding provenance is not producing a signal.** Because data-processing only copies the zone
-  fields, they fall outside the record-emission law's T2 "reachable consumer" test, which governs
-  signals DP *produces*.
+- **One record per chunk replaces governance with structure.** The emission law's five tests and
+  five riders existed to police multi-record fan-out and in-place mutation; delete those
+  capabilities and the invariants hold by construction.
+- A slot written by exactly one stage and never edited is what makes the record's honesty
+  legible: hole, empty claim and never-attempted are distinguishable from the record plus its
+  dialect alone.
+- **Forwarding provenance is not producing a signal.** Data-processing only copies the `source{}`
+  fields, so they need no consumer-today justification — the same way `device_id` needs none.
 
 **Watch out for**
 
-- **Mirrors must move with the schema.** DP's `C2Source` and storage's `Source` are `extra="forbid"`
-  — the trap D17 hit. A field added to the schema but not to both mirrors fails closed.
+- **Mirrors must move with the schema.** DP's and storage's pydantic mirrors are `extra="forbid"`
+  — the trap D17 hit. A field added to the schema but not to both mirrors fails closed. The v1
+  mirrors are cut at Stage C (`schemas.py` rewrite: one change, four parts).
 - A record whose chunk carried no zone simply omits those fields. Absence is normal, not an error.
+- `enrichments` and `discriminator` **do not exist in v1**, and neither does `content.kind`. Do
+  not re-add them additively; the first two are named on the charter §Slot Law dead-concepts
+  list, and `content.kind` died with the per-kind record model it labeled.
+- At cutover, v0 records are wiped and re-collected, never migrated (OD-2, the D19 license);
+  `/raw` is kept — bytes are sacred.
 
 **How it got here**
+
+- **2026-08-05 — D24 (drafted; ratified 2026-08-06): the rebuild re-cut to one record per chunk, built from slots.**
+  - **Was** — one chunk could fan out to several records (video keyframes, an `ocr` beside a
+    `caption`, an original beside its translation), told apart by a discriminator, with in-place
+    mutation governed by the emission law.
+  - **Changed** — v1 pins exactly one record per `(chunk_id, pipeline_version)`; `content`
+    becomes a slots map with one producer per slot; `modality` moves to the root; `enrichments`,
+    `discriminator` and `content.kind` are deleted.
+  - **Now** — cut at Stage A beside the running v0 and ratified 2026-08-06 as D24; the wire
+    flips at Stage F.
+  - **Payoff** — identity needs two components instead of three, sibling-record bookkeeping
+    disappears, and the governance the old shape required (five tests, five riders, an
+    exemption) is deleted rather than maintained.
 
 - **2026-07-27 — D19: the `discriminator` was surfaced.**
   - **Was** — the discriminator had fed `record_id` since v0 but lived *only* inside the hash, so a
@@ -484,9 +516,13 @@ carrying `{error:"..."}`.
 
 ### C10 — the training-window read
 
-> **storage → continuum** · `built` 2026-07-27 (`a5a48fb` storage · `1757efb` continuum · `2698b63` DP)
-> · [D18](DECISIONS.md) · [D20](DECISIONS.md) · schemas [c10_daylog.v1.json](contracts/c10_daylog.v1.json)
-> · [c10_training_window.v1.json](contracts/c10_training_window.v1.json)
+> **storage → continuum** · day-log v2 `designed`, ratified 2026-08-06
+> ([D28](DECISIONS.md)) · v1 `built` 2026-07-27 (`a5a48fb`
+> storage · `1757efb` continuum · `2698b63` DP), the running read until the Stage F cutover
+> · [D18](DECISIONS.md) · [D20](DECISIONS.md)
+> · schemas [c10_daylog.v2.json](contracts/c10_daylog.v2.json) ·
+> [c10_daylog.v1.json](contracts/c10_daylog.v1.json) ·
+> [c10_training_window.v1.json](contracts/c10_training_window.v1.json)
 
 **In one line.** Continuum asks storage *"what should I train on tonight?"* and storage answers with
 a window plus the day-log rendered over it. Continuum issues a warrant — `(user_id, window_id)`, and
@@ -546,6 +582,30 @@ Day-log body:
   `recipe_id` against the night you are about to run, and refuse on mismatch.
 - `home_tz` in the body records **the fallback zone actually used**, so a wrong-timezone adapter is
   falsifiable after the fact instead of invisible.
+
+- The **v2 deltas** (`designed`; ratified 2026-08-06 as [D28](DECISIONS.md) with
+  [D27](DECISIONS.md); built at Stage E) against the rules above, everything else standing:
+  - The renderer walks C2 v1 `content.slots` instead of per-kind records: `slots.caption` →
+    Scene · `slots.ocr` → World text (OCR) · `slots.transcript` → speaker-bucketed transcript
+    lines via its `splits[]`.
+  - Speech lines render from `slots.transcript`; when that slot is absent they fall back to
+    `slots.asr`, speakers unlabeled (ruled 2026-08-06).
+  - The dedup key collapses to latest `updated_at` per `(chunk_id)`, rowid tiebreak — one record
+    per chunk retires the `(chunk_id, content.kind, discriminator)` key, and `updated_at`
+    replaces `ingest_time` as the axis.
+  - Storage splits `ingest_time` into `created_at` (first landing of a `record_id`) and
+    `updated_at`, bumped only when `record_json` byte-compares different — a no-op
+    redelivery never re-windows a record.
+  - A heal that lands a byte-different record flows into the next window (accepted
+    double-training, the same class as a version bump).
+  - Training-window membership moves with the axis: the window is `[last_trained_t, now−δ)` on
+    `updated_at`.
+  - `daylog_format_version` and `recipe_id` bump; continuum's stamp-refusal is the transition
+    safety net.
+  - E-2 retraction is redesigned as whole-record operations (delete by `record_id` /
+    `chunk_id` / `pipeline_version`; manifest by `pipeline_version`) and finally built, at
+    Stage E.
+  - The D20 parity bar is re-baselined against the v2 renderer (Stage E, WP-E4).
 
 **Why it's this way**
 
@@ -635,6 +695,16 @@ Day-log body:
 
 **How it got here**
 
+- **2026-08-05 — D28 (drafted; ratified 2026-08-06): the day-log re-cut for the slots world.**
+  - **Was** — the v1 renderer walked per-kind records and deduped on
+    `(chunk_id, content.kind, discriminator)` over `ingest_time`, because one chunk could carry
+    several records in several dialects.
+  - **Changed** — v2 cut at rebuild Stage A (D28 drafted): slot-walk rendering, `(chunk_id)`
+    dedup on `updated_at`, and E-2 as whole-record operations.
+  - **Now** — paper only, on branch `dp-rebuild-v1`, ratified 2026-08-06; v1 remains the
+    running read until the Stage F cutover, and Stage E builds the v2 renderer.
+  - **Payoff** — the dedup rule loses two components, retraction becomes expressible in one
+    sentence, and the healed-record path gets a window to land in.
 - **2026-07-27 — F4: both renderers moved to the global epoch grid.**
   - **Was** — continuum bucketed segments relative to the window start, and storage's M9
     differential proof hid the disagreement behind a fixture whose event-window origin happened to

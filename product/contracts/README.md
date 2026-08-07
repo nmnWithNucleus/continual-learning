@@ -18,21 +18,25 @@ is push/at-least-once, dedup on `chunk_id`, gaps via `(stream_id, sequence)`.
   A *breaking* change = new `*.vN.json` file + version bump + an [ARCHITECTURE.md](../ARCHITECTURE.md)
   §Contracts edit. Never mutate a schema file in place once services build against it.
 - Every service validates the payloads it produces/consumes against these schemas in its tests.
-- Ten contracts are materialized across **twelve files**: C3/C9/C4/C6 (serve loop) + C1/C2 (learn
+- Ten contracts are materialized across **fourteen files**: C3/C9/C4/C6 (serve loop) + C1/C2 (learn
   loop) + *C12* (user profile, D18) + *C10 v1* (*two* files — the day-log fetch and the
   training-window ledger row, see below) + *C13* (recipe registry, *two* files, see below) + *C14*
-  (reservoir ledger); the last four landed 2026-07-27 with the storage build slice.
+  (reservoir ledger). The last four landed 2026-07-27 with the storage build slice.
+- The two DP-rebuild targets (*C2 v1* and *C10 day-log v2*) landed 2026-08-05, drafted at rebuild
+  Stage A (see below).
 - C5/C7/C8/C11 get schema files when their slices start.
 
 | File | Contract | Body |
 |---|---|---|
 | `c1_raw_stream_envelope.v0.json` | C1 | recording → data-processing envelope |
-| `c2_processed_record.v0.json` | C2 | data-processing → storage `/context` record |
+| `c2_processed_record.v0.json` | C2 | data-processing → storage `/context` record (the running wire) |
+| `c2_processed_record.v1.json` | C2 | the rebuild target: one record per chunk, slots (ratified, D24) |
 | `c3_userprompt.v0.json` | C3 | input → inference UserPrompt |
 | `c4_turn_record.v0.json` | C4 | inference → storage `/sessions` turn |
 | `c6_resolve.v0.json` | C6 | model-directory resolution |
 | `c9_response_stream.v0.json` | C9 | inference → output stream envelope |
-| `c10_daylog.v1.json` | C10 | `GET /training/daylog` — the rendered day-log |
+| `c10_daylog.v1.json` | C10 | `GET /training/daylog` — the rendered day-log (the running read) |
+| `c10_daylog.v2.json` | C10 | the rebuild target: slot-walk renderer, `updated_at` axis (ratified, D28) |
 | `c10_training_window.v1.json` | C10 | one training-window ledger row (open · close · each element of the enumeration) |
 | `c12_user_profile.v0.json` | C12 | `GET /users/{user_id}/profile` |
 | `c13_recipe.v0.json` | C13 | `GET /recipes/{recipe_id}` |
@@ -88,6 +92,23 @@ that carry a `window_id` — `c10_training_window.v1.json`, `c10_daylog.v1.json`
 the fixed-width property the whole lexicographic-ordering guarantee rests on. *Those bounds are not
 redundant with the pattern and must not be tidied away*; storage pins all three together in one test
 so the fix cannot silently reopen.
+
+## The DP-rebuild targets (Stage A; ratified 2026-08-06 as D24/D28)
+
+*`c2_processed_record.v1.json` and `c10_daylog.v2.json` landed 2026-08-05* on branch
+`dp-rebuild-v1`, cut at Stage A of the DP rebuild
+([plan](../services/data-processing/docs/refactor_dp_service.md) §2 + §5; ratified 2026-08-06
+as [D24](../DECISIONS.md) and [D28](../DECISIONS.md)). **No service validates against
+them yet, and that is by design, not the D17 drift failure**: they are the shapes the rebuild's
+Stages C–E build and validate against, cut first per [ORG.md](../ORG.md) §"Contracts before
+fan-out" — the same order C10-evolved/C13/C14 followed on 2026-07-27. The running service emits
+v0 / serves the v1 day-log until the rebuild's Stage F cutover; validators arrive with the
+producers (DP's rebuilt suite at Stage C, storage's v2 renderer at Stage E). Two carried-over
+traps: `c10_daylog.v2.json` keeps the `window_id` width bounds *verbatim* (the `pattern` trap
+above — storage's pinning test should grow to cover this fourth file when Stage E touches it),
+and `c2_processed_record.v1.json` closes the same trailing-newline hole on `record_id` with
+64-char bounds while `pipeline_version`, variable-width by nature, requires `fullmatch` in any
+enforcing implementation.
 
 **Why C13 is two files.** The training recipe and the gate policy are separate artifacts with
 separate ids and separate lifecycles — `recipe_id` is hashed into continuum's amplify/train stage

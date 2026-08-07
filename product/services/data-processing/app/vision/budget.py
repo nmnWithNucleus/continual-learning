@@ -2,56 +2,47 @@
 
 The training currency is *characters per day-log block*: acquisition was measured
 falling 3.2× for a 3.7× rise in chars/block. So the per-record caption/ocr length is
-not a cosmetic cap — it sets the dose. This module is the one place that turns the
-``VIDEO_CHARS_PER_SECOND`` dial into a per-record character cap, applied as
-``cap = round(rate × span_seconds)`` so the dose is identical at any chunk length
-(that span-parametricity is what lets DP ship at 10 s and absorb 60 s as an .env
-change — D-01).
+not a cosmetic cap — it sets the dose. This module turns a chars-per-second-of-life
+RATE into a per-record character cap, applied as ``cap = round(rate × span_seconds)``
+so the dose is identical at any chunk length (that span-parametricity is what lets DP
+ship at 10 s and absorb 60 s without touching identity — D-01).
 
-``VIDEO_CHARS_PER_SECOND = 22`` total, split ``16`` caption / ``6`` ocr. Truncation is
-deterministic (sentence boundary for the caption, word boundary for OCR) so the same
-reply truncates the same way on every worker in the fleet — a determinism contract,
-not an aesthetic one. Pure functions, no I/O: importable by the clip primary (WS-D)
-AND the OCR assembler (WS-C) without pulling either stage's dependencies.
+NO CONFIG (DP rebuild, L4): the v0 ``VIDEO_CHARS_PER_SECOND`` / ``VIDEO_CAPTION_CHARS_SHARE``
+env knobs are dead. The rates are code pins in the stage files that spend them —
+``app/stages/video/clipcap.py`` pins the caption rate (16), ``app/stages/video/screentext.py``
+pins the OCR rate (6; the v0 split of 22 total). Changing a rate there is a vB bump.
+Everything here is a pure function of ``(span_seconds, rate)`` / ``(text, cap)``.
+
+Truncation is deterministic (sentence boundary for the caption, word boundary for OCR)
+so the same reply truncates the same way on every worker in the fleet — a determinism
+contract, not an aesthetic one.
 """
 from __future__ import annotations
-
-from .config import VisionSettings
 
 # Sentence terminators that end a truncatable clause.
 _TERMINATORS = ".!?"
 
 
-def _caption_rate(vs: VisionSettings) -> int:
-    """chars/second-of-life the caption may spend (the rest goes to the OCR record)."""
-    return max(0, min(vs.caption_chars_share, vs.chars_per_second))
+def caption_cap(span_seconds: float, rate: float) -> int:
+    """Max characters for one clip caption over a ``span_seconds`` chunk at ``rate``
+    chars-per-second-of-life (D-11). The caption text is truncated to this on a
+    sentence boundary, so the dose is span-invariant at a fixed rate."""
+    return max(0, round(max(0.0, rate) * max(0.0, span_seconds)))
 
 
-def _ocr_rate(vs: VisionSettings) -> int:
-    """chars/second-of-life the OCR record may spend = total − caption share (>= 0)."""
-    return max(0, vs.chars_per_second - _caption_rate(vs))
+def ocr_cap(span_seconds: float, rate: float) -> int:
+    """Max characters for one OCR digest over a ``span_seconds`` chunk (D-11)."""
+    return max(0, round(max(0.0, rate) * max(0.0, span_seconds)))
 
 
-def caption_cap(span_seconds: float, vs: VisionSettings) -> int:
-    """Max characters for one clip caption over a ``span_seconds`` chunk (D-11). The
-    caption text the primary writes to /context is truncated to this on a sentence
-    boundary, so the dose is span-invariant at a fixed rate."""
-    return max(0, round(_caption_rate(vs) * max(0.0, span_seconds)))
-
-
-def ocr_cap(span_seconds: float, vs: VisionSettings) -> int:
-    """Max characters for one OCR digest record over a ``span_seconds`` chunk (D-11)."""
-    return max(0, round(_ocr_rate(vs) * max(0.0, span_seconds)))
-
-
-def caption_word_bounds(span_seconds: float, vs: VisionSettings) -> tuple[int, int]:
+def caption_word_bounds(span_seconds: float, rate: float) -> tuple[int, int]:
     """A (low, high) word-count band for the caption prompt, DERIVED from
     ``caption_cap`` at ~6 chars/word with a 20 % floor. This is guidance handed to the
     model in the prompt (``[[words_lo]]-[[words_hi]]``); the hard char cap is still
-    ``caption_cap`` applied to the rendered text. At span=60/R=16 → ~(128, 160); at
+    ``caption_cap`` applied to the rendered text. At span=60/rate=16 → ~(128, 160); at
     span=10 → ~(21, 27) — a description that scales with the length of life it covers,
     never a mandated line/word count (D-10 rejects padded static screens)."""
-    cap = caption_cap(span_seconds, vs)
+    cap = caption_cap(span_seconds, rate)
     hi = max(1, round(cap / 6))
     lo = max(1, round(hi * 0.8))
     return lo, hi

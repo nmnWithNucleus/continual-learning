@@ -1,7 +1,11 @@
 # The record-vs-mutation law — CHARTER extract (WS-E)
 
-**Status:** Folded into [CHARTER.md](../CHARTER.md) §Record-vs-mutation law (2026-07-25, WS-VC) — this file is the long-form rationale the charter row points at, not a pending proposal. Kept because the reasoning is what makes the rule enforceable.
-edit `CHARTER.md`; this file is the extract, written to that standard.
+**Status:** superseded 2026-08-06 by [CHARTER.md](../CHARTER.md) §Slot Law
+([D23](../../../DECISIONS.md)); this file is retained for the retired law's reasoning until
+Stage G folds it into condensed history. Everything below this line is the original text,
+unchanged — quoted material keeps its wording ([STYLE.md](../../../STYLE.md) rule 10). It was
+folded into the charter as §Record-vs-mutation law on 2026-07-25 (WS-VC), the section §Slot
+Law replaced.
 **Source of truth for the reasoning:** `handoff/ws-video-clip.md` §4 (invariant, T1–T5, R1–R5, the
 18-row worked table).
 *Source of truth for the rule:* `tests/test_emission_law.py` + `app/stagegraph/stage.py`. The law

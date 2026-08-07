@@ -1,173 +1,115 @@
-"""The Stage protocol + per-modality registry (zero-edit discovery, like processors/).
+"""The uniform Stage + per-modality registry (DP rebuild Stage C, Slot Law L4/L5).
 
 A stage is ONE disjoint file under ``app/stages/<modality>/`` decorated with
-``@register_stage``. The class declares everything the executor needs; the body is the
-transform. Discovery auto-imports every module under ``app/stages/`` on first use, so a
-new stage is a new file and NOTHING else.
+``@register_stage``. The declaration IS the contract surface:
 
-Kinds (who may touch what — enforced):
-  * ``primary``  — exactly one enabled per modality; fills slots via ``run``; its
-                   ``assemble(ctx)`` (pure, sync, called after ALL stages finish) emits
-                   the modality's primary units in order. Its ``version_fragment`` is the
-                   BASE dialect (non-empty whenever enabled).
-  * ``mutate``   — mutates the primary's declared ``mutable_slots`` in place (e.g.
-                   diarization filling speakers), declaring exactly WHICH in ``writes``
-                   (must be a subset of the primary's ``mutable_slots`` — resolution
-                   errors otherwise). **Enabledness IS
-                   ``version_fragment(settings) != ''``** — one resolver drives both, so
-                   a mutate stage physically cannot run without forking the dialect (the
-                   silent-overwrite bug class the audio slice once caught by review is
-                   now structural). Overriding ``enabled`` on a mutate stage is a
-                   registration error. Implicitly depends on the primary; two mutates
-                   whose ``writes`` intersect are CHAINED deterministically by ``order``
-                   (never concurrent — see executor.resolve), and their fragments
-                   compose in that same chain order, so the dialect encodes the sequence.
-  * ``sidecar``  — returns ADDITIONAL units (own discriminators); never touches the
-                   primary. May be ``best_effort``. A sidecar declaring a non-empty
-                   ``provides`` MUST declare ``version_fragment`` (the §4 R1 fork rider,
-                   enforced at registration): a provided slot exists only to be consumed,
-                   i.e. to change bytes of a record this stage does not itself emit, so
-                   its config must fork the dialect. A sidecar that only ADDS records and
-                   feeds nothing declares neither (forking the whole chunk's dialect on an
-                   additive toggle would re-key the primary for a change that never
-                   touched it).
+  * ``name`` / ``modality`` — who this is; ``slot`` (default = ``name``) — the ONE
+    record slot it may produce. One enabled producer per slot (registration + resolve
+    both enforce it); no stage edits another stage's slot — derived views are new
+    slots from ordinary stages whose ``needs`` reference the inputs (L5).
+  * ``stage_version`` (vS) bumps on CONTRACT changes: needs, slot name/shape, emit
+    semantics, budget. ``backend`` (name + vB, resolved in code) bumps on
+    IMPLEMENTATION changes: model, weights, prompts, thresholds, any behavior (L4).
+    The stage's dialect segment is ``<name>.v<S>-<backend>.v<B>[.exp-<code>]``; the
+    executor composes ``pipeline_version`` from the enabled stages' segments,
+    sorted, '+'-joined. No output-affecting env knobs exist anywhere — a stage
+    never even sees Settings; behavior lives in code or it does not exist.
+  * Mock backends are client-level fakes selected the same way real backends are —
+    by name, in the version string: construct the SAME stage class with
+    ``backend=Backend("mock", 1)`` and hand the context a fake client under the
+    stage's ``server`` key. The stage body runs identically either way.
+  * ``required`` (L7): a required stage's failure fails the chunk attempt (no
+    record — worker retry then dead-letter); an optional stage's failure leaves its
+    slot a hole, cancels its downstream cone, and the record ships.
+  * ``byte_budget`` (L5): the ceiling on the emitted slot's serialized UTF-8
+    JSON bytes at assembly — the measure includes the executor-stamped
+    ``version`` key, i.e. exactly the bytes the record carries for the slot.
+    Raising it is a stage-version bump; exceeding it is a stage failure, never
+    truncation. Declared here, in the stage file, so review sees it.
+  * ``consumer`` (L10, ruled in at the Stage C cleanup round): every slot ships
+    with a named consumer-today or an explicit speculative marker —
+    ``"daylog:<line>"`` (a C10 renderer route), ``"stage:<name>"`` (a downstream
+    stage consumes it in-run), or ``"speculative:<why>"``. Mandatory at
+    registration; declaration-only (no runtime behavior); pinned by the T-3
+    snapshot. Rough chars-per-second-of-life costs stay docstring-grade.
+  * Exactly one of ``run_sync`` (executed in a worker thread — blocking work can
+    never freeze the event loop by accident) or ``run_async`` (await-native IO:
+    the thin-client path, freeing threadpool tokens). Both receive ``StageContext``
+    and return ``StageOutput``.
 
-Slot ownership is CAPABILITY-SCOPED at runtime, not just declared: each stage's run
-receives a ``SlotView`` of the shared slots that (a) refuses writes to any key the stage
-does not own, and (b) refuses to even HAND a sidecar a reference to the primary's
-``mutable_slots`` — so an illegal mutation is impossible by construction (you cannot
-scribble on an object you were never given), raising ``SlotAccessError`` at the exact
-offending line, order-independently. This replaced the old end-of-run fingerprint guard,
-which was order-dependent (an illegal write landing before the mutate cohort finished
-was baked into the reference and missed).
+``server`` is operational routing only (which model-server client pool the stage
+calls, e.g. ``"whisper"``); it is deliberately NOT part of the identity segment —
+endpoints/replicas/timeouts are operational, the model behind them is pinned by
+the server's own code + manifest identity (L9).
 
-Policies: ``required`` (default — failure fails the chunk, worker taxonomy applies) or
-``best_effort`` (failure skips the stage + its downstream best_effort cone, counted;
-sidecar-only — a required/primary stage downstream of a best_effort one is a resolution
-error, because its "required" promise would be hollow).
-
-Execution contract — structural, not conventional: a stage defines EXACTLY ONE of
-``run_sync`` (always executed in a worker thread — blocking model/subprocess/CPU work
-can never freeze the event loop by accident) or ``run_async`` (await-native IO only:
-shared HTTP pools). Both receive the ``StageContext`` and return a ``StageResult``.
+Deleted with their subject matter (D23/D26): primary/mutate/sidecar kinds,
+``writes``/``mutable_slots``, SlotView capability proxies, ``best_effort`` policy
+machinery, ``order``, per-stage ``version_fragment``/``enabled`` resolvers, the R1
+fork rider + its frozen exemption, ``assemble``.
 """
 from __future__ import annotations
 
 import importlib
 import pkgutil
+import re
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
-from ..config import Settings
-from ..processing.base import ProcessedUnit
+# Grammar shared with the C2 v1 contract's pipeline_version/slot_version patterns:
+# stage names, backend names, slot names and experiment codes are all [a-z0-9_]+.
+_NAME_RE = re.compile(r"[a-z0-9_]+\Z")
 
 
 class StageRegistrationError(Exception):
-    """A malformed stage file — raised at import/discovery so a bad drop-in fails loudly."""
+    """A malformed stage declaration — raised at import/registration so a bad
+    drop-in fails loudly before it can ever run."""
 
 
-class SlotAccessError(RuntimeError):
-    """A stage touched a slot it does not own — a stage-file bug, raised AT the offending
-    read/write (synchronously, order-independently), never deferred to an end-of-run
-    check. Subclasses RuntimeError so existing required-failure taxonomy applies."""
+@dataclass(frozen=True)
+class Backend:
+    """A stage's implementation identity: ``name`` selects it (in code — the same
+    way for real and mock), ``version`` (vB) bumps on any behavior change."""
 
-
-class SlotView:
-    """A stage-scoped capability view over the shared slot dict.
-
-    Reads pass through EXCEPT keys in ``deny_read`` (a sidecar asking for the primary's
-    mutable slots — refusing the reference is what makes illegal mutation structurally
-    impossible: you cannot scribble on an object you were never handed). Direct writes
-    are allowed only for keys in ``allow_write`` (a mutate's declared ``writes``); all
-    other slot production goes through ``StageResult.slots`` so commit-on-success holds.
-    """
-
-    __slots__ = ("_slots", "_stage", "_deny_read", "_allow_write")
-
-    def __init__(self, slots: dict, stage_name: str,
-                 deny_read: frozenset, allow_write: frozenset) -> None:
-        self._slots = slots
-        self._stage = stage_name
-        self._deny_read = deny_read
-        self._allow_write = allow_write
-
-    def _check_read(self, key: str) -> None:
-        if key in self._deny_read:
-            raise SlotAccessError(
-                f"stage {self._stage!r} may not read primary mutable slot {key!r} — "
-                "a reference is mutation power (in-place writes bypass __setitem__): "
-                "sidecars never see primary mutable state, and a mutate sees only the "
-                "slots it declared in `writes` (declare it there — that also chains "
-                "you deterministically against the slot's other writers)"
-            )
-
-    def __getitem__(self, key: str):
-        self._check_read(key)
-        return self._slots[key]
-
-    def get(self, key: str, default=None):
-        self._check_read(key)
-        return self._slots.get(key, default)
-
-    def __setitem__(self, key: str, value) -> None:
-        if key not in self._allow_write:
-            raise SlotAccessError(
-                f"stage {self._stage!r} may not write slot {key!r} directly — return it "
-                "via StageResult.slots (commit-on-success), or declare it in `writes` "
-                "on a mutate stage"
-            )
-        self._slots[key] = value
-
-    def __delitem__(self, key: str) -> None:
-        raise SlotAccessError(f"stage {self._stage!r} may not delete slot {key!r}")
-
-    def __contains__(self, key: str) -> bool:
-        return key in self._slots and key not in self._deny_read
-
-    def __iter__(self):
-        return (k for k in self._slots if k not in self._deny_read)
-
-    def __len__(self) -> int:
-        return sum(1 for _ in self)
-
-    def __repr__(self) -> str:  # pragma: no cover - debugging aid
-        return f"SlotView(stage={self._stage!r}, keys={sorted(self)!r})"
-
-
-# Sentinel a skipped stage's future resolves to; dependents cascade-skip on it.
-SKIPPED = object()
-
-_KINDS = ("primary", "mutate", "sidecar")
-_POLICIES = ("required", "best_effort")
-
-# The SINGLE frozen exemption to the R1 fork rider below (§4.3 R1 / D-14): the legacy
-# ``video/keyframes`` prep sidecar has a non-empty ``provides`` and no fragment, solely so
-# the retired ``vidproc-*-v0`` record_ids reproduce byte-for-byte. No new stage joins it —
-# ``tests/test_emission_law.py`` re-runs the whole law with this set EMPTIED and asserts
-# this pair is the only violation in any configuration.
-R1_EXEMPT_SIDECARS = frozenset({("video", "keyframes")})
+    name: str
+    version: int
 
 
 @dataclass
-class StageResult:
-    """What a stage's run returns. ``slots`` are committed into the context ONLY on
-    success (a failed stage contributes nothing); ``units`` are a sidecar's additional
-    records (primary emits its units later, in ``assemble``)."""
+class StageOutput:
+    """What a stage's run returns.
 
-    units: list[ProcessedUnit] = field(default_factory=list)
-    slots: dict[str, Any] = field(default_factory=dict)
+    ``value`` — the JSON slot value committed into the record under the stage's
+    slot name (the executor adds the ``version`` key). ``None`` = this stage emits
+    no record slot (e.g. a prep stage whose whole output is transient bytes).
+    An empty-but-present value is the honest empty claim (L11) — distinct from
+    ``None`` and from a hole.
+
+    ``bytes`` — an in-run-only payload (raw frames, decoded audio…) handed to
+    dependents on the blackboard and FREED by the executor after the last consumer
+    finishes (L5: within a run the blackboard carries {ref, bytes}; binary never
+    lands in a slot).
+    """
+
+    value: Any = None
+    bytes: Any = None
 
 
 @dataclass
 class StageContext:
-    """The per-chunk blackboard stages read and write (via declared slots)."""
+    """The per-stage view of one chunk's run. No Settings anywhere: a stage that
+    wants a knob must put it in code and bump vB (L4).
 
-    c1: dict[str, Any]
+    ``inputs`` holds exactly the declared ``needs``' outputs, keyed by stage name.
+    ``clients`` maps server names (``Stage.server``) to model clients — real
+    ModelClients in production, client-level fakes under a mock dialect.
+    """
+
+    c1: Mapping[str, Any]
     blob: bytes
-    settings: Settings
     span_seconds: float
-    slots: dict[str, Any] = field(default_factory=dict)
-    resources: Any = None  # app-level handles: .metrics, .vlm_pool (may be None)
+    inputs: dict[str, StageOutput] = field(default_factory=dict)
+    clients: Mapping[str, Any] = field(default_factory=dict)
+    metrics: Any = None
 
 
 class Stage:
@@ -175,47 +117,110 @@ class Stage:
 
     name: str = ""
     modality: str = ""
-    kind: str = "sidecar"                 # primary | mutate | sidecar
-    policy: str = "required"              # required | best_effort (sidecar only)
-    needs: tuple[str, ...] = ()           # stage names this one awaits
-    provides: tuple[str, ...] = ()        # slot keys this stage commits via StageResult (AUTHORITATIVE:
-                                          # committing an undeclared key is a runtime error)
-    mutable_slots: tuple[str, ...] = ()   # PRIMARY only: slots mutate stages may write in place
-    writes: tuple[str, ...] = ()          # MUTATE only: which mutable_slots it edits in place
-                                          # (drives overlap-chaining; ⊆ primary.mutable_slots)
-    order: int = 0                        # deterministic assembly order (unique per modality)
+    stage_version: int = 0                 # vS; >= 1
+    backend: Optional[Backend] = None      # resolved in code; vB >= 1
+    needs: tuple[str, ...] = ()            # stage names this one awaits
+    slot: Optional[str] = None             # record slot name; default = name
+    required: bool = True                  # L7 failure policy
+    byte_budget: int = 0                   # L5 ceiling on the emitted slot's bytes
+    consumer: str = ""                     # L10: daylog:<line> | stage:<name> | speculative:<why>
+    server: str = ""                       # operational: which client pool run() uses
+    experiment: str = ""                   # non-empty -> .exp-<code> on the segment
 
-    # ---- resolution-time switches -------------------------------------------------
-    def enabled(self, settings: Settings) -> bool:
-        """primary/sidecar only — mutate enabledness derives from the fragment."""
-        return True
+    def __init__(self, *, backend: Optional[Backend] = None,
+                 experiment: Optional[str] = None) -> None:
+        # The in-code selection point: tests / an offline harness construct the
+        # same stage class with a mock or experimental Backend, and the dialect
+        # says so (never an env knob).
+        if backend is not None:
+            self.backend = backend
+        if experiment is not None:
+            self.experiment = experiment
 
-    def version_fragment(self, settings: Settings) -> str:
-        """primary: the BASE dialect (non-empty whenever enabled). mutate: '+tag' or ''
-        — THE single resolver (drives enabledness too). sidecar: usually ''."""
-        return ""
+    # ---- identity --------------------------------------------------------------
+    @property
+    def slot_name(self) -> str:
+        return self.slot if self.slot else self.name
 
-    def is_enabled(self, settings: Settings) -> bool:
-        """The executor's view: one rule per kind, no second decision site."""
-        if self.kind == "mutate":
-            return bool(self.version_fragment(settings))
-        return self.enabled(settings)
+    @property
+    def segment(self) -> str:
+        """This stage's dialect segment: ``<stage>.v<S>-<backend>.v<B>[.exp-<code>]``."""
+        seg = f"{self.name}.v{self.stage_version}-{self.backend.name}.v{self.backend.version}"
+        if self.experiment:
+            seg += f".exp-{self.experiment}"
+        return seg
 
-    # ---- execution (exactly one defined) -------------------------------------------
-    def run_sync(self, ctx: StageContext) -> StageResult:  # pragma: no cover - abstract
+    # ---- execution (exactly one defined) ----------------------------------------
+    def run_sync(self, ctx: StageContext) -> StageOutput:  # pragma: no cover - abstract
         raise NotImplementedError
 
-    async def run_async(self, ctx: StageContext) -> StageResult:  # pragma: no cover
+    async def run_async(self, ctx: StageContext) -> StageOutput:  # pragma: no cover
         raise NotImplementedError
 
-    # ---- primary only ----------------------------------------------------------------
-    def assemble(self, ctx: StageContext) -> list[ProcessedUnit]:  # pragma: no cover
-        raise NotImplementedError
-
-    # ---- introspection ---------------------------------------------------------------
+    # ---- introspection -----------------------------------------------------------
     @classmethod
     def _defines(cls, method: str) -> bool:
         return getattr(cls, method) is not getattr(Stage, method)
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"<Stage {self.modality}/{self.name} {self.segment}>"
+
+
+def validate_stage(stage: Stage) -> None:
+    """The declaration checks, hard. Shared by registration and by explicit
+    stage-set construction (mock dialects), so a malformed test set fails the
+    same way a malformed drop-in file does."""
+    cls_name = type(stage).__name__
+
+    def _bad(msg: str) -> StageRegistrationError:
+        return StageRegistrationError(f"{cls_name}: {msg}")
+
+    for label, value in (("name", stage.name), ("modality", stage.modality)):
+        if not isinstance(value, str) or not _NAME_RE.fullmatch(value or ""):
+            raise _bad(f"{label} must match [a-z0-9_]+ (got {value!r})")
+    if stage.slot is not None and (
+        not isinstance(stage.slot, str) or not _NAME_RE.fullmatch(stage.slot)
+    ):
+        raise _bad(f"slot must match [a-z0-9_]+ (got {stage.slot!r})")
+    if not isinstance(stage.stage_version, int) or isinstance(stage.stage_version, bool) \
+            or stage.stage_version < 1:
+        raise _bad(f"stage_version (vS) must be an int >= 1 (got {stage.stage_version!r})")
+    if not isinstance(stage.backend, Backend):
+        raise _bad("backend must be a Backend(name, version), resolved in code (L4)")
+    if not isinstance(stage.backend.name, str) or not _NAME_RE.fullmatch(stage.backend.name or ""):
+        raise _bad(f"backend.name must match [a-z0-9_]+ (got {stage.backend.name!r})")
+    if not isinstance(stage.backend.version, int) or isinstance(stage.backend.version, bool) \
+            or stage.backend.version < 1:
+        raise _bad(f"backend.version (vB) must be an int >= 1 (got {stage.backend.version!r})")
+    if not isinstance(stage.experiment, str) or (
+        stage.experiment and not _NAME_RE.fullmatch(stage.experiment)
+    ):
+        raise _bad(f"experiment code must match [a-z0-9_]+ (got {stage.experiment!r})")
+    if not isinstance(stage.required, bool):
+        raise _bad(f"required must be a bool (got {stage.required!r})")
+    if not isinstance(stage.byte_budget, int) or isinstance(stage.byte_budget, bool) \
+            or stage.byte_budget < 1:
+        raise _bad(
+            f"byte_budget must be a positive int (got {stage.byte_budget!r}) — every "
+            "slot ships under a byte budget declared in the stage file (L5/L10)"
+        )
+    if not isinstance(stage.consumer, str) or not re.fullmatch(
+            r"(daylog|stage|speculative):.+", stage.consumer):
+        raise _bad(
+            f"consumer must be 'daylog:<line>' | 'stage:<name>' | "
+            f"'speculative:<why>' (got {stage.consumer!r}) — a slot ships with a "
+            "named consumer-today or an explicit speculative marker (L10)"
+        )
+    if not isinstance(stage.needs, tuple):
+        raise _bad(f"needs must be a tuple of stage names (got {type(stage.needs).__name__})")
+    if stage.name in stage.needs:
+        raise _bad("needs may not include the stage itself")
+    if len(set(stage.needs)) != len(stage.needs):
+        raise _bad(f"needs contains duplicates: {stage.needs}")
+    cls = type(stage)
+    if cls._defines("run_sync") == cls._defines("run_async"):
+        raise _bad("define exactly one of run_sync (threadpooled) or run_async "
+                   "(loop-native IO)")
 
 
 # modality -> {name: Stage instance}
@@ -224,61 +229,10 @@ _discovered = False
 
 
 def register_stage(cls: type[Stage]) -> type[Stage]:
-    """Class decorator: validate the declaration hard at import, then register."""
+    """Class decorator: validate the declaration hard at import, then register
+    the stage instance (constructed with its in-code default backend)."""
     stage = cls()
-    if not stage.name or not stage.modality:
-        raise StageRegistrationError(f"{cls.__name__}: name and modality are required")
-    if stage.kind not in _KINDS:
-        raise StageRegistrationError(f"{cls.__name__}: kind must be one of {_KINDS}")
-    if stage.policy not in _POLICIES:
-        raise StageRegistrationError(f"{cls.__name__}: policy must be one of {_POLICIES}")
-    if stage.kind in ("primary", "mutate") and stage.policy == "best_effort":
-        raise StageRegistrationError(
-            f"{cls.__name__}: {stage.kind} stages cannot be best_effort — a lost mutation "
-            "or primary under an unchanged pipeline_version would be a silent lie"
-        )
-    if stage.kind == "mutate" and cls._defines("enabled"):
-        raise StageRegistrationError(
-            f"{cls.__name__}: mutate stages must NOT override enabled() — enabledness IS "
-            "version_fragment(settings) != '' (single resolver)"
-        )
-    if (
-        stage.kind == "sidecar"
-        and stage.provides
-        and not cls._defines("version_fragment")
-        and (stage.modality, stage.name) not in R1_EXEMPT_SIDECARS
-    ):
-        raise StageRegistrationError(
-            f"{cls.__name__}: a sidecar declaring provides={tuple(stage.provides)} must "
-            "declare version_fragment() — §4 R1 (the fork rider). A provided slot exists "
-            "only to be consumed, i.e. to change bytes of a record this stage does not "
-            "itself emit; with no fragment that change lands under an UNCHANGED "
-            "pipeline_version and silently upserts over /context (the diarize "
-            "silent-overwrite class, re-opened for whoever reads the slot). This binds "
-            "for a sidecar what the mutate rule above binds for a mutate. A sidecar that "
-            "only ADDS records declares no `provides` and needs no fragment"
-        )
-    defines_sync, defines_async = cls._defines("run_sync"), cls._defines("run_async")
-    if defines_sync == defines_async:
-        raise StageRegistrationError(
-            f"{cls.__name__}: define exactly one of run_sync (threadpooled) or "
-            f"run_async (loop-native IO)"
-        )
-    if stage.kind == "primary" and not cls._defines("assemble"):
-        raise StageRegistrationError(f"{cls.__name__}: primary stages must define assemble()")
-    if stage.kind != "primary" and stage.mutable_slots:
-        raise StageRegistrationError(f"{cls.__name__}: only primary declares mutable_slots")
-    if stage.kind == "mutate" and not stage.writes:
-        raise StageRegistrationError(
-            f"{cls.__name__}: mutate stages must declare `writes` (which of the "
-            "primary's mutable_slots they edit in place) — it drives write access AND "
-            "the deterministic chaining of overlapping mutates"
-        )
-    if stage.kind != "mutate" and stage.writes:
-        raise StageRegistrationError(
-            f"{cls.__name__}: only mutate stages declare `writes`; a {stage.kind} "
-            "produces slots via StageResult (see `provides`), it never edits in place"
-        )
+    validate_stage(stage)
 
     by_name = _REGISTRY.setdefault(stage.modality, {})
     existing = by_name.get(stage.name)
@@ -288,19 +242,18 @@ def register_stage(cls: type[Stage]) -> type[Stage]:
             f"with {type(existing).__name__}"
         )
     for other in by_name.values():
-        if other.order == stage.order and other.name != stage.name:
+        if other.name != stage.name and other.slot_name == stage.slot_name:
             raise StageRegistrationError(
-                f"{cls.__name__}: order {stage.order} already used by "
-                f"{stage.modality}/{other.name} — orders are the deterministic assembly "
-                "sequence and must be unique per modality"
+                f"{cls.__name__}: slot {stage.slot_name!r} already produced by "
+                f"{stage.modality}/{other.name} — one enabled producer per slot (L5)"
             )
     by_name[stage.name] = stage
     return cls
 
 
 def _discover() -> None:
-    """Import every module under ``app/stages/`` exactly once (recursive) so each stage
-    file self-registers — the processors-registry pattern, one level deeper."""
+    """Import every module under ``app/stages/`` exactly once (recursive) so each
+    stage file self-registers — a new stage is a new file and NOTHING else."""
     global _discovered
     if _discovered:
         return
@@ -308,9 +261,8 @@ def _discover() -> None:
 
     for mod in pkgutil.walk_packages(stages.__path__, stages.__name__ + "."):
         importlib.import_module(mod.name)
-    _discovered = True
-    # Post-discovery: every declared need must reference a stage that EXISTS (enabled-ness
-    # is settings-dependent and checked at resolution; existence is static).
+    # Post-discovery: every declared need must reference a registered stage.
+    # (Explicit stage sets — mock dialects — are re-checked at resolve time.)
     for modality, by_name in _REGISTRY.items():
         for stage in by_name.values():
             for need in stage.needs:
@@ -318,9 +270,21 @@ def _discover() -> None:
                     raise StageRegistrationError(
                         f"{modality}/{stage.name}: needs unknown stage {need!r}"
                     )
+    # Flipped only AFTER the needs check: a failed discovery must not leave a
+    # half-validated registry marked done (cleanup round).
+    _discovered = True
 
 
 def stages_for(modality: str) -> list[Stage]:
-    """All registered stages for a modality, in declared order. Empty if none."""
+    """All registered stages for a modality, sorted by name (deterministic;
+    execution order is readiness-driven, record slots are a map — nothing else
+    consumes an ordering). Empty if none."""
     _discover()
-    return sorted(_REGISTRY.get(modality, {}).values(), key=lambda s: s.order)
+    return sorted(_REGISTRY.get(modality, {}).values(), key=lambda s: s.name)
+
+
+def registered_modalities() -> list[str]:
+    """Sorted modalities that currently have at least one registered stage —
+    the modality routing the retired processors/ registry used to own."""
+    _discover()
+    return sorted(m for m, by_name in _REGISTRY.items() if by_name)

@@ -16,9 +16,13 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from app.processing.base import ProcessedContent, ProcessedUnit, Processor
 from tests.fake_storage import FakeStorage
-from tests.conftest import make_c1
+from tests.conftest import (
+    MOCK_AUDIO_PV,
+    FakeGraphProcessor,
+    install_mock_audio_registry,
+    make_c1,
+)
 
 
 def _wait(pred, timeout: float = 20.0, interval: float = 0.01) -> bool:
@@ -39,7 +43,7 @@ def _wait(pred, timeout: float = 20.0, interval: float = 0.01) -> bool:
 @pytest.fixture()
 def async_client(monkeypatch, fake_storage, tmp_path):
     """A data-processing app in ASYNC ingest mode, storage bound to the fake."""
-    monkeypatch.setenv("ASR_BACKEND", "mock")
+    install_mock_audio_registry(monkeypatch)
     monkeypatch.setenv("DP_VAR_DIR", str(tmp_path / "var"))
     monkeypatch.setenv("STORAGE_URL", "http://storage.test")
     monkeypatch.setenv("INGEST_ASYNC", "1")
@@ -113,7 +117,7 @@ def test_continuity_processed_populated_after_processing(async_client):
 
 def test_graceful_drain_processes_everything(monkeypatch, fake_storage, tmp_path):
     """Posting N chunks then closing the app drains every one (shutdown join)."""
-    monkeypatch.setenv("ASR_BACKEND", "mock")
+    install_mock_audio_registry(monkeypatch)
     monkeypatch.setenv("DP_VAR_DIR", str(tmp_path / "var"))
     monkeypatch.setenv("STORAGE_URL", "http://storage.test")
     monkeypatch.setenv("INGEST_ASYNC", "1")
@@ -150,33 +154,28 @@ def test_missing_blob_dead_letters_and_is_visible(async_client):
     assert 'dp_dead_letter_total{modality="audio"} 1' in metrics
 
 
-class _FlakyProcessor(Processor):
-    """Raises an UNEXPECTED (non-ProcessingError) error the first N process() calls, then
-    succeeds — models an infra hiccup (model cold-load 503, CUDA OOM, ffmpeg RuntimeError)."""
-
-    modality = "audio"
-    content_kind = "transcript"
+class _FlakyProcessor(FakeGraphProcessor):
+    """Raises an UNEXPECTED (non-ProcessingError) error the first N graph runs, then
+    succeeds — models an infra hiccup (model server cold 503, CUDA OOM, ffmpeg error)."""
 
     def __init__(self, fail_times: int) -> None:
         self._left = fail_times
         self.calls = 0
 
-    def pipeline_version(self, settings) -> str:
-        return "asr-mock-v0"
+        def run(c1, blob, span):
+            self.calls += 1
+            if self._left > 0:
+                self._left -= 1
+                raise RuntimeError("model still warming up (503)")  # NOT a ProcessingError
+            return {"asr": {"version": MOCK_AUDIO_PV, "value": "ok"}}
 
-    def process(self, c1, blob, settings, span_seconds) -> list[ProcessedUnit]:
-        self.calls += 1
-        if self._left > 0:
-            self._left -= 1
-            raise RuntimeError("model still warming up (503)")  # NOT a ProcessingError
-        return [ProcessedUnit(content=ProcessedContent(kind="transcript", text="ok"))]
+        super().__init__(run=run)
 
 
 def test_unexpected_processor_error_is_retried_not_dead_lettered(monkeypatch, fake_storage, tmp_path):
     """Fix (review #2): an infra error out of the processor is TRANSIENT — inline mode 500s
     → recording retries, so the async worker retries too rather than dead-lettering the
     first blip. Only after INGEST_MAX_RETRIES does it dead-letter."""
-    monkeypatch.setenv("ASR_BACKEND", "mock")
     monkeypatch.setenv("STORAGE_URL", "http://storage.test")
     monkeypatch.setenv("DP_VAR_DIR", str(tmp_path / "var"))
     monkeypatch.setenv("INGEST_ASYNC", "1")
@@ -184,7 +183,7 @@ def test_unexpected_processor_error_is_retried_not_dead_lettered(monkeypatch, fa
     monkeypatch.setenv("INGEST_MAX_RETRIES", "3")
     flaky = _FlakyProcessor(fail_times=2)  # fails twice, succeeds on the 3rd attempt
     import app.main as main_mod
-    monkeypatch.setattr(main_mod, "get_processor", lambda modality: flaky)
+    monkeypatch.setattr(main_mod, "graph_processor", lambda modality: flaky)
     app = main_mod.create_app()
     app.state.storage._transport = fake_storage.transport()
     with TestClient(app) as c:
@@ -215,31 +214,26 @@ def test_transient_blob_failure_retries_then_succeeds(async_client):
 
 # ---- Concurrency: in-flight duplicate + bounded-queue 503 -------------------
 
-class _GatedProcessor(Processor):
-    """A processor that blocks in process() until an Event is set — lets a test hold
-    workers busy to exercise in-flight dedup + queue-full backpressure deterministically."""
-
-    modality = "audio"
-    content_kind = "transcript"
+class _GatedProcessor(FakeGraphProcessor):
+    """Blocks the graph run until an Event is set — lets a test hold workers busy to
+    exercise in-flight dedup + queue-full backpressure deterministically."""
 
     def __init__(self) -> None:
         self.gate = threading.Event()
         self.started = 0
         self._lock = threading.Lock()
 
-    def pipeline_version(self, settings) -> str:
-        return "asr-mock-v0"
+        def run(c1, blob, span):
+            with self._lock:
+                self.started += 1
+            self.gate.wait(timeout=10)
+            return {"asr": {"version": MOCK_AUDIO_PV,
+                            "value": f"gated {c1['chunk_id']}"}}
 
-    def process(self, c1, blob, settings, span_seconds) -> list[ProcessedUnit]:
-        with self._lock:
-            self.started += 1
-        self.gate.wait(timeout=10)
-        return [ProcessedUnit(content=ProcessedContent(kind="transcript",
-                                                       text=f"gated {c1['chunk_id']}"))]
+        super().__init__(run=run)
 
 
 def _gated_app(monkeypatch, fake_storage, tmp_path, *, workers: int, queue_max: int):
-    monkeypatch.setenv("ASR_BACKEND", "mock")
     monkeypatch.setenv("DP_VAR_DIR", str(tmp_path / "var"))
     monkeypatch.setenv("STORAGE_URL", "http://storage.test")
     monkeypatch.setenv("INGEST_ASYNC", "1")
@@ -247,7 +241,7 @@ def _gated_app(monkeypatch, fake_storage, tmp_path, *, workers: int, queue_max: 
     monkeypatch.setenv("INGEST_QUEUE_MAX", str(queue_max))
     gated = _GatedProcessor()
     import app.main as main_mod
-    monkeypatch.setattr(main_mod, "get_processor", lambda modality: gated)
+    monkeypatch.setattr(main_mod, "graph_processor", lambda modality: gated)
     app = main_mod.create_app()
     app.state.storage._transport = fake_storage.transport()
     return app, gated
@@ -291,7 +285,7 @@ def test_failed_journal_accept_releases_claim(monkeypatch, fake_storage, tmp_pat
     the in-flight claim MUST be released — otherwise every retry ACKs 202-duplicate
     forever (silent loss + a lying ACK). After the transient failure clears, a
     redelivery re-claims cleanly and processes."""
-    monkeypatch.setenv("ASR_BACKEND", "mock")
+    install_mock_audio_registry(monkeypatch)
     monkeypatch.setenv("STORAGE_URL", "http://storage.test")
     monkeypatch.setenv("DP_VAR_DIR", str(tmp_path / "var"))
     monkeypatch.setenv("INGEST_ASYNC", "1")

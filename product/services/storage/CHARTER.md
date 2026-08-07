@@ -15,7 +15,9 @@
 > unrecorded, silent breakage, or calling a thing BUILT when it is only ratified.
 > Full posture + what changes at dev/prod: [ARCHITECTURE.md](../../ARCHITECTURE.md) §Stage.
 
-**Status:** chartered · **Last updated:** 2026-07-27 · the [D18](../../DECISIONS.md) scope
+**Status:** chartered · **Last updated:** 2026-08-06 (the D27/D28 joint rows built on
+branch `dp-rebuild-v1` at rebuild Stage E: E-2 whole-record shape on the M5 card, M9
+re-baselined; nothing running here changed) · the [D18](../../DECISIONS.md) scope
 expansion is `built` (`a5a48fb`, 310 tests). Lineage: [§How this charter got here](#how-this-charter-got-here).
 
 ## Mission
@@ -382,25 +384,35 @@ ingest clock, and which one answers a question is decided here, once.
 | M9 | **C10 evolved: day-log materialization + the training-window ledger** ([D18](../../DECISIONS.md)) | see the card: [↓](#m9--the-day-log-parity-bar) |
 
 ### M5 — deletion primitives, and what D18 widened
-> `designed` · widened 2026-07-26 by [D18](../../DECISIONS.md)
+> `designed` · widened 2026-07-26 by [D18](../../DECISIONS.md) · E-2 redesigned
+> whole-record by [D28](../../DECISIONS.md) and built on `dp-rebuild-v1` 2026-08-06
+> (rebuild Stage E WP-E3; lands at the Stage F cutover)
 
-**In one line.** Full-user delete and time-slice delete, plus the kind-aware retraction (E-2) — and
-every one of them must reach the derived stores too.
+**In one line.** Full-user delete and time-slice delete, plus the whole-record retraction (E-2) —
+and every one of them must reach the derived stores too.
 
 **Exit criterion.** Full-user delete purges `/raw`, `/context`, `/sessions`, directory entries and
 adapter artifacts, and schedules backup expiry. The deletion manifest is auditable. Platform's
 orchestration and proof-of-deletion (its M2) call these primitives; we do not own the end-to-end
 pipeline.
 
-**Rules — E-2's shape** (board-reviewed 2026-07-26)
+**Rules — E-2's shape** (redesigned by D28; the board-reviewed kind-granular shape of
+2026-07-26 retired unbuilt)
 
-- `DELETE /context/records?user_id=&from=&to=&kind=&pipeline_version=`, with `user_id` required.
-- `from`/`to` are half-open on `t_start` — event time, because a retraction is about a lived
-  period.
-- `kind` and `pipeline_version` are optional filters.
-- It returns an **auditable manifest** of counts by `kind` × `pipeline_version`, and `dry_run=true`
-  returns the manifest without deleting.
-- It must **re-materialize or invalidate every affected day-log**.
+- `DELETE /context/records?user_id=&record_id=&chunk_id=&pipeline_version=`, `user_id`
+  required; selectors AND together and at least one is required (a selectorless call is
+  refused — the full-user wipe is a different primitive).
+- *Whole* records, never kinds or slots: one record per chunk (D24) leaves nothing
+  kind-granular to name.
+- It returns an **auditable manifest** of counts by `pipeline_version`, and
+  `dry_run=true` returns the manifest without deleting.
+- It must **invalidate every affected day-log** (the cascade is built: dropped and
+  rebuilt on next fetch, the corrected-`home_tz` mechanism).
+- The time-slice delete ("delete last Tuesday", event-time bounds) is NOT E-2's job and
+  remains M5's own unbuilt primitive.
+- E-2 never touches DP's done-ledger: a retracted chunk's redelivery still *skips*
+  upstream (200 + a record_id storage no longer holds) — designed; rebuild after a
+  retraction is the OD-2 `/raw` replay tool or a version bump.
 
 **Why it's this way**
 
@@ -408,6 +420,9 @@ pipeline.
   reservoir, both are second copies of user content, so both must be in every deletion's cascade.
 - A retraction that clears `/context` and leaves a day-log standing has deleted nothing. That is a
   right-to-be-forgotten defect, not a tidiness one.
+- E-2 is retention and right-to-be-forgotten, never correctness — "deletion is never the
+  mechanism for correctness" stands (§Retention), and the one-record-per-chunk model is
+  what made the kind-granular design dead weight.
 
 ### M8 — profile, registry, reservoir
 > `built` 2026-07-27 · [D18](../../DECISIONS.md)
@@ -429,6 +444,7 @@ pipeline.
 
 ### M9 — the day-log parity bar
 > `built` 2026-07-27 · [D18](../../DECISIONS.md) · bar narrowed by [D20](../../DECISIONS.md), then widened by F4
+> · re-baselined 2026-08-06 against the v2 slot-walk renderer over C2 v1 records ([D28](../../DECISIONS.md), rebuild Stage E WP-E4)
 
 **In one line.** Storage mints windows idempotently over the `ingest_time` watermark, materializes
 day-logs, and serves fetch-by-`(user, window_id)` plus enumeration and close.
@@ -705,6 +721,17 @@ Eventual sub-teams:
 
 ## How this charter got here
 
+- **2026-08-06 — the DP-rebuild joint rows (D27/D28) built on branch, Stage E.**
+  - **Was** — E-2's card described the board-reviewed kind-granular retraction, and the
+    parity bar's baseline predated the rebuild.
+  - **Changed** — rebuild Stage E built the storage-side set on `dp-rebuild-v1`:
+    `created_at`/`updated_at` (byte-compare upsert), the C10 v2 slot-walk renderer,
+    E-2 as whole-record operations, and the D20 parity re-baseline.
+  - **Now** — the M5 card states the built whole-record shape (kind-granular retired
+    unbuilt, D28); the M9 card carries the re-baseline stamp; the running service is
+    untouched until the Stage F cutover.
+  - **Payoff** — the charter's cards describe the primitives that will actually land,
+    and the deletion-is-not-correctness line survived the redesign intact.
 - **2026-07-27 — the D18 scope expansion is `built`.**
   - **Was** — all four expansion rows were ratified and not built, and this charter's status line
     said so.

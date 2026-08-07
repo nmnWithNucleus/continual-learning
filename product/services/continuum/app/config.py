@@ -176,7 +176,7 @@ def get_settings() -> Settings:
                                 os.getenv("CONTINUUM_STORAGE_CLIENTS", "http"),
                                 ("local", "http"), "http"),
         var_dir=os.getenv("CONTINUUM_VAR_DIR", _default_var_dir()),
-        recipe_id=os.getenv("CONTINUUM_RECIPE_ID", "consolidation-v1.1"),
+        recipe_id=os.getenv("CONTINUUM_RECIPE_ID", "consolidation-v2.0"),
         policy_id=os.getenv("CONTINUUM_POLICY_ID", "gate-policy-v1.1"),
         recipes_dir=os.getenv("CONTINUUM_RECIPES_DIR", _default_recipes_dir()),
         policies_dir=os.getenv("CONTINUUM_POLICIES_DIR", _default_policies_dir()),

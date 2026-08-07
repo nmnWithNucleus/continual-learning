@@ -1,89 +1,84 @@
-"""Video PREP stage for the clip pipeline (`VIDEO_PIPELINE=clip`): the delta gate + frames.
+"""``clipprep`` — the video graph's frame prep: two ffmpeg passes → transient frames.
 
-A ``sidecar`` that emits NO units — it only ``provides`` the three slots the downstream
-clip stages consume: ``clip_frames`` (``ClipFrames``: the caption grid + OCR-frame times +
-idle flag + span), ``delta`` (``Delta``: the per-analysis-time change maps + anchor trace,
-for observability/calibration), and ``vision_settings`` (the base ``VisionSettings`` +
-clip knobs bundle). Two ffmpeg passes, one decode each (D-04) — the span is a C1 field, so
-there is no container-duration probe and no cut-detection pass.
+The one REQUIRED video stage (L7): everything downstream consumes its frames, so an
+undecodable chunk fails the attempt loudly (worker retry → dead-letter) — placeholder
+frames are never emitted as processed truth (the v0 mock synthetic fallback is dead;
+mock dialects are client-level fakes now, plan §3).
 
-Runs ONLY under the clip pipeline: ``enabled()`` is ``resolve_pipeline() == "clip"`` and
-the safe default is ``keyframe``, so on the shipped fixtures the legacy graph runs and this
-stage stays dormant — the default-keyframe suite stays green. ``version_fragment`` is gated
-on the SAME resolver (``"+cp-v1"`` under clip, ``""`` otherwise), so ``enabled()`` ⇔
-``version_fragment() != ''`` — forward-compatible with WS-E2's registration-time binding
-raise for sidecars-with-provides (the addendum §11 WS-E2 hole).
+Emits NO record slot: ``StageOutput(value=None, bytes=ClipFrames)``. The frames are
+re-derivable heavy data (a deterministic decode of the ``/raw`` bytes), which defaults
+to not-persisted under L5; the executor hands ``bytes`` to the declared consumers
+(``screentext``, ``clipcap``) and frees them after the last one finishes. The C2 §2
+video record carries ``caption`` + ``ocr`` only.
 
-Two decode outcomes, exactly like the legacy ``keyframes`` stage:
-  * undecodable/ffmpeg-absent under the MOCK dev backend → a synthetic ``ClipFrames``
-    (timing-less frames, no OCR reads, idle) so the loop stays headless;
-  * undecodable/ffmpeg-absent under a NON-mock backend → RAISE (the chunk is redelivered;
-    placeholders must never persist as processed truth).
-A requested frame the stream does not contain is a ``FrameCountError`` and RAISES on ANY
-backend (the ``-frame_pts`` guard) — never masked by the synthetic fallback.
+ffmpeg stays a SUBPROCESS (self-isolating, L9 — no model server), so ``run_sync`` in
+the executor's worker threadpool is the right execution mode: the blocking
+``subprocess.run`` waits can never freeze the event loop.
 
-ORDER — DESIGN vs the pre-integration tree. §2.1 assigns this stage ``order 0``, but the
-retained legacy ``keyframes`` stage still holds ``order 0`` and ``register_stage`` enforces
-per-modality order uniqueness UNCONDITIONALLY (``stage.py:260-266``), so ``order 0`` here
-would fail discovery and redden all 173 tests on this branch. ``order`` is behaviourally
-INERT for this stage — execution is readiness-driven off ``needs`` (empty), and ``order``
-only sequences the assembly of EMITTED sidecar units, of which this stage has none — so it
-is registered at a non-colliding order until integration renumbers the legacy pair (freeing
-0/10/20 for the clip cohort), at which point it returns to 0. See the WS-B build log.
+EVERY output-affecting knob is a CODE PIN below (L4) — the v0 env knobs they replace,
+with their v0 defaults (all carried forward unchanged):
 
-CLIP MODE IS NOT WIRED ON THIS BRANCH (also an integration concern). Two things are missing
-until WS-G/WS-D land: the legacy ``keyframes``/``captions`` have no ``enabled()`` gate yet
-(WS-G adds it), so they stay enabled in clip mode and ``keyframes`` ALSO provides
-``vision_settings`` — flipping ``VIDEO_PIPELINE=clip`` here therefore raises a *slot-owner*
-``GraphResolutionError`` on ``vision_settings`` (not the eventual "no clip primary"); and the
-``clipcap`` primary (WS-D) does not exist. Both resolve at integration. WS-B's tests drive
-this stage DIRECTLY (never through ``run_graph`` in clip mode), and the default keyframe
-graph is byte-unchanged, so the suite stays green.
+  ================================  =========================  ======
+  v0 env knob (dead)                pin                        value
+  ================================  =========================  ======
+  VIDEO_CLIP_SECONDS_PER_FRAME      seconds_per_frame          2.5
+  VIDEO_CLIP_MAX_FRAMES             max_frames                 12
+  VIDEO_CLIP_MIN_FRAMES             min_frames                 2
+  VIDEO_CLIP_FRAME_WIDTH            frame_width                768
+  VIDEO_OCR_FRAME_WIDTH             ocr_frame_width            1728
+  VIDEO_ANALYSIS_PERIOD_S           analysis_period_s          2.0
+  VIDEO_OCR_IDLE_PEAK               ocr_idle_peak              8
+  VIDEO_OCR_LAYOUT_PEAK             ocr_layout_peak            40
+  VIDEO_OCR_MAX_EVENTS              ocr_max_events             3
+  VIDEO_OCR_FLOOR_S                 ocr_floor_s                120.0
+  ================================  =========================  ======
+
+(The delta-gate constants that were never env — pixel binarize 24, 32×32 grid, spread
+thresholds — stay where they always were, in ``app/vision/delta.py``.) Changing ANY of
+these changes downstream bytes ⇒ bump ``backend.version`` (vB). The v0 ``delta``
+observability slot is not carried forward (no consumer — L10); the delta trace is
+computed inside ``prepare_clip`` and discarded here.
 """
 from __future__ import annotations
 
-from ...stagegraph import Stage, StageContext, StageResult, register_stage
 from ...timeutil import parse_rfc3339
-from ...vision import clip as clip_mod
-from ...vision.mode import resolve_pipeline
+from ...stagegraph.stage import Backend, Stage, StageContext, StageOutput, register_stage
+from ...vision.clip import ClipSettings, prepare_clip
+
+# The clip-prep operating point (see the table above). vB CONTRACT: editing any field
+# here is a behavior change for every downstream slot -> bump Backend("ffmpeg", vB).
+CLIP_SETTINGS = ClipSettings(
+    seconds_per_frame=2.5,
+    max_frames=12,
+    min_frames=2,
+    frame_width=768,        # 768 -> exactly 360 Qwen3-VL vision tokens/frame (D-03/A-16)
+    ocr_frame_width=1728,   # the mac capture cap — OCR reads native res, no resample
+    analysis_period_s=2.0,
+    ocr_idle_peak=8,
+    ocr_layout_peak=40,
+    ocr_max_events=3,
+    ocr_floor_s=120.0,
+)
 
 
 @register_stage
 class ClipPrepStage(Stage):
     name = "clipprep"
     modality = "video"
-    kind = "sidecar"                 # emits no units; only provides slots
-    policy = "required"
+    stage_version = 1
+    backend = Backend("ffmpeg", 1)
     needs = ()
-    provides = ("clip_frames", "delta", "vision_settings")
-    order = 5                        # design order 0; non-colliding stand-in (see docstring)
+    required = True
+    server = ""               # ffmpeg is a subprocess, not a model server (L9)
+    # L10: no record slot; the transient frames feed both downstream stages.
+    consumer = "stage:screentext+clipcap"
+    byte_budget = 1           # emits NO slot (value=None); the budget is structurally inert
 
-    def enabled(self, settings) -> bool:
-        return resolve_pipeline() == "clip"
-
-    def version_fragment(self, settings) -> str:
-        # Gated on the SAME resolver as enabled() so the binding holds for a sidecar with
-        # non-empty `provides` (WS-E2 forward-compat): enabled() <=> fragment != ''.
-        return "+cp-v1" if resolve_pipeline() == "clip" else ""
-
-    def run_sync(self, ctx: StageContext) -> StageResult:
-        cvs = clip_mod.build_vision_settings()
+    def run_sync(self, ctx: StageContext) -> StageOutput:
         t_start_epoch = parse_rfc3339(ctx.c1["t_start"]).timestamp()
-        try:
-            clip_frames, delta = clip_mod.prepare_clip(
-                ctx.blob, ctx.span_seconds, t_start_epoch, cvs
-            )
-        except clip_mod.ClipDecodeError:
-            # FrameCountError is NOT caught here — a missing requested frame always raises.
-            if cvs.base.backend != "mock":
-                raise RuntimeError(
-                    f"video chunk {ctx.c1['chunk_id']}: no decodable clip frames "
-                    "(ffmpeg absent/timed out or undecodable bytes) — refusing to emit "
-                    "placeholder frames under the non-mock backend; the chunk will be "
-                    "redelivered"
-                )
-            clip_frames = clip_mod.synthetic_clip_frames(ctx.span_seconds, cvs.clip)
-            delta = clip_mod.empty_delta()
-        return StageResult(
-            slots={"clip_frames": clip_frames, "delta": delta, "vision_settings": cvs}
+        # ClipDecodeError / FrameCountError propagate: required failure -> no record,
+        # worker retry -> dead-letter (L7). Never placeholder frames.
+        clip_frames, _delta = prepare_clip(
+            ctx.blob, ctx.span_seconds, t_start_epoch, CLIP_SETTINGS
         )
+        return StageOutput(value=None, bytes=clip_frames)

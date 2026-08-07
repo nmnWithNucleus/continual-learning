@@ -20,8 +20,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.ingest_queue import IngestQueue
-from app.processing.base import ProcessedContent, ProcessedUnit, Processor
-from tests.conftest import make_c1
+from tests.conftest import FakeGraphProcessor, make_c1
 
 
 def _wait(pred, timeout: float = 5.0, interval: float = 0.01) -> bool:
@@ -33,25 +32,23 @@ def _wait(pred, timeout: float = 5.0, interval: float = 0.01) -> bool:
     return False
 
 
-class _StubProcessor(Processor):
-    """Counts starts; optionally gates completion; optionally fails-once (transient)."""
+class _StubProcessor(FakeGraphProcessor):
+    """Counts starts; optionally gates completion; optionally fails-once (transient).
+    ``slot`` must be a real contract slot name (the one-POST path schema-validates
+    the record): "asr" for audio stubs, "caption" for video stubs."""
 
-    content_kind = "transcript"
-
-    def __init__(self, modality: str, kind: str, *, gated: bool = False,
+    def __init__(self, modality: str, slot: str, *, gated: bool = False,
                  fail_first: set[str] | None = None) -> None:
-        self.modality = modality
-        self._kind = kind
+        self._slot = slot
         self.gate = threading.Event()
         self._gated = gated
         self._fail_first = set(fail_first or ())
         self.started: list[str] = []
         self._lock = threading.Lock()
+        super().__init__(modality=modality, pv=f"{slot}.v1-stub.v1",
+                         run=self._process)
 
-    def pipeline_version(self, settings) -> str:
-        return f"{self.modality}-stub-v0"
-
-    def process(self, c1, blob, settings, span_seconds):
+    def _process(self, c1, blob, span_seconds):
         with self._lock:
             self.started.append(c1["chunk_id"])
         if c1["chunk_id"] in self._fail_first:
@@ -59,19 +56,18 @@ class _StubProcessor(Processor):
             raise RuntimeError("transient stub hiccup")
         if self._gated:
             assert self.gate.wait(timeout=10)
-        return [ProcessedUnit(content=ProcessedContent(
-            kind=self._kind, text=f"stub {c1['chunk_id']}"))]
+        return {self._slot: {"version": self._pv,
+                             "value": f"stub {c1['chunk_id']}"}}
 
 
 def _app(monkeypatch, fake_storage, tmp_path, stubs: dict, **env):
-    monkeypatch.setenv("ASR_BACKEND", "mock")
     monkeypatch.setenv("DP_VAR_DIR", str(tmp_path / "var"))
     monkeypatch.setenv("STORAGE_URL", "http://storage.test")
     monkeypatch.setenv("INGEST_ASYNC", "1")
     for k, v in env.items():
         monkeypatch.setenv(k, str(v))
     import app.main as main_mod
-    monkeypatch.setattr(main_mod, "get_processor", lambda modality: stubs[modality])
+    monkeypatch.setattr(main_mod, "graph_processor", lambda modality: stubs[modality])
     app = main_mod.create_app()
     app.state.storage._transport = fake_storage.transport()
     return app
@@ -89,7 +85,7 @@ def test_capped_modality_backlog_does_not_block_other_modalities(
     the old dequeue-then-acquire design it would sit blocked holding B (HOL), starving
     video although a worker was idle."""
     stubs = {
-        "audio": _StubProcessor("audio", "transcript", gated=True),
+        "audio": _StubProcessor("audio", "asr", gated=True),
         "video": _StubProcessor("video", "caption"),
     }
     app = _app(monkeypatch, fake_storage, tmp_path, stubs,
@@ -122,7 +118,7 @@ def test_capped_modality_backlog_does_not_block_other_modalities(
 def test_shared_bound_503_still_governs_with_limits(monkeypatch, fake_storage, tmp_path):
     """Capacity counts every queued job regardless of modality/eligibility — the single
     bounded-queue backpressure story survives the fairness dispatch."""
-    stubs = {"audio": _StubProcessor("audio", "transcript", gated=True)}
+    stubs = {"audio": _StubProcessor("audio", "asr", gated=True)}
     app = _app(monkeypatch, fake_storage, tmp_path, stubs,
                INGEST_WORKERS=1, INGEST_QUEUE_MAX=2, INGEST_MODALITY_LIMITS="audio=1")
     with TestClient(app) as c:
@@ -144,7 +140,7 @@ def test_backoff_sleep_releases_the_permit(monkeypatch, fake_storage, tmp_path):
     """A chunk waiting out its retry backoff must not occupy a modality slot: while
     rt-fail sleeps (transient failure, backoff 1.5s), rt-b takes the freed permit and
     completes. Preserves the old semaphore semantics under permit-at-dispatch."""
-    stub = _StubProcessor("audio", "transcript", fail_first={"rt-fail"})
+    stub = _StubProcessor("audio", "asr", fail_first={"rt-fail"})
     app = _app(monkeypatch, fake_storage, tmp_path, {"audio": stub},
                INGEST_WORKERS=2, INGEST_MODALITY_LIMITS="audio=1",
                INGEST_MAX_RETRIES=2, INGEST_RETRY_BACKOFF=1.5)
@@ -166,7 +162,7 @@ def test_backoff_sleep_releases_the_permit(monkeypatch, fake_storage, tmp_path):
 def test_no_limits_is_pure_fifo_dispatch(monkeypatch, fake_storage, tmp_path):
     """Empty knob (the default): every job is eligible, dispatch order == arrival order
     — byte-identical to the unlimited pool."""
-    stub = _StubProcessor("audio", "transcript", gated=True)
+    stub = _StubProcessor("audio", "asr", gated=True)
     app = _app(monkeypatch, fake_storage, tmp_path, {"audio": stub},
                INGEST_WORKERS=1)
     with TestClient(app) as c:
@@ -188,12 +184,12 @@ def test_backoff_retrier_is_not_starved_by_a_sustained_backlog(
     Parked re-acquirers now hold a permit RESERVATION the dispatch scan must respect."""
 
     class _SlowStub(_StubProcessor):
-        def process(self, c1, blob, settings, span_seconds):
+        def _process(self, c1, blob, span_seconds):
             if c1["chunk_id"].startswith("bl-"):
                 time.sleep(0.05)          # sustained backlog: each job takes a while
-            return super().process(c1, blob, settings, span_seconds)
+            return super()._process(c1, blob, span_seconds)
 
-    stub = _SlowStub("audio", "transcript", fail_first={"st-fail"})
+    stub = _SlowStub("audio", "asr", fail_first={"st-fail"})
     app = _app(monkeypatch, fake_storage, tmp_path, {"audio": stub},
                INGEST_WORKERS=2, INGEST_MODALITY_LIMITS="audio=1",
                INGEST_MAX_RETRIES=2, INGEST_RETRY_BACKOFF=0.1)
@@ -220,7 +216,7 @@ def test_worker_backstop_after_run_job_blowup_releases_permit(
     """The _worker generic-exception backstop (post-process_chunk failure, e.g.
     continuity.note_processed raising) must release the modality permit — a leak
     there permanently wedges the capped modality with zero signal (review gap)."""
-    stub = _StubProcessor("audio", "transcript")
+    stub = _StubProcessor("audio", "asr")
     app = _app(monkeypatch, fake_storage, tmp_path, {"audio": stub},
                INGEST_WORKERS=2, INGEST_MODALITY_LIMITS="audio=1")
     real_note = app.state.continuity.note_processed
@@ -249,7 +245,7 @@ def test_drain_cancels_cleanly_during_backoff_and_permit_wait(
     """Cancel during the backoff sleep (permit released, held=False) and during the
     _acquire_permit park must not double-release or wedge the drain; the chunks stay
     'accepted' in the journal — re-drivable (review gap: this path was unpinned)."""
-    stub = _StubProcessor("audio", "transcript", gated=True,
+    stub = _StubProcessor("audio", "asr", gated=True,
                           fail_first={"dr-sleeper"})
     app = _app(monkeypatch, fake_storage, tmp_path, {"audio": stub},
                INGEST_WORKERS=2, INGEST_MODALITY_LIMITS="audio=1",

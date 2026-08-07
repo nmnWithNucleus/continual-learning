@@ -1,24 +1,24 @@
 day-log differential proof — storage CHARTER M9 (bar NARROWED 2026-07-27, D20;
-extended to a MISALIGNED window origin 2026-07-27, F4)
+extended to a MISALIGNED window origin 2026-07-27, F4; RE-BASELINED 2026-08-06
+against the v2 slot-walk renderer over hand-built C2 v1 records — D28, Stage E)
 ======================================================================================
-  left   continuum/LocalDayLogClient
-  right  storage/materialize_daylog
-  fixture              27 C2 records, one user, one window
+  left   continuum/LocalDayLogClient  over 27 v0 records
+  right  storage/materialize_daylog  over 24 v1 equivalents (N4)
   window_id            w20260722T030000Z
-  storage window       [2026-07-22T02:00:00Z, 2026-07-22T03:00:00Z)  on ingest_time
+  storage window       [2026-07-22T02:00:00Z, 2026-07-22T03:00:00Z)  on updated_at (D27)
   continuum window     [2026-07-21T04:00:00Z, 2026-07-22T04:00:00Z)  on event t_start   <- grid-aligned
   continuum window     [2026-07-21T04:00:03Z, 2026-07-22T04:00:03Z)  on event t_start   <- misaligned
-  segmentation         segment_seconds=10 block_segments=12 recipe_id=consolidation-v1.1
+  segmentation         segment_seconds=10 block_segments=12 recipe_id=consolidation-v2.0
   home_tz              America/New_York
   storage rendered     24 segments, 5 blocks
 
 PRECONDITIONS (fixture-level) — the divergences this proof neutralises
 ----------------------------------------------------------------------
   P3 and P6 are ORIGIN-dependent and appear once per origin, below.
-  [PASS] P1  every fixture record is schema-valid C2
-  [PASS] P2  N1 neutralised: both paths saw the SAME records in the SAME order (27 records)
-  [PASS] P4  N3 neutralised: every fixture record is its own dialect (27 distinct keys)
-  [PASS] P5  storage's body validates against contracts/c10_daylog.v1.json
+  [PASS] P1  every fixture record is schema-valid C2 — v0 side against the v0 file, v1 side against the service's v1 gate
+  [PASS] P2  N1 + N4 neutralised: storage saw exactly the v1 fixtures in order (24 records), and the v1 set pairs 1:1 by (chunk_id, t_start) with the v0 set's 24 content chunks
+  [PASS] P4  N3 neutralised: every v1 fixture is its own chunk under the D28 dedup key (24 distinct keys)
+  [PASS] P5  storage's body validates against contracts/c10_daylog.v2.json
 
 THE BAR, RUN OVER EVERY ORIGIN
 ------------------------------

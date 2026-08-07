@@ -1,74 +1,183 @@
-"""Video PRIMARY stage: the clip captioner (Architecture A, ratified — WS-D, D2).
+"""``clipcap`` — the clip captioner: ONE multi-image VLM call → the ``caption`` slot.
 
-The clip pipeline's spine (design §2). Consumes ``clip_frames`` (WS-B ``clipprep``) and the
-rendered ``ocr_text`` injection block (WS-C ``screentext``), makes ONE multi-image VLM call
-through the captioner seam, and emits EXACTLY one ``kind='caption'`` record. All the logic
-lives in the backend (``app/vision/clipcap/``) and ``app/vision/emit.py``; this stage is the
-thin graph adapter.
+Thin client over an OpenAI-compatible endpoint (the self-hosted Qwen3-VL — an
+external cloud-style endpoint, not a supervised model server, so ``server = ""`` and
+the wire lives in ``app/vision/clipcap/vlm.py``). Consumes ``clipprep``'s transient
+frames and ``screentext``'s digest, injects the OCR text into the prompt (D-09 — one
+witness on two channels, the L11 corollary), parses the reply through the tolerant
+ladder, and ABSORBS the retired ``vision/emit.py``'s render: the slot value is
+``render_caption`` — the D-10 one-paragraph ``"{app} — {activity}. {description}"``
+render, D-12 single-line collapse, and the D-11 char cap (a CORRECTNESS knob: the
+chars-per-second-of-life dose) applied on a sentence boundary. The rest of emit.py
+did NOT move here: the D-05 verbatim-span rule lives in ``pipeline.build_c2`` and the
+L12 grid rule lives in the law + its tests.
 
-CONFIRMED WIRING: kind='primary', policy='required', order 20 (the locked clip band is
-clipprep=5, screentext=15, clipcap=20 — clear of legacy captions=10),
-needs=("clipprep","screentext"), provides=("clip",), mutable_slots=("enrichments",),
-version_fragment = backend.PIPELINE_VERSION + backend.prompt_tag(vs) + cfg_tag(vs).
-``enabled()`` is ``resolve_pipeline() == "clip"``, so the stage is DORMANT under the default
-keyframe pipeline and every legacy fixture stays green.
+OPTIONAL (L7): a captioner failure is a ``caption`` hole (record ships, healed by
+redrive) — v0's raise-and-redeliver posture, translated. ``needs = ("clipprep",
+"screentext")``: an OCR failure cancels this stage (statuses ``failed`` +
+``cancelled``), so a caption is NEVER produced from silently-missing OCR — the
+coupling v0 enforced by making screentext required.
 
-Settings note: the captioner, budget and ``cfg_tag`` all speak D1's FLAT ``VisionSettings``,
-so this stage reads it via ``get_vision_settings()`` (env-fresh, identical to what
-``version_fragment`` uses) rather than ``clipprep``'s composite ``ClipVisionSettings`` slot —
-both are pure functions of the same env, so the dialect and the run stay consistent, and the
-stage does not couple to another workstream's settings wrapper. ``ocr_text`` is injected into
-the clip prompt by the vlm backend under the labelled ``## On-screen text … (INPUT, not
-target)`` block (D-09): use it to name/ground what is visible, never copy it out.
+PROMPT-PACK IDENTITY (the L4 hard gate): the packs stay in ``app/vision/prompts``
+with their LOCK; this file pins the aggregate ``PACK_DIGEST`` as a CODE CONSTANT and
+registration fails LOUD below if the on-disk pack digests differently — a
+``.prompt.md`` edit without bumping ``Backend("vlm", vB)`` (and this pin) is
+impossible to ship silently. Decode params (max_tokens, temperature) live in the pack
+front-matter, inside the digest.
+
+Code pins (L4) — the v0 env knobs they replace:
+
+  =============================  ==================  ============================
+  v0 env knob (dead)             pin                 value
+  =============================  ==================  ============================
+  VIDEO_VLM_MODEL                MODEL               Qwen/Qwen3-VL-32B-Instruct
+  VIDEO_SCENARIO                 SCENARIO            screen-mac
+  VIDEO_CAPTION_CHARS_SHARE      CAPTION_RATE        16  (of the 22 total, D-11)
+  VIDEO_CLIP_PROMPT              (dead)              routes.json + SCENARIO decide
+  VIDEO_VLM_STRUCTURED           (dead)              guided decoding pinned OFF
+  VIDEO_MAX_PROMPT_IMAGES_CHECK  (dead)              clipprep's max_frames=12 bounds K
+  =============================  ==================  ============================
+
+Operational env (output-INERT, L4: the same served model behind any endpoint yields
+the same bytes; a timeout can only fail the call — a hole, never different bytes):
+``VLM_URL`` (default ``http://127.0.0.1:8000``), ``VLM_API_KEY`` (default empty),
+``VLM_TIMEOUT_S`` (default ``120``). Read fresh per call.
 """
 from __future__ import annotations
 
-from ...processing.base import ProcessedUnit
-from ...stagegraph import Stage, StageContext, StageResult, register_stage
-from ...vision import clipcap, emit
-from ...vision.config import get_vision_settings
-from ...vision.mode import resolve_pipeline
-from ...vision.version import cfg_tag
+import os
+
+from ...stagegraph.stage import (
+    Backend,
+    Stage,
+    StageContext,
+    StageOutput,
+    StageRegistrationError,
+    register_stage,
+)
+from ...vision import prompts
+from ...vision.budget import caption_cap, truncate_sentence
+from ...vision.clip_types import ClipDesc, ClipFrames
+from ...vision.clipcap import vlm
+
+# ---- code pins (L4). Editing any of these is a vB bump. --------------------------
+MODEL = "Qwen/Qwen3-VL-32B-Instruct"   # served-model-name requested on the wire
+SCENARIO = "screen-mac"                # prompt route (routes.json) + [[scenario_label]]
+CAPTION_RATE = 16                      # D-11: caption chars/second-of-life (of 22 total)
+
+# The aggregate prompt-pack digest this backend version was shipped against. Computed
+# by app/vision/prompts at import from the on-disk pack; `python -m app.vision.prompts`
+# prints the current value. EDITING A PACK => recompute, update this pin AND bump vB.
+# EXPECTED CHURN: the digest covers the whole pack dir INCLUDING the legacy
+# per-frame-v0 pack; its Stage-G removal will move this digest — that bump is
+# planned demolition, not drift (re-pin + vB bump there).
+PACK_DIGEST_PIN = "565066a0"
+
+if prompts.PACK_DIGEST != PACK_DIGEST_PIN:
+    raise StageRegistrationError(
+        f"clipcap: on-disk prompt pack digest {prompts.PACK_DIGEST!r} != pinned "
+        f"{PACK_DIGEST_PIN!r} — a .prompt.md/routes/schemas edit shipped without a "
+        "backend-version bump. Update PACK_DIGEST_PIN in app/stages/video/clipcap.py "
+        "and bump Backend('vlm', vB) so the dialect forks (L4); a silent prompt change "
+        "must never write records under an unchanged pipeline_version."
+    )
+
+
+_warned_timeout: set[str] = set()
+
+
+def _vlm_timeout_s() -> float:
+    """VLM_TIMEOUT_S with the house warn-and-default posture for operational
+    enum/number knobs: an unparsable value falls back LOUDLY (once per value),
+    never crashes the chunk (a typo'd timeout must not fail ingestion)."""
+    raw = os.getenv("VLM_TIMEOUT_S", "120")
+    try:
+        return float(raw)
+    except ValueError:
+        if raw not in _warned_timeout:
+            _warned_timeout.add(raw)
+            logger.warning("VLM_TIMEOUT_S=%r is not a number — using 120", raw)
+        return 120.0
+
+
+def render_caption(desc: ClipDesc, span_seconds: float) -> tuple[str, bool]:
+    """The single-line, budgeted caption string (D-10 / D-11 / D-12), absorbed from the
+    retired vision/emit.py, plus whether the D-11 cap actually truncated it (the
+    ``dp_video_truncated_total{pass="caption"}`` signal). Pure and deterministic:
+    identical ``(desc, span)`` → identical result on every worker."""
+    app = desc.app.strip()
+    activity = desc.activity.strip()
+    description = desc.description.strip()
+
+    # D-10: "app — activity." lead when present, degrading so a fallback (empty app /
+    # activity) never renders a dangling " — " or a leading ". ".
+    if app and activity:
+        lead = f"{app} — {activity}."
+    elif app:
+        lead = f"{app}."
+    elif activity:
+        lead = f"{activity}."
+    else:
+        lead = ""
+    text = f"{lead} {description}".strip() if lead else description
+
+    # D-12: collapse every whitespace run (incl. any stray newline) to one space. The
+    # parse ladder already cleaned each field; this guards the joined string.
+    text = " ".join(text.split())
+
+    # D-11: truncate to the per-record char budget on a sentence boundary (word-boundary
+    # fallback inside truncate_sentence). cap == 0 → "" (a valid empty caption).
+    capped = truncate_sentence(text, caption_cap(span_seconds, CAPTION_RATE))
+    return capped, capped != text
 
 
 @register_stage
 class ClipcapStage(Stage):
     name = "clipcap"
     modality = "video"
-    kind = "primary"
-    policy = "required"
+    slot = "caption"
+    stage_version = 1
+    backend = Backend("vlm", 1)
     needs = ("clipprep", "screentext")
-    provides = ("clip",)
-    mutable_slots = ("enrichments",)   # declared for a future bbox/quality mutate (E-5); no writer yet
-    order = 20
+    required = False          # L7: failure = caption hole; record ships; heal redrives
+    server = ""               # external OpenAI-compatible endpoint, not a fleet server
+    # L10: C10 v2 routes slots.caption to Scene lines (D28). ~16 chars/s cap.
+    consumer = "daylog:scene"
+    # L5/L10 budget: version key + JSON overhead + the caption. The text is capped at
+    # CAPTION_RATE × span (960 chars at the 60 s design max), so 4096 bytes holds even
+    # at ~4 UTF-8 bytes/char. Cost: ~16 chars per second of life.
+    byte_budget = 4096
 
-    def enabled(self, settings) -> bool:
-        """Dormant unless the clip pipeline is selected (default/unknown → keyframe)."""
-        return resolve_pipeline() == "clip"
+    async def run_async(self, ctx: StageContext) -> StageOutput:
+        clip: ClipFrames = ctx.inputs["clipprep"].bytes
+        # screentext ran (a declared need; its failure would have cancelled us), so its
+        # slot value exists — "" (ran-and-empty) renders as "(none)" in the prompt.
+        ocr_text: str = ctx.inputs["screentext"].value["value"]
+        chunk_id = str(ctx.c1.get("chunk_id", ""))
 
-    def version_fragment(self, settings) -> str:
-        """The clip base dialect: backend PIPELINE_VERSION + prompt-pack tag + cfg tag. A
-        backend flip, a prompt edit (via prompt_tag/PACK_DIGEST) or any OUTPUT_AFFECTING knob
-        forks the record_id (version-forward). The mock backend's prompt_tag is "" so a
-        prompt edit never re-keys the headless corpus (D-13)."""
-        vs = get_vision_settings()
-        backend = clipcap.select(vs)
-        return backend.PIPELINE_VERSION + backend.prompt_tag(vs) + cfg_tag(vs)
+        outcome = await vlm.describe(
+            clip, ocr_text, chunk_id,
+            # identity pins (vB):
+            model=MODEL, scenario=SCENARIO, caption_rate=CAPTION_RATE,
+            # operational wire (output-inert, read fresh per call):
+            url=os.getenv("VLM_URL", "http://127.0.0.1:8000").rstrip("/"),
+            api_key=os.getenv("VLM_API_KEY", ""),
+            timeout_s=_vlm_timeout_s(),
+        )
+        if outcome.fallback and ctx.metrics is not None:
+            try:
+                # Both labels, per the declaration — pack is stamped by describe()
+                # (cleanup round: {step}-only inc'd into a {pack,step} family and
+                # the KeyError was swallowed; the series could never record).
+                ctx.metrics.inc("dp_video_parse_fallback_total",
+                                {"pack": outcome.pack, "step": outcome.step})
+            except Exception:  # metrics must never fail a chunk
+                logger.exception("parse-fallback metric failed")
 
-    async def run_async(self, ctx: StageContext) -> StageResult:
-        """ONE loop-native multi-image call (0 threadpool tokens — §7.4). ``screentext``
-        completed first (a declared need), so its rendered OCR block is injected here (D-09)."""
-        vs = get_vision_settings()
-        clip = ctx.slots["clip_frames"]
-        ocr_text = ctx.slots["ocr_text"]
-        metrics = getattr(ctx.resources, "metrics", None)
-        backend = clipcap.select(vs)
-        desc = await backend.describe(vs, clip, ocr_text, ctx.c1, metrics)
-        return StageResult(slots={"clip": desc})
-
-    def assemble(self, ctx: StageContext) -> list[ProcessedUnit]:
-        """Exactly ONE kind='caption' unit, discriminator="", t_start=None (D-05). The
-        render + budget + single-line law live in emit.caption_unit; the record set is a pure
-        function of the chunk, never of the model output."""
-        desc = ctx.slots["clip"]
-        return [emit.caption_unit(desc, ctx.span_seconds, get_vision_settings())]
+        caption, truncated = render_caption(outcome.desc, ctx.span_seconds)
+        if truncated and ctx.metrics is not None:
+            try:
+                ctx.metrics.inc("dp_video_truncated_total", {"pass": "caption"})
+            except Exception:
+                logger.exception("truncated metric failed")
+        return StageOutput(value={"value": caption})

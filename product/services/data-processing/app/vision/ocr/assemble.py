@@ -1,34 +1,40 @@
 """OCR post-processing → one self-anchored single line (D-07 steps 2/3/5/6, D-08, D-12).
 
-Given the raw ``OcrRead``s a backend returned for a chunk, produce the single ``str`` that
-``screentext`` both (a) commits as the ``ocr_text`` slot the caption injects (D-09) and
-(b) emits as the ``kind='ocr'`` record's ``content.text`` — ONE rendered witness on two
-channels (§4 R2 Corollary 2), never two independent claims.
+Given the raw ``OcrRead``s the OCR server returned for a chunk, produce the single
+``str`` that ``screentext`` commits as its ``ocr`` slot value — the same string the
+caption injects (D-09): ONE rendered witness on two channels (the L11 provenance
+corollary), never two independent claims.
 
 The D-07 post-processing order, applied verbatim (event selection — step 1's floor grid ∪
-change events, capped — is WS-B's ``clipprep``; here we run everything AFTER the read):
+change events, capped — is ``clipprep``'s delta gate; here we run everything AFTER the read):
 
   1. drop boxes with ``confidence < min_conf``;
   2. sort into reading order by bbox and assign a REGION ROLE from bbox position — the
      semantically useful 80% of "location" as a word, at zero contract cost; the pixel
      geometry is then DISCARDED (never emitted to C2 — D-08);
   3. drop lines shorter than ``min_chars``;
-  4. deterministic secret redaction (``redact.py``);
+  4. deterministic secret redaction (``redact.py``) — ALWAYS on (an access control, not
+     a knob; the v0 ``VIDEO_PRIVACY_FILTER`` env flag was never read and is dead);
   5. drop a line >= ``dedup_ratio`` similar to the previous kept line, WITHIN this chunk
-     (cross-chunk state is forbidden — it would break fleet determinism, A-5);
+     (cross-chunk state is forbidden — it would break fleet determinism, L1);
   6. render to ONE line (no ``\n`` ever — D-12; separator ``" · "``), truncated at the
      chars-per-second-of-life budget (D-11) on a WORD boundary.
 
-Self-anchored (R2 corollary): every kept item carries its own ``+Ns`` offset and role
-inside the text, so the record is understandable alone.
+NO CONFIG (DP rebuild, L4): the thresholds arrive as EXPLICIT keyword arguments; the one
+live set of values is pinned in ``app/stages/video/screentext.py`` under that stage's
+backend version. Pure functions of their inputs — identical reads + pins → identical
+string on every worker.
+
+Self-anchored (the L11 corollary): every kept item carries its own ``+Ns`` offset and
+role inside the text, so the record is understandable alone.
 """
 from __future__ import annotations
 
 import difflib
 import re
 
+from ..budget import ocr_cap, truncate_word
 from ..clip_types import OcrRead
-from .config import OcrConfig
 from .redact import redact
 
 # The frozen role vocabulary (D-07 step 2 / clip_types.OcrRegion.role).
@@ -38,32 +44,6 @@ ROLES = (
 )
 
 _WS_RUN = re.compile(r"\s+")
-
-# ---- budget (D-11) --------------------------------------------------------------
-# Local stub of WS-D's ``app/vision/budget.py`` — the OCR share is a chars-per-second-
-# of-life dial (16 caption / 6 ocr split of VIDEO_CHARS_PER_SECOND=22). Kept local so a
-# WS-D lag never blocks this workstream; when budget.py lands, this collapses to an
-# import. cap = round(R × span_seconds), so the dose is identical at any chunk length.
-
-
-def ocr_cap(span_seconds: float, cfg: OcrConfig) -> int:
-    """Character budget for the OCR record at this span (D-11). Never negative."""
-    return max(0, round(cfg.ocr_chars_per_second * max(0.0, span_seconds)))
-
-
-def truncate_word(text: str, cap: int) -> str:
-    """Truncate ``text`` to at most ``cap`` chars on a word boundary (deterministic).
-    ``cap <= 0`` means "no budget" -> empty string; a text already within budget is
-    returned unchanged."""
-    if cap <= 0:
-        return ""
-    if len(text) <= cap:
-        return text
-    cut = text[:cap]
-    sp = cut.rfind(" ")
-    if sp > 0:
-        cut = cut[:sp]
-    return cut.rstrip()
 
 
 # ---- region role from bbox ------------------------------------------------------
@@ -130,25 +110,34 @@ def _norm_key(text: str) -> str:
     return _normalize_text(text).lower()
 
 
-def render(reads, cfg: OcrConfig, span_seconds: float) -> tuple[str, int]:
+def render(
+    reads,
+    span_seconds: float,
+    *,
+    min_conf: float,
+    min_chars: int,
+    dedup_ratio: float,
+    chars_per_second: float,
+) -> tuple[str, int, bool]:
     """Run D-07 steps 2-6 over the chunk's ``OcrRead``s and return
-    ``(single_line_text, n_redactions)``. Empty string when nothing legible survives —
-    the caller still emits the record (with ``content.text == ""``), so record PRESENCE,
-    not absence, is the coverage signal (§4 R3(e))."""
+    ``(single_line_text, n_redactions, truncated)``. Empty string when nothing
+    legible survives — the caller still emits its slot (with ``value == ""``), so
+    slot PRESENCE, not absence, is the coverage signal (L11: the honest empty
+    claim). ``truncated`` = the budget cap actually cut the line."""
     # Deterministic: process reads in time order, regions in reading order.
     items: list[tuple[float, str, str]] = []  # (t_offset_s, role, text)
     n_redactions = 0
 
     for read in sorted(reads, key=lambda r: r.t_offset_s):
         # (1) confidence gate.
-        regions = [r for r in read.regions if r.conf >= cfg.min_conf]
-        # (2) reading order by bbox top-left (stable — preserves backend order when bboxes
-        #     are absent, e.g. the vlm arm's zero bboxes).
+        regions = [r for r in read.regions if r.conf >= min_conf]
+        # (2) reading order by bbox top-left (stable — preserves backend order when
+        #     bboxes are absent/zero).
         regions = sorted(regions, key=lambda r: (round(r.bbox[1], 4), round(r.bbox[0], 4)))
         for region in regions:
             text = _normalize_text(region.text)
             # (3) minimum length (on the raw legible text, before redaction).
-            if len(text) < cfg.min_chars:
+            if len(text) < min_chars:
                 continue
             # (4) secret redaction.
             text, n = redact(text)
@@ -165,14 +154,16 @@ def render(reads, cfg: OcrConfig, span_seconds: float) -> tuple[str, int]:
             ratio = difflib.SequenceMatcher(
                 None, _norm_key(kept[-1][2]), _norm_key(item[2])
             ).ratio()
-            if ratio >= cfg.dedup_ratio:
+            if ratio >= dedup_ratio:
                 continue
         kept.append(item)
 
-    # (6) single-line render + budget truncation on a word boundary.
-    line = " · ".join(
+    # (6) single-line render + budget truncation on a word boundary. The third
+    # return says whether the cap actually truncated (the
+    # dp_video_truncated_total{pass="ocr"} signal — cleanup round).
+    full = " · ".join(
         f"+{int(round(t))}s {role}: {text}" for t, role, text in kept
     )
-    line = _normalize_text(line)  # belt-and-braces: no newline can survive
-    line = truncate_word(line, ocr_cap(span_seconds, cfg))
-    return line, n_redactions
+    full = _normalize_text(full)  # belt-and-braces: no newline can survive
+    line = truncate_word(full, ocr_cap(span_seconds, chars_per_second))
+    return line, n_redactions, line != full

@@ -1,21 +1,26 @@
-"""D18 / C10 — day-log materialization and the day-log fetch.
+"""D28 / C10 v2 — day-log materialization over C2 v1 slots, and the day-log fetch.
 
-The materializer is LIFTED from continuum's `app/daylog.py` (the PRODUCT renderer over C2
-records — not `morpheus/profiles/*.py`'s parity-locked `Profile.render_block`). Three rules
-change, everything else is preserved, and this file is organised on exactly that split:
+The v2 renderer walks ``content.slots`` (rebuild Stage E, WP-E2). This file is organised
+the way its v1 predecessor was, with the heal×window matrix appended:
 
-  PART 1 — the three CHANGED rules, one test each (and then some):
-     1. membership is by `ingest_time`, not `t_start`;
+  PART 1 — the CHANGED rules, one test each (and then some):
+     1. membership is by `updated_at` (D27), not `t_start`;
      2. segment buckets sit on a GLOBAL epoch grid, not relative to the window start;
-     3. one dialect per record — latest `ingest_time` wins per
-        (chunk_id, content.kind, discriminator).
-  PART 2 — the PRESERVED behaviours, as regressions against the continuum original: same-span
-     merge, diarized sub-spans in their own buckets, block grouping by temporal adjacency
-     (max_gap_s = 6*segment_seconds), the block_segments cap, `_block_zone`'s preference
-     order, the exact anchor line, the Scene/Heard/World-text labels, quality handling, and
-     the travel case (two device zones in one window, different local dates).
-  PART 3 — the HTTP surface: GET /training/daylog, the C10 body, the cache and its
-     invalidation, and the four failure modes.
+     3. one record per chunk — latest `updated_at` wins per (chunk_id), rowid tiebreak
+        (D28; the v0 (chunk_id, kind, discriminator) key collapsed with the per-kind
+        record model).
+  PART 2 — slot routing + PRESERVED behaviours: caption→Scene, ocr→World text,
+     transcript splits speaker-bucketed by their OWN t_start (both timestamp spellings),
+     the RULED asr fallback (spk null) when transcript is absent, holes render as
+     absence, empty values are honest claims, no acoustic route; and the regressions
+     the v1 renderer already held: same-span merge, block grouping and caps, the exact
+     anchor line, `_block_zone`'s preference order, quality handling, travel.
+  PART 3 — the HTTP surface: GET /training/daylog, the C10 v2 body + stamps, the cache
+     and its R2 invalidation, and the failure modes.
+  PART 4 — the heal×window matrix (the Stage D close-out law, all THREE shapes):
+     a filling heal re-windows; a byte-identical still-holey re-POST does not; a
+     byte-different-but-NOT-fuller heal (hole migrated between slots) re-windows and
+     the renderer shows the new truth.
 """
 from __future__ import annotations
 
@@ -23,6 +28,7 @@ import json
 import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
+from typing import Any, Optional
 
 import pytest
 
@@ -41,7 +47,14 @@ from app.daylog import (
     select_dialects,
 )
 from app.db import Store
-from tests.conftest import make_c2
+from tests.conftest import (
+    make_c2,
+    slot_asr,
+    slot_acoustic,
+    slot_caption,
+    slot_ocr,
+    slot_transcript,
+)
 
 UTC = timezone.utc
 
@@ -67,80 +80,103 @@ def _instant(raw: str) -> datetime:
     """Parse EITHER spelling the C10 body uses, so tests compare instants not strings.
 
     One body, one time axis, two serializations: the WINDOW's `t_start`/`t_end` are minted
-    by storage's `db._TS_FMT` and end in `Z` ("2026-07-24T02:00:00Z"), while every SEGMENT
-    bound comes from `datetime.isoformat()` and ends in a numeric offset
-    ("2026-07-21T09:00:00+00:00"). They name the same instants, but `+` (0x2B) sorts below
-    `Z` (0x5A), so string-comparing across the two forms is wrong exactly at equality — the
-    same moment reads as "earlier" in the offset spelling. Anything in a test that puts a
-    segment bound next to a window bound goes through here first.
-
-    The spellings are not unified in `app/daylog.py` on purpose (see `daylog_body`):
-    continuum's renderer also emits `isoformat()` bounds, and the M9 parity diff's D7 check
-    compares those payloads byte-for-byte, so respelling storage's side would turn a
-    passing check red for cosmetics.
+    by storage's `db._TS_FMT` and end in `Z`, while every SEGMENT bound comes from
+    `datetime.isoformat()` and ends in a numeric offset. They name the same instants, but
+    `+` (0x2B) sorts below `Z` (0x5A), so string-comparing across the two forms is wrong
+    exactly at equality. Anything in a test that puts a segment bound next to a window
+    bound goes through here first.
     """
     return datetime.fromisoformat(raw.replace("Z", "+00:00"))
 
 
-def _land(store: Store, user_id: str, ingest_time: str, **kwargs) -> dict:
-    """Land a C2 record and force its storage-assigned ingest_time.
-
-    ingest_time is minted by storage at write and is deliberately not a C2 field, so a test
-    that needs deterministic window membership sets it on the column directly — the same
-    'reach into the columns' idiom tests/test_civil_time.py and tests/test_windows.py use.
-    """
-    record = make_c2(user_id=user_id, **kwargs)
-    store.put_context(record)
-    with store._connect() as conn:
-        conn.execute(
-            "UPDATE context_records SET ingest_time = ? WHERE record_id = ?",
-            (ingest_time, record["record_id"]),
-        )
-        conn.commit()
-    return record
+# --- C2 v1 fixture builders ---------------------------------------------------------
 
 
-def _backdate(store: Store, *, hours: int = 1) -> str:
-    """Push every landed record's ingest_time into the past, and return the new value.
-
-    ingest_time is minted at write and is not a C2 field, so a record landed over HTTP is
-    always ingested `now` — while a window's end is `now - delta`, which would sit BELOW
-    its own start and refuse to open. Backdating is what lets these tests exercise the real
-    routes against the real clock instead of injecting time everywhere.
-    """
-    stamp = _stamp(datetime.now(UTC) - timedelta(hours=hours))
-    with store._connect() as conn:
-        conn.execute("UPDATE context_records SET ingest_time = ?", (stamp,))
-        conn.commit()
-    return stamp
-
-
-def _caption(t_start: str, text: str, *, device_tz: str | None = None,
-             chunk_id: str | None = None, **kwargs) -> dict:
-    """A caption record — the simplest thing that renders a `Scene: ` line."""
-    record = make_c2(t_start=t_start, t_end=t_start, chunk_id=chunk_id, **kwargs)
-    # No `segments` key at all: C2 declares it as an array, so a null would be a schema
-    # violation rather than "no sub-spans".
-    record["content"] = {"kind": "caption", "text": text, "language": "en"}
-    record["source"]["modality"] = "video"
+def _v1(t_start: str, slots: dict[str, Any], *, chunk_id: Optional[str] = None,
+        user_id: str = "u1", device_tz: Optional[str] = None,
+        pipeline_version: str = "asr.v1-mock.v1", modality: str = "audio",
+        t_end: Optional[str] = None) -> dict[str, Any]:
+    record = make_c2(user_id=user_id, chunk_id=chunk_id, t_start=t_start,
+                     t_end=t_end or t_start, slots=slots,
+                     pipeline_version=pipeline_version, modality=modality)
     if device_tz:
         record["source"]["device_tz"] = device_tz
     return record
 
 
-def _undiarized(t_start: str, text: str, **kwargs) -> dict:
-    """A transcript record with no sub-spans — the parent-chunk ASR path."""
-    record = make_c2(t_start=t_start, t_end=t_start, text=text, **kwargs)
-    del record["content"]["segments"]
+def _cap(t_start: str, text: str, **kw) -> dict[str, Any]:
+    """A caption record — the simplest thing that renders a `Scene: ` line."""
+    kw.setdefault("modality", "video")
+    kw.setdefault("pipeline_version", "clipcap.v1-mock.v1+clipprep.v1-mock.v1")
+    return _v1(t_start, {"caption": slot_caption(text)}, **kw)
+
+
+def _ocr(t_start: str, text: str, **kw) -> dict[str, Any]:
+    kw.setdefault("modality", "video")
+    kw.setdefault("pipeline_version", "clipprep.v1-mock.v1+screentext.v1-mock.v1")
+    return _v1(t_start, {"ocr": slot_ocr(text)}, **kw)
+
+
+def _asr(t_start: str, text: str, *, splits: Optional[list] = None, **kw) -> dict[str, Any]:
+    """An asr-only record — the transcript slot is ABSENT (never attempted or holed),
+    so the ruled fallback path renders it."""
+    return _v1(t_start, {"asr": slot_asr(text, splits=splits)}, **kw)
+
+
+def _tr(t_start: str, splits: list, *, asr_text: Optional[str] = None, **kw) -> dict[str, Any]:
+    """A record carrying the speaker-aligned transcript slot (plus its asr witness)."""
+    slots: dict[str, Any] = {"transcript": slot_transcript(splits)}
+    if asr_text is not None:
+        slots["asr"] = slot_asr(asr_text)
+    kw.setdefault("pipeline_version",
+                  "asr.v1-mock.v1+diarize.v1-mock.v1+speaker_align.v1-mock.v1")
+    return _v1(t_start, slots, **kw)
+
+
+def _rows(*records_with_stamp) -> list[dict]:
+    """Build the store's window-range row shape by hand: (record, updated_at, seq)."""
+    return [
+        {"seq": seq, "updated_at": stamp, "record": rec}
+        for seq, (rec, stamp) in enumerate(records_with_stamp, start=1)
+    ]
+
+
+def _land(store: Store, record: dict, stamp: str) -> dict:
+    """Land a record and force its storage-assigned stamps to `stamp` — the same
+    'reach into the columns' idiom tests/test_windows.py uses."""
+    store.put_context(record)
+    with store._connect() as conn:
+        conn.execute(
+            "UPDATE context_records SET created_at = ?, updated_at = ? "
+            "WHERE record_id = ?",
+            (stamp, stamp, record["record_id"]),
+        )
+        conn.commit()
     return record
 
 
-def _rows(*records_with_ingest) -> list[dict]:
-    """Build the store's ingest-range row shape by hand: (record, ingest_time, seq)."""
-    return [
-        {"seq": seq, "ingest_time": ingest, "record": rec}
-        for seq, (rec, ingest) in enumerate(records_with_ingest, start=1)
-    ]
+def _repin(store: Store, record_id: str, stamp: str) -> None:
+    """Re-pin ONE record's updated_at (a heal's bump, made deterministic)."""
+    with store._connect() as conn:
+        conn.execute("UPDATE context_records SET updated_at = ? WHERE record_id = ?",
+                     (stamp, record_id))
+        conn.commit()
+
+
+def _backdate(store: Store, *, hours: int = 1) -> str:
+    """Push every landed record's stamps into the past, and return the new value.
+
+    The stamps are minted at write and are not C2 fields, so a record landed just now
+    always carries `now` — while a window's end is `now - delta`, which would sit BELOW
+    its own start and refuse to open. Backdating lets PART 3 exercise the real routes
+    against the real clock instead of injecting time everywhere.
+    """
+    stamp = _stamp(datetime.now(UTC) - timedelta(hours=hours))
+    with store._connect() as conn:
+        conn.execute("UPDATE context_records SET created_at = ?, updated_at = ?",
+                     (stamp, stamp))
+        conn.commit()
+    return stamp
 
 
 def _build(records, *, window_id="w20260724T040000Z", user_id="u1", home_tz="UTC", **kw):
@@ -148,58 +184,54 @@ def _build(records, *, window_id="w20260724T040000Z", user_id="u1", home_tz="UTC
                         home_tz=home_tz, **kw)
 
 
+def _texts(daylog) -> str:
+    blocks = daylog.blocks if hasattr(daylog, "blocks") else daylog["blocks"]
+    return " ".join(b.text if hasattr(b, "text") else b["text"] for b in blocks)
+
+
 # =====================================================================================
-# PART 1 — the three CHANGED rules
+# PART 1 — the CHANGED rules
 # =====================================================================================
 
-# --- change 1: membership is by ingest_time, not t_start -----------------------------
+# --- change 1: membership is by updated_at (D27), not t_start ------------------------
 
 
-def test_membership_is_by_ingest_time_not_event_time(store):
-    """THE watermark rule. A chunk captured Tuesday and uploaded Friday belongs to
-    FRIDAY's window — and renders in a block anchored "On [Tuesday]". Late data cannot be
-    lost because on an ingest-time watermark late data does not exist."""
+def test_membership_is_by_updated_at_not_event_time(store):
+    """THE watermark rule on D27's axis. A chunk captured Tuesday and uploaded Friday
+    belongs to FRIDAY's window — and renders in a block anchored "On [Tuesday]". Late
+    data cannot be lost because on a storage-clock watermark late data does not exist."""
     store.put_profile("u1", "UTC")
     tuesday = "2026-07-21T09:00:00Z"
-    # Captured Tuesday, uploaded Friday.
-    _land(store, "u1", "2026-07-24T02:00:00Z",
-          **{"t_start": tuesday, "t_end": tuesday})
+    _land(store, _cap(tuesday, "a tuesday memory", chunk_id="chunk-tue"),
+          "2026-07-24T02:00:00Z")
     window = store.open_training_window("u1", now=datetime(2026, 7, 24, 4, 0, 0, tzinfo=UTC))
 
     body = materialize_daylog(store, "u1", window["window_id"])
 
-    # The window is FRIDAY's on the ingest axis...
+    # The window is FRIDAY's on the updated_at axis...
     assert body["t_start"] <= "2026-07-24T02:00:00Z" < body["t_end"]
     # ...and the record is in it, anchored to the TUESDAY it was actually lived.
     assert len(body["blocks"]) == 1
     assert body["blocks"][0]["anchors"]["date"] == "2026-07-21"
     assert body["blocks"][0]["text"].startswith("On 2026-07-21, ")
-    # The rendered content therefore starts DAYS BEFORE the window's own t_start. That is
-    # the late-upload case working, not a bug.
-    #
-    # Compared as parsed INSTANTS, and by the actual gap. Two reasons, both of which a bare
-    # `body["segments"][0]["t_start"] < body["t_start"]` got wrong:
-    #   * the two fields are spelled differently (segment bounds carry `+00:00`, window
-    #     bounds carry `Z` — see `_instant`), and `+` sorts below `Z`, so that string
-    #     compare would have held even for a segment starting exactly AT the window start;
-    #   * "days before" is the claim, and `<` alone would also pass for one second before.
+    # The rendered content starts DAYS BEFORE the window's own t_start — the late-upload
+    # case working, not a bug. Compared as parsed INSTANTS (two spellings) and by the
+    # actual gap ("days before" is the claim; `<` alone would pass for one second).
     lead = _instant(body["t_start"]) - _instant(body["segments"][0]["t_start"])
     assert lead > timedelta(days=1), lead
 
 
-def test_a_record_ingested_outside_the_window_is_excluded_even_if_its_event_time_is_inside(store):
+def test_a_record_updated_outside_the_window_is_excluded_even_if_its_event_time_is_inside(store):
     """The mirror image, and the one an event-time filter would get wrong: an event time
-    that sits comfortably inside the window's clock range buys nothing if the record
-    landed after `t_end`."""
+    inside the window's clock range buys nothing if the record's updated_at sits after
+    `t_end`."""
     store.put_profile("u1", "UTC")
-    _land(store, "u1", "2026-07-24T02:00:00Z",
-          t_start="2026-07-24T02:30:00Z", t_end="2026-07-24T02:30:00Z",
-          text="inside the window on both axes")
+    _land(store, _asr("2026-07-24T02:30:00Z", "inside the window on both axes",
+                      chunk_id="chunk-in"), "2026-07-24T02:00:00Z")
     window = store.open_training_window("u1", now=datetime(2026, 7, 24, 4, 0, 0, tzinfo=UTC))
     # Lands AFTER the window closed, but with an event time inside its range.
-    _land(store, "u1", "2026-07-24T05:00:00Z",
-          t_start="2026-07-24T02:31:00Z", t_end="2026-07-24T02:31:00Z",
-          text="late arriving straggler")
+    _land(store, _asr("2026-07-24T02:31:00Z", "late arriving straggler",
+                      chunk_id="chunk-late"), "2026-07-24T05:00:00Z")
 
     body = materialize_daylog(store, "u1", window["window_id"])
     rendered = " ".join(b["text"] for b in body["blocks"])
@@ -207,14 +239,13 @@ def test_a_record_ingested_outside_the_window_is_excluded_even_if_its_event_time
     assert "late arriving straggler" not in rendered
 
 
-def test_build_daylog_has_no_event_time_filter_at_all(store):
-    """continuum's `in_window(t_start, win)` guard is DELETED, not ported: the range query
-    on the ingest axis already decided membership, so re-filtering on the event axis would
-    throw away exactly the backlog this design exists to train."""
+def test_build_daylog_has_no_event_time_filter_at_all():
+    """The range query on the window axis already decided membership; re-filtering on
+    the event axis would throw away exactly the backlog this design exists to train."""
     far_past = _iso(datetime(2019, 3, 4, 11, 0, 0, tzinfo=UTC).timestamp())
     far_future = _iso(datetime(2031, 3, 4, 11, 0, 0, tzinfo=UTC).timestamp())
-    daylog = _build([_caption(far_past, "a very old memory"),
-                     _caption(far_future, "a very new one")])
+    daylog = _build([_cap(far_past, "a very old memory", chunk_id="c-old"),
+                     _cap(far_future, "a very new one", chunk_id="c-new")])
     assert len(daylog.blocks) == 2
     assert daylog.blocks[0].anchors["date"] == "2019-03-04"
     assert daylog.blocks[1].anchors["date"] == "2031-03-04"
@@ -224,46 +255,44 @@ def test_build_daylog_has_no_event_time_filter_at_all(store):
 
 
 def test_segment_buckets_sit_on_the_global_epoch_grid():
-    """floor(t_start / segment_seconds), with no window origin in the expression. Two
-    moments 1 s apart across an epoch multiple land in DIFFERENT buckets; two moments 9 s
-    apart inside one land in the SAME bucket."""
+    """floor(t_start / segment_seconds), no window origin in the expression. Two moments
+    1 s apart across an epoch multiple land in DIFFERENT buckets; two moments 9 s apart
+    inside one land in the SAME bucket."""
     base = datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()  # a multiple of 10
     daylog = _build([
-        _caption(_iso(base + 9), "end of bucket zero"),
-        _caption(_iso(base + 10), "start of bucket one"),
+        _cap(_iso(base + 9), "end of bucket zero", chunk_id="c1"),
+        _cap(_iso(base + 10), "start of bucket one", chunk_id="c2"),
     ])
     assert len(daylog.segments) == 2
     assert daylog.segments[0].t_start == "2026-07-24T12:00:00+00:00"
     assert daylog.segments[1].t_start == "2026-07-24T12:00:10+00:00"
 
-    same = _build([_caption(_iso(base + 1), "a"), _caption(_iso(base + 9), "b")])
+    same = _build([_cap(_iso(base + 1), "a", chunk_id="c1"),
+                   _cap(_iso(base + 9), "b", chunk_id="c2")])
     assert len(same.segments) == 1
     assert same.segments[0].caption == ["a", "b"]
 
 
-def test_the_grid_does_not_move_with_the_window(store):
-    """The whole point of going global: a moment's bucket is the SAME whichever window
-    collects it, so re-materialization is stable. Window-relative indices would also go
-    negative here, because the record's event time precedes both windows."""
+def test_the_grid_does_not_move_with_the_window():
+    """A moment's bucket is the SAME whichever window collects it, so
+    re-materialization is stable; window-relative indices would also go negative."""
     epoch = datetime(2026, 7, 21, 9, 0, 7, tzinfo=UTC).timestamp()
-    rec = _caption(_iso(epoch), "one moment")
+    rec = _cap(_iso(epoch), "one moment", chunk_id="c1")
     first = _build([rec], window_id="w20260724T040000Z")
     second = _build([rec], window_id="w20260731T040000Z")
     assert first.segments[0].t_start == second.segments[0].t_start == \
         "2026-07-21T09:00:00+00:00"
-    # Only the seg_id's window prefix differs — the bucket itself did not move.
     assert first.segments[0].seg_id == "w20260724T040000Z_s00000"
     assert second.segments[0].seg_id == "w20260731T040000Z_s00000"
 
 
 def test_seg_id_is_the_ordinal_not_the_epoch_bucket_index():
-    """`{window_id}_s{ordinal:05d}` where ordinal is the position in the sorted segment
-    list. It CANNOT be the epoch index: at 10 s buckets that is a nine-digit number, which
-    would blow the fixed {:05d} width on the first record ever materialized."""
+    """`{window_id}_s{ordinal:05d}` — the position in the sorted list, never the epoch
+    index (a nine-digit number at 10 s buckets that would blow the fixed width)."""
     base = datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()
-    daylog = _build([_caption(_iso(base), "a"),
-                     _caption(_iso(base + 5000), "b"),
-                     _caption(_iso(base + 90000), "c")])
+    daylog = _build([_cap(_iso(base), "a", chunk_id="c1"),
+                     _cap(_iso(base + 5000), "b", chunk_id="c2"),
+                     _cap(_iso(base + 90000), "c", chunk_id="c3")])
     assert [s.seg_id for s in daylog.segments] == [
         "w20260724T040000Z_s00000",
         "w20260724T040000Z_s00001",
@@ -276,112 +305,90 @@ def test_seg_id_is_the_ordinal_not_the_epoch_bucket_index():
     ]
 
 
-# --- change 3: one dialect per record, latest ingest_time wins -----------------------
+# --- change 3: one record per chunk, latest updated_at wins, rowid tiebreak ----------
 
 
-def test_one_dialect_per_record_latest_ingest_time_wins():
-    """The cutover double-count fix. Two renderings of ONE chunk under two pipeline
-    versions: only the latest-INGESTED survives. Keyed on ingest_time and not on
-    pipeline_version because pipeline_version is a COMPOSED string (a mutate stage's
-    enabledness is a version fragment) and therefore not orderable."""
+def test_one_record_per_chunk_latest_updated_at_wins():
+    """The version-forward case (L8 case 2): a reprocess under a bumped dialect lands
+    BESIDE the old record under a new record_id — same chunk, two rows. The day-log
+    renders exactly the latest-updated one."""
     t = _iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp())
-    old = _caption(t, "a blurry doorway", chunk_id="chunk-A", pipeline_version="cap-v9")
-    new = _caption(t, "a red front door", chunk_id="chunk-A", pipeline_version="cap-v2")
+    old = _cap(t, "a blurry doorway", chunk_id="chunk-A",
+               pipeline_version="clipcap.v1-mock.v1")
+    new = _cap(t, "a red front door", chunk_id="chunk-A",
+               pipeline_version="clipcap.v2-mock.v1")
+    assert old["record_id"] != new["record_id"]          # genuinely beside, not upsert
     rows = _rows((old, "2026-07-24T01:00:00Z"), (new, "2026-07-24T03:00:00Z"))
 
     kept = select_dialects(rows)
-    assert [r["record"]["content"]["text"] for r in kept] == ["a red front door"]
-    # And it renders once, not twice.
+    assert [r["record"]["record_id"] for r in kept] == [new["record_id"]]
     daylog = _build([r["record"] for r in kept])
     assert daylog.blocks[0].text.endswith("Scene: a red front door")
 
 
-def test_the_dialect_key_is_kind_aware():
-    """Phase-3 proved captions and transcripts can share one pipeline_version, so a
-    kind-blind rule would drop transcripts in order to drop captions."""
+def test_the_dedup_key_is_chunk_id_alone():
+    """(chunk_id), nothing else (D28): two records of ONE chunk collapse whatever their
+    slot sets or dialects; two records of DIFFERENT chunks both survive."""
     t = _iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp())
-    cap = _caption(t, "a red front door", chunk_id="chunk-A", pipeline_version="v1")
-    asr = _undiarized(t, "hello there", chunk_id="chunk-A", pipeline_version="v1")
-    asr["record_id"] = "rec-asr"
-    rows = _rows((cap, "2026-07-24T01:00:00Z"), (asr, "2026-07-24T03:00:00Z"))
+    cap = _cap(t, "a red front door", chunk_id="chunk-A",
+               pipeline_version="clipcap.v1-mock.v1")
+    ocr = _ocr(t, "EXIT", chunk_id="chunk-A",
+               pipeline_version="screentext.v9-mock.v1")   # different slots, same chunk
+    other = _asr(t, "hello there", chunk_id="chunk-B")
+    kept = select_dialects(_rows((cap, "2026-07-24T01:00:00Z"),
+                                 (ocr, "2026-07-24T03:00:00Z"),
+                                 (other, "2026-07-24T01:00:00Z")))
+    assert sorted(dialect_key(r["record"]) for r in kept) == ["chunk-A", "chunk-B"]
+    assert {r["record"]["record_id"] for r in kept} == \
+        {ocr["record_id"], other["record_id"]}
 
-    kept = select_dialects(rows)
-    assert len(kept) == 2
-    assert dialect_key(cap)[1] == "caption"
-    assert dialect_key(asr)[1] == "transcript"
 
-
-def test_the_dialect_key_is_discriminator_aware():
-    """Two keyframes of ONE video chunk are two UNITS, not two dialects of one. The
-    discriminator is what tells them apart — and it is independently readable on C2 only
-    since 2026-07-27; before that it lived solely inside the record_id hash."""
+def test_the_dedup_tiebreak_is_rowid_within_one_second():
+    """updated_at is second-granularity, so a data-processing flush — or two
+    consecutive heals — lands inside one value; rowid breaks the tie and is
+    LOAD-BEARING (the D27 upsert keeps rowids stable for exactly this)."""
     t = _iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp())
-    kf0 = _caption(t, "a red front door", chunk_id="chunk-A")
-    kf0["record_id"], kf0["discriminator"] = "rec-kf0", "kf:0"
-    kf1 = _caption(t, "a hallway", chunk_id="chunk-A")
-    kf1["record_id"], kf1["discriminator"] = "rec-kf1", "kf:1"
-    assert schemas.validate_c2(kf0) == [] and schemas.validate_c2(kf1) == []
-
-    kept = select_dialects(_rows((kf0, "2026-07-24T01:00:00Z"),
-                                 (kf1, "2026-07-24T01:00:00Z")))
-    assert len(kept) == 2
-    # ...but two DIALECTS of keyframe 0 collapse to one.
-    kf0b = _caption(t, "a red door, ajar", chunk_id="chunk-A", pipeline_version="cap-v2")
-    kf0b["record_id"], kf0b["discriminator"] = "rec-kf0-v2", "kf:0"
-    kept = select_dialects(_rows((kf0, "2026-07-24T01:00:00Z"),
-                                 (kf1, "2026-07-24T01:00:00Z"),
-                                 (kf0b, "2026-07-24T03:00:00Z")))
-    assert sorted(r["record"]["record_id"] for r in kept) == ["rec-kf0-v2", "rec-kf1"]
-
-
-def test_absent_and_empty_discriminator_are_the_same_key():
-    """The 1:1 case. A producer that starts emitting `discriminator: ""` must not
-    double-count against its own earlier records, which carried no key at all."""
-    t = _iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp())
-    without = _caption(t, "old dialect", chunk_id="chunk-A")
-    with_empty = _caption(t, "new dialect", chunk_id="chunk-A", pipeline_version="cap-v2")
-    with_empty["record_id"], with_empty["discriminator"] = "rec-2", ""
-    assert dialect_key(without) == dialect_key(with_empty)
-    kept = select_dialects(_rows((without, "2026-07-24T01:00:00Z"),
-                                 (with_empty, "2026-07-24T03:00:00Z")))
-    assert [r["record"]["content"]["text"] for r in kept] == ["new dialect"]
-
-
-def test_the_dialect_tiebreak_is_deterministic_within_one_second():
-    """ingest_time is minted at SECOND granularity, so a whole data-processing flush lands
-    inside one value and "latest wins" would otherwise be decided by dict ordering. rowid
-    is the tiebreak — the same stable one every ordered read in this service uses."""
-    t = _iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp())
-    first = _caption(t, "first of the flush", chunk_id="chunk-A", pipeline_version="v1")
-    second = _caption(t, "second of the flush", chunk_id="chunk-A", pipeline_version="v2")
+    first = _cap(t, "first of the flush", chunk_id="chunk-A",
+                 pipeline_version="clipcap.v1-mock.v1")
+    second = _cap(t, "second of the flush", chunk_id="chunk-A",
+                  pipeline_version="clipcap.v2-mock.v1")
     same_second = "2026-07-24T03:00:00Z"
     kept = select_dialects(_rows((first, same_second), (second, same_second)))
-    assert [r["record"]["content"]["text"] for r in kept] == ["second of the flush"]
+    assert [r["record"]["record_id"] for r in kept] == [second["record_id"]]
     # ...and it does not depend on which order they were handed in.
     reordered = [
-        {"seq": 2, "ingest_time": same_second, "record": second},
-        {"seq": 1, "ingest_time": same_second, "record": first},
+        {"seq": 2, "updated_at": same_second, "record": second},
+        {"seq": 1, "updated_at": same_second, "record": first},
     ]
-    assert [r["record"]["content"]["text"] for r in select_dialects(reordered)] == \
-        ["second of the flush"]
+    assert [r["record"]["record_id"] for r in select_dialects(reordered)] == \
+        [second["record_id"]]
 
 
-def test_a_reprocess_that_survives_selection_renders_once_end_to_end(store):
-    """The whole rule, through the store: land a chunk, reprocess it under a NEW
-    pipeline_version so both rows exist, and materialize. The day-log carries the new
-    dialect exactly once."""
+def test_a_record_without_a_chunk_id_survives_on_its_own_key(store):
+    """Schema-valid C2 v1 always carries source.chunk_id; the defensive posture stands:
+    a defect upstream loses a GROUPING, never a record."""
+    t = _iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp())
+    orphan = _cap(t, "an orphan", chunk_id="c1")
+    del orphan["source"]["chunk_id"]
+    normal = _cap(t, "a neighbour", chunk_id="c2")
+    kept = select_dialects(_rows((orphan, "2026-07-24T01:00:00Z"),
+                                 (normal, "2026-07-24T01:00:00Z")))
+    assert len(kept) == 2
+    assert dialect_key(orphan).startswith("\x00record_id:")
+
+
+def test_a_version_forward_reprocess_renders_once_end_to_end(store):
+    """The whole rule, through the store: land a chunk, version-forward it (a NEW
+    record_id lands beside), and materialize. The day-log carries the new dialect
+    exactly once."""
     store.put_profile("u1", "UTC")
     t = "2026-07-24T02:00:00Z"
-    old = _caption(t, "a blurry doorway", chunk_id="chunk-A", pipeline_version="cap-v1",
-                   user_id="u1")
-    new = _caption(t, "a red front door", chunk_id="chunk-A", pipeline_version="cap-v2",
-                   user_id="u1")
-    for record, ingest in ((old, "2026-07-24T02:05:00Z"), (new, "2026-07-24T02:06:00Z")):
-        store.put_context(record)
-        with store._connect() as conn:
-            conn.execute("UPDATE context_records SET ingest_time = ? WHERE record_id = ?",
-                         (ingest, record["record_id"]))
-            conn.commit()
+    old = _cap(t, "a blurry doorway", chunk_id="chunk-A",
+               pipeline_version="clipcap.v1-mock.v1")
+    new = _cap(t, "a red front door", chunk_id="chunk-A",
+               pipeline_version="clipcap.v2-mock.v1")
+    _land(store, old, "2026-07-24T02:05:00Z")
+    _land(store, new, "2026-07-24T02:06:00Z")
     window = store.open_training_window("u1", now=datetime(2026, 7, 24, 4, 0, 0, tzinfo=UTC))
 
     body = materialize_daylog(store, "u1", window["window_id"])
@@ -391,77 +398,161 @@ def test_a_reprocess_that_survives_selection_renders_once_end_to_end(store):
 
 
 # =====================================================================================
-# PART 2 — PRESERVED behaviours (regressions against the continuum original)
+# PART 2 — slot routing + PRESERVED behaviours
 # =====================================================================================
 
 
 def test_same_span_records_merge_into_one_segment():
     t = _iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp())
-    cap = _caption(t, "a red door", chunk_id="c1")
-    ocr = _caption(t, "EXIT", chunk_id="c2")
-    ocr["content"]["kind"] = "ocr"
-    asr = _undiarized(t, "hello there", chunk_id="c3")
-    daylog = _build([cap, ocr, asr])
+    daylog = _build([_cap(t, "a red door", chunk_id="c1"),
+                     _ocr(t, "EXIT", chunk_id="c2"),
+                     _asr(t, "hello there", chunk_id="c3")])
     assert len([s for s in daylog.segments if not s.is_empty()]) == 1
     seg = daylog.segments[0]
     assert seg.caption == ["a red door"]
     assert seg.ocr == ["EXIT"]
-    assert seg.asr[0]["text"] == "hello there"
+    assert seg.asr[0] == {"spk": None, "text": "hello there", "t": t}
 
 
-def test_diarized_subspans_land_in_their_own_buckets_by_their_own_t_start():
-    """A 30 s VAD chunk spans three buckets and its speech must be anchored where it was
-    actually said, not where the chunk began."""
+def test_transcript_splits_land_in_their_own_buckets_by_their_own_t_start():
+    """A 30 s VAD chunk spans three buckets and its speech must be anchored where it
+    was actually said, not where the chunk began. The parent asr text is NOT rendered
+    on top of its aligned view — one witness, one voice."""
     base = datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()
-    rec = make_c2(chunk_id="c1", t_start=_iso(base), t_end=_iso(base + 30),
-                  text="first second")
-    rec["content"]["segments"] = [
-        {"t_start": _iso(base), "t_end": _iso(base + 2), "text": "first", "speaker": "a"},
-        {"t_start": _iso(base + 25), "t_end": _iso(base + 27), "text": "second",
-         "speaker": "b"},
-    ]
+    rec = _tr(_iso(base), [
+        {"t_start": _iso(base), "t_end": _iso(base + 2), "value": "first",
+         "speaker": "speaker-0"},
+        {"t_start": _iso(base + 25), "t_end": _iso(base + 27), "value": "second",
+         "speaker": "speaker-1"},
+    ], asr_text="first second", chunk_id="c1", t_end=_iso(base + 30))
     daylog = _build([rec])
     non_empty = [s for s in daylog.segments if not s.is_empty()]
     assert len(non_empty) == 2                      # bucket +0 and bucket +20
-    assert non_empty[0].asr[0] == {"spk": "a", "text": "first", "t": _iso(base)}
-    assert non_empty[1].asr[0]["spk"] == "b"
-    # The parent chunk's own text is NOT added on top of its sub-spans.
+    assert non_empty[0].asr[0] == {"spk": "speaker-0", "text": "first", "t": _iso(base)}
+    assert non_empty[1].asr[0]["spk"] == "speaker-1"
     assert "first second" not in [a["text"] for s in non_empty for a in s.asr]
 
 
-def test_blocks_break_on_a_gap_of_more_than_six_segments():
-    """max_gap_s = 6 * segment_seconds. A camera-off gap starts a new block, so one anchor
-    line never spans hours of silence."""
+def test_both_split_timestamp_spellings_bucket_correctly():
+    """The Stage C carry, verbatim: split timestamps arrive in the verbatim C1 root
+    spelling (trailing Z) AND in abs_time's +00:00-microsecond spelling. Both must
+    bucket by instant, not by string."""
     base = datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()
-    # 50 s apart: gap between bucket-0's END (+10) and bucket-5's start (+50) is 40 s <= 60.
-    together = _build([_caption(_iso(base), "a"), _caption(_iso(base + 50), "b")])
-    assert len(together.blocks) == 1
-    # 80 s apart: gap is 70 s > 60 -> two blocks.
-    apart = _build([_caption(_iso(base), "a"), _caption(_iso(base + 80), "b")])
-    assert len(apart.blocks) == 2
-    assert [len(b.seg_ids) for b in apart.blocks] == [1, 1]
+    z_spelled = "2026-07-24T12:00:01Z"
+    offset_spelled = "2026-07-24T12:00:11.250000+00:00"     # the +00:00-microsecond form
+    rec = _tr(_iso(base), [
+        {"t_start": z_spelled, "t_end": z_spelled, "value": "zulu line",
+         "speaker": "speaker-0"},
+        {"t_start": offset_spelled, "t_end": offset_spelled, "value": "offset line",
+         "speaker": "speaker-0"},
+    ], chunk_id="c1", t_end=_iso(base + 30))
+    daylog = _build([rec])
+    non_empty = [s for s in daylog.segments if not s.is_empty()]
+    assert len(non_empty) == 2                      # buckets +0 and +10, by INSTANT
+    assert non_empty[0].asr[0]["text"] == "zulu line"
+    assert non_empty[1].asr[0]["text"] == "offset line"
+    # The line's own `t` keeps the split's verbatim spelling — never respelled.
+    assert non_empty[0].asr[0]["t"] == z_spelled
+    assert non_empty[1].asr[0]["t"] == offset_spelled
 
 
-def test_a_block_holds_at_most_block_segments_segments():
+def test_heard_lines_fall_back_to_asr_when_transcript_is_absent():
+    """The ruled fallback (2026-08-06): transcript absent — a hole (incl. a permanent
+    one) or a dialect that never attempted it — renders speech from slots.asr, spk
+    null, each split by its OWN t_start."""
     base = datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()
-    records = [_caption(_iso(base + 10 * i), f"caption {i}") for i in range(30)]
-    daylog = _build(records)
-    assert len(daylog.segments) == 30
-    assert [len(b.seg_ids) for b in daylog.blocks] == [12, 12, 6]
-    # Every seg_id a block cites is a real segment, and each is cited exactly once.
-    cited = [sid for b in daylog.blocks for sid in b.seg_ids]
-    assert cited == [s.seg_id for s in daylog.segments]
+    rec = _asr(_iso(base), "hello over there", splits=[
+        {"t_start": _iso(base), "t_end": _iso(base + 2), "value": "hello"},
+        {"t_start": _iso(base + 25), "t_end": _iso(base + 27), "value": "over there"},
+    ], chunk_id="c1", t_end=_iso(base + 30))
+    daylog = _build([rec])
+    non_empty = [s for s in daylog.segments if not s.is_empty()]
+    assert len(non_empty) == 2
+    assert non_empty[0].asr[0] == {"spk": None, "text": "hello", "t": _iso(base)}
+    assert non_empty[1].asr[0] == {"spk": None, "text": "over there",
+                                   "t": _iso(base + 25)}
+    # The Heard line renders the unlabeled lines bare — no fabricated speaker (L11).
+    assert "Heard: hello" in daylog.blocks[0].text
+
+
+def test_the_asr_fallback_without_splits_renders_at_the_records_own_t_start():
+    """The whole-chunk shape: an asr slot with no finer timing renders one line at the
+    record's t_start."""
+    t = _iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp())
+    daylog = _build([_asr(t, "a whole chunk of speech", chunk_id="c1")])
+    assert daylog.segments[0].asr == [
+        {"spk": None, "text": "a whole chunk of speech", "t": t}]
+
+
+def test_no_fallback_when_the_transcript_slot_is_present_but_empty():
+    """Present-with-empty-splits is an aligned-and-EMPTY claim, not a hole: the
+    renderer must not second-guess a slot the record does carry (L11)."""
+    t = _iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp())
+    rec = _tr(t, [], asr_text="speech the aligner judged empty", chunk_id="c1")
+    daylog = _build([rec])
+    assert daylog.segments == []
+
+
+def test_an_empty_asr_value_is_honest_silence_not_a_line():
+    """`asr.value: ""` is the VAD-gated silence claim; nothing renders."""
+    t = _iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp())
+    assert _build([_asr(t, "", chunk_id="c1")]).segments == []
+
+
+def test_ran_and_empty_ocr_contributes_no_line():
+    """`ocr.value: ""` = OCR ran, the screen had no legible text. Distinguishable from
+    a hole in the RECORD, deliberately not in the day-log (L11)."""
+    t = _iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp())
+    ran_empty = _ocr(t, "", chunk_id="c1")
+    holed = _cap(t, "a desk", chunk_id="c2")        # ocr never attempted / holed
+    daylog = _build([ran_empty, holed])
+    assert [s.ocr for s in daylog.segments if not s.is_empty()] == [[]]
+    assert "World text" not in daylog.blocks[0].text
+
+
+def test_an_empty_caption_value_renders_no_scene_line():
+    t = _iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp())
+    assert _build([_cap(t, "   ", chunk_id="c1")]).segments == []
+
+
+def test_an_empty_slots_map_renders_nothing_and_is_legal():
+    """The all-optional-failure record (L7) ships and renders as pure absence."""
+    t = _iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp())
+    record = _v1(t, {}, chunk_id="c1")
+    assert schemas.validate_c2(record) == []
+    assert _build([record]).segments == []
+
+
+def test_holes_render_as_absence_never_as_fabrication():
+    """L11: a dialect that attempted screentext but holed it renders NO World-text
+    line — and nothing else invents one. The record, not the day-log, carries the
+    hole-vs-empty distinction."""
+    t = _iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp())
+    holed = _v1(t, {"caption": slot_caption("a desk by a window")}, chunk_id="c1",
+                modality="video",
+                pipeline_version="clipcap.v1-mock.v1+screentext.v1-mock.v1")
+    block = _build([holed]).blocks[0]
+    assert "Scene: a desk by a window" in block.text
+    assert "World text" not in block.text and "Heard" not in block.text
+
+
+def test_the_acoustic_slot_has_no_route():
+    """The C10 v2 contract names no acoustic route; the stage's consumer marker stays
+    honestly speculative. Routing it here would fabricate a consumer (L10/L11)."""
+    t = _iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp())
+    rec = _v1(t, {"acoustic": slot_acoustic(["keyboard typing"], confidence=0.9)},
+              chunk_id="c1")
+    assert _build([rec]).segments == []
 
 
 def test_the_anchor_line_and_labels_are_byte_exact():
     """The rendered block is what the model trains on, so its bytes are the interface —
-    including the EN DASH between the two clock readings and the label spellings."""
+    including the EN DASH between the clock readings and the label spellings, UNCHANGED
+    from v1 (D20: the block text is contract; WP-E4 re-proves it differentially)."""
     base = datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()
-    cap = _caption(_iso(base), "a red door", chunk_id="c1")
-    ocr = _caption(_iso(base), "EXIT", chunk_id="c2")
-    ocr["content"]["kind"] = "ocr"
-    asr = _undiarized(_iso(base), "hello there", chunk_id="c3")
-    block = _build([cap, ocr, asr]).blocks[0]
+    block = _build([_cap(_iso(base), "a red door", chunk_id="c1"),
+                    _ocr(_iso(base), "EXIT", chunk_id="c2"),
+                    _asr(_iso(base), "hello there", chunk_id="c3")]).blocks[0]
     assert block.text == (
         "On 2026-07-24, around 12:00–12:00 local time:\n"
         "Scene: a red door\n"
@@ -471,41 +562,58 @@ def test_the_anchor_line_and_labels_are_byte_exact():
     assert block.anchors == {"date": "2026-07-24", "place": None}
 
 
-def test_a_diarized_speaker_is_named_in_the_heard_line():
+def test_an_aligned_speaker_is_named_in_the_heard_line():
     base = datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()
-    rec = make_c2(chunk_id="c1", t_start=_iso(base), t_end=_iso(base + 2), text="hi")
-    rec["content"]["segments"] = [
-        {"t_start": _iso(base), "t_end": _iso(base + 1), "text": "hi", "speaker": "ana"},
-        {"t_start": _iso(base + 1), "t_end": _iso(base + 2), "text": "hey",
-         "speaker": None},
-    ]
+    rec = _tr(_iso(base), [
+        {"t_start": _iso(base), "t_end": _iso(base + 1), "value": "hi",
+         "speaker": "speaker-0"},
+        {"t_start": _iso(base + 1), "t_end": _iso(base + 2), "value": "hey",
+         "speaker": None},                          # alignment found no turn
+    ], chunk_id="c1", t_end=_iso(base + 2))
     block = _build([rec]).blocks[0]
-    assert "Heard: ana: hi | hey" in block.text
+    assert "Heard: speaker-0: hi | hey" in block.text
 
 
 def test_only_the_lines_with_content_appear():
     base = datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()
-    block = _build([_caption(_iso(base), "just a caption")]).blocks[0]
+    block = _build([_cap(_iso(base), "just a caption", chunk_id="c1")]).blocks[0]
     assert block.text == "On 2026-07-24, around 12:00–12:00 local time:\nScene: just a caption"
     assert "Heard:" not in block.text and "World text" not in block.text
 
 
-def test_empty_text_never_creates_a_bucket():
+def test_blocks_break_on_a_gap_of_more_than_six_segments():
+    """max_gap_s = 6 * segment_seconds — a camera-off gap starts a new block."""
     base = datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()
-    empty = _caption(_iso(base), "   ", chunk_id="c1")
-    assert _build([empty]).segments == []
+    together = _build([_cap(_iso(base), "a", chunk_id="c1"),
+                       _cap(_iso(base + 50), "b", chunk_id="c2")])
+    assert len(together.blocks) == 1
+    apart = _build([_cap(_iso(base), "a", chunk_id="c1"),
+                    _cap(_iso(base + 80), "b", chunk_id="c2")])
+    assert len(apart.blocks) == 2
+    assert [len(b.seg_ids) for b in apart.blocks] == [1, 1]
+
+
+def test_a_block_holds_at_most_block_segments_segments():
+    base = datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()
+    records = [_cap(_iso(base + 10 * i), f"caption {i}", chunk_id=f"c{i}")
+               for i in range(30)]
+    daylog = _build(records)
+    assert len(daylog.segments) == 30
+    assert [len(b.seg_ids) for b in daylog.blocks] == [12, 12, 6]
+    cited = [sid for b in daylog.blocks for sid in b.seg_ids]
+    assert cited == [s.seg_id for s in daylog.segments]
 
 
 def test_quality_is_none_when_nothing_is_scored_and_the_min_over_what_is():
-    """C2 v0 carries no quality field, so every segment comes out UNSCORED — which is not
-    the same as scoring zero, and continuum's amplification gate deliberately lets None
-    through. When scores do exist a block takes the min over the SCORED segments only; an
-    unscored neighbour must not drag the block to None."""
+    """C2 v1 carries no quality field, so every segment is UNSCORED (null throughout
+    v2 — the c10 v2 schema says so); unscored is not zero. When scores exist a block
+    takes the min over the SCORED segments only."""
     from app.daylog import _render_block
 
     base = datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()
-    daylog = _build([_caption(_iso(base), "a"), _caption(_iso(base + 10), "b"),
-                     _caption(_iso(base + 20), "c")])
+    daylog = _build([_cap(_iso(base), "a", chunk_id="c1"),
+                     _cap(_iso(base + 10), "b", chunk_id="c2"),
+                     _cap(_iso(base + 20), "c", chunk_id="c3")])
     assert [s.quality for s in daylog.segments] == [None, None, None]
     assert len(daylog.blocks) == 1 and daylog.blocks[0].quality is None
 
@@ -518,67 +626,55 @@ def test_quality_is_none_when_nothing_is_scored_and_the_min_over_what_is():
 
 
 def test_the_anchor_line_uses_the_capturing_devices_zone():
-    """The device's zone WINS over the profile fallback: it is the only value that is right
-    when the user was travelling, because it says where they physically were."""
     t = _iso(datetime(2026, 7, 24, 6, 0, 0, tzinfo=UTC).timestamp())
-    block = _build([_caption(t, "a shrine", device_tz="Asia/Tokyo")], home_tz="UTC").blocks[0]
+    block = _build([_cap(t, "a shrine", device_tz="Asia/Tokyo", chunk_id="c1")],
+                   home_tz="UTC").blocks[0]
     assert "15:00" in block.text            # 06:00 UTC -> 15:00 Tokyo
-    assert "06:00" not in block.text        # the UTC reading must NOT appear
+    assert "06:00" not in block.text
 
 
 def test_the_anchor_line_falls_back_to_home_tz_when_the_device_is_silent():
-    """Pre-D17 records (and devices that cannot determine a zone) carry no device_tz; they
-    render in the user's profile home_tz, not in UTC and not by crashing."""
     t = _iso(datetime(2026, 7, 24, 6, 0, 0, tzinfo=UTC).timestamp())
-    block = _build([_caption(t, "a shrine")], home_tz="Asia/Tokyo").blocks[0]
+    block = _build([_cap(t, "a shrine", chunk_id="c1")], home_tz="Asia/Tokyo").blocks[0]
     assert "15:00" in block.text
 
 
 def test_an_unresolvable_device_zone_degrades_instead_of_killing_the_night():
-    """A garbage zone id from one device must never sink a whole training run — it
-    DEGRADES to the profile fallback rather than raising."""
     t = _iso(datetime(2026, 7, 24, 6, 0, 0, tzinfo=UTC).timestamp())
-    block = _build([_caption(t, "a shrine", device_tz="Mars/Olympus_Mons")],
+    block = _build([_cap(t, "a shrine", device_tz="Mars/Olympus_Mons", chunk_id="c1")],
                    home_tz="UTC").blocks[0]
     assert "06:00" in block.text
 
 
 def test_the_first_contributing_record_stamps_the_bucket_zone():
-    """A ~10 s bucket cannot straddle a real zone change, so first-writer-wins is not a
-    lossy choice — it just avoids re-deciding per contributing record."""
     base = datetime(2026, 7, 24, 6, 0, 0, tzinfo=UTC).timestamp()
-    daylog = _build([_caption(_iso(base), "a", device_tz="Asia/Tokyo", chunk_id="c1"),
-                     _caption(_iso(base + 1), "b", device_tz="Europe/Paris", chunk_id="c2")])
+    daylog = _build([_cap(_iso(base), "a", device_tz="Asia/Tokyo", chunk_id="c1"),
+                     _cap(_iso(base + 1), "b", device_tz="Europe/Paris", chunk_id="c2")])
     assert daylog.segments[0].tz == "Asia/Tokyo"
 
 
 def test_travel_two_zones_in_one_window_render_with_different_local_dates():
-    """The case a single per-window timezone structurally cannot express: two blocks
-    captured in different zones each render in their OWN zone, and the DATES differ — which
-    is exactly the failure a wrong tz hides."""
     base = datetime(2026, 7, 24, 6, 0, 0, tzinfo=UTC).timestamp()
-    boarding = _caption(_iso(base), "boarding", device_tz="America/Los_Angeles",
-                        chunk_id="c1")
-    landed = _caption(_iso(base + 10 * 3600), "landed", device_tz="Asia/Tokyo",
-                      chunk_id="c2")
+    boarding = _cap(_iso(base), "boarding", device_tz="America/Los_Angeles",
+                    chunk_id="c1")
+    landed = _cap(_iso(base + 10 * 3600), "landed", device_tz="Asia/Tokyo",
+                  chunk_id="c2")
     blocks = _build([boarding, landed], home_tz="UTC").blocks
     assert len(blocks) == 2, [b.text for b in blocks]
     assert "23:00" in blocks[0].text            # 06:00 UTC -> 23:00 previous day in LA
     assert "01:00" in blocks[1].text            # 16:00 UTC -> 01:00 next day in Tokyo
     assert blocks[0].anchors["date"] == "2026-07-23"
     assert blocks[1].anchors["date"] == "2026-07-25"
-    assert blocks[0].anchors["date"] != blocks[1].anchors["date"]
 
 
 def test_the_travel_case_survives_the_round_trip_through_http(client, store):
-    """...and the same thing end to end, because the zone is resolved at materialization
-    and must not be flattened by the cache or the response model."""
+    """...end to end over the REAL wire — the v1 records POST through the v1-only gate,
+    and the zone is resolved at materialization, not flattened by the cache."""
     store.put_profile("u1", "UTC")
     base = datetime(2026, 7, 24, 6, 0, 0, tzinfo=UTC).timestamp()
     for offset, text, tz, chunk in ((0, "boarding", "America/Los_Angeles", "c1"),
                                     (10 * 3600, "landed", "Asia/Tokyo", "c2")):
-        record = _caption(_iso(base + offset), text, device_tz=tz, chunk_id=chunk,
-                          user_id="u1")
+        record = _cap(_iso(base + offset), text, device_tz=tz, chunk_id=chunk)
         assert client.post("/context/records", json=record).status_code == 200
     _backdate(store)
     window = client.post("/training/windows", json={"user_id": "u1"}).json()
@@ -587,7 +683,6 @@ def test_the_travel_case_survives_the_round_trip_through_http(client, store):
                       params={"user_id": "u1", "window_id": window["window_id"]}).json()
     dates = [b["anchors"]["date"] for b in body["blocks"]]
     assert dates == ["2026-07-23", "2026-07-25"]
-    # home_tz on the body is the FALLBACK zone, which neither block ended up using.
     assert body["home_tz"] == "UTC"
     assert [s["tz"] for s in body["segments"]] == ["America/Los_Angeles", "Asia/Tokyo"]
 
@@ -600,73 +695,74 @@ def test_the_travel_case_survives_the_round_trip_through_http(client, store):
 def _window_with_one_caption(client, store, user_id="u1", home_tz="UTC",
                              text="a red front door") -> dict:
     store.put_profile(user_id, home_tz)
-    record = _caption(_iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()), text,
-                      user_id=user_id, chunk_id="chunk-A")
+    record = _cap(_iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()), text,
+                  user_id=user_id, chunk_id="chunk-A")
     assert client.post("/context/records", json=record).status_code == 200
     _backdate(store)
     return client.post("/training/windows", json={"user_id": user_id}).json()
 
 
 def _window_with_captions(client, store, offsets, *, user_id="u1", home_tz="UTC") -> dict:
-    """A window over one caption per offset (seconds from 2026-07-24T12:00:00Z).
-
-    That base instant is a multiple of BOTH grids under test (10 s and 60 s), so a bucket
-    boundary never falls mid-fixture and the two shapes differ only where the knob says.
-    """
+    """A window over one caption per offset (seconds from 2026-07-24T12:00:00Z) — a
+    multiple of both grids under test (10 s and 60 s)."""
     store.put_profile(user_id, home_tz)
     base = datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()
     for i, offset in enumerate(offsets):
-        record = _caption(_iso(base + offset), f"caption {i:02d}",
-                          user_id=user_id, chunk_id=f"chunk-{i:02d}")
+        record = _cap(_iso(base + offset), f"caption {i:02d}",
+                      user_id=user_id, chunk_id=f"chunk-{i:02d}")
         assert client.post("/context/records", json=record).status_code == 200
     _backdate(store)
     return client.post("/training/windows", json={"user_id": user_id}).json()
 
 
-def test_the_daylog_fetch_serves_a_valid_c10_body(client, store):
+def test_the_daylog_fetch_serves_a_valid_c10_v2_body(client, store):
     window = _window_with_one_caption(client, store)
     response = client.get("/training/daylog",
                           params={"user_id": "u1", "window_id": window["window_id"]})
     assert response.status_code == 200, response.text
     body = response.json()
-    assert schemas.validate_c10(body) == []
-    assert body["contract"] == "C10" and body["version"] == "1"
+    assert schemas.validate_c10(body) == []          # the v2 schema is the gate now
+    assert body["contract"] == "C10" and body["version"] == "2"
     assert body["user_id"] == "u1"
     assert body["window_id"] == window["window_id"]
-    # The window's INGEST bounds, verbatim from the ledger.
     assert (body["t_start"], body["t_end"]) == (window["t_start"], window["t_end"])
-    assert body["daylog_format_version"] == DAYLOG_FORMAT_VERSION
-    # The body stamps the recipe the service is CONFIGURED with, whatever that is —
-    # asserting a version literal here made this test fail on a legitimate re-pin
-    # (v1.0 -> v1.1, 2026-07-27) without anything being wrong.
-    assert body["recipe_id"] == daylog_recipe_id()
+    # The bumped stamps (D28): the slot-walk format and its forked recipe.
+    assert body["daylog_format_version"] == DAYLOG_FORMAT_VERSION == "2"
+    assert body["recipe_id"] == daylog_recipe_id() == "consolidation-v2.0"
     assert body["home_tz"] == "UTC"
     assert body["content_fingerprint"]
     assert body["blocks"][0]["text"].endswith("Scene: a red front door")
 
 
+def test_the_bumped_recipe_renders_under_the_same_knobs_it_stamps(client, store):
+    """consolidation-v2.0 forks v1.1 with byte-identical corpus knobs; the stamp and
+    the render stay the same decision (10 s buckets, 12-segment blocks)."""
+    window = _window_with_captions(client, store, [0, 20, 40])
+    body = client.get("/training/daylog",
+                      params={"user_id": "u1", "window_id": window["window_id"]}).json()
+    assert body["recipe_id"] == "consolidation-v2.0"
+    assert len(body["segments"]) == 3               # 10 s grid, not some new default
+    assert recipe_segmentation("consolidation-v2.0") == (DEFAULT_SEGMENT_SECONDS,
+                                                         DEFAULT_BLOCK_SEGMENTS)
+
+
 def test_home_tz_on_the_body_is_the_fallback_zone_actually_used(client, store):
-    """The D17 follow-up this field closes: without it a night rendered under the wrong
-    profile zone is unfalsifiable after the fact."""
     window = _window_with_one_caption(client, store, home_tz="Asia/Tokyo")
     body = client.get("/training/daylog",
                       params={"user_id": "u1", "window_id": window["window_id"]}).json()
     assert body["home_tz"] == "Asia/Tokyo"
-    # ...and it is the zone the block actually rendered in (no device_tz on the record).
     assert body["blocks"][0]["text"].startswith("On 2026-07-24, around 21:00")
 
 
 def test_an_empty_window_is_an_empty_daylog_not_an_error(client, store):
-    """A window with no records is a legitimate, servable day-log — the cycle reads it and
-    closes with skipped_no_data, which deliberately does NOT advance the watermark."""
     store.put_profile("u1", "UTC")
-    old = _caption("2026-07-01T12:00:00Z", "ancient", chunk_id="chunk-old", user_id="u1")
+    old = _cap("2026-07-01T12:00:00Z", "ancient", chunk_id="chunk-old")
     assert client.post("/context/records", json=old).status_code == 200
     with store._connect() as conn:
-        conn.execute("UPDATE context_records SET ingest_time = '2026-07-01T12:00:00Z'")
+        conn.execute("UPDATE context_records SET created_at = '2026-07-01T12:00:00Z', "
+                     "updated_at = '2026-07-01T12:00:00Z'")
         conn.commit()
     window = store.open_training_window("u1", now=datetime(2026, 7, 2, 0, 0, 0, tzinfo=UTC))
-    # Force the window's floor past the only record so the range is genuinely empty.
     with store._connect() as conn:
         conn.execute("UPDATE training_windows SET t_start = '2026-07-01T13:00:00Z'")
         conn.commit()
@@ -686,42 +782,47 @@ def test_the_daylog_is_materialized_once_and_cached(client, store):
         cached = conn.execute("SELECT * FROM day_logs").fetchall()
     assert len(cached) == 1
     assert cached[0]["content_fingerprint"] == first["content_fingerprint"]
+    assert cached[0]["daylog_format_version"] == "2"
 
     second = client.get("/training/daylog", params=params).json()
     assert second == first
 
 
-def test_the_cache_is_invalidated_when_a_record_inside_the_window_is_rewritten(client, store):
-    """The one hole a cache over an upsert has: a SAME-VERSION reprocess rewrites a
-    record's text in place while deliberately preserving its ingest_time, so it stays
-    inside a window that may already have been rendered and served."""
-    window = _window_with_one_caption(client, store, text="a blurry doorway")
-    params = {"user_id": "u1", "window_id": window["window_id"]}
-    before = client.get("/training/daylog", params=params).json()
+def test_a_byte_different_reprocess_dissolves_out_of_the_rendered_window(store):
+    """D27 + R2, end to end at the store level: a same-version reprocess that changes
+    bytes BUMPS updated_at, so the record LEAVES the already-rendered window —
+    put_context drops the affected caches (both windows), the re-materialized old
+    window excludes the record (it dissolves out, D18), and the NEXT window picks it
+    up. Trained bodies are history, not edited."""
+    store.put_profile("u1", "UTC")
+    t = "2026-07-24T02:00:00Z"
+    first = _cap(t, "a blurry doorway", chunk_id="chunk-A")
+    _land(store, first, "2026-07-24T02:00:00Z")
+    window_a = store.open_training_window(
+        "u1", now=datetime(2026, 7, 24, 4, 0, 0, tzinfo=UTC))
+    before = materialize_daylog(store, "u1", window_a["window_id"])
     assert "a blurry doorway" in before["blocks"][0]["text"]
 
-    # Same record_id (deterministic on chunk_id + pipeline_version), same version, better
-    # text — an in-place correction, which is the upsert branch of put_context.
-    fixed = _caption(_iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()),
-                     "a red front door", chunk_id="chunk-A", user_id="u1")
-    assert client.post("/context/records", json=fixed).status_code == 200
+    fixed = _cap(t, "a red front door", chunk_id="chunk-A")
+    assert fixed["record_id"] == first["record_id"]
+    store.put_context(fixed)                      # byte-different -> updated_at bumps
+    _repin(store, fixed["record_id"], "2026-07-24T05:00:00Z")
 
-    after = client.get("/training/daylog", params=params).json()
-    assert "a red front door" in after["blocks"][0]["text"]
-    assert after["content_fingerprint"] != before["content_fingerprint"]
+    again = materialize_daylog(store, "u1", window_a["window_id"])
+    assert again["blocks"] == []                  # cache dropped AND dissolved out
+    assert again["content_fingerprint"] != before["content_fingerprint"]
+
+    store.close_training_window("u1", window_a["window_id"], "published")
+    window_b = store.open_training_window(
+        "u1", now=datetime(2026, 7, 24, 6, 1, 0, tzinfo=UTC))
+    body = materialize_daylog(store, "u1", window_b["window_id"])
+    rendered = " ".join(b["text"] for b in body["blocks"])
+    assert "a red front door" in rendered
+    assert "a blurry doorway" not in rendered
 
 
 def test_a_corrected_home_tz_re_materializes_rather_than_serving_the_typo_forever(
         client, store):
-    """`home_tz` is a RENDER INPUT, not a note on the row.
-
-    It is the fallback zone for every record that carries no `device_tz`, so it fixes the
-    anchor line's local DATE — the one thing a day-log asserts that nothing downstream can
-    re-derive. A day-log rendered under an operator's typo'd zone (Pacific/Kiritimati,
-    UTC+14, one keystroke from nothing in particular) must not keep serving that date after
-    the profile is corrected: format_version and recipe_id are compared for exactly this
-    reason and home_tz is the third input of the same kind.
-    """
     window = _window_with_one_caption(client, store, home_tz="Pacific/Kiritimati")
     params = {"user_id": "u1", "window_id": window["window_id"]}
 
@@ -736,17 +837,12 @@ def test_a_corrected_home_tz_re_materializes_rather_than_serving_the_typo_foreve
     assert corrected["blocks"][0]["anchors"]["date"] == "2026-07-24"
     assert corrected["blocks"][0]["text"].startswith("On 2026-07-24, around 08:00")
     assert corrected["content_fingerprint"] != typo["content_fingerprint"]
-    # The cache was REPLACED, not shadowed: the row now records the zone actually used.
     with store._connect() as conn:
         rows = conn.execute("SELECT home_tz FROM day_logs").fetchall()
     assert [r["home_tz"] for r in rows] == ["America/New_York"]
 
 
 def test_a_cached_daylog_still_serves_after_the_profile_disappears(client, store):
-    """The zone is compared only when there IS a current one to compare against: the
-    profile is required to BUILD and not to SERVE. A materialized night already records the
-    zone it rendered under, so losing the profile afterwards must not retroactively make it
-    unreadable — and must not silently re-render it either."""
     window = _window_with_one_caption(client, store, home_tz="Asia/Tokyo")
     params = {"user_id": "u1", "window_id": window["window_id"]}
     first = client.get("/training/daylog", params=params).json()
@@ -778,18 +874,13 @@ def test_a_format_version_bump_re_materializes_rather_than_serving_the_old_diale
 
 def test_the_recipe_id_is_service_config_never_a_request_parameter(client, store,
                                                                    monkeypatch):
-    """recipe_id is GLOBAL and versioned and it enters continuum's stage keys, so a caller
-    who could choose it per fetch could fork the id per user."""
     monkeypatch.setenv("STORAGE_DAYLOG_RECIPE_ID", "consolidation-test-1min-v1.0")
     window = _window_with_one_caption(client, store)
     params = {"user_id": "u1", "window_id": window["window_id"]}
     body = client.get("/training/daylog", params=params).json()
     assert body["recipe_id"] == "consolidation-test-1min-v1.0"
-    # ...and the stamp is a fact about the RENDER, not a label beside it: this recipe
-    # declares corpus.segment_seconds=60, so the buckets are 60 s wide and not the 10 s of
-    # the module constants. (Asserting only the id is what let the two drift apart.)
+    # ...and the stamp is a fact about the RENDER: this recipe declares 60 s buckets.
     assert body["segments"][0]["t_end"] == "2026-07-24T12:01:00+00:00"
-    # Passing it as a query parameter is ignored, not honoured.
     other = client.get("/training/daylog",
                        params={**params, "recipe_id": "something-else"}).json()
     assert other["recipe_id"] == "consolidation-test-1min-v1.0"
@@ -797,15 +888,6 @@ def test_the_recipe_id_is_service_config_never_a_request_parameter(client, store
 
 def test_the_segment_grid_comes_from_the_stamped_recipes_corpus_knobs(
         client, store, monkeypatch):
-    """The body stamps `recipe_id`, so the render must USE that recipe's `corpus` knobs.
-
-    continuum keys its journal stage on (recipe_id, content_fingerprint) and records
-    recipe_id in C5 lineage, so a night rendered on a 10 s grid while claiming a recipe
-    that declares 60 s is audited as trained under a recipe it was not trained under — and
-    nothing downstream can tell afterwards. consolidation-test-1min-v1.0 declares
-    segment_seconds=60: three captions 20 s apart are ONE bucket under it and THREE under
-    consolidation-v1.0's 10 s grid.
-    """
     monkeypatch.setenv("STORAGE_DAYLOG_RECIPE_ID", "consolidation-test-1min-v1.0")
     window = _window_with_captions(client, store, [0, 20, 40])
     params = {"user_id": "u1", "window_id": window["window_id"]}
@@ -817,8 +899,7 @@ def test_the_segment_grid_comes_from_the_stamped_recipes_corpus_knobs(
         "2026-07-24T12:00:00+00:00", "2026-07-24T12:01:00+00:00")
     assert body["segments"][0]["caption"] == ["caption 00", "caption 01", "caption 02"]
 
-    # The control, over the SAME records: re-pin the default recipe and the 10 s grid comes
-    # back. (It re-materializes because recipe_id no longer matches the cached row.)
+    # The control, over the SAME records: the default (v2.0) recipe's 10 s grid.
     monkeypatch.delenv("STORAGE_DAYLOG_RECIPE_ID")
     default = client.get("/training/daylog", params=params).json()
     assert default["recipe_id"] == daylog_recipe_id()
@@ -828,9 +909,6 @@ def test_the_segment_grid_comes_from_the_stamped_recipes_corpus_knobs(
 
 def test_the_block_cap_comes_from_the_stamped_recipes_corpus_knobs(
         client, store, monkeypatch):
-    """The other `corpus` knob, on the same rule: block_segments=5 in the test recipe, 12
-    in consolidation-v1.0. Eight captions a minute apart are 5+3 under the first and a
-    single block under the second."""
     monkeypatch.setenv("STORAGE_DAYLOG_RECIPE_ID", "consolidation-test-1min-v1.0")
     window = _window_with_captions(client, store, [60 * i for i in range(8)])
     params = {"user_id": "u1", "window_id": window["window_id"]}
@@ -845,10 +923,6 @@ def test_the_block_cap_comes_from_the_stamped_recipes_corpus_knobs(
 
 def test_an_unresolvable_recipe_refuses_instead_of_falling_back_to_the_constants(
         client, store, monkeypatch):
-    """FAIL LOUDLY, because the silent fallback IS the bug: rendering under the module
-    constants while stamping a recipe id we could not even read produces an artifact whose
-    provenance is wrong and uncheckable. 500 because recipe_id is service config and never
-    a request parameter — the caller cannot fix this."""
     monkeypatch.setenv("STORAGE_DAYLOG_RECIPE_ID", "no-such-recipe-v9.9")
     window = _window_with_one_caption(client, store)
     params = {"user_id": "u1", "window_id": window["window_id"]}
@@ -859,18 +933,13 @@ def test_an_unresolvable_recipe_refuses_instead_of_falling_back_to_the_constants
     assert detail["error"] == "day-log recipe cannot be resolved"
     assert detail["recipe_id"] == "no-such-recipe-v9.9"
 
-    # Nothing was cached under a recipe that does not exist, so re-pinning a real one is
-    # all it takes to recover.
     with store._connect() as conn:
         assert conn.execute("SELECT COUNT(*) AS n FROM day_logs").fetchone()["n"] == 0
-    monkeypatch.setenv("STORAGE_DAYLOG_RECIPE_ID", "consolidation-v1.0")
+    monkeypatch.setenv("STORAGE_DAYLOG_RECIPE_ID", "consolidation-v2.0")
     assert client.get("/training/daylog", params=params).status_code == 200
 
 
 def test_a_recipe_without_usable_corpus_knobs_refuses(client, store, monkeypatch, tmp_path):
-    """A registry that answers is not the same as a recipe that segments. A recipe with no
-    `corpus` block — or with a knob that cannot divide an epoch grid — is refused rather
-    than quietly completed from the constants, for the same reason as an unknown id."""
     synthetic = tmp_path / "synthetic-recipes"
     synthetic.mkdir()
     artifact = synthetic / "knobless-v1.0.json"
@@ -891,19 +960,15 @@ def test_a_recipe_without_usable_corpus_knobs_refuses(client, store, monkeypatch
         materialize_daylog(store, "u1", window["window_id"])
     assert refused.value.detail["knob"] == "corpus.segment_seconds"
 
-    # ...and against the REAL registry the knobs are read verbatim, both of them — which
-    # is also what keeps the module constants honest as build_daylog's defaults.
     monkeypatch.delenv("STORAGE_RECIPES_DIR")
     assert recipe_segmentation("consolidation-v1.0") == (DEFAULT_SEGMENT_SECONDS,
                                                          DEFAULT_BLOCK_SEGMENTS)
 
 
 def test_the_fingerprint_is_stable_across_renders_and_moves_with_content(client, store):
-    """content_fingerprint is a journal stage key, compared only to ITSELF across runs."""
     window = _window_with_one_caption(client, store)
     params = {"user_id": "u1", "window_id": window["window_id"]}
     body = client.get("/training/daylog", params=params).json()
-    # Re-deriving it from the served body reproduces it exactly (nothing hidden inside).
     from app.daylog import Block, DayLog, Segment
     rebuilt = DayLog(
         window_id=body["window_id"], user_id=body["user_id"], home_tz=body["home_tz"],
@@ -914,10 +979,8 @@ def test_the_fingerprint_is_stable_across_renders_and_moves_with_content(client,
 
 
 def test_a_user_without_a_profile_is_refused_loudly(client, store):
-    """409, not a UTC render. There is no server-side default timezone anywhere in the
-    system, so substituting one would anchor a whole night to the wrong local date and
-    nothing downstream could tell."""
-    record = _caption(_iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()), "hi")
+    record = _cap(_iso(datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()), "hi",
+                  user_id="user-1")
     assert client.post("/context/records", json=record).status_code == 200
     _backdate(store)
     window = client.post("/training/windows", json={"user_id": "user-1"}).json()
@@ -926,7 +989,6 @@ def test_a_user_without_a_profile_is_refused_loudly(client, store):
                           params={"user_id": "user-1", "window_id": window["window_id"]})
     assert response.status_code == 409
     assert response.json()["detail"]["error"] == "no profile"
-    # Nothing was cached, so writing the profile is all it takes to recover.
     store.put_profile("user-1", "UTC")
     assert client.get("/training/daylog",
                       params={"user_id": "user-1",
@@ -941,9 +1003,6 @@ def test_an_unknown_window_is_a_404(client, store):
 
 
 def test_a_cross_user_fetch_fails_closed(client, store):
-    """window_id is a PER-USER token derived from an instant, so an id-only fetch would be
-    a cross-user read of somebody's whole day. Isolation fails closed: it 404s rather than
-    revealing that the id names someone else's window."""
     window = _window_with_one_caption(client, store, user_id="u1")
     store.put_profile("u2", "UTC")
     response = client.get("/training/daylog",
@@ -960,10 +1019,8 @@ def test_a_malformed_window_id_is_a_422(client, store):
 
 
 def test_the_day_log_table_appears_on_a_preexisting_db(tmp_path):
-    """The D17 migration idiom: a live DB created before this table existed must gain it.
-    New TABLES and INDEXES ride in _SCHEMA alone (CREATE ... IF NOT EXISTS runs on a live
-    DB); only new COLUMNS on existing tables need a _MIGRATIONS entry, and this adds none.
-    """
+    """The migration idiom: new TABLES and INDEXES ride in _SCHEMA (after the D27
+    pre-step renames the axis columns); only new COLUMNS need a _MIGRATIONS entry."""
     db = tmp_path / "legacy.db"
     conn = sqlite3.connect(db)
     conn.executescript(
@@ -982,4 +1039,116 @@ def test_the_day_log_table_appears_on_a_preexisting_db(tmp_path):
             "SELECT name FROM sqlite_master WHERE type = 'index'")}
     assert "day_logs" in tables
     assert "idx_day_logs_user_range" in indexes
-    assert "idx_context_user_ingest" in indexes
+    assert "idx_context_user_updated" in indexes
+
+
+# =====================================================================================
+# PART 4 — the heal×window matrix (Stage D close-out law: all THREE shapes)
+# =====================================================================================
+#
+# The DP-side inputs are pinned by Stage D's `test_heal_seam.py`: a still-holey heal
+# re-POSTs BYTE-IDENTICAL wire bytes; a filling heal changes bytes; and a heal can move
+# a hole between slots (byte-different but NOT fuller — the shape a literal
+# "fuller-wins" reading would miss). These tests replay exactly those shapes against
+# the D27 byte-compare and the v2 renderer, deterministically (injected ledger clock;
+# the heal's real-clock bump re-pinned into a known window range).
+
+_HEAL_PV = "asr.v1-mock.v1+diarize.v1-mock.v1+speaker_align.v1-mock.v1"
+
+
+def _open_window_a(store) -> dict:
+    return store.open_training_window(
+        "u1", now=datetime(2026, 7, 24, 4, 0, 0, tzinfo=UTC))
+
+
+def _next_window(store, window_a) -> dict:
+    store.close_training_window("u1", window_a["window_id"], "published")
+    return store.open_training_window(
+        "u1", now=datetime(2026, 7, 24, 6, 1, 0, tzinfo=UTC))
+
+
+def test_heal_shape_1_a_filling_heal_re_windows_and_renders_the_new_truth(store):
+    """GREEN HEAL FILLS A HOLE: byte-different → updated_at bumps → the record leaves
+    the rendered window and the NEXT window renders the healed (speaker-aligned)
+    truth. Until the heal, the ruled asr fallback carried the speech unlabeled."""
+    store.put_profile("u1", "UTC")
+    t = "2026-07-24T02:00:00Z"
+    holey = _v1(t, {"asr": slot_asr("hello there")}, chunk_id="chunk-A",
+                pipeline_version=_HEAL_PV)           # transcript attempted, holed
+    _land(store, holey, "2026-07-24T02:00:00Z")
+    window_a = _open_window_a(store)
+    before = materialize_daylog(store, "u1", window_a["window_id"])
+    assert "Heard: hello there" in before["blocks"][0]["text"]   # fallback, spk null
+
+    healed = _v1(t, {"asr": slot_asr("hello there"),
+                     "transcript": slot_transcript([
+                         {"t_start": t, "t_end": t, "value": "hello there",
+                          "speaker": "speaker-0"}])},
+                 chunk_id="chunk-A", pipeline_version=_HEAL_PV)
+    assert healed["record_id"] == holey["record_id"]  # same identity: an upsert, L3
+    store.put_context(healed)                         # byte-different -> bump
+    _repin(store, healed["record_id"], "2026-07-24T05:00:00Z")
+
+    dissolved = materialize_daylog(store, "u1", window_a["window_id"])
+    assert dissolved["blocks"] == []                  # window A: dissolved out
+
+    window_b = _next_window(store, window_a)
+    body = materialize_daylog(store, "u1", window_b["window_id"])
+    assert "Heard: speaker-0: hello there" in body["blocks"][0]["text"]
+
+
+def test_heal_shape_2_a_byte_identical_still_holey_repost_does_not_re_window(store):
+    """STILL-HOLEY RE-POST: DP re-POSTs byte-identical bytes (Stage D pins the wire),
+    the D27 upsert touches nothing, the cached day-log SURVIVES and the record stays
+    in its window. No re-render, no fingerprint movement, no cache loss."""
+    store.put_profile("u1", "UTC")
+    t = "2026-07-24T02:00:00Z"
+    holey = _v1(t, {"asr": slot_asr("hello there")}, chunk_id="chunk-A",
+                pipeline_version=_HEAL_PV)
+    _land(store, holey, "2026-07-24T02:00:00Z")
+    window_a = _open_window_a(store)
+    before = materialize_daylog(store, "u1", window_a["window_id"])
+
+    store.put_context(holey)                          # the still-holey heal re-POST
+    with store._connect() as conn:
+        row = conn.execute(
+            "SELECT updated_at FROM context_records WHERE record_id = ?",
+            (holey["record_id"],)).fetchone()
+        cached = conn.execute("SELECT COUNT(*) AS n FROM day_logs").fetchone()["n"]
+    assert row["updated_at"] == "2026-07-24T02:00:00Z"   # unmoved
+    assert cached == 1                                    # cache NOT invalidated
+
+    again = materialize_daylog(store, "u1", window_a["window_id"])
+    assert again == before                                # served, byte-for-byte
+
+
+def test_heal_shape_3_byte_different_but_not_fuller_re_windows_and_shows_the_new_truth(store):
+    """THE SHAPE A LITERAL READING WOULD MISS: the hole MIGRATES between slots — the
+    heal's re-run filled ocr while the captioner was out, so caption regressed. Not
+    fuller, but byte-different: it bumps, re-windows, and the renderer shows the new
+    truth (R3: blind replace; the ledger, not the record, carries hole truth)."""
+    store.put_profile("u1", "UTC")
+    t = "2026-07-24T02:00:00Z"
+    pv = "clipcap.v1-mock.v1+clipprep.v1-mock.v1+screentext.v1-mock.v1"
+    first = _v1(t, {"caption": slot_caption("a desk by a window")},
+                chunk_id="chunk-A", modality="video", pipeline_version=pv)
+    _land(store, first, "2026-07-24T02:00:00Z")
+    window_a = _open_window_a(store)
+    before = materialize_daylog(store, "u1", window_a["window_id"])
+    assert "Scene: a desk by a window" in before["blocks"][0]["text"]
+    assert "World text" not in before["blocks"][0]["text"]
+
+    migrated = _v1(t, {"ocr": slot_ocr("EXIT")},
+                   chunk_id="chunk-A", modality="video", pipeline_version=pv)
+    assert migrated["record_id"] == first["record_id"]
+    store.put_context(migrated)                       # byte-different, NOT fuller
+    _repin(store, migrated["record_id"], "2026-07-24T05:00:00Z")
+
+    dissolved = materialize_daylog(store, "u1", window_a["window_id"])
+    assert dissolved["blocks"] == []
+
+    window_b = _next_window(store, window_a)
+    body = materialize_daylog(store, "u1", window_b["window_id"])
+    rendered = " ".join(b["text"] for b in body["blocks"])
+    assert "World text (OCR): EXIT" in rendered
+    assert "a desk by a window" not in rendered       # the regression rendered honestly

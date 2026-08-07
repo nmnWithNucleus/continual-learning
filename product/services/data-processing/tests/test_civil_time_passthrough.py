@@ -60,6 +60,21 @@ def test_civil_time_does_not_change_record_id(client):
     assert res_a.json()["record_ids"] == res_b.json()["record_ids"]
 
 
+def test_device_clock_reaches_c2_source_verbatim(client):
+    """The D17 trio's third member. v0's C2 schema omitted device_clock (a
+    standing prose/schema gap); v1 closes it — the flag that keeps clock skew
+    detectable rides source{} verbatim like its siblings."""
+    c1 = make_c1(client.fake_storage)
+    c1["device_clock"] = "unsynced"
+    for rec in _records(client, c1):
+        assert rec["source"]["device_clock"] == "unsynced"
+
+
+def test_absent_device_clock_stays_absent(client):
+    for rec in _records(client, make_c1(client.fake_storage)):
+        assert "device_clock" not in rec["source"]
+
+
 def test_unknown_envelope_fields_are_still_rejected(client):
     """extra='forbid' still holds — we widened C1 by exactly two fields, we did
     not open the envelope up."""

@@ -1,0 +1,84 @@
+{
+  "tags": [
+    {
+      "label": "Speech",
+      "score": 0.6799216866493225
+    },
+    {
+      "label": "Conversation",
+      "score": 0.12533746659755707
+    },
+    {
+      "label": "Female speech, woman speaking",
+      "score": 0.06866244971752167
+    },
+    {
+      "label": "Narration, monologue",
+      "score": 0.03376559168100357
+    },
+    {
+      "label": "Speech synthesizer",
+      "score": 0.02726951614022255
+    },
+    {
+      "label": "Male speech, man speaking",
+      "score": 0.011449320241808891
+    },
+    {
+      "label": "Sigh",
+      "score": 0.009429888799786568
+    },
+    {
+      "label": "Gasp",
+      "score": 0.006441907491534948
+    },
+    {
+      "label": "Inside, small room",
+      "score": 0.005407386459410191
+    },
+    {
+      "label": "Zipper (clothing)",
+      "score": 0.002663468476384878
+    },
+    {
+      "label": "Breathing",
+      "score": 0.002026370959356427
+    },
+    {
+      "label": "Inside, large room or hall",
+      "score": 0.0019500695634633303
+    },
+    {
+      "label": "Groan",
+      "score": 0.001249533612281084
+    },
+    {
+      "label": "Writing",
+      "score": 0.0011695006396621466
+    },
+    {
+      "label": "Snort",
+      "score": 0.000838813662994653
+    },
+    {
+      "label": "Animal",
+      "score": 0.0007973647443577647
+    },
+    {
+      "label": "Hiccup",
+      "score": 0.0007202689885161817
+    },
+    {
+      "label": "Child speech, kid speaking",
+      "score": 0.0006897136336192489
+    },
+    {
+      "label": "Oink",
+      "score": 0.0005543138249777257
+    },
+    {
+      "label": "Television",
+      "score": 0.0004942267551086843
+    }
+  ]
+}
