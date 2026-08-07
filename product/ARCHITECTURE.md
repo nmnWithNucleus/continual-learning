@@ -5,9 +5,8 @@
 > This is an evolving first version, not a frozen spec — changes to §Contracts route through
 > a founders' session and a note in [HANDOFF.md](HANDOFF.md).
 
-**Last updated:** 2026-08-06 (C2 v1 + C10 v2 cut on branch `dp-rebuild-v1` at rebuild Stage A;
-decision rows ratified 2026-08-06, [D24](DECISIONS.md)/[D28](DECISIONS.md); C10 card's heal
-sentence aligned to the contract's byte-different phrasing at the Stage D close-out)
+**Last updated:** 2026-08-07 (the C2 and C10 cards state the running contracts;
+[D24](DECISIONS.md)/[D28](DECISIONS.md))
 
 ---
 
@@ -138,8 +137,7 @@ Terms this repo coined. Nobody arrives knowing them.
 | `/context` | The durable store of processed records — what was said, seen and read, timestamped. |
 | **record** | One processed unit in `/context`: **exactly one per chunk** (C2 v1), built from `content.slots` — a transcript, a caption and an OCR pass are *slots* in the same record, not separate records. |
 | **dialect** | *Which processing produced this record* — the composed `pipeline_version`. The trainer must see only one dialect per chunk. |
-| **discriminator** | *Retired.* Under v0 it told a chunk's several records apart; C2 v1 is one record per chunk, so it is gone (why it existed, and what killed it: [data-processing §Condensed history](services/data-processing/CHARTER.md#condensed-history--the-v0-governance-the-slot-law-replaced)). |
-| **window** | The span one night's training covers: `[last_trained_t, now−δ)` on storage's ingest axis. |
+| **window** | The span one night's training covers: `[last_trained_t, now−δ)` on storage's `updated_at` axis. |
 | **watermark** | `last_trained_t` — how far this user's adapter has actually been trained. Moves only on a publish. |
 | **day-log** | The rendered account of a window that the trainer reads: anchored scene blocks. |
 | **segment** | A ~10 s bucket of a day-log, holding whatever captions, transcripts and OCR fell inside it. |
@@ -158,7 +156,7 @@ Terms this repo coined. Nobody arrives knowing them.
 | ID | Producer → Consumer | Carries | Status | Card |
 |---|---|---|---|---|
 | **C1** | recording → data-processing | Every captured chunk's metadata, and where its bytes landed | `built` | [↓](#c1--the-raw-stream-envelope) |
-| **C2** | data-processing → storage `/context` | One processed record: what was said, seen or read, and when | `built` (v1, live since the Stage F cutover) | [↓](#c2--the-processed-record) |
+| **C2** | data-processing → storage `/context` | One processed record: what was said, seen or read, and when | `built` and live | [↓](#c2--the-processed-record) |
 | **C3** | input (QueryBuilder) → inference | A user's request, turned into model input | `built` | [↓](#c3--the-userprompt) |
 | **C4** | inference → storage `/sessions` | The full record of one turn, traces included | `built` | [↓](#c4--the-turn-record) |
 | **C5** | continuum → model directory | A newly trained adapter, and whether it may serve | `built` | [↓](#c5--the-adapter-publish) |
@@ -166,7 +164,7 @@ Terms this repo coined. Nobody arrives knowing them.
 | **C7** | inference ↔ mentors | Questions to frontier models, and everything they answer with | `designed` | [↓](#c7--the-mentor-protocol) |
 | **C8** | QueryBuilder ↔ data-processing | The capture pipeline, offered synchronously to a live request | `designed` | [↓](#c8--the-shared-pipeline-api) |
 | **C9** | inference → output | The answer, streaming, and what happened at the end of the turn | `built` | [↓](#c9--the-response-stream) |
-| **C10** | storage → continuum | Tonight's training window, and the day-log rendered over it | `built` (v2, live since the Stage F cutover) | [↓](#c10--the-training-window-read) |
+| **C10** | storage → continuum | Tonight's training window, and the day-log rendered over it | `built` and live | [↓](#c10--the-training-window-read) |
 | **C11** | storage → input (QueryBuilder) | What the user did today, before tonight's training reaches the weights | `designed` | [↓](#c11--the-recent-context-read) |
 | **C12** | storage → continuum | Per-user policy the system reads to decide its own behaviour | `built` | [↓](#c12--the-user-profile-read) |
 | **C13** | storage → continuum + inference | Versioned recipes and gate policies, fetched by id | `built` | [↓](#c13--the-recipe-registry) |
@@ -245,18 +243,15 @@ Envelope leg  recording ──push──▶ data-processing
 
 ### C2 — the processed record
 
-> **data-processing → storage `/context`** · v1 `built` and **live since the Stage F cutover**
-> (2026-08-07), ratified 2026-08-06 ([D24](DECISIONS.md)) · v0 retired at the cutover (records
-> wiped fresh-forward, OD-2) · [D10](DECISIONS.md) · [D17](DECISIONS.md) · [D19](DECISIONS.md)
-> · schemas [c2_processed_record.v1.json](contracts/c2_processed_record.v1.json) ·
-> [c2_processed_record.v0.json](contracts/c2_processed_record.v0.json) (archived)
+> **data-processing → storage `/context`** · `built` and live · ratified 2026-08-06
+> ([D24](DECISIONS.md)) · [D10](DECISIONS.md) · [D17](DECISIONS.md) · [D19](DECISIONS.md)
+> · schema [c2_processed_record.v1.json](contracts/c2_processed_record.v1.json)
 
 **In one line.** Data-processing writes down what a chunk actually contained — the words spoken, the
 scene described, the text on screen, with the timestamps that let separate devices be lined up
 against each other.
 
-**Shape** — v1, the wire the service emits since the Stage F cutover. The v0 schema is archived;
-its shape and why it was replaced are in §How it got here.
+**Shape** — the wire data-processing emits.
 
 ```
 {contract:"C2", version:"1", record_id, user_id, modality,
@@ -270,7 +265,7 @@ its shape and why it was replaced are in §How it got here.
 
 - Exactly **one** record per `(chunk_id, pipeline_version)` — Slot Law L2, schema-hard.
   `record_id = sha256(chunk_id ␀ pipeline_version)`, NUL-joined, hex, a blind `/context` upsert.
-  There is no discriminator; one-record-per-chunk is why dropping it is safe.
+  Two components are enough: one record per chunk leaves no siblings to tell apart.
 - A `pipeline_version` bump **forks** a new record rather than rewriting the old one. Reprocessing
   is version-forward; records are never edited in place.
 - `content.slots` is a map keyed by slot name: one producing stage per slot, written once, never
@@ -284,21 +279,17 @@ its shape and why it was replaced are in §How it got here.
   ordering and range-query axis. Sub-slot `splits[]` carry absolute RFC3339 times for C10's
   sub-span bucketing.
 - Storage-side timestamps are **not** in C2, and no DP wall-clock is either: storage assigns
-  `created_at`/`updated_at` ([D27](DECISIONS.md); `ingest_time` under the running v0), and
+  `created_at`/`updated_at` ([D27](DECISIONS.md)), and
   `processed_at` was dropped (ruled 2026-08-06) because a wall-clock field inside the record
   breaks the byte-compare and T-1. Processing latency is a `/metrics` matter.
 - Reading a record is Slot Law L11: stage in the dialect + slot absent = attempted and failed;
   slot present with empty value = honest empty claim; stage not in the dialect = never attempted.
-- **v1 is the wire.** The service emits v1 since the Stage F cutover (2026-08-07); v0 records were
-  wiped fresh-forward at the cutover (OD-2) and `/raw` was kept — bytes are sacred.
-
 **Why it's this way**
 
 - **Timestamps are the spine.** Concurrent activity captured by different devices has to be
   alignable, which is what makes a day-log possible at all.
-- **One record per chunk replaces governance with structure.** The emission law's five tests and
-  five riders existed to police multi-record fan-out and in-place mutation; delete those
-  capabilities and the invariants hold by construction.
+- **Structure beats governance.** With no fan-out and no in-place mutation to police, the
+  invariants hold by construction rather than by a procedure somebody has to run.
 - A slot written by exactly one stage and never edited is what makes the record's honesty
   legible: hole, empty claim and never-attempted are distinguishable from the record plus its
   dialect alone.
@@ -308,53 +299,25 @@ its shape and why it was replaced are in §How it got here.
 **Watch out for**
 
 - **Mirrors must move with the schema.** DP's and storage's pydantic mirrors are `extra="forbid"`
-  — the trap D17 hit. A field added to the schema but not to both mirrors fails closed. The v1
-  mirrors were cut at Stage C (`schemas.py` rewrite: one change, four parts).
+  — the trap D17 hit. A field added to the schema but not to both mirrors fails closed, so the
+  schema, both mirrors and their tests move as one change.
 - A record whose chunk carried no zone simply omits those fields. Absence is normal, not an error.
-- `enrichments` and `discriminator` **do not exist in v1**, and neither does `content.kind`. Do
-  not re-add them additively; the first two are named on the charter §Slot Law dead-concepts
-  list, and `content.kind` died with the per-kind record model it labeled.
-- At cutover, v0 records are wiped and re-collected, never migrated (OD-2, the D19 license);
-  `/raw` is kept — bytes are sacred.
+- There is no `enrichments` block, no `discriminator` and no `content.kind`, and none of the
+  three may be re-added additively. A slot carries its own name and value, which is what the
+  first two were reaching for, and one record per chunk removes the need for the third.
 
 **How it got here**
 
-- **2026-08-05 — D24 (drafted; ratified 2026-08-06): the rebuild re-cut to one record per chunk, built from slots.**
-  - **Was** — one chunk could fan out to several records (video keyframes, an `ocr` beside a
-    `caption`, an original beside its translation), told apart by a discriminator, with in-place
-    mutation governed by the emission law.
-  - **Changed** — v1 pins exactly one record per `(chunk_id, pipeline_version)`; `content`
-    becomes a slots map with one producer per slot; `modality` moves to the root; `enrichments`,
-    `discriminator` and `content.kind` are deleted.
-  - **Now** — cut at Stage A beside the running v0 and ratified 2026-08-06 as D24; the wire
-    flips at Stage F.
-  - **Payoff** — identity needs two components instead of three, sibling-record bookkeeping
-    disappears, and the governance the old shape required (five tests, five riders, an
-    exemption) is deleted rather than maintained.
-
-- **2026-07-27 — D19: the `discriminator` was surfaced.**
-  - **Was** — the discriminator had fed `record_id` since v0 but lived *only* inside the hash, so a
-    reader holding two records could not tell whether they were two units of one chunk or two
-    dialects of one unit. C10's one-dialect rule needs exactly that distinction.
-  - **Changed** — emitted it as a top-level optional string, absent or `""` in the 1:1 case.
-  - **Now** — the invariant is visible. Duplicate discriminators within a chunk were already rejected
-    at `services/data-processing/app/stagegraph/executor.py:396-401`, so this added no new promise.
-  - **Payoff** — nothing re-keyed: `record_id` is unchanged, and an empty discriminator still
-    reproduces the two-component v0 id byte-for-byte (`app/pipeline.py:33-46`).
+- **2026-08-06 — D24: one record per chunk, built from slots.** The contract pins exactly one
+  record per `(chunk_id, pipeline_version)`, `content` as a slots map with one producer per slot,
+  and `modality` at the root. Identity needs two components, and sibling-record bookkeeping does
+  not exist.
 - **2026-07-26 — D17: civil-time passthrough.**
   - **Was** — four documents promised a *storage-assigned* user-local timezone that was never built.
   - **Changed** — the zone comes from the capturing device instead, carried verbatim from C1.
   - **Now** — `source.device_tz` and `source.device_utc_offset_minutes` ride along, optional-additive.
   - **Payoff** — correct under travel by construction, because the device reports where the user
     actually was.
-- **2026-07-26 — the prose caught up with its own schema.**
-  - **Was** — this summary described `record_id` as deterministic on `(chunk_id, pipeline_version)`,
-    while the schema had mandated the discriminator since v0.
-  - **Changed** — corrected the summary.
-  - **Now** — schema and prose agree.
-  - **Payoff** — explicitly *not* a contract change. The authoritative artifact was right all
-    along and only its summary lagged, which is a shape of defect [ORG.md](ORG.md) names because it
-    recurs.
 - **2026-07-09 — D10: minted with the learn-loop skeleton.** ASR only — transcript plus segment
   timestamps, no diarization, no enrichment, no vision.
 
@@ -516,12 +479,9 @@ carrying `{error:"..."}`.
 
 ### C10 — the training-window read
 
-> **storage → continuum** · day-log v2 `built` and **live since the Stage F cutover**
-> (2026-08-07), ratified 2026-08-06 ([D28](DECISIONS.md)) · v1 was the running read
-> 2026-07-27 → cutover (`a5a48fb` storage · `1757efb` continuum · `2698b63` DP)
+> **storage → continuum** · `built` and live · ratified 2026-08-06 ([D28](DECISIONS.md))
 > · [D18](DECISIONS.md) · [D20](DECISIONS.md)
 > · schemas [c10_daylog.v2.json](contracts/c10_daylog.v2.json) ·
-> [c10_daylog.v1.json](contracts/c10_daylog.v1.json) ·
 > [c10_training_window.v1.json](contracts/c10_training_window.v1.json)
 
 **In one line.** Continuum asks storage *"what should I train on tonight?"* and storage answers with
@@ -558,7 +518,7 @@ Day-log body:
 
 **Rules**
 
-- The window is `[last_trained_t, now−δ)` on storage's `ingest_time` axis — not event time, not
+- The window is `[last_trained_t, now−δ)` on storage's `updated_at` axis — not event time, not
   a local date. `δ` defaults to 60 s and covers in-flight writes racing the boundary.
 - `last_trained_t` advances **only when a cycle publishes.** Every other outcome — `gate_failed`,
   `frozen`, `crashed`, `skipped_no_data`, leaves it where it is, so the next window is a strict
@@ -570,48 +530,33 @@ Day-log body:
 - `window_id` is **opaque** — `w<YYYYMMDD>T<HHMMSS>Z`, derived from the window's end instant in UTC,
   minted and validated in exactly one place (`services/storage/app/window_id.py`). Consumers may
   rely on `<` and `>=`, and on nothing else.
-- **Membership is by `ingest_time`; bucketing is by `t_start`.** A chunk captured Tuesday and
+- **Membership is by `updated_at`; bucketing is by `t_start`.** A chunk captured Tuesday and
   uploaded Friday trains in Friday's window, rendered in a block anchored *"On [Tuesday]"* — content
   stays event-time-correct because blocks form by temporal adjacency and carry their own anchors, so
   a backlog simply forms its own blocks.
 - Segment buckets sit on a **global epoch grid**, `floor(t_start / segment_seconds)` — never
   relative to the window start.
-- **One dialect per record, latest wins.** Under the live v2 renderer the dedup key is latest
-  `updated_at` per `(chunk_id)` (one record per chunk; see the v2 deltas). *(v0/v1 keyed
-  `(chunk_id, content.kind, discriminator)` over `ingest_time` — retired with the discriminator.)*
+- **One dialect per record, latest wins.** The dedup key is latest `updated_at` per `(chunk_id)`,
+  rowid tiebreak — one record per chunk leaves nothing finer to key on.
 - **The consumer verifies the dialect; the stamp does not.** Compare `daylog_format_version` and
   `recipe_id` against the night you are about to run, and refuse on mismatch.
 - `home_tz` in the body records **the fallback zone actually used**, so a wrong-timezone adapter is
   falsifiable after the fact instead of invisible.
 
-- The **v2 deltas** (`built` and live since the Stage F cutover; ratified 2026-08-06 as
-  [D28](DECISIONS.md) with [D27](DECISIONS.md); built at Stage E) against the rules above,
-  everything else standing:
-  - The renderer walks C2 v1 `content.slots` instead of per-kind records: `slots.caption` →
-    Scene · `slots.ocr` → World text (OCR) · `slots.transcript` → speaker-bucketed transcript
-    lines via its `splits[]`.
-  - Speech lines render from `slots.transcript`; when that slot is absent they fall back to
-    `slots.asr`, speakers unlabeled (ruled 2026-08-06).
-  - The dedup key collapses to latest `updated_at` per `(chunk_id)`, rowid tiebreak — one record
-    per chunk retires the `(chunk_id, content.kind, discriminator)` key, and `updated_at`
-    replaces `ingest_time` as the axis.
-  - Storage splits `ingest_time` into `created_at` (first landing of a `record_id`) and
-    `updated_at`, bumped only when `record_json` byte-compares different — a no-op
-    redelivery never re-windows a record.
-  - A heal that lands a byte-different record flows into the next window (accepted
-    double-training, the same class as a version bump).
-  - Training-window membership moves with the axis: the window is `[last_trained_t, now−δ)` on
-    `updated_at`.
-  - `daylog_format_version` and `recipe_id` bump; continuum's stamp-refusal is the transition
-    safety net.
-  - E-2 retraction is redesigned as whole-record operations (delete by `record_id` /
-    `chunk_id` / `pipeline_version`; manifest by `pipeline_version`) and finally built, at
-    Stage E.
-  - The D20 parity bar is re-baselined against the v2 renderer (Stage E, WP-E4).
+- **Rendering routes by slot** ([D28](DECISIONS.md)): `slots.caption` → Scene ·
+  `slots.ocr` → World text (OCR) · `slots.transcript` → speaker-bucketed transcript lines via
+  its `splits[]`. When `slots.transcript` is absent, speech falls back to `slots.asr` with
+  speakers unlabeled.
+- **`created_at` and `updated_at` are storage's own** ([D27](DECISIONS.md)): `created_at` is the
+  first landing of a `record_id`; `updated_at` bumps only when `record_json` byte-compares
+  different, so a no-op redelivery never re-windows a record. A heal that lands a byte-different
+  record flows into the next window — accepted double-training, the same class as a version bump.
+- **Retraction is whole-record**: delete by `record_id` / `chunk_id` / `pipeline_version`, with a
+  manifest by `pipeline_version`.
 
 **Why it's this way**
 
-- **An ingest-time watermark dissolves late data instead of handling it.** `ingest_time` is
+- **A store-clock watermark dissolves late data instead of handling it.** `updated_at` is
   assigned by storage at write, so a record can never land below an already-closed boundary and
   there is no late-arrival case left to get wrong.
 - Two properties fall out free: storage needs **no timezone** to serve C10, and a missed or
@@ -649,35 +594,34 @@ Day-log body:
   - `cycle.py:106,115` — journal debt and `latest_window`.
   - `reservoir.py:105` — replay's `before_window` filter.
 - Mixed id formats in one user's history order correctly only by ASCII accident (`-` = 0x2D sorts
-  below `0` = 0x30), so any cutover must be explicit and tested, never trusted.
+  below `0` = 0x30), so any change of id format must be explicit and tested, never trusted.
 - **One id collision corrupts the journal, the reservoir and C5 lineage at once** — hence second
   granularity, and belt-and-braces the cycle refuses a window whose end is not strictly greater than
   `last_trained_t`.
 - **`pipeline_version` cannot be the dialect key.** It is a *composed* string (an optional stage's
-  enabledness is a version fragment) and therefore not orderable, where `ingest_time` is storage's
-  own monotone clock and is. (This was the v0/v1 reasoning; C10 v2 dedups on `(chunk_id)` alone —
-  one record per chunk removed the need to key on `content.kind`.)
+  enabledness is a version fragment) and therefore not orderable, where `updated_at` is storage's
+  own monotone clock and is.
 - **`seg_id` carries no cross-materialization stability guarantee** (D20). What is stable is the
   bucket grid, which decides grouping; the label is only the segment's position in the rendered
   day-log, so a re-materialization that legitimately drops a record renumbers everything after it.
 - Nothing external stores a `seg_id`, so it sits outside the byte-identity bar. Storage CHARTER
   M9(b) requires an order-preserving bijection with per-block membership preserved instead.
 - **`content_fingerprint` is not a cross-backend equality claim.** It is computed by whoever renders
-  and only ever compared to itself across runs — it is a journal stage key. At cutover it changes
-  once and that night re-runs, which is correct, because the input genuinely changed.
+  and only ever compared to itself across runs — it is a journal stage key. When the renderer
+  changes it moves once and that night re-runs, which is correct: the input genuinely changed.
 - **The two recipe pins are set independently** (`STORAGE_DAYLOG_RECIPE_ID`, `CONTINUUM_RECIPE_ID`),
   so a half-finished re-pin is an ordinary deployment slip that only the consumer can detect.
 - Storage renders honestly under its own pin and stamps what it rendered, while publish writes
   *continuum's* `recipe_id` into C5, so the adapter would be audited as trained under a recipe it
   was not trained under.
-- **A `pipeline_version` bump is a forward-only correction.** New records get new `ingest_time`s
-  and land in the next window, so the day-log renders the new dialect. The old dialect is *not*
+- **A `pipeline_version` bump is a forward-only correction.** New records get new `updated_at`
+  stamps and land in the next window, so the day-log renders the new dialect. The old dialect is *not*
   un-trained, which on an append-only weight chain is irreducible.
 - Accepted cost: the same lived moment can be trained twice, in two dialects.
 - Suppressing already-rendered chunks would stop the double exposure and would also stop the
   *correction* from ever training. We bump precisely because the old dialect was worse, so training
   the correction wins.
-- The escape hatch is a deliberate rebuild from base over retained history, which the retained
+- The escape hatch is deliberately retraining from base over retained history, which the kept
   day-logs and the reservoir make possible. Named here, not built, tracked as a storage OQ.
 - **Strike counting is unaffected** by superset windows: each failed night is a distinct, larger
   window and so strikes once, and `active_before` still resumes from the last `active` entry because
@@ -697,16 +641,6 @@ Day-log body:
 
 **How it got here**
 
-- **2026-08-05 — D28 (drafted; ratified 2026-08-06): the day-log re-cut for the slots world.**
-  - **Was** — the v1 renderer walked per-kind records and deduped on
-    `(chunk_id, content.kind, discriminator)` over `ingest_time`, because one chunk could carry
-    several records in several dialects.
-  - **Changed** — v2 cut at rebuild Stage A (D28 drafted): slot-walk rendering, `(chunk_id)`
-    dedup on `updated_at`, and E-2 as whole-record operations.
-  - **Now** — paper only, on branch `dp-rebuild-v1`, ratified 2026-08-06; v1 remains the
-    running read until the Stage F cutover, and Stage E builds the v2 renderer.
-  - **Payoff** — the dedup rule loses two components, retraction becomes expressible in one
-    sentence, and the healed-record path gets a window to land in.
 - **2026-07-27 — F4: both renderers moved to the global epoch grid.**
   - **Was** — continuum bucketed segments relative to the window start, and storage's M9
     differential proof hid the disagreement behind a fixture whose event-window origin happened to
@@ -719,8 +653,8 @@ Day-log body:
   - **Payoff** — measured before the fix, shifting that fixture's origin by 1–9 s broke M9 tier A
     at every one of the nine: segment bounds always, block text (the artifact that trains the
     model) at eight, and at +3 s the segment count and per-block membership too.
-  - Window-relative indices also go negative once membership sits on the ingest axis, so the old
-    rule was unusable.
+  - Window-relative indices also go negative once membership sits on the store-clock axis, so the
+    window-relative rule was unusable.
 - **2026-07-27 — F3: a dialect mismatch became a refusal, not a stamp.**
   - **Was** — storage wrote `daylog_format_version` and `recipe_id` into every day-log and nobody
     read them, which is precisely the silent format change those fields exist to prevent.
@@ -738,37 +672,17 @@ Day-log body:
   - **Now** — `gate_failed`, `frozen`, `crashed` and `skipped_no_data` all leave `last_trained_t`
     where it is.
   - **Payoff** — one rule replaces five cases, and the four places that stated it collapse to one.
-- **2026-07-27 — built and cut over.**
-  - **Was** — continuum built the day-log in-process from the raw range read and recomputed the
-    window from `now` on every attempt, which on a retry would have minted a fresh id, a fresh
-    journal, and therefore a full re-train, a second C5 entry and a second reservoir admission.
-  - **Changed** — materialization, the window ledger and the sole `window_id` minter moved to
-    storage; continuum consumes over `HttpDayLogClient`. `Window.local_date` and
-    `ReservoirEntry.local_window_date()` were deleted, along with the code that rebuilt prior windows
-    by re-deriving their bounds under *tonight's* timezone.
-  - **Now** — prior windows are *enumerated and fetched*, never reconstructed, which is what makes
-    the enumeration read load-bearing rather than a convenience.
-  - **Payoff** — the day-log storage renders is proven byte-identical to continuum's over two
-    window origins including a misaligned one (D20's bar). Costs accepted: filesystem paths,
-    `seg_id`, `block_id`, the training seed (`cycle.py:147` seeds from `window_id`) and C5
-    `training_window` lineage all re-key.
-  - Old directories are orphaned, not corrupted, and need no migration for correctness. But a
-    night re-run across the change is **not** apples-to-apples, because amplification variant
-    selection and replay sampling move with the seed.
-  - We took that discontinuity rather than re-pin the seed on a "stable" value that was itself
-    changing; anyone needing a controlled comparison pins it explicitly, which is a recipe change.
-    `tests/parity/` seeds from its own harness and is unaffected.
-- **2026-07-26 — D18: from a raw range read to a day-log fetch over an ingest-time watermark.**
+- **2026-07-26 — D18: storage serves a day-log fetch over a store-clock watermark.**
   - **Was** — C10 was `GET /context/records?user_id=&from=&to=`, an event-time range read over a
     window named by a local date. Late-arriving records could fall below a closed boundary, and
     naming a window required a timezone.
   - **Changed** — ratified at the storage/C10 board: a day-log fetch plus a training-window ledger,
-    over an `ingest_time` watermark, with `window_id` reduced to an opaque token.
+    over a storage-assigned watermark, with `window_id` reduced to an opaque token.
   - **Now** — the four operations above. The raw range read stays first-class: it is D12's beta
     training feed, the debugging path, and C11-adjacent.
   - **Payoff** — late data stops existing as a category, storage needs no timezone, and a missed
-    night merges into the next. C12, C13 and C14 were minted alongside, and E-2 dropped from a
-    cutover blocker to the retraction / privacy / space primitive it should always have been.
+    night merges into the next. C12, C13 and C14 were minted alongside, and E-2 became the
+    retraction / privacy / space primitive it should always have been.
 
 ### C11 — the recent-context read
 
@@ -1186,7 +1100,7 @@ materializes, continuum consumes.
 
 - **Storage owns** the scheduled materialization (C2 records → ~10 s segment rows → gap-bounded scene
   blocks → anchored block text), the *retained* day-logs, the per-user training-window ledger and
-  its `ingest_time` watermark, and the sole `window_id` minter.
+  its `updated_at` watermark, and the sole `window_id` minter.
 - **Continuum owns** the amplifier's renderer — `Profile.render_block`
   (`services/continuum/app/morpheus/profiles/`), which is recipe-coupled and is the surface locked
   byte-identical against the research line, plus trainer-seam file materialization
@@ -1207,7 +1121,7 @@ materializes, continuum consumes.
 
 - **The decisive reason is replay, not tidiness.** Replay re-reads *prior* day-logs every night, so a
   continuum-side builder would re-pull every prior day's raw records nightly — O(days²) across the
-  wire to rebuild an artifact storage could simply have kept.
+  wire to reconstruct an artifact storage could simply have kept.
 - `morpheus/blocks.py:5-7` had already drawn the line: *"Keeping that boundary narrow is what lets
   the day-log move behind a storage client without any kernel noticing."*
 

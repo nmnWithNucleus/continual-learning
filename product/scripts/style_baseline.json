@@ -1,7 +1,7 @@
 {
   "note": "Ratchet for style_check.py. Shrink it, never grow it.",
   "counts": {
-    "product/ARCHITECTURE.md": 5,
+    "product/ARCHITECTURE.md": 4,
     "product/DECISIONS.md": 1,
     "product/HANDOFF.md": 3,
     "product/ORG.md": 1,
