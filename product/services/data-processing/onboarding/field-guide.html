@@ -154,11 +154,11 @@ ul.tight li { margin-bottom:8px; max-width:72ch; }
     <span class="stage-chip">⚠ Stage: PROTOTYPE (D19) — the docs speak in a production voice; the build is a prototype</span>
     <div class="note law" style="margin-top:20px">
       <b class="tag">Derived teaching view · D22</b>
-      <p>This page is <strong>derived and non-authoritative</strong>. It exists to teach; it is not a source of truth. Wherever this page and the repository disagree, <strong>the repository wins</strong> — read the <a href="../CHARTER.md">data-processing charter</a> and the <a href="../../../ARCHITECTURE.md">system architecture</a> first, then come back. It is linked from the charter and corrected in the same session as the change it teaches (the D22 bargain). This rewrite <em>is</em> that correction: it was rewritten from the v0 world to the v1 world at Stage G of the rebuild, on 2026-08-07.</p>
+      <p>This page is <strong>derived and non-authoritative</strong>. It exists to teach; it is not a source of truth. Wherever this page and the repository disagree, <strong>the repository wins</strong> — read the <a href="../CHARTER.md">data-processing charter</a> and the <a href="../../../ARCHITECTURE.md">system architecture</a> first, then come back. It is linked from the charter and corrected in the same session as the change it teaches (the D22 bargain).</p>
     </div>
     <div class="statrow">
       <div class="stat"><div class="v">1 chunk → 1 record</div><div class="k">C2 v1: one record per chunk, built from slots (Slot Law L2)</div></div>
-      <div class="stat"><div class="v">569 + 4</div><div class="k">DP tests green / skipped, after the Stage G demolition</div></div>
+      <div class="stat"><div class="v">569 + 4</div><div class="k">DP tests green / skipped</div></div>
       <div class="stat"><div class="v">:8085</div><div class="k">our port (storage :8083 · recording :8084 · captioner :8161)</div></div>
       <div class="stat"><div class="v">C1 → C2</div><div class="k">the two contracts we live between (C8 is designed, unbuilt)</div></div>
     </div>
@@ -171,8 +171,7 @@ ul.tight li { margin-bottom:8px; max-width:72ch; }
   <h2>What you're joining, in ninety seconds</h2>
   <p class="dek">The shortest true description of the service, before any detail.</p>
   <p>Data processing takes a few seconds of someone's captured life — a slice of audio, a slice of screen or camera video — and writes down what it contained: the words spoken, the scene described, the text on the screen, each stamped with the wall-clock time it happened. Recording hands us those slices over HTTP; we pull the raw bytes from storage, run them through a small graph of processing steps, and write one record back to storage's <code>/context</code> store. Tonight, the continuum service reads those records and trains the user's personal model on them.</p>
-  <p>The service was rebuilt from the ground up in 2026 (Stages A–G, ratified as decisions D23–D28). The rebuild replaced a complicated model — one slice could become several records, and a later step could edit an earlier step's record in place — with a strict, simpler one whose good behaviour holds <strong>by construction</strong>: one slice becomes exactly one record, each field written by exactly one step and never edited. If you learned the old world from an earlier version of this guide, module 03 is where the difference lives.</p>
-  <div class="note"><p>The old world needed a book of governance (a five-test emission law, discriminators, capability views) to keep multi-record mutation honest. The rebuild deleted the capabilities, so the governance had nothing left to govern. The tombstone for those retired concepts is the charter's §Condensed history — read it once you know the new world, not before.</p></div>
+  <p>Good behaviour holds <strong>by construction</strong>: one slice becomes exactly one record, each field written by exactly one step and never edited. The Slot Law (D23–D28) is what the running service enforces — module 03 is where that shape lives.</p>
 </section>
 
 <!-- ===================================================== 01 -->
@@ -241,7 +240,7 @@ ul.tight li { margin-bottom:8px; max-width:72ch; }
   }
 }</code></pre>
   <div class="note law"><b class="tag">Slot Law L2 · L3 · L5</b><p><strong>One record per <code>(chunk_id, pipeline_version)</code></strong>, the executor structurally emits one and a test asserts it (L2). <strong>Identity is two components</strong>, NUL-joined and hashed — there is no third "discriminator" component, because with one record per chunk there are no siblings to tell apart (L3). <strong>Content is a slot map</strong>, one producer per slot, each written once and never edited (L5). A speaker-aligned transcript is not an edit of the raw ASR — it is a <em>new</em> slot from an ordinary stage whose inputs are the ASR and diarization slots.</p></div>
-  <p>A video chunk has the same shape: one record with a <code>caption</code> slot and an <code>ocr</code> slot. In the old world that was two records told apart by a discriminator; now it is two slots in one record. Storage assigns the durable timestamps (<code>created_at</code>, <code>updated_at</code>) — there is deliberately no wall-clock inside the record, so a re-run under the same dialect is byte-identical.</p>
+  <p>A video chunk has the same shape: one record with a <code>caption</code> slot and an <code>ocr</code> slot. Storage assigns the durable timestamps (<code>created_at</code>, <code>updated_at</code>) — there is deliberately no wall-clock inside the record, so a re-run under the same dialect is byte-identical.</p>
 </section>
 
 <!-- ===================================================== 04 -->
@@ -254,7 +253,7 @@ ul.tight li { margin-bottom:8px; max-width:72ch; }
     <li><strong>Stage version <code>vS</code></strong> bumps on a contract change — the stage's needs, its slot's name or shape, its emit semantics, its byte budget. <strong>Backend version <code>vB</code></strong> bumps on an implementation change — the model, its weights, its prompts, its thresholds, any behaviour.</li>
     <li><strong>No output-affecting env knob exists.</strong> Every environment variable is operational only — endpoints, replica counts, timeouts, log levels. A determinism test in CI proves it: fixed bytes and fixed versions produce a byte-identical record across the whole settings matrix. If a knob could move one byte of a record, the test goes red.</li>
   </ul>
-  <div class="note"><p><b class="tag">A worked example from Stage G</b>When the legacy prompt pack was deleted, the aggregate prompt-pack digest changed. Because a registration guard welds that digest to the captioner's backend version, the change forced a <code>vB</code> bump — the captioner's pin went <code>clipcap.v1-vlm.v1</code> → <code>clipcap.v1-vlm.v2</code>. The bump is code-true today and wire-true only after the next deliberate fleet restart deploys it: the running process imported the old pack, so live video records still stamp <code>vlm.v1</code> until then (module 09). Nobody could quietly change a model-facing prompt without the dialect forking; that is the law working.</p></div>
+  <div class="note"><p><b class="tag">A worked example</b>When a prompt pack's content-addressed digest changes, a registration guard welds that digest to the captioner's backend version and forces a <code>vB</code> bump — e.g. <code>clipcap.v1-vlm.v1</code> → <code>clipcap.v1-vlm.v2</code>. The bump is code-true immediately and wire-true only after the next deliberate fleet restart deploys it (module 09). Nobody can quietly change a model-facing prompt without the dialect forking; that is the law working.</p></div>
   <p><strong>Experiments fork the dialect too.</strong> An in-code A/B must surface its treatment in the string as <code>.exp-&lt;code&gt;</code> — invisible-to-identity experimentation is forbidden, so an experimental caption can never be mistaken for a real one in the training corpus.</p>
 </section>
 
@@ -350,9 +349,9 @@ ul.tight li { margin-bottom:8px; max-width:72ch; }
     <div class="bd-item"><div class="hd"><span class="pill dim">designed</span><b>C8 — the synchronous API</b></div><p>Offering the pipeline to the input service for interactive requests. Nothing is built; the inline path is its skeleton.</p></div>
     <div class="bd-item"><div class="hd"><span class="pill dim">designed</span><b>World-data enrichment</b></div><p>Known-faces, geolocation, place/object tags (charter M5). Not built; slots make it an additive change when it lands.</p></div>
     <div class="bd-item"><div class="hd"><span class="pill warn">watch</span><b>Video throughput</b></div><p>CPU OCR plus a 32B captioner per video chunk is the slow leg; there is no per-modality fairness cap yet, so a video burst can starve audio. Named at the soak, tuned later.</p></div>
-    <div class="bd-item"><div class="hd"><span class="pill warn">pending</span><b>The vlm.v2 dialect flip</b></div><p>Stage G's prompt-pack demolition re-pinned the digest and bumped the captioner to <code>clipcap.v1-vlm.v2</code> — in code. The running fleet predates the bump and still stamps <code>vlm.v1</code>; the flip deploys at the next deliberate restart (module 04's worked example).</p></div>
+    <div class="bd-item"><div class="hd"><span class="pill warn">pending</span><b>The vlm.v2 dialect flip</b></div><p>Code pins <code>clipcap.v1-vlm.v2</code>; the running fleet may still stamp <code>vlm.v1</code> until the next deliberate restart deploys the bump (module 04's worked example).</p></div>
   </div>
-  <p style="margin-top:16px">The retired v0 world — the emission law, discriminators, capability views, the env-flippable dialect freeze, the two-record video shape — is not taught here because it no longer runs. If you need to know why those existed and what killed them, the charter's §Condensed history is the six-paragraph tombstone.</p>
+  <p style="margin-top:16px">This guide teaches the running world only. Depth and law live in the <a href="../CHARTER.md">charter</a> §Slot Law.</p>
 </section>
 
 <!-- ===================================================== 10 -->
@@ -376,11 +375,11 @@ ul.tight li { margin-bottom:8px; max-width:72ch; }
 <span class="dir">servers/</span>          <span class="cm"># the machinery — one dir per model, each its own venv</span>
   whisper/ pyannote/ ast/ ocr/ common/
 <span class="dir">tests/</span>            <span class="cm"># the executable law: T-1…T-6 plus the kept suites</span>
-<span class="dir">docs/</span>            <span class="cm"># the rebuild's record: refactor_dp_service.md + stage worklogs</span>
+<span class="dir">docs/</span>            <span class="cm"># service docs (when present)</span>
   </div>
   <h4>A sensible first hour</h4>
   <ol class="tight" style="padding-left:22px">
-    <li>Read the <a href="../CHARTER.md">charter</a> §Slot Law (L1–L12) — the twelve laws this service enforces — and its §Condensed history to see what they replaced.</li>
+    <li>Read the <a href="../CHARTER.md">charter</a> §Slot Law (L1–L12) — the twelve laws this service enforces.</li>
     <li>Read <code>app/pipeline.py</code> <code>build_c2</code> and <code>app/stagegraph/executor.py</code> — the record is assembled here, and the one-record law is structural here.</li>
     <li>Read one audio stage (<code>app/stages/audio/asr.py</code>) and one video stage (<code>app/stages/video/clipcap.py</code>) to see the thin-client shape.</li>
     <li>Run the suite (<code>tests/</code>): the law is executable, so watching T-1…T-6 pass is the fastest way to trust it.</li>

@@ -85,11 +85,8 @@ below):
 
 ## The DP rebuild's joint rows are LIVE (D27/D28, cut over at Stage F, 2026-08-07)
 
-Two of the rebuild's six rows are joint with us — **D27** and **D28**
-([../../DECISIONS.md](../../DECISIONS.md)). Built on `dp-rebuild-v1` at Stage E, they went
-**live at the Stage F cutover** (worklog:
-[../data-processing/docs/refactor_stage_F.md](../data-processing/docs/refactor_stage_F.md)).
-The `:8083` service now serves them to the live fleet:
+Two joint rows with data-processing — **D27** and **D28**
+([../../DECISIONS.md](../../DECISIONS.md)) — are live on `:8083`:
 
 - **D27** — `ingest_time` split into `created_at` + `updated_at` (the byte-compare is the
   upsert; a no-op re-POST leaves the row untouched); the training-window axis and the
@@ -116,6 +113,7 @@ The `:8083` service now serves them to the live fleet:
 | 4 | **Retention mechanism** ([D19](../../DECISIONS.md)) — a versioned per-store retention document, every store `keep_forever`, read and surfaced on `/metrics`, *no sweeper*. Rules mark *eligibility*; a separate explicit sweep acts and writes a manifest. | So a bad config edit can produce a wrong report, never silent data loss |
 | 5 | **Encryption at rest + per-user isolation tests** (M4). | Not started |
 | 6 | **Postgres + GCS migration** — metadata in Postgres, day-logs/corpora in GCS ([D19](../../DECISIONS.md) option (c)). | Kept cheap by a rule, not foresight: every new store goes behind a **narrow interface** from day one, so the swap is a backend change |
+| 7 | **Retire the v0 parity apparatus in ONE later act.** Today the parity proof's P1 precondition loads `c2_processed_record.v0.json` by `$id`, and a green storage test runs that proof in-process — so the apparatus is KEEP-EXEMPT, not purge residue. The owed act: modernize continuum's synthetic/replay paths off v0 shapes, replace the differential with a pinned v2 golden, then delete the v0 schema. A contract nobody serves should not live in the tree forever. | not purge work; founders' follow-up |
 
 ## Gotchas
 - **Contracts are the source of truth.** Schema validation uses a `referencing` registry so
