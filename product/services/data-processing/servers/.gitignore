@@ -1,5 +1,8 @@
 logs/
 .venv/
+# Side-by-side venvs from a rebuild-beside repair (.venv-rebuild, .venv-corrupt-<date>,
+# .venv-discard-*). Each is multi-GB; without this a `git add -A` stages the whole fleet.
+.venv-*/
 __pycache__/
 .pytest_cache/
 *.egg-info/
