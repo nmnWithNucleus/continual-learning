@@ -1,9 +1,9 @@
 # DP Rebuild — Stage F worklog (Cutover)
 
-**Stage:** F — Cutover · **Status:** IN_PROGRESS · *Dated:* 2026-08-07
-**Branch:** dp-rebuild-v1 — merges to main at WP-F1; the merge is part of this stage · **Plan:** [refactor_dp_service.md](refactor_dp_service.md) §8 Stage F
-**Laws this stage:** OD-1 (the beside-build lands in one deploy) · OD-2 fresh-forward wipe under the D19 license, `/raw` sacred · OD-3 already paid (all four servers behind the seam since Stage B) · D28 stamp bump ("2" + consolidation-v2.0) · D20 block-text contract · D16 redrive (the standing async-default gate, paid at drill 1) · D27 `updated_at` window axis
-**Scope:** WP-F0a vLLM + identity probe + caption first-contact · WP-F0b continuum stamp teaching (the one licensed continuum change) · WP-F0c cutover kit (wipe script, un-repoint, rollback runbook, merge preflight) · GATE 1 · WP-F1 cutover · WP-F2 five drills · WP-F3 soak setup
+**Stage:** F — Cutover · **Status:** DONE 2026-08-07 (closed under the amended WP-F3 soak bar, founder ruling R2) · *Dated:* 2026-08-07
+**Branch:** dp-rebuild-v1 — merged to main at WP-F1 (`bf1e806`); the rebuild is on `main` and this stage is closed there · **Plan:** [refactor_dp_service.md](refactor_dp_service.md) §8 Stage F
+**Laws this stage:** OD-1 (the beside-build lands in one deploy) · OD-2 fresh-forward wipe under the D19 license, `/raw` sacred · OD-3 already paid (all four servers behind the seam since Stage B) · D28 stamp bump ("2" + consolidation-v2.0) · D20 block-text contract · D16 redrive (the standing async-default gate, paid at drill 1, in-flight witness paid at the soak) · D27 `updated_at` window axis
+**Scope:** WP-F0a vLLM + identity probe + caption first-contact · WP-F0b continuum stamp teaching (the one licensed continuum change) · WP-F0c cutover kit (wipe script, un-repoint, rollback runbook, merge preflight) · GATE 1 · WP-F1 cutover · WP-F2 five drills · WP-F3 soak (amended to the synthetic engineering bar per R2: sustained-load soak + in-flight D16 kill + one continuum train cycle on a v2 window)
 
 This stage is different in kind: two hard gates where work stops for an explicit founder
 message in this session. Only a message containing "CUTOVER APPROVED" unlocks WP-F1; the
@@ -517,6 +517,261 @@ night consumes that window end-to-end — fetch accepted, corpus rendered,
 train + gate + publish per recipe consolidation-v2.0 — and the window closes
 `published` with the C5 lineage row present. The soak verdict closes this stage
 tomorrow; until then **Status stays IN_PROGRESS** and Stage G does not start.
+
+> **Amended and closed 2026-08-07 (founder ruling R2, below).** Live capture had not
+> begun, so the calendar-pilot-day shape of this exit transferred to the post-Stage-G
+> client-testing phase; the soak's ENGINEERING content — sustained-load stability + one
+> continuum train cycle on a v2 window — was executed synthetically and is evidenced in
+> the three 2026-08-07 sections below (WP-F3 amended soak · THE TRAIN LEG). Status is
+> DONE and Stage G is open.
+
+## 2026-08-07 — stage-close session: founder rulings, quoted verbatim as authority
+
+> R1. "The two Stage F push events (05:55:28 main+branch, 06:32:06 main) are retroactively
+> ratified. Pushes to origin are henceforth permitted at each stage-close."
+>
+> R2. "The soak bar is amended: live capture has not begun, so a calendar pilot day blocks
+> on lifestyle, not engineering. The soak's engineering content — sustained-load
+> stability and one full train cycle on a v2 window — is executed synthetically NOW;
+> the original bar's live-day shape transfers to the client-testing phase that begins
+> after Stage G."
+>
+> R3. "The two uncommitted onboarding files (field-guide.html, review_actions.md) are
+> committed AS-IS first, preserving that session's reader-review work; Stage G's
+> rewrite then supersedes on top."
+
+R1 ratifies the two pushes already made and licenses a push at each stage-close (this
+stage's close included). R2 supersedes the WP-F3 soak-exit paragraph above: the pilot
+day's LIVE shape (a real captured day) moves to the client-testing phase after Stage G;
+what closes Stage F now is the amended engineering bar — a synthetic sustained-load soak
+through the real client path plus one full continuum train cycle on a v2 window, both
+executed and evidenced below. R3 is consumed at Stage G's open ([refactor_stage_G.md](refactor_stage_G.md)).
+
+**Notes owed from the founder's post-drill verification round:**
+
+- **Drill 3's counters instrument, named.** The "ast server-call counters across the
+  skip: UNMOVED" line was measured log-derived from the ast access logs: the count of
+  `POST /infer` request lines across the two replica logs
+  (`servers/logs/ast-8141.log`, `ast-8142.log`), read against a pre-drill offset —
+  zero new `/infer` lines across the skip re-POST. The worklog claimed the fact
+  without naming the instrument; a gate-adjacent claim carries its measurement.
+- **The in-flight-kill recommendation, recorded.** Drill 1's honest disclosure stands:
+  the queue outran the operator, so the exercised crash window was
+  records-durable/receipts-unpropagated, and the boot re-drive found zero pendings.
+  The verification round's recommendation: repeat the D16 drill with an IN-FLIGHT
+  kill — SIGKILL DP while the journal's pending set is demonstrably non-empty (slow
+  the fleet or feed a burst) — so the pending-replay boot path gets its live witness.
+  Executed during the synthetic soak, below.
+
+## 2026-08-07 — WP-F3 (amended): the synthetic soak, executed
+
+The R2 engineering bar run against the LIVE post-cutover fleet: a sustained mixed
+audio+video load driven through recording's REAL client path (`POST /capture/segments`,
+the durable door a device drives — never DP `/ingest` directly), with the in-flight D16
+kill exercised mid-run. Feed built from the committed fixtures only: `speech_real_dialog.webm`
+(the LibriVox *Christmas Carol* real two-speaker dialog), `speech_two_speakers.webm`
+(piper TTS), and a muxed `video_scenes.mp4`+dialog A/V clip; four concurrent captures
+across two users (`u-soak`, `u-soak-b`) on four devices, paced against the DP journal
+depth. Evidence script + logs live in the session scratchpad, the caption-smoke precedent.
+
+**Load delivered.** 950 durable segments across the four captures (soak-dialog 480 ·
+soak-piper 200 · soak-av 126 video · soak-b-dialog 120) plus a 24-segment video burst,
+demuxing to **~830 C1 chunks** pushed through the real emit path. Captured stream-time
+represented: soak-dialog alone is 480 × 17.808 s ≈ **2.4 h**; the four captures together
+≈ **3.6 h** of mixed life-stream — the "several hours' equivalent" the bar asks for.
+Processed at the soak's steady point: **477 chunks** (`processed` journal) — 420 audio +
+57 video — each a schema-clean C2 v1 record under the composed real pipeline_versions
+(`acoustic.v1-ast.v1+asr.v1-fw.v1+diarize.v1-pyannote.v1+speaker_align.v1-builtin.v1` for
+audio; `clipcap.v1-vlm.v1+clipprep.v1-ffmpeg.v1+screentext.v1-ppocr.v1` for video); the
+remainder still draining (video-bound, below) with the fleet healthy.
+
+**Fleet stability over the run (RSS + VRAM, start → end).** The soak ran ~40 min
+(07:19 → 07:58Z); snapshots at both ends (read-only) in the scratchpad:
+
+```
+                     baseline 07:19     end 07:58      note
+storage   :8083      pid 533819 65 MB   pid 533819 80 MB   SAME pid — never restarted
+recording :8084      pid 3356458 74 MB  pid 3356458 124 MB SAME pid — never restarted
+vLLM      :8161      pid 470702 1429 MB pid 470702 1399 MB SAME pid — survived SIGSTOP/CONT
+GPU0-1 (vLLM)        70089 MiB          70089 MiB          IDENTICAL — zero VRAM growth
+GPU4-5 (whisper)     4375 MiB           4375 MiB           IDENTICAL
+GPU2-3 (pyannote)    859 MiB            2497 MiB           higher = mid-inference at snap, not leak
+GPU6-7 (ast)         1147 MiB           1267 MiB           flat
+```
+
+- **storage, recording and the captioner kept their pids through the entire soak** —
+  no crash, no restart, RSS growth is ordinary working-set (recording buffers spool +
+  ledger). vLLM VRAM on GPUs 0-1 is byte-identical start to end (70089 MiB): the
+  captioner does not leak across an all-day-equivalent load.
+- **DP and the eight model servers carry NEW pids at the end** — respawned by the
+  operator-induced kill drill (below), the one and only fleet-churn event. Every model
+  replica's latest supervisor spawn line reads `restarts=0`, so the supervisor performed
+  **zero autonomous respawns** since recovery; the DP log carries no `down … restart #`
+  line in the post-recovery boot. Warm RSS sits in the same band as the baseline fleet
+  (whisper ~0.9 GB, pyannote ~1.7 GB, ast ~1.1 GB, ocr ~0.33 GB) — no runaway.
+- **Supervisor log clean**: no crash-loop caps, no identity failures, no unrequested
+  kills across the run.
+
+**Storage growth coherent (records == chunks, one each).** Measured over the soak
+users' processed set (read-only join, DP journal × storage `context_records`):
+
+```
+DP processed (soak users)               : 445 chunks
+  processed rows with record_ids != 1   : 0     (L2 — one record per chunk, schema-hard)
+storage records (soak users)            : 448   over 448 DISTINCT chunk_ids
+  storage chunks with != 1 record       : 0     (L2 holds on the storage side too)
+  DP record_ids absent from storage      : 0     (every processed chunk is durable in /context)
+```
+
+One chunk → exactly one C2 v1 record, on both sides of the seam, zero duplicates, zero
+orphans. (The 445-vs-448 is read-skew of three on a still-draining pipeline — DP and
+storage counted a few seconds apart — not an incoherence: distinct-chunks == records on
+each side.)
+
+**No error-class metrics moved except where induced.** Across the run: `dp_dead_letter_total`
+**0**, `dp_journal_dead_letter` **0**, `dp_records_finalized_with_permanent_holes_total`
+**0**, `dp_server_identity_failures_total` **0**, DP and recording `/metrics` show **no 5xx**.
+The only optional-stage hole in the whole soak was the acoustic hole the fleet already
+carried into the run (baseline `ast unavailable=1` from a prior drill), not a soak event.
+
+**A named throughput characteristic, not a defect (disclosed).** Post-recovery the drain
+ran video-bound at ~2 video chunks/min against ~16 audio/min on an idle box (load ~3 of
+208 cores). The cause is the CPU-OCR cost the reader-review already flagged (`screentext`
+at ~0.93 s/frame × up to 12 frames ≈ 11 s/video chunk on two CPU replicas) compounded by
+a real Qwen3-VL-32B multi-image caption per chunk, with no modality-fairness cap
+(`INGEST_MODALITY_LIMITS` empty) so a queued video run can hold a worker while audio waits.
+It is a pacing property under a synthetic backlog, not a stability failure: nothing
+crashes, leaks or drops, and it is exactly what the E-3(b) captioner split and the
+`INGEST_MODALITY_LIMITS` knob exist to tune. Left as-is (operational), named here so the
+soak verdict is honest about why the tail drains slowly. `/metrics` also read slowly
+(seconds) under peak write load — the journal-count gauge waiting on WAL busy-timeout
+against the four writers — and returned to sub-100 ms the moment load eased; an
+observability latency under load, not an outage (`/health` stayed sub-10 ms throughout).
+
+### The in-flight D16 kill (the recommendation's live witness)
+
+The drill-1 gap the verification round named — the boot re-drive never saw a non-empty
+pending set — is paid here. Method: with the captioner briefly `SIGSTOP`ped so video
+chunks stacked, the DP journal's `pending(accepted)` set was driven to **27** durable rows
+(23 audio + 8 video, `redrive_attempts` all 0, zero dead-lettered), then DP was
+`SIGKILL`ed mid-flight (`kill -9`, 07:45:31Z). The kill script re-read the journal a
+breath later: **31** durable `accepted` rows survived the hard kill (a few more chunks
+recording 202-accepted as the socket died), DP `/health` answered nothing (down). The
+captioner was `SIGCONT`ed so the recovered chunks could complete.
+
+Recovery via the deploy's own bring-up (`run_learn.sh --skip-install`, after clearing the
+orphaned supervised fleet — the drill-1 `fuser -k` lesson): full fleet 9/9 healthy in
+**~31 s**, DP `/health` back to the async new-world shape. The boot re-drive re-enqueued
+the durable pending set (direct DB witness: re-driven chunks carry a bumped
+`redrive_attempts`; the "journal re-drive: N re-enqueued" INFO line is below uvicorn's
+surfaced WARNING level, so it does not appear in the access log — the DB is the witness,
+not the log).
+
+**Redrive arithmetic, pasted:**
+
+```
+the 27 chunks durably 'pending' at the in-flight SIGKILL:
+  now processed (recovered)   : 27   ← every one
+  still pending (draining)    : 0
+  dead-lettered / lost        : 0
+  global dead-letter rows     : 0
+```
+
+Zero in-flight loss across a hard kill: the durable journal held the accepted set, and
+the pending-replay boot path re-processed all 27 to `processed`, each landing exactly one
+C2 v1 record (the coherence check above includes them). The recording leg told the same
+story from its side: the ~66 s DP downtime outran recording's bounded 4-attempt `/ingest`
+retry (~1.5 s), so **25 segments** marked `failed` — recording's honest terminal for a
+transport error, visible in the gap report, never a silent `clean` (this is exactly the
+open E-6 "auto-retry failed segments" ask: a recoverable 503/transport becomes terminal
+in 1.5 s). A manual `POST /capture/captures/{id}/retry` on each capture re-emitted all 25;
+they reprocessed to `failed=0`. Both durable ledgers — DP's journal and recording's
+capture ledger — reconverged with no data lost.
+
+### Soak verdict against the amended (R2) bar
+
+| R2 engineering bar | Result |
+|---|---|
+| Sustained load through the REAL client path (capture door, not `/ingest`) | **met** — 950 segments → ~830 chunks, 4 concurrent captures / 2 users, mixed audio+video from committed fixtures, ~3.6 h stream-equivalent |
+| Fleet stability (RSS + VRAM start vs end, zero unexplained respawns, supervisor clean) | **met** — storage/recording/vLLM pids unchanged; vLLM VRAM identical start→end; zero autonomous respawns (only the induced kill); supervisor log clean |
+| Storage growth coherent (records == chunks, one each) | **met** — one C2 v1 record per chunk on both sides, zero dup, zero orphan (L2) |
+| No error-class metrics moving | **met** — 0 dead-letter, 0 permanent-holes, 0 identity failures, no 5xx |
+| In-flight D16 kill → pending-replay boot path witnessed | **met** — 27/27 recovered across a hard SIGKILL, 0 lost; recording's 25 transport-failed segments retried clean |
+| One full continuum train cycle on a v2 window | **met** — below (THE TRAIN LEG) |
+
+The synthetic engineering content of the soak is satisfied. The original bar's LIVE
+pilot-day shape transfers to the post-Stage-G client-testing phase (R2). A named
+throughput characteristic (video/CPU-OCR pacing) and recording's E-6 retry-window are
+disclosed above; neither is a stability failure and both are pre-existing, tracked items.
+
+## 2026-08-07 — THE TRAIN LEG: one full continuum cycle on the v2 soak window
+
+The one lap the rebuild never ran end to end: continuum's own nightly consolidation
+machinery, driven once against a real v2 window over the live storage seam. Invocation is
+the SANCTIONED one, not a hand-rolled trainer — `python -m app.nightly --user <u>`, the
+headless path continuum's `run.sh` demo and `scripts/seam_check.py` both drive, mock
+trainer backend (the no-GPU path; the real Morpheus backend is a SLURM job, out of scope
+for a synthetic lap). Continuum was taught the v2 stamps at WP-F0b, so it trains under
+`consolidation-v2.0` and would refuse anything else.
+
+```
+cd product/services/continuum
+STORAGE_URL=http://127.0.0.1:8083 CONTINUUM_STORAGE_CLIENTS=http \
+  TRAINER_BACKEND=mock CONTINUUM_RECIPE_ID=consolidation-v2.0 \
+  CONTINUUM_POLICY_ID=gate-policy-v1.1 \
+  CONTINUUM_VAR_DIR=<session scratch> MOCK_GATE=auto \
+  ./.venv/bin/python -m app.nightly --user u-soak
+```
+
+`CONTINUUM_VAR_DIR` points at the session scratchpad deliberately: the window, the C10 v2
+day-log fetch, the recipe fetch and the window-close all hit PRODUCTION storage `:8083`
+(that is the seam the lap proves), while the journal / adapter / model-directory artifacts
+land in scratch so the live continuum `var/` learn-state stays pristine — same posture as
+`DP_VAR_DIR`, an operational location, not part of what the lap exercises. `home_tz` was
+declared for `u-soak` via C12 before the run (a user with no `home_tz` is NOT SCHEDULABLE
+by design).
+
+**The cycle, end to end (all six verbs ran, none skipped):**
+
+```
+window open   -> storage minted/returned w20260807T080154Z  [2026-08-07T07:19:58Z .. 08:01:54Z]
+day-log fetch -> GET /training/daylog: contract=C10 version=2 daylog_format_version=2
+                 recipe_id=consolidation-v2.0  (246 segments, 23 blocks, fp acf973b7fccb0979)
+stages_run    -> ["daylog","amplify","replay_mix","train","gate","publish"]  stages_skipped []
+gate          -> passed (checks min_probes/new_day_recall/traps/heldout all true; the three
+                 canary checks skipped — WS4-unwired, the same skip seam_check shows)
+status        -> published
+window close  -> storage: w20260807T080154Z state=consolidated outcome=published
+                 closed_at 2026-08-07T08:03:22Z  (watermark advances only on published)
+```
+
+**C5 lineage present and coherent** (`model_directory/u-soak/entries.jsonl`, the C5
+adapter-publish shape):
+
+```json
+{"contract":"C5","user_id":"u-soak","adapter_version":"a-ec4c5f948d2c",
+ "adapter_dir":".../adapters/u-soak/w20260807T080154Z/a-ec4c5f948d2c",
+ "base_model_hash":"qwen3-vl-32b-instruct","training_window":"w20260807T080154Z",
+ "recipe_id":"consolidation-v2.0",
+ "eval_report":{"new_day_recall":0.285,"traps_pass":0.5,"heldout":"1/222","base_heldout":"0/222",
+   "n_probes":310,"checks":{"min_probes":true,"new_day_recall":true,"traps":true,"heldout":true},
+   "policy_id":"gate-policy-v1.1"},
+ "status":"active"}
+```
+
+- `training_window` matches the storage window row exactly; `recipe_id` is the v2 recipe;
+  `status:"active"` and `active.json` points at adapter `a-ec4c5f948d2c`. The artifact is
+  on disk (`adapters/u-soak/w20260807T080154Z/a-ec4c5f948d2c/` — `weights.bin`,
+  `adapter_config.json`, `meta.json`); `meta.json` records `backend:"mock"`,
+  `recipe_id:"consolidation-v2.0"`, `objective:"next-token CPT"`, `resumed_from:null`
+  (u-soak's first night — no prior adapter to continue).
+
+The lineage is coherent along every axis a reader would check: window ⇄ C5
+`training_window`, recipe stamp ⇄ trained-under recipe, adapter id ⇄ artifact dir ⇄
+`active.json` pointer. **The cycle surfaced no defect** — it fetched a real v2-rendered
+day-log over the live C10 seam, amplified + trained + gated + published, and closed the
+window `published` with C5 written. Nothing about continuum was patched. The one unrun lap
+of the rebuild is run.
 
 ## 2026-08-07 — GATE 1 verification round (founder, 3 lenses; fixes applied)
 
