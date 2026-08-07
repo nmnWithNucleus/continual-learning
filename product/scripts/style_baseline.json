@@ -26,6 +26,7 @@
     "product/services/data-processing/readings/Choosing Frame Rate and Resolution for Screen Recording of Desktop Use.md": 2,
     "product/services/data-processing/servers/ast/tests/fixtures/INPUT_PROVENANCE.md": 3,
     "product/services/data-processing/servers/ast/tests/fixtures/PROVENANCE.md": 3,
+    "product/services/data-processing/servers/ocr/README.md": 1,
     "product/services/data-processing/servers/ocr/tests/fixtures/INPUT_PROVENANCE.md": 1,
     "product/services/data-processing/servers/pyannote/README.md": 1,
     "product/services/data-processing/servers/pyannote/tests/fixtures/INPUT_PROVENANCE.md": 3,

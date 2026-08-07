@@ -1,22 +1,18 @@
-# servers/ocr — PP-OCR model server (migration drill · work package)
+# servers/ocr — PP-OCR model server
 
-The v0 OCR service's engine (`PPOCREngine` — PP-OCRv4 det+rec ONNX on CPU via
-rapidocr-onnxruntime) relocated into the shared model-server framework
-(`servers/common`). Same engine, same models, same region semantics — different
-wire and different configuration posture:
+PP-OCRv4 det+rec ONNX on CPU via rapidocr-onnxruntime, behind the shared
+model-server framework (`servers/common`). Same engine, same models, same region
+semantics — different wire and different configuration posture:
 
 - **Wire**: the framework contract (`GET /health` with identity, `POST /infer`
-  `{input_b64, codec, params}` → `{ok, result}`), not v0's bespoke
-  `/ocr`. Error split: deterministic bad input → `422 transient:false`; replica
-  hiccup / not warm → `503 transient:true`; unexpected crash → `500 transient:true`.
-- **No env knobs (L4)**: v0's `OCR_MODE/OCR_EP/OCR_THREADS/OCR_*_MODEL`
-  are gone. Engine settings are pinned in `server.py`: 4 intra-op threads, angle
-  classifier off (screen text is upright), CPU-only, models discovered from the
-  installed rapidocr-onnxruntime package and sha256-hashed at load. A model swap
+  `{input_b64, codec, params}` → `{ok, result}`), not a bespoke `/ocr`. Error
+  split: bad input → `422 transient:false`; not warm → `503 transient:true`;
+  unexpected crash → `500 transient:true`.
+- **No env knobs (L4)**: engine settings are pinned in `server.py` — 4 intra-op
+  threads, angle classifier off (screen text is upright), CPU-only, models
+  discovered from the installed package and sha256-hashed at load. A model swap
   is a code change. Operational env only (`DP_SERVER_HOST/PORT/LOG_LEVEL`).
-- **This was built beside the v0 OCR service, not migrated from it.** At the Stage
-  F cutover the v0 process was stopped and its tree removed at migration drill; this server
-  runs on the manifest's CPU replicas (ports 8151/8152, `gpu: null`).
+- **Replicas**: manifest CPU replicas on ports 8151/8152 (`gpu: null`).
 
 `/infer` result: `{"regions": [{"text", "bbox": [x0,y0,x1,y1], "conf"}, ...]}` —
 bbox in pixels of the submitted image, origin top-left; text **verbatim and
