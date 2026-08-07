@@ -1,18 +1,18 @@
 # =============================================================================
-# servers/ocr -- PP-OCR model server (Stage B, WP-B5) dependencies.
+# servers/ocr -- PP-OCR model server dependencies.
 #
 # Installs into THIS server's own venv (servers/ocr/.venv) and never into the
 # shared DP venv: the PP-OCR stack (onnxruntime, opencv, shapely, pyclipper)
-# stays quarantined exactly as the v0 OCR service kept it (D-06).
+# stays quarantined exactly as the prior OCR service kept it.
 #
-# Engine pins are copied VERBATIM from the validated v0 OCR stack
+# Engine pins are copied VERBATIM from the validated prior OCR stack
 # (CPU, Python 3.12). onnxruntime is pinned because its version is reported in
 # /health identity and ORT is not guaranteed bit-exact across releases/providers.
 #
 # Set up the venv:
-#   cd servers/ocr
-#   python3 -m venv .venv
-#   ./.venv/bin/pip install -r requirements.txt
+# cd servers/ocr
+# python3 -m venv.venv
+#./.venv/bin/pip install -r requirements.txt
 # =============================================================================
 
 # PP-OCR det+rec ONNX on CPU. Bundles the ch_PP-OCRv4 det/rec ONNX models the

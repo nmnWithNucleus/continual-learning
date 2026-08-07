@@ -1,4 +1,4 @@
-"""WP-C1 — the uniform Stage + registration checks (Slot Law L4/L5 surface).
+"""the uniform Stage + registration checks (Slot Law L4/L5 surface).
 
 A stage is one file under ``app/stages/<modality>/`` declaring exactly:
 name, modality, stage_version (vS), backend (name + vB, resolved in code), needs,
@@ -7,7 +7,7 @@ run_sync | run_async. Registration enforces the declaration hard at import:
 unique slot per modality, one-of run methods, segment grammar.
 
 The dead concepts (kinds, mutate/writes/mutable_slots, SlotView, best_effort,
-policies, R1 machinery, order) must not exist on the module at all.
+policies, fork rider machinery, order) must not exist on the module at all.
 """
 from __future__ import annotations
 
@@ -78,8 +78,8 @@ def test_segment_with_experiment_code():
 
 def test_backend_override_at_construction_names_mock_in_segment():
     """Mock backends are selected the same way real ones are — by name, in the
-    version string (plan §3): a test constructs the SAME stage class with a mock
-    Backend and the dialect segment says so."""
+ version string (mock-dialect rule): a test constructs the SAME stage class with a mock
+ Backend and the dialect segment says so."""
     s = _stage_cls()(backend=Backend("mock", 1))
     assert s.segment == "asr.v1-mock.v1"
 
@@ -183,7 +183,7 @@ def test_duplicate_needs_is_registration_error(clean_reg):
 
 
 # ---------------------------------------------------------------------------
-# Dead concepts stay dead (D23/D26 — deleted with their subject matter)
+# Dead concepts stay dead (/ — deleted with their subject matter)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("dead", [
@@ -205,8 +205,8 @@ def test_dead_attrs_are_gone_from_stage(dead_attr):
 @pytest.mark.parametrize("bad", ["", "heard", "daylog", "consumer:x", "daylog:"])
 def test_consumer_declaration_is_mandatory_with_grammar(clean_reg, bad):
     """L10's ruled-in minimal form (cleanup round): a slot ships with a named
-    consumer-today or an explicit speculative marker — absence or a malformed
-    marker is a registration error."""
+ consumer-today or an explicit speculative marker — absence or a malformed
+ marker is a registration error."""
     with pytest.raises(StageRegistrationError, match="consumer"):
         register_stage(_stage_cls(consumer=bad))
 

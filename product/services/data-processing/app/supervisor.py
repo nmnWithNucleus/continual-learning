@@ -1,4 +1,4 @@
-"""Model-server supervisor (Stage B, L9 machinery side).
+"""Model-server supervisor.
 
 Reads the manifest (servers/manifest.json: server -> dir, entry, replicas with
 port + GPU pin), spawns each replica in its OWN venv as a long-lived process,
@@ -7,10 +7,10 @@ capped backoff ladder. GPU pinning is CUDA_VISIBLE_DEVICES per replica (gpu: nul
 pins to CPU by hiding every device) — which physical GPU a replica lands on is
 operational, never output-affecting (L4).
 
-The supervisor lives in DP (plan §3) but is imported by nothing in v0 — main.py
-wiring is Stage C's. Stage B drives it standalone:
+The supervisor lives in DP (mock-dialect rule) but is imported by nothing in the
+prior layout — main.py wiring owns it. Run standalone:
 
-    .venv/bin/python -m app.supervisor --manifest servers/manifest.json
+.venv/bin/python -m app.supervisor --manifest servers/manifest.json
 
 Never touches processes it did not spawn; binds nothing itself. Stdlib + httpx.
 """
@@ -113,7 +113,7 @@ class Supervisor:
     def from_file(cls, manifest_path: str | Path,
                   base_dir: str | Path | None = None) -> "Supervisor":
         """base_dir defaults to the manifest's grandparent — the service root,
-        since the manifest lives at <service>/servers/manifest.json."""
+ since the manifest lives at <service>/servers/manifest.json."""
         path = Path(manifest_path).resolve()
         manifest = json.loads(path.read_text())
         return cls(manifest, base_dir=Path(base_dir) if base_dir else path.parents[1])
@@ -164,7 +164,7 @@ class Supervisor:
 
     async def wait_ready(self, timeout_s: float | None = None) -> None:
         """Block until every replica reports /health 200, or raise TimeoutError
-        naming the stragglers. Default timeout: the max startup_timeout_s."""
+ naming the stragglers. Default timeout: the max startup_timeout_s."""
         deadline = time.monotonic() + (
             timeout_s if timeout_s is not None
             else max(r.spec.startup_timeout_s for r in self._replicas))
@@ -213,7 +213,7 @@ class Supervisor:
 
     async def run(self) -> None:
         """Monitor forever: restart-on-crash and restart-on-sustained-unhealth,
-        with the per-server backoff ladder (reset after a stable-ready period)."""
+ with the per-server backoff ladder (reset after a stable-ready period)."""
         await asyncio.gather(*(self._monitor(r) for r in self._replicas))
 
     async def _monitor(self, replica: _Replica) -> None:
@@ -307,7 +307,7 @@ class Supervisor:
 
 async def _main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
-        description="DP model-server supervisor (Stage B standalone runner)")
+        description="DP model-server supervisor (standalone runner)")
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--base-dir", default=None,
                         help="service root; default: manifest's grandparent")

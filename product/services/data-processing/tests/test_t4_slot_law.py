@@ -53,8 +53,8 @@ def test_one_producer_per_slot_is_a_resolve_time_hard_error():
 
 def test_no_stage_can_edit_anothers_slot():
     """Structural: a stage's output lands under ITS OWN slot name only — there
-    is no API surface through which stage B can write slot A (the SlotView
-    capability machinery was deleted WITH the capability)."""
+ is no API surface through which stage B can write slot A (a slot write proxy
+ capability machinery was deleted WITH the capability)."""
     result = _run([
         _stage("asr", value={"value": "original"}),
         # 'edit' consumes asr but its output lands under 'edit', never over 'asr'.
@@ -97,7 +97,7 @@ def test_binary_in_slot_is_red():
 
 def test_bytes_ride_the_blackboard_not_the_record():
     """L5's split: heavy payloads flow to consumers in-run and are freed; the
-    record carries only JSON slots."""
+ record carries only JSON slots."""
     held = {}
 
     def producer(self, ctx):
@@ -129,12 +129,12 @@ def test_unknown_slot_fails_closed_at_the_contract():
 
 def test_l12_grid_rule_is_stated():
     """L12 lives in the law + here (nothing is ported from vision/emit.py):
-    arrays inside slots that are keyframe-like structures key their elements on
-    a grid derived from the declared C1 span — never on model output, survivor
-    ordinals, or decoder frame indices. splits[] are NOT that: they are sub-span
-    timings that legitimately carry model-found boundaries as absolute times.
-    No v1 slot carries a keyframe-like array today; the first producer that
-    ships one must add its grid-keying test HERE."""
+ arrays inside slots that are keyframe-like structures key their elements on
+ a grid derived from the declared C1 span — never on model output, survivor
+ ordinals, or decoder frame indices. splits[] are NOT that: they are sub-span
+ timings that legitimately carry model-found boundaries as absolute times.
+ No v1 slot carries a keyframe-like array today; the first producer that
+ ships one must add its grid-keying test HERE."""
     # Executable placeholder: the v1 slot set carries no keyframe-like arrays.
     from app.models import C2SlotsV1
     assert set(C2SlotsV1.model_fields) == {

@@ -7,20 +7,20 @@ producing stages' values (``ctx.inputs["asr"].value`` / ``ctx.inputs["diarize"]
 .value``); reads are tolerant of an executor-stamped ``version`` key so the
 same code joins stamped slot dicts identically.
 
-Join semantics — the v0 ``audio/diarize/assign.py`` rules, EXACTLY:
-  * each asr split gets the speaker of its MAX-temporal-overlap diarization
-    turn; equal overlap tie-breaks on the lexicographically SMALLEST label;
-    strictly-zero overlap contributes nothing; no overlapping turn (or no
-    turns at all) -> ``speaker: None``;
-  * overlap is computed in seconds on the splits' own absolute times (v0
-    computed in chunk-relative seconds — same intervals, same result);
-  * one output split per asr split, in order, carrying the asr split's
-    ``t_start``/``t_end``/``value`` strings VERBATIM (never re-rendered) plus
-    the REQUIRED-NULLABLE ``speaker``.
+Join semantics — the prior ``audio/diarize/assign.py`` rules, EXACTLY:
+ * each asr split gets the speaker of its MAX-temporal-overlap diarization
+ turn; equal overlap tie-breaks on the lexicographically SMALLEST label;
+ strictly-zero overlap contributes nothing; no overlapping turn (or no
+ turns at all) -> ``speaker: None``;
+ * overlap is computed in seconds on the splits' own absolute times (v0
+ computed in chunk-relative seconds — same intervals, same result);
+ * one output split per asr split, in order, carrying the asr split's
+ ``t_start``/``t_end``/``value`` strings VERBATIM (never re-rendered) plus
+ the REQUIRED-NULLABLE ``speaker``.
 
 No asr splits (the VAD-silence empty claim) -> ``{"splits": []}``. The v0
 ``enrichments.speakers`` aggregation (per-speaker totals) died with the
-enrichments block (D24) and is NOT ported.
+enrichments block () and is NOT ported.
 """
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ def _epoch(value: str) -> float:
 def _speaker_for(start: float, end: float,
                  turns: list[tuple[float, float, str]]) -> Optional[str]:
     """The max-overlap turn's speaker (v0 ``_speaker_for``, ported verbatim):
-    lowest label breaks ties; None when no turn strictly overlaps."""
+ lowest label breaks ties; None when no turn strictly overlaps."""
     best_overlap = 0.0
     best_speaker: Optional[str] = None
     for t_start, t_end, speaker in turns:
@@ -63,7 +63,7 @@ class SpeakerAlignStage(Stage):
     byte_budget = 49152          # asr's splits + a speaker per split; the real
                                  # golden emits 371 B — wide margin at 60 s
     server = ""                  # pure CPU: no client pool
-    # L10: C10 v2 routes speech lines from slots.transcript.splits (D28).
+    # L10: C10 v2 routes speech lines from slots.transcript.splits ().
     consumer = "daylog:heard"
 
     def run_sync(self, ctx: StageContext) -> StageOutput:

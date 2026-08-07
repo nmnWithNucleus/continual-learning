@@ -1,4 +1,4 @@
-"""The prompt pack under the DP rebuild — digest, resolution, render, CLI.
+"""The prompt pack under the — digest, resolution, render, CLI.
 
 The kept subject (plan §6): the pack registry, its normalised content digest, the
 scenario resolution and the relock/show tooling. The v0 dialect half (cfg_tag,
@@ -36,7 +36,7 @@ _ALL = {
     "screen-clip-v1", "screen-clip-idle-v1", "screen-clip-single-v1",
     "screen-ocr-v1", "camera-clip-v1",
 }
-# The legacy per-frame-v0 pack was removed at Stage G demolition; the two tests that
+# The legacy legacy per-frame pack was removed at demolition; the two tests that
 # used it as a schema-less / placeholder-free example now build inline fixtures, so the
 # parser coverage does not depend on a retired pack.
 _SCHEMALESS_PROMPT = (
@@ -169,7 +169,7 @@ def test_get_unknown_id_raises():
 
 def test_routes_referencing_absent_pack_fails_loud_at_load(tmp_path):
     """A registry whose routes.json references a pack that is not on disk must FAIL
-    LOUD at load — never as a later select() crash mid-run."""
+ LOUD at load — never as a later select() crash mid-run."""
     d = _copy_subset(tmp_path / "p", ["camera-clip-v1", "screen-ocr-v1"])
     with pytest.raises(PromptPackError):
         load_registry(d)
@@ -246,7 +246,7 @@ def test_render_fills_placeholders_and_leaves_no_markers():
 
 def test_render_missing_context_raises():
     with pytest.raises(KeyError):
-        render(get("screen-clip-v1"), span_s="60")  # missing scenario_label / n / ...
+        render(get("screen-clip-v1"), span_s="60")  # missing scenario_label / n /...
 
 
 def test_render_ignores_extra_context_and_packs_without_placeholders():

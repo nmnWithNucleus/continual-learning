@@ -1,16 +1,15 @@
-"""The character budget — a chars-per-second-of-life dial, and a CORRECTNESS knob (D-11).
+"""The character budget — a chars-per-second-of-life dial, and a CORRECTNESS knob ().
 
 The training currency is *characters per day-log block*: acquisition was measured
 falling 3.2× for a 3.7× rise in chars/block. So the per-record caption/ocr length is
 not a cosmetic cap — it sets the dose. This module turns a chars-per-second-of-life
 RATE into a per-record character cap, applied as ``cap = round(rate × span_seconds)``
 so the dose is identical at any chunk length (that span-parametricity is what lets DP
-ship at 10 s and absorb 60 s without touching identity — D-01).
+ship at 10 s and absorb 60 s without touching identity —).
 
-NO CONFIG (DP rebuild, L4): the v0 ``VIDEO_CHARS_PER_SECOND`` / ``VIDEO_CAPTION_CHARS_SHARE``
-env knobs are dead. The rates are code pins in the stage files that spend them —
+NO CONFIG (L4): legacy chars-per-second env knobs are dead. The rates are code pins in the stage files that spend them —
 ``app/stages/video/clipcap.py`` pins the caption rate (16), ``app/stages/video/screentext.py``
-pins the OCR rate (6; the v0 split of 22 total). Changing a rate there is a vB bump.
+pins the OCR rate (6; the prior split of 22 total). Changing a rate there is a vB bump.
 Everything here is a pure function of ``(span_seconds, rate)`` / ``(text, cap)``.
 
 Truncation is deterministic (sentence boundary for the caption, word boundary for OCR)
@@ -25,23 +24,23 @@ _TERMINATORS = ".!?"
 
 def caption_cap(span_seconds: float, rate: float) -> int:
     """Max characters for one clip caption over a ``span_seconds`` chunk at ``rate``
-    chars-per-second-of-life (D-11). The caption text is truncated to this on a
-    sentence boundary, so the dose is span-invariant at a fixed rate."""
+ chars-per-second-of-life (). The caption text is truncated to this on a
+ sentence boundary, so the dose is span-invariant at a fixed rate."""
     return max(0, round(max(0.0, rate) * max(0.0, span_seconds)))
 
 
 def ocr_cap(span_seconds: float, rate: float) -> int:
-    """Max characters for one OCR digest over a ``span_seconds`` chunk (D-11)."""
+    """Max characters for one OCR digest over a ``span_seconds`` chunk ()."""
     return max(0, round(max(0.0, rate) * max(0.0, span_seconds)))
 
 
 def caption_word_bounds(span_seconds: float, rate: float) -> tuple[int, int]:
     """A (low, high) word-count band for the caption prompt, DERIVED from
-    ``caption_cap`` at ~6 chars/word with a 20 % floor. This is guidance handed to the
-    model in the prompt (``[[words_lo]]-[[words_hi]]``); the hard char cap is still
-    ``caption_cap`` applied to the rendered text. At span=60/rate=16 → ~(128, 160); at
-    span=10 → ~(21, 27) — a description that scales with the length of life it covers,
-    never a mandated line/word count (D-10 rejects padded static screens)."""
+ ``caption_cap`` at ~6 chars/word with a 20 % floor. This is guidance handed to the
+ model in the prompt (``[[words_lo]]-[[words_hi]]``); the hard char cap is still
+ ``caption_cap`` applied to the rendered text. At span=60/rate=16 → ~(128, 160); at
+ span=10 → ~(21, 27) — a description that scales with the length of life it covers,
+ never a mandated line/word count (rejects padded static screens)."""
     cap = caption_cap(span_seconds, rate)
     hi = max(1, round(cap / 6))
     lo = max(1, round(hi * 0.8))
@@ -50,10 +49,10 @@ def caption_word_bounds(span_seconds: float, rate: float) -> tuple[int, int]:
 
 def truncate_sentence(text: str, cap: int) -> str:
     """Truncate ``text`` to at most ``cap`` characters on a SENTENCE boundary — the
-    last ``.``/``!``/``?`` (followed by whitespace or end) at or before ``cap``. Falls
-    back to :func:`truncate_word` when no sentence boundary fits, so a single run-on
-    reply is still cut cleanly. Deterministic: identical (text, cap) → identical result
-    on every worker."""
+ last ``.``/``!``/``?`` (followed by whitespace or end) at or before ``cap``. Falls
+ back to :func:`truncate_word` when no sentence boundary fits, so a single run-on
+ reply is still cut cleanly. Deterministic: identical (text, cap) → identical result
+ on every worker."""
     text = text.strip()
     if cap <= 0:
         return ""
@@ -71,8 +70,8 @@ def truncate_sentence(text: str, cap: int) -> str:
 
 def truncate_word(text: str, cap: int) -> str:
     """Truncate ``text`` to at most ``cap`` characters on a WORD boundary (the last
-    space at or before ``cap``). A single word longer than ``cap`` is hard-cut so the
-    length bound always holds. Deterministic."""
+ space at or before ``cap``). A single word longer than ``cap`` is hard-cut so the
+ length bound always holds. Deterministic."""
     text = text.strip()
     if cap <= 0:
         return ""

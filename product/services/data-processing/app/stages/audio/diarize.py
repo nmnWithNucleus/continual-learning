@@ -5,10 +5,10 @@ nothing else. The v0 stage MUTATED the primary's segments in place (filled
 ``segments[].speaker`` + ``enrichments.speakers``); both are dead: the
 speaker-aligned view is the separate ``transcript`` slot from ``speaker_align``
 (L5 — no stage edits another's slot), and the ``enrichments.speakers``
-aggregation has no C2 v1 home (retired with the enrichments block, D24).
+aggregation has no C2 v1 home (retired with the enrichments block,).
 
 Params pinned in code (L4): ``span_seconds`` only — the server's one required
-param (turns are clamped to it server-side). v0's DIARIZE_MIN_SPEAKERS /
+param (turns are clamped to it server-side). prior DIARIZE_MIN_SPEAKERS /
 DIARIZE_MAX_SPEAKERS knobs defaulted to 0 = "let the model decide"; that
 default IS the pin — no clustering hints are sent. Sending hints would be a
 vB bump.
@@ -36,7 +36,7 @@ from .asr import require_client
 
 def normalize_speakers(turns) -> dict[str, str]:
     """raw server label -> ``speaker-N`` by first onset (raw label breaks ties)
-    — the v0 normalization rule, applied client-side to the slot vocabulary."""
+ — the prior normalization rule, applied client-side to the slot vocabulary."""
     first_onset: dict[str, float] = {}
     for turn in turns:
         raw = turn["speaker"]

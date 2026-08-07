@@ -1,17 +1,17 @@
-"""Graph resolution + the readiness executor (DP rebuild Stage C, Slot Law core).
+"""Graph resolution + the readiness executor (Slot Law core).
 
 RESOLUTION (cheap string work over a handful of stages, run BEFORE any stage) turns
 an explicit stage set into the executable DAG, enforcing the graph-shaped law
 loudly instead of skipping silently:
 
-  * every declaration re-validated (explicit mock sets fail like bad drop-ins);
-  * unique stage names; ONE producer per slot (L5, hard error);
-  * every ``needs`` resolves inside the set; no cycles;
-  * a required stage may not sit (transitively) downstream of an optional one —
-    its "required" promise would be hollow under L7's cancelled-cone rule;
-  * ``pipeline_version`` = the '+'-joined SORTED list of every stage's segment
-    ``<stage>.v<S>-<backend>.v<B>[.exp-<code>]`` (L4) — composed here, before any
-    stage runs, so the string states the ATTEMPTED dialect (L11).
+ * every declaration re-validated (explicit mock sets fail like bad drop-ins);
+ * unique stage names; ONE producer per slot (L5, hard error);
+ * every ``needs`` resolves inside the set; no cycles;
+ * a required stage may not sit (transitively) downstream of an optional one —
+ its "required" promise would be hollow under L7's cancelled-cone rule;
+ * ``pipeline_version`` = the '+'-joined SORTED list of every stage's segment
+ ``<stage>.v<S>-<backend>.v<B>[.exp-<code>]`` (L4) — composed here, before any
+ stage runs, so the string states the ATTEMPTED dialect (L11).
 
 EXECUTION is readiness-driven, not level-barriered: one task per stage inside an
 ``asyncio.TaskGroup``, each awaiting its needs' futures. ``run_sync`` stages
@@ -60,8 +60,8 @@ class GraphResolutionError(Exception):
 
 class SlotEmitError(RuntimeError):
     """A stage's slot emission broke the law (budget, shape, forged version) —
-    a stage-file bug surfacing as a stage failure: required ⇒ the chunk attempt
-    fails; optional ⇒ a hole. Never a truncation, never a silent fix-up."""
+ a stage-file bug surfacing as a stage failure: required ⇒ the chunk attempt
+ fails; optional ⇒ a hole. Never a truncation, never a silent fix-up."""
 
 
 # Sentinel a failed-or-cancelled stage's future resolves to; dependents cascade.
@@ -80,7 +80,7 @@ class ResolvedGraph:
 @dataclass
 class GraphResult:
     """One chunk's single-record payload: the slots map (each value stamped with
-    its producer's segment) + the per-stage statuses (L8's vocabulary)."""
+ its producer's segment) + the per-stage statuses (L8's vocabulary)."""
 
     slots: dict[str, Any]
     statuses: dict[str, str]             # stage name -> ok | failed | cancelled
@@ -174,7 +174,7 @@ def resolve(modality: str, stages: list[Stage]) -> ResolvedGraph:
 
 def emitted_slot_bytes(emitted: dict) -> int:
     """The budget measure: len(utf8(json(emitted slot))) under the canonical
-    serialization (no ascii escaping, compact separators)."""
+ serialization (no ascii escaping, compact separators)."""
     return len(json.dumps(emitted, ensure_ascii=False,
                           separators=(",", ":")).encode("utf-8"))
 
@@ -251,8 +251,8 @@ async def run_graph(
     metrics: Any = None,
 ) -> GraphResult:
     """Run one chunk through the resolved graph. Returns exactly ONE GraphResult
-    (the single-record assembly L2 rides on) or raises the leaf exception of a
-    required-stage failure (no record — L7)."""
+ (the single-record assembly L2 rides on) or raises the leaf exception of a
+ required-stage failure (no record — L7)."""
     loop = asyncio.get_running_loop()
     futures: dict[str, asyncio.Future] = {s.name: loop.create_future()
                                           for s in resolved.stages}
@@ -264,7 +264,7 @@ async def run_graph(
 
     def _release_inputs(stage: Stage) -> None:
         """One consumer (ran, failed or cancelled) is done with its inputs; free
-        a producer's transient bytes the moment its last consumer finishes."""
+ a producer's transient bytes the moment its last consumer finishes."""
         for need in stage.needs:
             remaining[need] -= 1
             if remaining[need] == 0 and need in blackboard:

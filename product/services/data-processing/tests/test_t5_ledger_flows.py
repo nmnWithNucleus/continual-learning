@@ -1,6 +1,6 @@
-"""T-5 — ledger/heal flows: the FULL L7/L8 law (Stage D) + the §4 crash table.
+"""T-5 — ledger/heal flows: the FULL L7/L8 law + the §4 crash table.
 
-The redelivery matrix: skip (case 3) / version-forward beside-ness (case 2) /
+The redelivery matrix: skip (case 3) / version-forward version-forward (case 2) /
 heal fills-the-hole byte-identically (case 4) / heal-exhaustion -> done_final +
 permanent-holes metric + skip thereafter / poison -> dead-letter, visible,
 redelivery re-arms. Plus the §4 crash rows this file owns directly:
@@ -9,15 +9,15 @@ converges) and the statuses round-trip (failed vs cancelled DISTINCT after a
 kill-9 of the journal). The remaining §4 rows are owned by named tests
 elsewhere — the worklog's crash-table checklist maps every row to its test:
 
-  * before journal.accept        -> test_async_ingest.test_failed_journal_accept_releases_claim
-  * after accept, before work    -> test_journal.test_kill_recovery_startup_redrive
-  * mid-graph                    -> test_async_ingest dead-letter/retry suite
-  * epoch fencing                -> test_journal.test_stale_worker_epoch_writes_no_op
-                                    + test_heal_failed_pending_delete_is_epoch_guarded…
-  * model server crash           -> servers/common kill-one drill + model_client
-                                    re-verify presentation tests
+ * before journal.accept -> test_async_ingest.test_failed_journal_accept_releases_claim
+ * after accept, before work -> test_journal.test_kill_recovery_startup_redrive
+ * mid-graph -> test_async_ingest dead-letter/retry suite
+ * epoch fencing -> test_journal.test_stale_worker_epoch_writes_no_op
+ + test_heal_failed_pending_delete_is_epoch_guarded…
+ * model server crash -> servers/common kill-one drill + model_client
+ re-verify presentation tests
 
-Seam-level heal containment (200-on-failure, never dead-letter, D16 bytes) is
+Seam-level heal containment (200-on-failure, never dead-letter, bytes) is
 pinned in test_heal_seam.py; this file owns the LAW-level matrix.
 """
 from __future__ import annotations
@@ -52,9 +52,9 @@ def _wait(pred, timeout: float = 10.0, interval: float = 0.01) -> bool:
 
 def test_same_dialect_redelivery_skips(client, monkeypatch):
     """L8 case 3 demands ALL GREEN: with this module's always-failing optional
-    stage patched healthy, a same-dialect redelivery is a pure skip. (Since
-    Stage D, a HOLEY record's redelivery is a heal, not a skip — that flow is
-    pinned below and in test_heal_seam.py.)"""
+ stage patched healthy, a same-dialect redelivery is a pure skip. (Since
+ a HOLEY record's redelivery is a heal, not a skip — that flow is
+ pinned below and in test_heal_seam.py.)"""
     monkeypatch.setattr(
         _OptionalBoom, "run_sync",
         lambda self, ctx: StageOutput(value={"values": ["keyboard typing"],
@@ -72,8 +72,8 @@ def test_same_dialect_redelivery_skips(client, monkeypatch):
 
 def test_version_forward_reprocess_lands_beside(client, monkeypatch):
     """A dialect change between deliveries: the redelivery is NOT served the
-    stale receipt — it reprocesses under the new version and the new record
-    lands beside the old (distinct record_id, both retained by the upsert)."""
+ stale receipt — it reprocesses under the new version and the new record
+ lands beside the old (distinct record_id, both retained by the upsert)."""
     fs = client.fake_storage
     c1 = make_c1(fs, chunk_id="t5-vfwd")
     first = client.post("/ingest", json=c1)
@@ -148,7 +148,7 @@ def mock_registry(monkeypatch):
 
 def test_optional_failure_ships_holey_record(client):
     """L7's second half: hole, statuses recorded, record ships. The heal that
-    fills the hole is pinned below and in test_heal_seam.py."""
+ fills the hole is pinned below and in test_heal_seam.py."""
     fs = client.fake_storage
     resp = client.post("/ingest", json=make_c1(fs, chunk_id="t5-hole"))
     assert resp.status_code == 200
@@ -158,12 +158,12 @@ def test_optional_failure_ships_holey_record(client):
     assert "asr" in record["content"]["slots"]           # the record still ships
 
 
-# ---- The full law (Stage D): heal byte-identity, exhaustion, crash rows --------
+# ---- The full law : heal byte-identity, exhaustion, crash rows --------
 
 def test_healed_record_byte_identical_to_never_holed_run(monkeypatch, tmp_path):
     """L8 case 4's strongest form: heal fills the hole and the healed record is
-    BYTE-IDENTICAL to a never-holed run of the same version — provable because
-    assembly is sorted and no wall-clock field exists in the record (§4)."""
+ BYTE-IDENTICAL to a never-holed run of the same version — provable because
+ assembly is sorted and no wall-clock field exists in the record (§4)."""
     from app.main import create_app
     from tests.test_heal_seam import _FlakyAcoustic
 
@@ -198,7 +198,7 @@ def test_healed_record_byte_identical_to_never_holed_run(monkeypatch, tmp_path):
 
 def test_heal_exhaustion_fires_metrics_and_skips(client):
     """Heal-exhaustion: done_final + the permanent-holes metric (once, per holed
-    stage) + skip thereafter. The attempts metric counts every heal re-run."""
+ stage) + skip thereafter. The attempts metric counts every heal re-run."""
     fs = client.fake_storage
     c1 = make_c1(fs, chunk_id="t5-mexh")
     client.post("/ingest", json=c1)                       # holey ship (boom stage)
@@ -224,8 +224,8 @@ def test_heal_exhaustion_fires_metrics_and_skips(client):
 
 def test_crash_after_post_before_mark_redelivery_converges(client, monkeypatch):
     """§4 row: crash after POST, before mark_processed. The redelivery finds no
-    receipt, reprocesses FULLY, and the re-POST is byte-identical — storage's
-    upsert is a no-op and the flow converges (then skips, all green here)."""
+ receipt, reprocesses FULLY, and the re-POST is byte-identical — storage's
+ upsert is a no-op and the flow converges (then skips, all green here)."""
     monkeypatch.setattr(
         _OptionalBoom, "run_sync",
         lambda self, ctx: StageOutput(value={"values": [], }),
@@ -258,7 +258,7 @@ def test_crash_after_post_before_mark_redelivery_converges(client, monkeypatch):
 
 class _ConeAlign(Stage):
     """Optional stage downstream of the always-failing acoustic — its status is
-    CANCELLED (never ran), and the ledger must keep that distinct from failed."""
+ CANCELLED (never ran), and the ledger must keep that distinct from failed."""
 
     name = "speaker_align"
     modality = "audio"
@@ -276,9 +276,9 @@ class _ConeAlign(Stage):
 
 def test_statuses_roundtrip_failed_vs_cancelled_after_kill9(monkeypatch, tmp_path):
     """The ledger keeps failed vs cancelled DISTINCT across a kill-9: post-hoc
-    inspection through a FRESH Journal handle (the recovery-test idiom — the
-    sqlite file is all that survives) and a restarted app both read the same
-    evidence, and the claim tree heals off it."""
+ inspection through a FRESH Journal handle (the recovery-test idiom — the
+ sqlite file is all that survives) and a restarted app both read the same
+ evidence, and the claim tree heals off it."""
     from app.main import create_app
     from app.stagegraph.processor import graph_processor
 
@@ -314,8 +314,8 @@ def test_statuses_roundtrip_failed_vs_cancelled_after_kill9(monkeypatch, tmp_pat
 
 def test_poison_chunk_dead_letters_then_redelivery_rearms(monkeypatch, tmp_path):
     """The matrix's poison row (L7): a terminal failure dead-letters — VISIBLE
-    in the journal and continuity, never a silent drop, and never a record —
-    and an external redelivery re-arms it for a clean run."""
+ in the journal and continuity, never a silent drop, and never a record —
+ and an external redelivery re-arms it for a clean run."""
     from app.main import create_app
 
     install_mock_audio_registry(monkeypatch)

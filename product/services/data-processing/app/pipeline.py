@@ -2,22 +2,22 @@
 
 Pure functions (no I/O). The stage graph has already produced the slots map
 (each value stamped with its producer's dialect segment by the executor); here
-we only assemble the C2 v1 envelope around it (plan §2, D24).
+we only assemble the C2 v1 envelope around it (plan §2,).
 
 ``record_id`` = sha256(chunk_id NUL pipeline_version) — NUL-joined, lowercase
 hex, EXACTLY TWO components (L3). One record per (chunk_id, pipeline_version)
-(L2) is why dropping the v0 discriminator is safe: same pair -> byte-identical
+(L2) is why dropping the prior discriminator is safe: same pair -> byte-identical
 id, so a redelivery/reprocess/heal re-POST is an idempotent /context upsert; a
 ``pipeline_version`` bump forks a new record BESIDE the old (version-forward,
 L8 case 2).
 
-``t_start``/``t_end`` are the C1 span strings carried VERBATIM (the D-05 rule,
+``t_start``/``t_end`` are the C1 span strings carried VERBATIM (the rule,
 ported from the retired vision/emit.py): never reparsed, reformatted or
 normalized — a re-rendered timestamp is how a record silently moves out of its
 day-log window. ``source{}`` is provenance verbatim from C1 minus ``modality``
 (lifted to the record root — a C1 chunk is strictly single-modality) and minus
 the transport-only fields (sequence, codec, blob_sha256, blob_bytes), exactly
-as in v0. The D17 civil-time trio (device_tz, device_utc_offset_minutes,
+as in v0. The civil-time trio (device_tz, device_utc_offset_minutes,
 device_clock) + device_location ride verbatim when present, omitted when absent
 — we derive nothing, validate nothing, infer nothing.
 
@@ -34,14 +34,14 @@ from .timeutil import parse_rfc3339
 # NUL separator between id components so no combination can collide by concatenation.
 _ID_SEP = b"\x00"
 
-# D17 provenance passthrough: carried verbatim when the device reported them.
+# provenance passthrough: carried verbatim when the device reported them.
 _SOURCE_OPTIONAL = ("device_tz", "device_utc_offset_minutes", "device_clock",
                     "device_location")
 
 
 def compute_record_id(chunk_id: str, pipeline_version: str) -> str:
     """Deterministic, URL-safe (hex) record id for (chunk_id, pipeline_version) —
-    the L3 two-component identity. Blind upsert key; no discriminator."""
+ the L3 two-component identity. Blind upsert key; no discriminator."""
     digest = hashlib.sha256()
     digest.update(chunk_id.encode("utf-8"))
     digest.update(_ID_SEP)
@@ -63,10 +63,10 @@ def build_c2(
 ) -> dict[str, Any]:
     """Assemble the ONE C2 v1 record for a chunk from its slots map (L2/L5).
 
-    ``slots`` is the executor's GraphResult.slots — every value already carries
-    its producer's segment as ``version``. An empty map is legal and honest
-    (all-optional-failure under L7: the dialect states what was attempted).
-    """
+ ``slots`` is the executor's GraphResult.slots — every value already carries
+ its producer's segment as ``version``. An empty map is legal and honest
+ (all-optional-failure under L7: the dialect states what was attempted).
+ """
     source: dict[str, Any] = {
         "device_id": c1["device_id"],
         "stream_id": c1["stream_id"],
@@ -85,7 +85,7 @@ def build_c2(
         "user_id": c1["user_id"],
         "modality": c1["modality"],
         "source": source,
-        "t_start": c1["t_start"],   # VERBATIM C1 strings — the D-05 rule
+        "t_start": c1["t_start"],   # VERBATIM C1 strings — the rule
         "t_end": c1["t_end"],
         "pipeline_version": pipeline_version,
         "content": {"slots": slots},

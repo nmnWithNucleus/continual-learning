@@ -18,19 +18,19 @@ sha256 `a2e29465ffc9c4df72a7571e7270fb4d304910637ef56e1770c01ba95ea0756d`
 
 ```json
 {
-  "device": "cuda",
-  "frameworks": {
-    "ffmpeg": "7.1",
-    "pyannote.audio": "3.3.2",
-    "torch": "2.8.0+cu128",
-    "torchaudio": "2.8.0+cu128"
-  },
-  "model_name": "pyannote/speaker-diarization-3.1",
-  "weights": {
-    "embedding_revision": "837717ddb9ff5507820346191109dc79c958d614",
-    "pipeline_revision": "84fd25912480287da0247647c3d2b4853cb3ee5d",
-    "segmentation_revision": "e66f3d3b9eb0873085418a7b813d3b369bf160bb"
-  }
+ "device": "cuda",
+ "frameworks": {
+ "ffmpeg": "7.1",
+ "pyannote.audio": "3.3.2",
+ "torch": "2.8.0+cu128",
+ "torchaudio": "2.8.0+cu128"
+ },
+ "model_name": "pyannote/speaker-diarization-3.1",
+ "weights": {
+ "embedding_revision": "837717ddb9ff5507820346191109dc79c958d614",
+ "pipeline_revision": "84fd25912480287da0247647c3d2b4853cb3ee5d",
+ "segmentation_revision": "e66f3d3b9eb0873085418a7b813d3b369bf160bb"
+ }
 }
 ```
 
@@ -44,12 +44,12 @@ Each run is a SEPARATE fresh process: server built in-process
 (`fastapi.testclient.TestClient`, no port), warm waited, one `POST /infer`,
 result serialized as canonical JSON (`sort_keys=True, indent=2`).
 
-| run | GPU (CUDA_VISIBLE_DEVICES) | result sha256      |
+| run | GPU (CUDA_VISIBLE_DEVICES) | result sha256 |
 |-----|----------------------------|--------------------|
-| 1   | 2                          | `fef8b89c0b925afe…`|
-| 2   | 2                          | `fef8b89c0b925afe…`|
-| 3   | 2                          | `fef8b89c0b925afe…`|
-| 4   | 3                          | `fef8b89c0b925afe…`|
+| 1 | 2 | `fef8b89c0b925afe…`|
+| 2 | 2 | `fef8b89c0b925afe…`|
+| 3 | 2 | `fef8b89c0b925afe…`|
+| 4 | 3 | `fef8b89c0b925afe…`|
 
 Full digest, all four runs and the committed golden:
 `fef8b89c0b925afe6ad6ab3f6d35a3851b168f8bd92fb2163eb425395f81a11b`.

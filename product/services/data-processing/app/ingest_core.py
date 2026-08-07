@@ -8,15 +8,15 @@ exactly when ``dedup.put`` runs (the C2 written), which is also when continuity
 is told ``note_processed``.
 
 Failures are raised as ``ProcessingError`` carrying BOTH:
-  * ``http_status`` — the exact status the INLINE path returns (502 for
-    blob/sha/context, 500 for bad-C2), mapped only at the HTTP boundary;
-  * ``transient`` — whether the async worker should RETRY (a 5xx / timeout /
-    connect blip: yes) or DEAD-LETTER immediately (a since-deleted blob, a
-    corrupt-bytes sha mismatch, an invalid C2: no). Misclassifying a terminal
-    failure as transient head-of-line-stalls the worker pool; misclassifying a
-    transient one as terminal dead-letters recoverable work. A required stage's
-    failure propagates as the stage raised it (the executor's leaf re-raise) —
-    the worker taxonomy treats non-ProcessingError exceptions as it always has.
+ * ``http_status`` — the exact status the INLINE path returns (502 for
+ blob/sha/context, 500 for bad-C2), mapped only at the HTTP boundary;
+ * ``transient`` — whether the async worker should RETRY (a 5xx / timeout /
+ connect blip: yes) or DEAD-LETTER immediately (a since-deleted blob, a
+ corrupt-bytes sha mismatch, an invalid C2: no). Misclassifying a terminal
+ failure as transient head-of-line-stalls the worker pool; misclassifying a
+ transient one as terminal dead-letters recoverable work. A required stage's
+ failure propagates as the stage raised it (the executor's leaf re-raise) —
+ the worker taxonomy treats non-ProcessingError exceptions as it always has.
 
 Pure of FastAPI: takes the storage client + dedup store explicitly (the caller
 reads ``app.state.storage`` per call, preserving the test transport-injection
@@ -62,13 +62,13 @@ def _observe(metrics, name: str, value: float, labels: Optional[dict] = None) ->
 
 def _sha256_hex(data: bytes) -> str:
     """Hex sha256 of a blob — module-level so it can be handed to a threadpool
-    (hashing a whole video blob is CPU-heavy and MUST NOT run on the event loop)."""
+ (hashing a whole video blob is CPU-heavy and MUST NOT run on the event loop)."""
     return hashlib.sha256(data).hexdigest()
 
 
 def _is_empty_claim(slot: dict) -> bool:
     """An honest empty claim (L11): a present slot whose payload is empty —
-    ``value: ""`` (asr/ocr/caption) or ``values: []`` (acoustic)."""
+ ``value: ""`` (asr/ocr/caption) or ``values: []`` (acoustic)."""
     if "value" in slot:
         return not str(slot["value"]).strip()
     if "values" in slot:
@@ -92,19 +92,19 @@ async def process_chunk(
     app_state: Any = None,
     heal: bool = False,
 ) -> list[str]:
-    """Process one accepted chunk end-to-end and return ``[record_id]`` (the D16
-    wire keeps its list shape; exactly one id is derivable per chunk — D24).
-    Raises ``ProcessingError`` on failure; on success the durable journal receipt
-    lands FIRST (epoch-guarded, off the loop), then the chunk is marked done in
-    ``dedup`` — journal-before-dedup, so a crash between them re-drives an
-    already-written chunk (idempotent upsert) rather than ever forgetting one.
+    """Process one accepted chunk end-to-end and return ``[record_id]`` (the 
+ wire keeps its list shape; exactly one id is derivable per chunk —).
+ Raises ``ProcessingError`` on failure; on success the durable journal receipt
+ lands FIRST (epoch-guarded, off the loop), then the chunk is marked done in
+ ``dedup`` — journal-before-dedup, so a crash between them re-drives an
+ already-written chunk (idempotent upsert) rather than ever forgetting one.
 
-    ``heal=True`` (L8 case 4) changes NOTHING about the run itself — full graph
-    off this delivery's envelope, same one-POST, and L3 makes the re-POSTed
-    record_id identical, so the upsert replaces holey with fuller — it only
-    routes the receipt through the journal's heal-budget arithmetic. Callers own
-    the containment of a FAILED heal (``heal_chunk`` / the worker's heal branch);
-    this function still raises on failure like any run."""
+ ``heal=True`` (L8 case 4) changes NOTHING about the run itself — full graph
+ off this delivery's envelope, same one-POST, and L3 makes the re-POSTed
+ record_id identical, so the upsert replaces holey with fuller — it only
+ routes the receipt through the journal's heal-budget arithmetic. Callers own
+ the containment of a FAILED heal (``heal_chunk`` / the worker's heal branch);
+ this function still raises on failure like any run."""
     chunk_id = c1["chunk_id"]
     modality = c1["modality"]
 
@@ -231,9 +231,9 @@ async def process_chunk(
 def _note_heal_outcome(metrics, modality: str, state: Optional[dict],
                        failed_run: bool) -> None:
     """Shared heal-attempt bookkeeping (both seams, success + failure): every
-    completed heal attempt counts (the metric is the rate; the ledger column is
-    the budget and counts only non-green ones), and the finalization edge fires
-    the permanent-holes counter once per holed stage."""
+ completed heal attempt counts (the metric is the rate; the ledger column is
+ the budget and counts only non-green ones), and the finalization edge fires
+ the permanent-holes counter once per holed stage."""
     if metrics is not None:
         metrics.inc("dp_heal_attempts_total", {"modality": modality})
     if state is None:
@@ -266,13 +266,13 @@ async def heal_chunk(
     prior_record_ids: list[str],
 ) -> list[str]:
     """L8 case 4 with the containment rules, for the INLINE seam (the async
-    worker branches at its dead-letter point instead, keeping its transient-retry
-    loop): run the full graph off THIS delivery's envelope; on success the upsert
-    replaced holey with fuller and the journal did the budget arithmetic. On ANY
-    failure — even a required stage, e.g. the fleet down — the chunk KEEPS its
-    existing record and done-row, ``heal_attempts`` increments (``heal_failed``),
-    and the reply is 200 + the existing record_id. A heal never dead-letters a
-    chunk that has a durable record, and never regresses done."""
+ worker branches at its dead-letter point instead, keeping its transient-retry
+ loop): run the full graph off THIS delivery's envelope; on success the upsert
+ replaced holey with fuller and the journal did the budget arithmetic. On ANY
+ failure — even a required stage, e.g. the fleet down — the chunk KEEPS its
+ existing record and done-row, ``heal_attempts`` increments (``heal_failed``),
+ and the reply is 200 + the existing record_id. A heal never dead-letters a
+ chunk that has a durable record, and never regresses done."""
     try:
         return await process_chunk(
             c1=c1, settings=settings, processor=processor,

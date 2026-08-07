@@ -127,7 +127,7 @@ changes nothing about our C2 obligations; `input` builds prompts from what C8 re
 | **M0** | Walking skeleton: C1 fixture → pull blob by `blob_ref` → audio ASR → C2 record in /context, `pipeline_version` stamped and idempotent | an end-to-end integration test green against a storage dev target; the record validates against the C2 schema; a re-pushed `chunk_id` yields no duplicate record |
 | **M1** | Full audio pipeline: denoise → diarize → ASR → translate; timestamps injected from the C1 envelope | Pilot body-cam + computer-mic sample processed; WER/DER measured on a labeled sample and published as baseline |
 | **M2** | Text normalization + image pipeline (ImgProc → OCR-specialist pass → dense caption → world-data injection) | Screenshots/webcam frames from pilot computer capture land in /context with captions **and transcribed on-screen text (with frame location)**; spot-check review pass, incl. an OCR-heavy screen |
-| **M3** | Video pipeline: VidProc chunking + dense describe, ported from POC Phase-2/3 machinery | Body-cam and screen-recording chunks described end-to-end; reviewed via an explorer-style spot-check tool |
+| **M3** | Video pipeline: clipprep chunking + dense describe, ported from POC Phase-2/3 machinery | Body-cam and screen-recording chunks described end-to-end; reviewed via an explorer-style spot-check tool |
 | **M4** | Cross-source time spine: per-device skew handling, one per-user timeline | Two-device concurrent test capture aligns within a documented skew bound; alignment test in CI |
 | **M5** | World-data enrichment: known-faces/people registry, geolocation, place/object tags | Registry-known faces tagged in pilot streams; geo/place tags from the C1 optional device-location field where captured, content-inferred otherwise |
 | **M6** | C8 synchronous API — same pipeline code, interactive profile | `input` round-trips a multimodal request through C8; p95 latency within the budget agreed in ARCHITECTURE.md |
@@ -262,8 +262,8 @@ reprocess is an upsert and not a duplicate.
    - A zone is a fact about where the user physically was, knowable only at the capture device and
      only at capture time. Anything we reconstructed downstream would be a guess dressed as data.
    - Skew stays *detectable* rather than *corrected*: `device_clock` flags an undisciplined stamp,
-     `device_utc_offset_minutes` witnesses what the device believed, and storage's `ingest_time` is
-     an independent clock.
+     `device_utc_offset_minutes` witnesses what the device believed, and storage's own
+     `created_at`/`updated_at` clocks are independent.
    - **Consequence for the Slot Law:** these fields are envelope *provenance we forward*, not
      signals we produce, so the L10 consumer-today rule does not gate them — the same way
      `device_id` and `blob_ref` are not gated.
@@ -284,16 +284,16 @@ reprocess is an upsert and not a duplicate.
 
    - The envelope carries the instant (`t_start`/`t_end` UTC), the civil-time context (`device_tz`,
      `device_utc_offset_minutes`), a discipline flag (`device_clock`), and dense
-     `(stream_id, sequence)` continuity; storage adds an independent `ingest_time`.
+     `(stream_id, sequence)` continuity; storage adds independent `created_at`/`updated_at`.
    - That is enough to *detect* a bad clock from stored data, which is what a cross-check is for.
    - Content-based RWT reconstruction is therefore **not** a standing pipeline pass. It stays a
-     diagnostic to reach for if the `device_clock` / `ingest_time` disagreement rate ever proves
+     diagnostic to reach for if the `device_clock` / storage-clock disagreement rate ever proves
      non-trivial on a real fleet.
 
    **Watch out for**
 
    - **Residual, genuinely open:** nobody measures that disagreement rate yet. A cheap `/metrics`
-     counter on `unsynced` chunks and |`ingest_time` − `t_end`| outliers would close it properly.
+     counter on `unsynced` chunks and |storage clock − `t_end`| outliers would close it properly.
 10. Screen capture is OCR-heavy: dense captioning at ~205-px effective frames drops small text (POC
     token-budget math). **Resolved (CTO, [D8](../../DECISIONS.md)): decouple OCR from the base
     model.**
@@ -420,7 +420,7 @@ v0 = **one lead session + on-demand workstream agents**. As the service grows:
 | Sub-team | Owns |
 |---|---|
 | Audio/text pipelines | denoise, diarization, ASR, translation, normalization |
-| Vision pipelines | ImgProc/VidProc, dense captioning, the OCR path |
+| Vision pipelines | ImgProc/clipprep, dense captioning, the OCR path |
 | Enrichment & time spine | world-data injection, registries, cross-source alignment |
 | Backend/reliability | stream orchestration, C1/C2/C8 surfaces, CI/CD, backpressure, cost + observability |
 | Research | captioning operating points, self-hosted captioner, RWT verification |
@@ -431,7 +431,7 @@ v0 = **one lead session + on-demand workstream agents**. As the service grows:
 
 - **[poc/live_stream_stability](../../../poc/live_stream_stability/README.md) — direct ancestor.**
   Phase-1 (download → ASR → diarize) prototypes the audio pipeline; Phase-2 (chunking + the
-  20-min/1-fps operating point) prototypes VidProc; Phase-3 (dense describe with video-relative +
+  20-min/1-fps operating point) prototypes video chunking; Phase-3 (dense describe with video-relative +
   real-world-time timestamps, multi-granularity, batch economics) prototypes video dense
   captioning + timestamp injection.
 - Deep record: its HANDOFF.md + `experiments/phase3_describe/`.

@@ -1,8 +1,8 @@
 """Storage-service client: pull raw blobs + write C2 records.
 
 Storage owns both stores; data-processing calls exactly two endpoints:
-  * GET  {STORAGE_URL}/raw/blobs?ref=<blob_ref>   -> 200 raw bytes body
-  * POST {STORAGE_URL}/context/records            (body = C2 JSON) -> {ok, record_id}
+ * GET {STORAGE_URL}/raw/blobs?ref=<blob_ref> -> 200 raw bytes body
+ * POST {STORAGE_URL}/context/records (body = C2 JSON) -> {ok, record_id}
 
 The ``ref`` is passed as a QUERY PARAM (not a path segment) because a blob_ref is
 an opaque storage-owned string that may contain '/'.
@@ -33,7 +33,7 @@ class StorageClient:
 
     async def get_blob(self, blob_ref: str) -> bytes:
         """Pull the raw chunk bytes by opaque ref. Raises httpx.HTTPStatusError on
-        a non-2xx (e.g. 404 for a since-deleted blob)."""
+ a non-2xx (e.g. 404 for a since-deleted blob)."""
         async with self._client() as client:
             resp = await client.get(
                 f"{self.base_url}/raw/blobs", params={"ref": blob_ref}

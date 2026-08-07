@@ -10,9 +10,9 @@
 ## Active
 
 - **First review of the v1 guide — pending.** Eleven modules (00–10) teach one record per chunk,
-  slots, the version law, the machinery/bureaucracy split, heal, and an honest real-vs-unbuilt
-  board. It wants a fresh read against the running service. Anything a fresh read surfaces about
-  the code goes to the [service board](../HANDOFF.md) §Next, not here.
+ slots, the version law, the machinery/bureaucracy split, heal, and an honest real-vs-unbuilt
+ board. It wants a fresh read against the running service. Anything a fresh read surfaces about
+ the code goes to the [service board](../HANDOFF.md) §Next, not here.
 
 ## How to edit the guide
 

@@ -1,7 +1,7 @@
-"""The ``screentext`` stage — a thin client over the ocr model server (DP rebuild).
+"""The ``screentext`` stage — a thin client over the ocr model server ().
 
 New-API client tests: the stage is driven directly with a StageContext whose
-``clients["ocr"]`` is a client-level fake (plan §3 — no server spawned). The
+``clients["ocr"]`` is a client-level fake (mock-dialect rule — no server spawned). The
 centerpiece is the GOLDEN test: the fake returns the REAL ocr server's measured
 ``/infer`` result (servers/ocr/tests/fixtures/golden_regions.json, bit-stable per its
 PROVENANCE.md) for the REAL committed input frame — so the ``ocr`` slot value pinned
@@ -50,8 +50,8 @@ GOLDEN_SLOT_VALUE = (
 
 class FakeOcrClient:
     """Client-level fake for the ocr server: records each /infer payload and returns a
-    canned result (or raises). The wire shape is asserted here so a drift from the
-    servers/common envelope fails in THIS suite, not on the fleet."""
+ canned result (or raises). The wire shape is asserted here so a drift from the
+ servers/common envelope fails in THIS suite, not on the fleet."""
 
     def __init__(self, result=None, fail_at: set[int] | None = None):
         self.result = result if result is not None else GOLDEN_REGIONS
@@ -102,7 +102,7 @@ def test_declaration():
 
 
 def test_pins_are_the_v0_defaults():
-    # The knob-disposition contract: the v0 env defaults, carried into code (L4).
+    # The knob-disposition contract: the prior env defaults, carried into code (L4).
     assert (MIN_CONF, MIN_CHARS, DEDUP_RATIO, OCR_CHARS_PER_SEC) == (0.60, 4, 0.92, 6.0)
 
 
@@ -131,7 +131,7 @@ def test_golden_value_is_deterministic():
 
 def test_no_ocr_times_is_ran_and_empty():
     """An idle chunk (no delta events, no floor read) still EMITS the slot: value ""
-    is the honest empty claim — the coverage signal. Never omitted on success."""
+ is the honest empty claim — the coverage signal. Never omitted on success."""
     client = FakeOcrClient()
     cf = ClipFrames(frames=_frames(2), ocr_times=(), idle=True, span_s=10.0)
     out = _run(ScreentextStage(), _ctx(cf, client, 10.0))
@@ -147,7 +147,7 @@ def test_empty_regions_is_ran_and_empty():
     assert len(client.calls) == 1
 
 
-# ------------------------------------------------------------------ error posture (v0 A-10)
+# ------------------------------------------------------------------ error posture (v0)
 
 def test_minority_of_frame_errors_is_absorbed():
     # 1 of 3 frames errors -> absorbed; the digest renders from the other two.
@@ -160,7 +160,7 @@ def test_minority_of_frame_errors_is_absorbed():
 
 def test_majority_of_frame_errors_raises():
     """>50% erroring RAISES — the stage is optional, so this becomes an ocr HOLE and a
-    cancelled caption cone (v0 dead-lettered the chunk; v1 heals via redrive, L8)."""
+ cancelled caption cone (prior dead-letter path the chunk; v1 heals via redrive, L8)."""
     client = FakeOcrClient(fail_at={0, 1})
     cf = ClipFrames(frames=_frames(3), ocr_times=(0.0, 5.0, 10.0), idle=False, span_s=60.0)
     with pytest.raises(RuntimeError, match=">50%"):
@@ -197,7 +197,7 @@ def test_match_frame_tolerance():
 def test_normalize_bbox_divides_pixels_and_passes_through_normalized():
     # Pixel coords (the ocr server's contract) divide by the frame dims...
     assert _normalize_bbox([640, 400, 1280, 800], 1280, 800) == (0.5, 0.5, 1.0, 1.0)
-    # ...already-normalized coords pass through (the Stage B carry-over check).
+    #...already-normalized coords pass through (the carry-over check).
     assert _normalize_bbox([0.1, 0.2, 0.3, 0.4], 1280, 800) == (0.1, 0.2, 0.3, 0.4)
     # Garbage degrades to the zero sentinel, never a crash.
     assert _normalize_bbox(["x"], 1280, 800) == (0.0, 0.0, 0.0, 0.0)

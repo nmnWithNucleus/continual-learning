@@ -1,48 +1,42 @@
 """``screentext`` — thin client over the ocr model server → the ``ocr`` slot.
 
-The DP-side half of D-06/D-07/D-08 under the rebuild. Consumes ``clipprep``'s
-transient ``ClipFrames``, sends each delta-gate-selected hi-res frame to the ocr
-server (``ctx.clients["ocr"]``, the framework ``/infer`` envelope: one base64 JPEG
-per call), then runs the KEPT client-side pipeline — bbox normalization → assemble
-(confidence gate, reading order + role, min-chars, deterministic redaction,
+Consumes ``clipprep``'s transient ``ClipFrames``, sends each delta-gate-selected hi-res
+frame to the ocr server (``ctx.clients["ocr"]``, the framework ``/infer`` envelope: one
+base64 JPEG per call), then runs the kept client-side pipeline — bbox normalization →
+assemble (confidence gate, reading order + role, min-chars, deterministic redaction,
 within-chunk dedup, char budget) — down to ONE self-anchored line.
 
 Slot ``ocr`` = ``{"value": <digest text>}``, emitted WHENEVER the stage ran:
 ``value == ""`` is the honest empty claim (OCR ran, the screen carried no legible
 text — the coverage signal, L11). The slot is absent only when the stage FAILED (a
-hole). OPTIONAL under L7 — v0 wired this ``policy='required'`` (a skipped OCR
-silently changed the caption); v1 gets the same guarantee structurally: a screentext
-failure cancels ``clipcap``'s cone (it ``needs`` this stage), so a caption can never
-ship computed from missing OCR — and the record ships with BOTH holes, healed by
-redrive (L8), instead of dead-lettering the chunk.
+hole). OPTIONAL under L7 — a screentext failure cancels ``clipcap``'s cone (it
+``needs`` this stage), so a caption can never ship computed from missing OCR — and
+the record ships with BOTH holes, healed by redrive (L8).
 
-Ported v0 posture (from the v0 stage adapter, documented there as A-10): per-frame
-server errors are ABSORBED and counted; >50% of a chunk's attempted frames erroring
-RAISES (refusing a corpus with the majority of on-screen text lost) — now a hole +
-heal instead of v0's redelivery.
+Per-frame server errors are ABSORBED and counted; >50% of a chunk's attempted frames
+erroring RAISES (refusing a corpus with the majority of on-screen text lost) — a hole
++ heal instead of dead-lettering the chunk.
 
-Identity: the det/rec model shas the v0 config pinned (``VIDEO_OCR_MODEL_SHA_DET/REC``
-asserted against the v0 OCR service's ``/health``) now live in ``servers/manifest.json``
+Identity: det/rec model shas are pinned in ``servers/manifest.json``
 ``expected_identity.weights.det_sha256/rec_sha256``, verified by ``ModelClient``
-before a replica serves its first call — same guarantee, one home. The server's
-engine settings (PP-OCRv4 det+rec, cls off, 4 threads, CPU EP) are pinned in
-``servers/ocr/server.py``; together they ARE ``Backend("ppocr", 1)``.
+before a replica serves its first call. The server's engine settings (PP-OCRv4 det+rec,
+cls off, 4 threads, CPU EP) are pinned in ``servers/ocr/server.py``; together they ARE
+``Backend("ppocr", 1)``.
 
-Code pins below (L4) — the v0 env knobs they replace (v0 defaults carried forward):
+Code pins below (L4):
 
   =========================  ==================  =====
-  v0 env knob (dead)         pin                 value
+  pin                        constant            value
   =========================  ==================  =====
-  VIDEO_OCR_MIN_CONF         MIN_CONF            0.60
-  VIDEO_OCR_MIN_CHARS        MIN_CHARS           4
-  VIDEO_OCR_DEDUP_RATIO      DEDUP_RATIO         0.92
-  (22 − 16, derived D-11)    OCR_CHARS_PER_SEC   6.0
+  min confidence             MIN_CONF            0.60
+  min chars                  MIN_CHARS           4
+  dedup ratio                DEDUP_RATIO         0.92
+  OCR chars/sec share        OCR_CHARS_PER_SEC   6.0
   =========================  ==================  =====
 
-Frame-time matching keeps v0's ``_MATCH_TOL_S = 0.25`` float-jitter tolerance.
-The v0 OCR service's 48 MB request-body cap is NOT carried forward: clipprep pins
-``ocr_frame_width=1728``, so a frame JPEG is bounded well under 2 MB by construction
-and the cap is unreachable — a framework-level body limit would guard nothing.
+Frame-time matching uses ``_MATCH_TOL_S = 0.25`` float-jitter tolerance.
+Clipprep pins ``ocr_frame_width=1728``, so a frame JPEG is bounded well under 2 MB
+by construction.
 """
 from __future__ import annotations
 
@@ -55,18 +49,17 @@ from ...vision.ocr import assemble
 
 logger = logging.getLogger("data-processing.stages.video.screentext")
 
-# ---- code pins (L4). Editing any of these is a vB bump (they change the ocr slot's
-# bytes AND, injected via D-09, the caption's). ------------------------------------
+# ---- code pins (L4). Editing any of these is a vB bump. --------------------
 MIN_CONF = 0.60          # drop server regions below this confidence
 MIN_CHARS = 4            # drop lines shorter than this
 DEDUP_RATIO = 0.92       # drop a line >= this similar to the previous kept (chunk-local)
-OCR_CHARS_PER_SEC = 6.0  # D-11: the OCR share of the 22 chars/second-of-life dose
+OCR_CHARS_PER_SEC = 6.0  # OCR share of the 22 chars/second-of-life dose
 
 # Match tolerance between an ``ocr_times`` value and a frame's ``t_offset_s`` (they come
-# from the same clipprep pass; this only guards float re-parse jitter). v0 value.
+# from the same clipprep pass; this only guards float re-parse jitter).
 _MATCH_TOL_S = 0.25
 
-# Ported v0 posture: a minority of per-frame errors is absorbed; a majority raises.
+# A minority of per-frame errors is absorbed; a majority raises.
 _MAX_ERROR_FRACTION = 0.5
 
 
@@ -83,7 +76,7 @@ def _match_frame(frames: tuple[Frame, ...], t: float) -> Frame | None:
 
 def _jpeg_dims(jpeg: bytes) -> tuple[int, int] | None:
     """Parse (width, height) from a JPEG's SOF marker — dependency-free (no PIL).
-    Ported verbatim from the retired v0 client (vision/ocr/ppocr.py)."""
+    Ported verbatim from the prior in-process client."""
     if not jpeg or len(jpeg) < 4 or jpeg[0] != 0xFF or jpeg[1] != 0xD8:
         return None
     i, n = 2, len(jpeg)
@@ -110,9 +103,7 @@ def _jpeg_dims(jpeg: bytes) -> tuple[int, int] | None:
 def _normalize_bbox(raw: list, frame_w: int, frame_h: int) -> tuple[float, float, float, float]:
     """Normalize a wire bbox ``[x0,y0,x1,y1]`` to [0,1]. The ocr server returns PIXEL
     coordinates of the submitted image (servers/ocr/server.py contract), which divide by
-    the frame dims; already-normalized coordinates (all <= 1.0) pass through. Ported
-    verbatim from the retired v0 client — the Stage B carry-over confirms the
-    pass-through stays valid."""
+    the frame dims; already-normalized coordinates (all <= 1.0) pass through."""
     try:
         x0, y0, x1, y1 = (float(v) for v in raw[:4])
     except (TypeError, ValueError, IndexError):
@@ -127,9 +118,9 @@ def _normalize_bbox(raw: list, frame_w: int, frame_h: int) -> tuple[float, float
 def _regions_to_read(result: dict, frame: Frame) -> OcrRead:
     """Map the server's ``{"regions": [{text, bbox, conf}, ...]}`` result onto the kept
     client-side shapes. Role is assigned DP-side from the normalized bbox in
-    ``assemble.render`` (role="" here), exactly as in v0."""
+    ``assemble.render`` (role="" here)."""
     dims = _jpeg_dims(frame.jpeg_hi or b"")
-    # v0 fallback geometry: the pinned OCR width and a 16:10 height estimate.
+    # Fallback geometry: the pinned OCR width and a 16:10 height estimate.
     frame_w = dims[0] if dims else 1728
     frame_h = dims[1] if dims else max(1, round(1728 * 10 / 16))
     regions = []
@@ -153,8 +144,8 @@ class ScreentextStage(Stage):
     needs = ("clipprep",)
     required = False          # L7: failure = hole + cancelled caption cone, healed later
     server = "ocr"
-    # L10: C10 v2 routes slots.ocr to World text lines (D28); clipcap also
-    # consumes it in-run (D-09 injection).
+    # L10: C10 v2 routes slots.ocr to World text lines; clipcap also
+    # consumes it in-run (OCR text injection).
     consumer = "daylog:world_text"
     # L5/L10 budget: version key + JSON overhead + the digest text. The text is capped at
     # OCR_CHARS_PER_SEC × span (360 chars at the 60 s design max), so 2048 bytes holds
@@ -183,7 +174,7 @@ class ScreentextStage(Stage):
                     "params": {},
                 })
                 reads.append(_regions_to_read(result, frame))
-            except Exception as exc:  # noqa: BLE001 - per-frame errors are absorbed (v0 A-10)
+            except Exception as exc:  # noqa: BLE001 - per-frame errors are absorbed
                 errors += 1
                 logger.warning("OCR read failed for chunk %s at t+%.2fs: %s",
                                chunk_id, t, exc)
@@ -199,7 +190,7 @@ class ScreentextStage(Stage):
             )
 
         # >50% of a chunk's OCR frames erroring RAISES: optional stage -> a HOLE and a
-        # cancelled caption cone (v0 dead-lettered instead; v1 heals via redrive, L8).
+        # cancelled caption cone (healed via redrive, L8).
         if attempted and errors / attempted > _MAX_ERROR_FRACTION:
             raise RuntimeError(
                 f"OCR failed on {errors}/{attempted} frames (>50%) for chunk {chunk_id} — "

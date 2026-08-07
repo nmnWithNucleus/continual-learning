@@ -1,6 +1,6 @@
-"""WP-C2 — graph resolution + the readiness executor under the Slot Law.
+"""graph resolution + the readiness executor under the Slot Law.
 
-KEPT from the v0 executor: readiness TaskGroup (independent stages overlap),
+KEPT from the prior executor: readiness TaskGroup (independent stages overlap),
 commit-on-success, cancel-and-await-siblings on required failure, leaf re-raise
 (the exact exception, ProcessingError preferred), threadpooled run_sync.
 
@@ -277,7 +277,7 @@ def test_commit_on_success_only():
 
 
 # ---------------------------------------------------------------------------
-# Slot emission law: budgets, shape, version stamping (L5)
+# Slot record emission rule: budgets, shape, version stamping (L5)
 # ---------------------------------------------------------------------------
 
 def test_budget_breach_on_required_stage_fails_the_chunk():
@@ -288,7 +288,7 @@ def test_budget_breach_on_required_stage_fails_the_chunk():
 
 def test_budget_counts_the_emitted_slot_utf8_bytes():
     """The measure is len(utf8(json(emitted slot incl. version))) — a value that
-    fits exactly passes, one byte more fails."""
+ fits exactly passes, one byte more fails."""
     value = {"value": "abc"}
     emitted = {"version": "fit.v1-mock.v1", **value}
     exact = len(json.dumps(emitted, ensure_ascii=False,
@@ -378,8 +378,8 @@ def test_bytes_freed_even_when_consumer_cone_is_cancelled():
 
 def test_required_stage_leaking_cancellederror_fails_the_chunk():
     """BLOCKER regression: a stage BODY raising asyncio.CancelledError must be a
-    stage failure, never mistaken for external cancellation — the leak let a
-    record SHIP with its required slot missing (journaled done, no retry)."""
+ stage failure, never mistaken for external cancellation — the leak let a
+ record SHIP with its required slot missing (journaled done, no retry)."""
     def leak(self, ctx):
         raise asyncio.CancelledError()
 
@@ -389,8 +389,8 @@ def test_required_stage_leaking_cancellederror_fails_the_chunk():
 
 def test_optional_stage_leaking_cancellederror_is_a_failed_hole():
     """The optional variant: the leak previously dropped the stage from statuses
-    entirely. It must read as an ordinary failure — 'failed' status, slot hole,
-    downstream cone cancelled, statuses COMPLETE for every resolved stage."""
+ entirely. It must read as an ordinary failure — 'failed' status, slot hole,
+ downstream cone cancelled, statuses COMPLETE for every resolved stage."""
     def leak(self, ctx):
         raise asyncio.CancelledError()
 
@@ -405,9 +405,9 @@ def test_optional_stage_leaking_cancellederror_is_a_failed_hole():
 
 def test_wire_bytes_do_not_depend_on_completion_order():
     """Reproduced defect: slots/statuses were inserted in completion order, so
-    record bytes varied with replica latency — falsifying §4's reprocess →
-    byte-identical → upsert-no-op chain (and, at Stage E, causing spurious
-    updated_at re-windows). Adversarial completion order must not move a byte."""
+ record bytes varied with replica latency — falsifying §4's reprocess →
+ byte-identical → upsert-no-op chain (and, at causing spurious
+ updated_at re-windows). Adversarial completion order must not move a byte."""
     import json as _json
     from app.pipeline import build_c2
 

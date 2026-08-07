@@ -1,4 +1,4 @@
-"""DedupStore — the L8 claim tree (Stage D) + the async claim lifecycle.
+"""DedupStore — the L8 claim tree + the async claim lifecycle.
 
 The five verdicts, decided ONLY from DP's own ledger (the row_lookup callback
 over the journal's done-row — never a storage read), under the existing one-lock
@@ -39,7 +39,7 @@ def test_no_row_is_fresh():
 
 def test_version_mismatch_is_version_forward_even_with_holes_or_final():
     """Tree order: the version check comes FIRST (L8 case 2) — a stale-dialect
-    row version-forwards regardless of its hole or budget state."""
+ row version-forwards regardless of its hole or budget state."""
     for row in (
         _row(pv="pv-OLD", statuses={"asr": "ok"}),
         _row(pv="pv-OLD", statuses={"asr": "ok", "acoustic": "failed"}),
@@ -84,7 +84,7 @@ def test_done_final_or_exhausted_budget_is_skip():
 
 def test_unresolvable_current_pv_skips_the_version_check():
     """current_pv None (modality unresolvable) — can't judge, same posture as the
-    old pv_for_modality None: the stored row is served."""
+ old pv_for_modality None: the stored row is served."""
     d = DedupStore(row_lookup=lambda cid: _row(pv="pv-OLD", statuses={"a": "ok"}))
     assert _classify(d, "c1", None).verdict == "skip"
 
@@ -115,8 +115,8 @@ def test_stable_skips_are_cached_heals_are_not():
 
 def test_classify_ledger_read_runs_off_the_event_loop():
     """Close-out round: the review-round fix moved the sqlite read off the loop;
-    this pins it (a docstring is not enforcement). The lookup must run on a
-    thread that is NOT the event-loop thread and has no running loop."""
+ this pins it (a docstring is not enforcement). The lookup must run on a
+ thread that is NOT the event-loop thread and has no running loop."""
     import threading
 
     seen: dict = {}

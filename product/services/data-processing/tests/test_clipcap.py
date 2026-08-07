@@ -2,7 +2,7 @@
 
 New-API client tests, headless: the OpenAI-compatible endpoint is a fake
 (``httpx.MockTransport`` injected through the ``vlm.make_async_client`` factory — the
-client-level-fake rule, plan §3), so the production wire (D-02 payload, D-09 OCR
+client-level-fake rule, mock-dialect rule), so the production wire (payload, OCR
 injection) is exercised with no model, and the caption slot value is PINNED.
 """
 from __future__ import annotations
@@ -101,7 +101,7 @@ def test_declaration():
 
 
 def test_identity_pins():
-    # The v0 env knobs, as code (L4): VIDEO_VLM_MODEL / VIDEO_SCENARIO /
+    # The legacy env names, as code (L4): VIDEO_VLM_MODEL / VIDEO_SCENARIO /
     # VIDEO_CAPTION_CHARS_SHARE.
     assert MODEL == "Qwen/Qwen3-VL-32B-Instruct"
     assert SCENARIO == "screen-mac"
@@ -116,7 +116,7 @@ def test_pack_digest_pin_matches_the_on_disk_pack():
 
 def test_pack_edit_without_vb_bump_fails_registration(monkeypatch):
     """The L4 hard gate: if the on-disk pack digests differently from the pin, the
-    stage module REFUSES to import — a .prompt.md edit cannot ship without a vB bump."""
+ stage module REFUSES to import — a.prompt.md edit cannot ship without a vB bump."""
     monkeypatch.setattr(stage_mod, "_REGISTRY", {})     # throwaway registry
     monkeypatch.setattr(stage_mod, "_discovered", True)
     monkeypatch.setattr(prompts, "PACK_DIGEST", "deadbeef")
@@ -126,7 +126,7 @@ def test_pack_edit_without_vb_bump_fails_registration(monkeypatch):
     # registered stage (and this module's imports) remain intact.
 
 
-# ------------------------------------------------------------------ the wire (D-02/D-09)
+# ------------------------------------------------------------------ the wire (/)
 
 def test_call_produces_the_pinned_caption_slot():
     captured: list[httpx.Request] = []
@@ -141,7 +141,7 @@ def test_call_produces_the_pinned_caption_slot():
     finally:
         mp.undo()
     # The PINNED caption: render_caption over the canned reply at span 60/rate 16
-    # (cap 960 — no truncation), D-10 lead + description.
+    # (cap 960 — no truncation), lead + description.
     assert out.value == {"value":
         "Xcode — editing Swift code. The person edits a Swift file in Xcode, "
         "scrolling through a view controller."}
@@ -155,7 +155,7 @@ def test_payload_shape_is_one_multi_image_call(monkeypatch):
     ocr_text = "+0s titlebar: Xcode — ViewController.swift"
     _run(_ctx(_clip(n=3), ocr_text=ocr_text))
 
-    assert len(captured) == 1                       # ONE call (D-02), never per-frame
+    assert len(captured) == 1                       # ONE call (), never per-frame
     req = captured[0]
     assert req.url.path == "/v1/chat/completions"
     body = json.loads(req.content)
@@ -170,12 +170,12 @@ def test_payload_shape_is_one_multi_image_call(monkeypatch):
     system, user = body["messages"]
     assert system["role"] == "system" and isinstance(system["content"], str)
     parts = user["content"]
-    # Frame labels interleave before each image; the task text is LAST (D-02).
+    # Frame labels interleave before each image; the task text is LAST ().
     images = [p for p in parts if p["type"] == "image_url"]
     labels = [p for p in parts if p["type"] == "text" and p["text"].startswith("Frame ")]
     assert len(images) == 3 and len(labels) == 3
     assert parts[-1]["type"] == "text" and "Reply with ONE JSON" in parts[-1]["text"]
-    # D-09: the OCR text is injected INTO the prompt text, before the task.
+    # : the OCR text is injected INTO the prompt text, before the task.
     head = parts[0]
     assert head["type"] == "text" and ocr_text in head["text"]
 
@@ -202,7 +202,7 @@ def test_single_frame_uses_the_single_pack_and_idle_uses_idle(monkeypatch):
 
 def test_operational_env_reaches_the_wire_but_not_the_bytes(monkeypatch):
     """VLM_URL/VLM_API_KEY are operational (L4): they move the request, never the
-    slot value."""
+ slot value."""
     captured: list[httpx.Request] = []
     _fake_endpoint(monkeypatch, capture=captured)
     monkeypatch.setenv("VLM_URL", "http://elsewhere.test:9999")
@@ -258,7 +258,7 @@ def test_render_lead_and_description():
 
 
 def test_render_degrades_without_dangling_separators():
-    # D-10: no dangling " — ", no leading ". " when fields are empty.
+    # : no dangling " — ", no leading ". " when fields are empty.
     assert render_caption(_desc(app="", activity=""), 60.0)[0] == "A thread is open."
     assert render_caption(_desc(activity=""), 60.0)[0] == "Mail. A thread is open."
     assert render_caption(_desc(app=""), 60.0)[0] == "reading an email. A thread is open."
@@ -267,7 +267,7 @@ def test_render_degrades_without_dangling_separators():
 def test_render_is_single_line(monkeypatch):
     d = _desc(description="line one\nline two\n\nline three")
     out, _ = render_caption(d, 60.0)
-    assert "\n" not in out and "  " not in out      # D-12
+    assert "\n" not in out and "  " not in out      # 
 
 
 def test_render_truncates_at_the_span_budget_on_a_sentence():
@@ -319,11 +319,11 @@ def test_parse_fallback_increments_the_real_family(monkeypatch):
 
 
 def test_caption_truncation_increments_the_real_family(monkeypatch):
-    """Stage D WP-D0 (inherited nit): the {pass="caption"} series had no test —
-    dp_video_truncated_total was proven recording only for {pass="ocr"}. Drive
-    the REAL stage through a span small enough that the canned reply overflows
-    the caption cap (16 chars/s -> 32 at span 2) and assert the series renders
-    under main.py's exact declaration."""
+    """(inherited nit): the {pass="caption"} series had no test —
+ dp_video_truncated_total was proven recording only for {pass="ocr"}. Drive
+ the REAL stage through a span small enough that the canned reply overflows
+ the caption cap (16 chars/s -> 32 at span 2) and assert the series renders
+ under main.py's exact declaration."""
     from dataclasses import replace as dc_replace
 
     from app.metrics import Metrics

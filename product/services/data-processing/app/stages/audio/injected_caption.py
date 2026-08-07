@@ -11,20 +11,20 @@ name in the dialect segment, INJECT_CAPTION_INDEX became the constructor
 argument.
 
 Ported v0 semantics (the old injected-caption stage, verbatim where it matters):
-  * THE JOIN IS WALL-CLOCK, and it has to be — a replayed chunk's ids are
-    freshly-minted ULIDs, so the shared spine is the only join key. A chunk's
-    captions are the index rows whose ``t_start`` falls inside the chunk's C1
-    span (HALF-OPEN [t_start, t_end), the day-log's attribution rule), found
-    by bisect over the sorted row starts.
-  * the emitted splits carry the index's OWN time strings VERBATIM (v0's rule:
-    they are the spine recording stamped from; re-rendering them is how a
-    timezone or trailing-Z difference silently moves a record out of its
-    window).
-  * blank-text rows are skipped; a missing/malformed index RAISES rather than
-    yielding an empty result (a silent zero-caption day reads exactly like a
-    day nobody described); the parsed index is cached per (mtime_ns, size) so
-    a redeployed file is picked up but a 15 MB index parses once, not per
-    chunk.
+ * THE JOIN IS WALL-CLOCK, and it has to be — a replayed chunk's ids are
+ freshly-minted ULIDs, so the shared spine is the only join key. A chunk's
+ captions are the index rows whose ``t_start`` falls inside the chunk's C1
+ span (HALF-OPEN [t_start, t_end), the day-log's attribution rule), found
+ by bisect over the sorted row starts.
+ * the emitted splits carry the index's OWN time strings VERBATIM (prior rule:
+ they are the spine recording stamped from; re-rendering them is how a
+ timezone or trailing-Z difference silently moves a record out of its
+ window).
+ * blank-text rows are skipped; a missing/malformed index RAISES rather than
+ yielding an empty result (a silent zero-caption day reads exactly like a
+ day nobody described); the parsed index is cached per (mtime_ns, size) so
+ a redeployed file is picked up but a 15 MB index parses once, not per
+ chunk.
 
 Slot value: ``{"splits": [{t_start, t_end, value}...]}``; ``[]`` = ran, no
 described window in this span (honest empty claim, L11).
@@ -73,8 +73,8 @@ class InjectedCaptionStage(Stage):
     # ---- index ------------------------------------------------------------------
     def _load_index(self) -> tuple[list[float], list[dict[str, Any]]]:
         """The caption index as (sorted start epochs, rows). Raises loudly on a
-        missing/malformed file — v0's rule: injection was asked for, so a
-        silent empty result is indistinguishable from an undescribed day."""
+ missing/malformed file — prior rule: injection was asked for, so a
+ silent empty result is indistinguishable from an undescribed day."""
         stat = Path(self.index_path).stat()   # missing file raises here
         key = (stat.st_mtime_ns, stat.st_size)
         if self._cache is not None and self._cache[0] == key:

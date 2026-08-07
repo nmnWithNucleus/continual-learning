@@ -1,51 +1,50 @@
-"""The uniform Stage + per-modality registry (DP rebuild Stage C, Slot Law L4/L5).
+"""The uniform Stage + per-modality registry (Slot Law L4/L5).
 
 A stage is ONE disjoint file under ``app/stages/<modality>/`` decorated with
 ``@register_stage``. The declaration IS the contract surface:
 
-  * ``name`` / ``modality`` — who this is; ``slot`` (default = ``name``) — the ONE
-    record slot it may produce. One enabled producer per slot (registration + resolve
-    both enforce it); no stage edits another stage's slot — derived views are new
-    slots from ordinary stages whose ``needs`` reference the inputs (L5).
-  * ``stage_version`` (vS) bumps on CONTRACT changes: needs, slot name/shape, emit
-    semantics, budget. ``backend`` (name + vB, resolved in code) bumps on
-    IMPLEMENTATION changes: model, weights, prompts, thresholds, any behavior (L4).
-    The stage's dialect segment is ``<name>.v<S>-<backend>.v<B>[.exp-<code>]``; the
-    executor composes ``pipeline_version`` from the enabled stages' segments,
-    sorted, '+'-joined. No output-affecting env knobs exist anywhere — a stage
-    never even sees Settings; behavior lives in code or it does not exist.
-  * Mock backends are client-level fakes selected the same way real backends are —
-    by name, in the version string: construct the SAME stage class with
-    ``backend=Backend("mock", 1)`` and hand the context a fake client under the
-    stage's ``server`` key. The stage body runs identically either way.
-  * ``required`` (L7): a required stage's failure fails the chunk attempt (no
-    record — worker retry then dead-letter); an optional stage's failure leaves its
-    slot a hole, cancels its downstream cone, and the record ships.
-  * ``byte_budget`` (L5): the ceiling on the emitted slot's serialized UTF-8
-    JSON bytes at assembly — the measure includes the executor-stamped
-    ``version`` key, i.e. exactly the bytes the record carries for the slot.
-    Raising it is a stage-version bump; exceeding it is a stage failure, never
-    truncation. Declared here, in the stage file, so review sees it.
-  * ``consumer`` (L10, ruled in at the Stage C cleanup round): every slot ships
-    with a named consumer-today or an explicit speculative marker —
-    ``"daylog:<line>"`` (a C10 renderer route), ``"stage:<name>"`` (a downstream
-    stage consumes it in-run), or ``"speculative:<why>"``. Mandatory at
-    registration; declaration-only (no runtime behavior); pinned by the T-3
-    snapshot. Rough chars-per-second-of-life costs stay docstring-grade.
-  * Exactly one of ``run_sync`` (executed in a worker thread — blocking work can
-    never freeze the event loop by accident) or ``run_async`` (await-native IO:
-    the thin-client path, freeing threadpool tokens). Both receive ``StageContext``
-    and return ``StageOutput``.
+ * ``name`` / ``modality`` — who this is; ``slot`` (default = ``name``) — the ONE
+ record slot it may produce. One enabled producer per slot (registration + resolve
+ both enforce it); no stage edits another stage's slot — derived views are new
+ slots from ordinary stages whose ``needs`` reference the inputs (L5).
+ * ``stage_version`` (vS) bumps on CONTRACT changes: needs, slot name/shape, emit
+ semantics, budget. ``backend`` (name + vB, resolved in code) bumps on
+ IMPLEMENTATION changes: model, weights, prompts, thresholds, any behavior (L4).
+ The stage's dialect segment is ``<name>.v<S>-<backend>.v<B>[.exp-<code>]``; the
+ executor composes ``pipeline_version`` from the enabled stages' segments,
+ sorted, '+'-joined. No output-affecting env knobs exist anywhere — a stage
+ never even sees Settings; behavior lives in code or it does not exist.
+ * Mock backends are client-level fakes selected the same way real backends are —
+ by name, in the version string: construct the SAME stage class with
+ ``backend=Backend("mock", 1)`` and hand the context a fake client under the
+ stage's ``server`` key. The stage body runs identically either way.
+ * ``required`` (L7): a required stage's failure fails the chunk attempt (no
+ record — worker retry then dead-letter); an optional stage's failure leaves its
+ slot a hole, cancels its downstream cone, and the record ships.
+ * ``byte_budget`` (L5): the ceiling on the emitted slot's serialized UTF-8
+ JSON bytes at assembly — the measure includes the executor-stamped
+ ``version`` key, i.e. exactly the bytes the record carries for the slot.
+ Raising it is a stage-version bump; exceeding it is a stage failure, never
+ truncation. Declared here, in the stage file, so review sees it.
+ * ``consumer`` (L10, ruled in at the cleanup round): every slot ships
+ with a named consumer-today or an explicit speculative marker —
+ ``"daylog:<line>"`` (a C10 renderer route), ``"stage:<name>"`` (a downstream
+ stage consumes it in-run), or ``"speculative:<why>"``. Mandatory at
+ registration; declaration-only (no runtime behavior); pinned by the T-3
+ snapshot. Rough chars-per-second-of-life costs stay docstring-grade.
+ * Exactly one of ``run_sync`` (executed in a worker thread — blocking work can
+ never freeze the event loop by accident) or ``run_async`` (await-native IO:
+ the thin-client path, freeing threadpool tokens). Both receive ``StageContext``
+ and return ``StageOutput``.
 
 ``server`` is operational routing only (which model-server client pool the stage
 calls, e.g. ``"whisper"``); it is deliberately NOT part of the identity segment —
 endpoints/replicas/timeouts are operational, the model behind them is pinned by
 the server's own code + manifest identity (L9).
 
-Deleted with their subject matter (D23/D26): primary/mutate/sidecar kinds,
-``writes``/``mutable_slots``, SlotView capability proxies, ``best_effort`` policy
-machinery, ``order``, per-stage ``version_fragment``/``enabled`` resolvers, the R1
-fork rider + its frozen exemption, ``assemble``.
+These do not exist and must not be re-added: primary/mutate/sidecar kinds,
+``writes``/``mutable_slots``, SlotView, ``best_effort`` policy machinery, ``order``,
+per-stage ``version_fragment``/``enabled`` resolvers, R1 fork riders, ``assemble``.
 """
 from __future__ import annotations
 
@@ -62,13 +61,13 @@ _NAME_RE = re.compile(r"[a-z0-9_]+\Z")
 
 class StageRegistrationError(Exception):
     """A malformed stage declaration — raised at import/registration so a bad
-    drop-in fails loudly before it can ever run."""
+ drop-in fails loudly before it can ever run."""
 
 
 @dataclass(frozen=True)
 class Backend:
     """A stage's implementation identity: ``name`` selects it (in code — the same
-    way for real and mock), ``version`` (vB) bumps on any behavior change."""
+ way for real and mock), ``version`` (vB) bumps on any behavior change."""
 
     name: str
     version: int
@@ -78,17 +77,17 @@ class Backend:
 class StageOutput:
     """What a stage's run returns.
 
-    ``value`` — the JSON slot value committed into the record under the stage's
-    slot name (the executor adds the ``version`` key). ``None`` = this stage emits
-    no record slot (e.g. a prep stage whose whole output is transient bytes).
-    An empty-but-present value is the honest empty claim (L11) — distinct from
-    ``None`` and from a hole.
+ ``value`` — the JSON slot value committed into the record under the stage's
+ slot name (the executor adds the ``version`` key). ``None`` = this stage emits
+ no record slot (e.g. a prep stage whose whole output is transient bytes).
+ An empty-but-present value is the honest empty claim (L11) — distinct from
+ ``None`` and from a hole.
 
-    ``bytes`` — an in-run-only payload (raw frames, decoded audio…) handed to
-    dependents on the blackboard and FREED by the executor after the last consumer
-    finishes (L5: within a run the blackboard carries {ref, bytes}; binary never
-    lands in a slot).
-    """
+ ``bytes`` — an in-run-only payload (raw frames, decoded audio…) handed to
+ dependents on the blackboard and FREED by the executor after the last consumer
+ finishes (L5: within a run the blackboard carries {ref, bytes}; binary never
+ lands in a slot).
+ """
 
     value: Any = None
     bytes: Any = None
@@ -97,12 +96,12 @@ class StageOutput:
 @dataclass
 class StageContext:
     """The per-stage view of one chunk's run. No Settings anywhere: a stage that
-    wants a knob must put it in code and bump vB (L4).
+ wants a knob must put it in code and bump vB (L4).
 
-    ``inputs`` holds exactly the declared ``needs``' outputs, keyed by stage name.
-    ``clients`` maps server names (``Stage.server``) to model clients — real
-    ModelClients in production, client-level fakes under a mock dialect.
-    """
+ ``inputs`` holds exactly the declared ``needs``' outputs, keyed by stage name.
+ ``clients`` maps server names (``Stage.server``) to model clients — real
+ ModelClients in production, client-level fakes under a mock dialect.
+ """
 
     c1: Mapping[str, Any]
     blob: bytes
@@ -125,7 +124,7 @@ class Stage:
     byte_budget: int = 0                   # L5 ceiling on the emitted slot's bytes
     consumer: str = ""                     # L10: daylog:<line> | stage:<name> | speculative:<why>
     server: str = ""                       # operational: which client pool run() uses
-    experiment: str = ""                   # non-empty -> .exp-<code> on the segment
+    experiment: str = ""                   # non-empty ->.exp-<code> on the segment
 
     def __init__(self, *, backend: Optional[Backend] = None,
                  experiment: Optional[str] = None) -> None:
@@ -168,8 +167,8 @@ class Stage:
 
 def validate_stage(stage: Stage) -> None:
     """The declaration checks, hard. Shared by registration and by explicit
-    stage-set construction (mock dialects), so a malformed test set fails the
-    same way a malformed drop-in file does."""
+ stage-set construction (mock dialects), so a malformed test set fails the
+ same way a malformed drop-in file does."""
     cls_name = type(stage).__name__
 
     def _bad(msg: str) -> StageRegistrationError:
@@ -230,7 +229,7 @@ _discovered = False
 
 def register_stage(cls: type[Stage]) -> type[Stage]:
     """Class decorator: validate the declaration hard at import, then register
-    the stage instance (constructed with its in-code default backend)."""
+ the stage instance (constructed with its in-code default backend)."""
     stage = cls()
     validate_stage(stage)
 
@@ -253,7 +252,7 @@ def register_stage(cls: type[Stage]) -> type[Stage]:
 
 def _discover() -> None:
     """Import every module under ``app/stages/`` exactly once (recursive) so each
-    stage file self-registers — a new stage is a new file and NOTHING else."""
+ stage file self-registers — a new stage is a new file and NOTHING else."""
     global _discovered
     if _discovered:
         return
@@ -277,14 +276,14 @@ def _discover() -> None:
 
 def stages_for(modality: str) -> list[Stage]:
     """All registered stages for a modality, sorted by name (deterministic;
-    execution order is readiness-driven, record slots are a map — nothing else
-    consumes an ordering). Empty if none."""
+ execution order is readiness-driven, record slots are a map — nothing else
+ consumes an ordering). Empty if none."""
     _discover()
     return sorted(_REGISTRY.get(modality, {}).values(), key=lambda s: s.name)
 
 
 def registered_modalities() -> list[str]:
     """Sorted modalities that currently have at least one registered stage —
-    the modality routing the retired processors/ registry used to own."""
+ the modality routing the retired processors/ registry used to own."""
     _discover()
     return sorted(m for m, by_name in _REGISTRY.items() if by_name)

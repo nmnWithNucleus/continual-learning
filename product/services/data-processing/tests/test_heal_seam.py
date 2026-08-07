@@ -1,4 +1,4 @@
-"""WP-D2 seam wiring — the four verdicts routed at both ingest paths (L8).
+"""seam wiring — the four verdicts routed at both ingest paths (L8).
 
 Inline and async /ingest route fresh / version-forward / skip / heal from the
 claim tree; the async path heal-claims via the queue like any job. Heal
@@ -6,7 +6,7 @@ containment at the seam: a heal re-runs the FULL graph off the redelivery's own
 envelope, re-POSTs the SAME record_id (L3: same chunk_id + pv), and NEVER
 regresses done — a failed heal (even a required stage: fleet down) keeps the
 existing record and done-row, increments the budget, and answers 200 with the
-existing record_id; it never dead-letters. The D16 wire shapes stay
+existing record_id; it never dead-letters. The wire shapes stay
 byte-identical throughout (202/200/503).
 """
 from __future__ import annotations
@@ -35,7 +35,7 @@ def _wait(pred, timeout: float = 10.0, interval: float = 0.01) -> bool:
 
 class _FlakyAcoustic(Stage):
     """Optional stage with a class-level kill switch — the 'model server down'
-    stand-in. Slot value is a valid contract `acoustic` slot."""
+ stand-in. Slot value is a valid contract `acoustic` slot."""
 
     name = "acoustic"
     modality = "audio"
@@ -55,7 +55,7 @@ class _FlakyAcoustic(Stage):
 @pytest.fixture()
 def mock_registry(monkeypatch):
     """The conftest `client` fixture picks this override up: mock asr (required)
-    + the flaky optional acoustic."""
+ + the flaky optional acoustic."""
     reg = install_mock_audio_registry(monkeypatch)
     _FlakyAcoustic.down = False
     stage_mod.register_stage(_FlakyAcoustic)
@@ -99,7 +99,7 @@ def test_inline_heal_fills_the_hole_same_record_id(client):
 
 def test_inline_heal_failure_never_regresses_done(client, monkeypatch):
     """The containment law: mid-heal REQUIRED failure (asr down too) keeps the
-    record + done-row, charges the budget, answers 200 + the existing id."""
+ record + done-row, charges the budget, answers 200 + the existing id."""
     fs = client.fake_storage
     c1 = make_c1(fs, chunk_id="seam-hf")
     _FlakyAcoustic.down = True
@@ -124,7 +124,7 @@ def test_inline_heal_failure_never_regresses_done(client, monkeypatch):
 
 def test_inline_heal_exhaustion_finalizes_then_skips(client):
     """Still-holey heals charge the budget; at HEAL_MAX_ATTEMPTS the row goes
-    done_final and every later delivery is a pure skip (no graph, no blob)."""
+ done_final and every later delivery is a pure skip (no graph, no blob)."""
     fs = client.fake_storage
     c1 = make_c1(fs, chunk_id="seam-exh")
     _FlakyAcoustic.down = True
@@ -150,10 +150,10 @@ def test_inline_heal_exhaustion_finalizes_then_skips(client):
 def test_inline_heal_failure_with_failed_bookkeeping_still_answers_200(client,
                                                                        monkeypatch):
     """Close-out round: the containment write itself failing (heal's graph run
-    fails AND journal.heal_failed raises — lock past the busy timeout, disk
-    full) must still answer 200 + the existing record_id, with the budget
-    UNCHARGED and no dead-letter. The review round shipped this guard without a
-    test — an untested behavior change its own TDD framing claimed not to make."""
+ fails AND journal.heal_failed raises — lock past the busy timeout, disk
+ full) must still answer 200 + the existing record_id, with the budget
+ UNCHARGED and no dead-letter. The review round shipped this guard without a
+ test — an untested behavior change its own TDD framing claimed not to make."""
     fs = client.fake_storage
     c1 = make_c1(fs, chunk_id="seam-hf2")
     _FlakyAcoustic.down = True
@@ -186,7 +186,7 @@ def test_inline_heal_failure_with_failed_bookkeeping_still_answers_200(client,
 
 def test_inline_heal_repost_is_byte_identical_while_holes_persist(client):
     """A still-holey heal re-POSTs the same bytes (sorted assembly + L3 identity):
-    storage's byte-compare sees a no-op, `updated_at` must not re-window."""
+ storage's byte-compare sees a no-op, `updated_at` must not re-window."""
     fs = client.fake_storage
     c1 = make_c1(fs, chunk_id="seam-noop")
     _FlakyAcoustic.down = True
@@ -232,7 +232,7 @@ def test_async_heal_claim_rides_the_queue(async_client):
 
     _FlakyAcoustic.down = False
     r2 = async_client.post("/ingest", json=c1)              # heal claim
-    # D16 wire byte-identical: a heal claim ACKs exactly like any accepted job.
+    # wire byte-identical: a heal claim ACKs exactly like any accepted job.
     assert r2.status_code == 202
     assert r2.json() == {"ok": True, "accepted": True, "chunk_id": "aseam-heal"}
     assert _wait(lambda: len(fs.record_posts) == 2)
@@ -247,9 +247,9 @@ def test_async_heal_claim_rides_the_queue(async_client):
 def test_async_heal_transient_blips_retry_within_one_delivery_then_heal_green(
         monkeypatch, tmp_path):
     """Review round (tests lens): the worker's transient-retry loop must serve
-    heal jobs too — a blip mid-heal retries WITHIN the delivery and a green
-    outcome charges nothing. (Every earlier heal test pinned retries=0, leaving
-    the retry x heal interplay unfalsifiable.)"""
+ heal jobs too — a blip mid-heal retries WITHIN the delivery and a green
+ outcome charges nothing. (Every earlier heal test pinned retries=0, leaving
+ the retry x heal interplay unfalsifiable.)"""
     install_mock_audio_registry(monkeypatch)
     _FlakyAcoustic.down = False
     stage_mod.register_stage(_FlakyAcoustic)
@@ -298,8 +298,8 @@ def test_async_heal_transient_blips_retry_within_one_delivery_then_heal_green(
 def test_async_heal_retries_exhausted_charges_exactly_one_attempt(
         monkeypatch, tmp_path):
     """Review round: retries exhausted inside ONE heal delivery = ONE budget
-    charge (attempts count this chunk's own failed heals, never worker retries).
-    A charge-per-retry bug would burn HEAL_MAX_ATTEMPTS on a single delivery."""
+ charge (attempts count this chunk's own failed heals, never worker retries).
+ A charge-per-retry bug would burn HEAL_MAX_ATTEMPTS on a single delivery."""
     install_mock_audio_registry(monkeypatch)
     _FlakyAcoustic.down = False
     stage_mod.register_stage(_FlakyAcoustic)
@@ -342,9 +342,9 @@ def test_async_heal_retries_exhausted_charges_exactly_one_attempt(
 
 def test_redrive_skip_verdict_clears_the_stale_pending_row(monkeypatch, tmp_path):
     """Review round (sqlite/races lenses): a pending row orphaned by an
-    epoch-mismatched receipt (e.g. an inline replay under a flipped mode) must
-    not live forever — the redrive loop's skip verdict is proof the ledger says
-    done, and it now clears the row it was launched to resolve."""
+ epoch-mismatched receipt (e.g. an inline replay under a flipped mode) must
+ not live forever — the redrive loop's skip verdict is proof the ledger says
+ done, and it now clears the row it was launched to resolve."""
     install_mock_audio_registry(monkeypatch)
     _FlakyAcoustic.down = False
     stage_mod.register_stage(_FlakyAcoustic)
@@ -365,7 +365,7 @@ def test_redrive_skip_verdict_clears_the_stale_pending_row(monkeypatch, tmp_path
     j.accept(c1, "t0")
     epoch1, _ = j.accept(c1, "t1")                    # epoch 1 row survives...
     pv = graph_processor("audio").pipeline_version()
-    j.mark_processed(c1, ["rid"], pv, "t2", epoch=0,  # ...an epoch-0 receipt
+    j.mark_processed(c1, ["rid"], pv, "t2", epoch=0,  #...an epoch-0 receipt
                      statuses={"asr": "ok", "acoustic": "ok"})
     assert j.counts()["pending"] == 1                 # the phantom exists
 

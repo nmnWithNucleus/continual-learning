@@ -1,8 +1,8 @@
 # servers/pyannote — speaker diarization model server
 
-Serves `pyannote/speaker-diarization-3.1` behind the Stage B model-server seam
+Serves `pyannote/speaker-diarization-3.1` behind the model-server seam
 (`dp_servers_common`): warmup thread, `GET /health` (identity), `POST /infer`.
-The diarization behavior is a faithful copy of the v0 in-process seam
+The diarization behavior is a faithful copy of the prior in-process seam
 (`app/audio/diarize/pyannote.py`, node-7 smoke-validated 2026-07-19): ffmpeg
 pre-decode to 16 kHz mono WAV (torchaudio's soundfile backend can't demux
 webm/opus), scoped `weights_only=False` around the checkpoint load (torch >= 2.6
@@ -14,8 +14,8 @@ overlapping turns permitted.
 
 ```sh
 cd servers/pyannote
-python3 -m venv .venv
-./.venv/bin/pip install -r requirements.txt   # torch is ~2 GB; be patient
+python3 -m venv.venv
+./.venv/bin/pip install -r requirements.txt # torch is ~2 GB; be patient
 ```
 
 Pins of note: `torch==2.8.0` + `torchaudio==2.8.0` + `pyannote.audio==3.3.2`
@@ -41,14 +41,14 @@ detects that and fails the load loudly.
 
 `POST /infer` body (`dp_servers_common.wire.InferRequest`, extra fields forbidden):
 
-- `input_b64` — raw audio container bytes (webm/opus, m4a/aac, wav, ...), base64
+- `input_b64` — raw audio container bytes (webm/opus, m4a/aac, wav,...), base64
 - `codec` — e.g. `"audio/webm"`; drives the ffmpeg temp-file extension
 - `params`:
-  - `span_seconds` (float, **required**) — chunk span; turns are clamped to it
-  - `min_speakers` / `max_speakers` (int >= 1, optional) — clustering hints
-  - anything else → deterministic 422
+ - `span_seconds` (float, **required**) — chunk span; turns are clamped to it
+ - `min_speakers` / `max_speakers` (int >= 1, optional) — clustering hints
+ - anything else → deterministic 422
 
-Result: `{"turns": [{"start_s": float, "end_s": float, "speaker": "spk_0"}, ...]}`
+Result: `{"turns": [{"start_s": float, "end_s": float, "speaker": "spk_0"},...]}`
 — chunk-relative seconds, sorted by `(start_s, end_s)`, first-onset-normalized
 labels, overlaps allowed. Undecodable input (ffmpeg failure) → 422
 `transient=false`; the same bytes fail identically everywhere.
@@ -70,7 +70,7 @@ supervisor subset-matches this against `servers/manifest.json`
 ## Tests
 
 ```sh
-cd servers/pyannote && CUDA_VISIBLE_DEVICES=2 ./.venv/bin/python -m pytest tests/ -q
+cd servers/pyannote && CUDA_VISIBLE_DEVICES=2./.venv/bin/python -m pytest tests/ -q
 ```
 
 In-process via `fastapi.testclient.TestClient` — no port is ever bound. The

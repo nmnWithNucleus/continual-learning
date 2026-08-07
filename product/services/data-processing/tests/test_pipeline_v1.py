@@ -1,15 +1,15 @@
-"""WP-C3 — the two-component record id (L3) + the C2 v1 assembler + the mirror.
+"""the two-component record id (L3) + the C2 v1 assembler + the mirror.
 
 record_id = sha256(chunk_id NUL pipeline_version), lowercase hex, exactly two
 components — the discriminator is gone with the multi-record model (L2/L3).
 
 build_c2 assembles the ONE record: slots map, root-level modality, source
-verbatim from C1 minus modality + transport fields, the D17 trio (incl.
+verbatim from C1 minus modality + transport fields, the trio (incl.
 device_clock) riding source{} verbatim, t_start/t_end carried as VERBATIM C1
-strings (the D-05 rule), no processed_at (ruled 2026-08-06), no enrichments, no
+strings (the rule), no processed_at (ruled 2026-08-06), no enrichments, no
 discriminator, no content.kind.
 
-The mirror moves as one change: contract file (Stage A) + schemas.py validator
+The mirror moves as one change: contract file + schemas.py validator
 + models.py pydantic mirror + these tests.
 """
 from __future__ import annotations
@@ -122,8 +122,8 @@ def test_absent_d17_fields_are_omitted_never_null():
 
 
 def test_spans_carried_verbatim_never_reformatted():
-    """The D-05 rule: whatever RFC3339 spelling C1 used rides through
-    char-for-char — fractional seconds, offset spelling, all of it."""
+    """The rule: whatever RFC3339 spelling C1 used rides through
+ char-for-char — fractional seconds, offset spelling, all of it."""
     c1 = {**C1, "t_start": "2026-07-19T17:04:10.123456+00:00",
           "t_end": "2026-07-19T17:04:22.000001Z"}
     record = build_c2(c1, SLOTS, PV)

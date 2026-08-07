@@ -1,11 +1,11 @@
-"""The prompt pack — a git-tree registry whose content digest IS the dialect (D-13).
+"""The prompt pack — a git-tree registry whose content digest IS the dialect ().
 
 One ``.prompt.md`` file per prompt (front-matter + ``[system]`` / ``[user]``), plus
 ``routes.json`` (scenario → pack id, family defaults, scenario labels), ``schemas.json``
 (the guided-decoding JSON Schemas), and ``LOCK.json`` (the hand-bumped ``PACK_VERSION`` +
 the last-locked digest). This module loads, validates, resolves and hashes them.
 
-Identity under the DP rebuild (L4): ``PACK_DIGEST`` — sha8 over the NORMALISED specs
+Identity under the (L4): ``PACK_DIGEST`` — sha8 over the NORMALISED specs
 (id + role + decode params + output schema + system + user, with line endings normalised
 and trailing whitespace stripped per line) plus the canonical ``routes.json``. A reflow /
 CRLF checkout / trailing newline does NOT move it; every model-facing byte, decode
@@ -15,8 +15,8 @@ backend-version (vB) bump is impossible to ship silently. The v0 ``version_tag``
 machinery is gone: identity is the stage's ``<stage>.v<S>-<backend>.v<B>`` segment, and a
 prompt change is a vB bump (enforced by the digest pin), never a self-composing tag.
 
-**Loading discipline (D-13 TOCTOU note).** Packs are read ONCE per process at import and
-never re-stat'd. Prompts are baked into the image; the v0 ``VIDEO_PROMPT_DIR`` override
+**Loading discipline (TOCTOU note).** Packs are read ONCE per process at import and
+never re-stat'd. Prompts are baked into the image; the prior ``VIDEO_PROMPT_DIR`` override
 and the ``VIDEO_CLIP_PROMPT`` pack override are DEAD (output-affecting env knobs, L4) —
 the registry loads from this package directory, full stop. Experiments construct an
 experimental stage in code (``experiment=`` → ``.exp-<code>`` in the dialect).
@@ -72,7 +72,7 @@ def _lf(text: str) -> str:
 
 def parse_prompt(text: str, schemas: dict[str, Any]) -> PromptSpec:
     """Parse one ``.prompt.md`` (front-matter ``---`` block, then ``[system]`` / ``[user]``
-    sections) into a :class:`PromptSpec`, resolving its ``schema:`` name against ``schemas``."""
+ sections) into a :class:`PromptSpec`, resolving its ``schema:`` name against ``schemas``."""
     text = _lf(text)
     fm: dict[str, str] = {}
     body = text
@@ -127,7 +127,7 @@ def parse_prompt(text: str, schemas: dict[str, Any]) -> PromptSpec:
 
 def _norm_text(t: str) -> str:
     """Line endings → LF, trailing whitespace stripped per line, trailing blank lines
-    dropped. This is what makes a whitespace-only edit a NO-OP for the digest."""
+ dropped. This is what makes a whitespace-only edit a NO-OP for the digest."""
     lines = [ln.rstrip() for ln in _lf(t).split("\n")]
     while lines and lines[-1] == "":
         lines.pop()
@@ -136,8 +136,8 @@ def _norm_text(t: str) -> str:
 
 def normalise(spec: PromptSpec) -> bytes:
     """The canonical, model-facing bytes of a spec: every byte the model sees, every
-    decode parameter, and the output schema — nothing else (NOT the ``scenarios``
-    routing attribute, which is folded via ``routes.json``)."""
+ decode parameter, and the output schema — nothing else (NOT the ``scenarios``
+ routing attribute, which is folded via ``routes.json``)."""
     schema_json = json.dumps(spec.schema, sort_keys=True, separators=(",", ":"))
     parts = [
         f"id={spec.id}",
@@ -153,8 +153,8 @@ def normalise(spec: PromptSpec) -> bytes:
 
 def compute_digest(packs: dict[str, PromptSpec], routes: dict[str, Any]) -> str:
     """sha8 over the normalised specs (sorted by id) + the canonical routes.json. Editing
-    a prompt's text, a decode param, its schema, a route or a scenario label forks it; a
-    whitespace-only edit does not."""
+ a prompt's text, a decode param, its schema, a route or a scenario label forks it; a
+ whitespace-only edit does not."""
     blob = b"\0".join(normalise(s) for s in sorted(packs.values(), key=lambda s: s.id))
     routes_json = json.dumps(routes, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(blob + b"\0ROUTES\0" + routes_json).hexdigest()[:8]
@@ -167,11 +167,11 @@ def pack_digest(spec: PromptSpec) -> str:
 
 def _validate_routes(packs: dict[str, PromptSpec], routes: dict[str, Any], source_dir: Path) -> None:
     """Every pack id ``routes.json`` names (scenarios + family defaults) MUST be a loaded
-    pack, and the ``clip`` family default MUST be a loaded ``role=='clip'`` pack. Enforced
-    at import so a self-inconsistent drop-in (e.g. a VIDEO_PROMPT_DIR override that omits the
-    default pack while ``routes.json`` still references it) fails LOUD here — never as a
-    ``select()``/``version_tag()`` divergence that crashes a worker mid-run (an unvalidated
-    default would let ``version_tag`` stamp a dialect whose pack ``select`` cannot load)."""
+ pack, and the ``clip`` family default MUST be a loaded ``role=='clip'`` pack. Enforced
+ at import so a self-inconsistent drop-in (e.g. a VIDEO_PROMPT_DIR override that omits the
+ default pack while ``routes.json`` still references it) fails LOUD here — never as a
+ ``select()``/``version_tag()`` divergence that crashes a worker mid-run (an unvalidated
+ default would let ``version_tag`` stamp a dialect whose pack ``select`` cannot load)."""
     refs = {f"scenarios[{s}]": pid for s, pid in routes.get("scenarios", {}).items()}
     refs.update({f"family_defaults[{f}]": pid for f, pid in routes.get("family_defaults", {}).items()})
     missing = {ref: pid for ref, pid in refs.items() if pid not in packs}
@@ -190,8 +190,8 @@ def _validate_routes(packs: dict[str, PromptSpec], routes: dict[str, Any], sourc
 
 def load_registry(source_dir: Path) -> tuple[dict[str, PromptSpec], dict[str, Any], dict[str, Any]]:
     """Load every ``*.prompt.md`` + ``routes.json`` + ``schemas.json`` from ``source_dir``,
-    and validate that ``routes.json`` references only loaded packs. Pure w.r.t. the directory
-    (exposed so ``relock`` / tests can load an alternate tree)."""
+ and validate that ``routes.json`` references only loaded packs. Pure w.r.t. the directory
+ (exposed so ``relock`` / tests can load an alternate tree)."""
     try:
         schemas = json.loads((source_dir / "schemas.json").read_text("utf-8"))
         routes = json.loads((source_dir / "routes.json").read_text("utf-8"))
@@ -217,8 +217,8 @@ def _load_lock_version(source_dir: Path) -> str:
 
 
 # --------------------------------------------------------------------------------------
-# Load ONCE at import (never re-stat'd — the D-13 TOCTOU discipline). Packaged dir ONLY:
-# the v0 VIDEO_PROMPT_DIR override was an output-affecting env knob and is dead (L4).
+# Load ONCE at import (never re-stat'd — the TOCTOU discipline). Packaged dir ONLY:
+# the prior VIDEO_PROMPT_DIR override was an output-affecting env knob and is dead (L4).
 # --------------------------------------------------------------------------------------
 _SOURCE_DIR = _PACKAGE_DIR
 PROMPT_SOURCE = "packaged"
@@ -233,9 +233,9 @@ PACK_DIGEST: str = compute_digest(_PACKS, _ROUTES)
 # --------------------------------------------------------------------------------------
 def family_default(role: str) -> str:
     """The pinned default pack id for a role — GUARANTEED to be a loaded pack (so
-    ``select`` and ``version_tag`` can never disagree on a real, renderable pack).
-    ``routes.json`` is validated at import, so the first branch always holds for the clip
-    family; the loaded-``role=='clip'`` fallback is belt-and-braces for any other role."""
+ ``select`` and ``version_tag`` can never disagree on a real, renderable pack).
+ ``routes.json`` is validated at import, so the first branch always holds for the clip
+ family; the loaded-``role=='clip'`` fallback is belt-and-braces for any other role."""
     pid = _ROUTES.get("family_defaults", {}).get(role, "")
     if pid in _PACKS:
         return pid
@@ -247,15 +247,15 @@ def family_default(role: str) -> str:
 
 def _is_clip(pack_id: str) -> bool:
     """A pack the clip captioner may render (never an ``ocr`` pack, never the ``legacy``
-    fingerprint record). Idle/single variants are role ``clip`` and remain selectable."""
+ fingerprint record). Idle/single variants are role ``clip`` and remain selectable."""
     return pack_id in _PACKS and _PACKS[pack_id].role == "clip"
 
 
 def _resolve_pack_id(scenario: str) -> str:
     """``routes[scenario]`` → pinned family default. ``scenario`` is a CODE PIN in the
-    ``clipcap`` stage file (the v0 ``VIDEO_SCENARIO``/``VIDEO_CLIP_PROMPT`` env knobs are
-    dead, L4). An unknown scenario — or a route to a non-clip pack — resolves to the
-    default: never render the wrong family, never crash on a route gap."""
+ ``clipcap`` stage file (the prior ``VIDEO_SCENARIO``/``VIDEO_CLIP_PROMPT`` env knobs are
+ dead, L4). An unknown scenario — or a route to a non-clip pack — resolves to the
+ default: never render the wrong family, never crash on a route gap."""
     by_scenario = _ROUTES.get("scenarios", {}).get(scenario, "")
     if _is_clip(by_scenario):
         return by_scenario
@@ -269,7 +269,7 @@ def select(scenario: str) -> PromptSpec:
 
 def get(pack_id: str) -> PromptSpec:
     """Direct lookup by id (e.g. the idle / single runtime variant). Raises ``KeyError``
-    for a truly-unknown id — a code bug, loud."""
+ for a truly-unknown id — a code bug, loud."""
     return _PACKS[pack_id]
 
 
@@ -288,8 +288,8 @@ def routes() -> dict[str, Any]:
 
 def render(spec: PromptSpec, /, **context: Any) -> RenderedPrompt:
     """Fill every ``[[token]]`` in the spec's system + user text from ``context``. A
-    placeholder with no matching context key RAISES (catches a caller/template mismatch);
-    unused context keys are ignored (different roles fill different subsets)."""
+ placeholder with no matching context key RAISES (catches a caller/template mismatch);
+ unused context keys are ignored (different roles fill different subsets)."""
     def fill(text: str) -> str:
         def repl(m: "re.Match[str]") -> str:
             key = m.group(1)

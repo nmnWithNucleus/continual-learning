@@ -1,4 +1,4 @@
-# ocr_truth fixtures (WS-C seam)
+# ocr_truth fixtures (OCR seam)
 
 Synthetic, hand-authored OCR ground-truth for the DP-side post-processing tests. **JSON
 only — no binaries** (house rule 5: headless + offline, commit no image files). Each file
@@ -8,4 +8,4 @@ build `OcrRead`s from these and assert region-role assignment, the confidence / 
 dedup gates, and the single-line render.
 
 The 200 hand-labelled *real* macOS frames + the O-2 bake-off are the recording/capture
-deliverable, not this seam's; the v0 OCR bake-off tree was retired at Stage G.
+deliverable, not this seam's; the OCR bake-off tree is not kept here.

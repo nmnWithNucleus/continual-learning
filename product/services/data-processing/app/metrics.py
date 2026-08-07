@@ -9,18 +9,18 @@ stable, so a tiny in-house registry + renderer satisfies the contract and stays
 fully unit-testable without any model, GPU, or extra package.
 
 Design:
-  * a ``Metrics`` registry is INSTANCE-scoped (attached to ``app.state``), not a
-    process-global singleton — so tests that build several apps in one process don't
-    leak counters into each other (prometheus_client's global default registry is a
-    known test-isolation footgun; we avoid it by construction).
-  * Counter / Gauge / Histogram, each with optional labels. Values live under the
-    tuple of label values in declared order, so the render is stable + ordered.
-  * PULL-TIME gauge sources (``add_gauge_source``): queue depth and continuity
-    counts are live state owned elsewhere; a source callback is invoked at render
-    time so the scrape always reflects the current value without a push on every
-    change.
-  * thread-safe: handlers touch it from the event loop AND from the threadpool
-    workers (async /ingest), so every mutation takes a ``threading.Lock``.
+ * a ``Metrics`` registry is INSTANCE-scoped (attached to ``app.state``), not a
+ process-global singleton — so tests that build several apps in one process don't
+ leak counters into each other (prometheus_client's global default registry is a
+ known test-isolation footgun; we avoid it by construction).
+ * Counter / Gauge / Histogram, each with optional labels. Values live under the
+ tuple of label values in declared order, so the render is stable + ordered.
+ * PULL-TIME gauge sources (``add_gauge_source``): queue depth and continuity
+ counts are live state owned elsewhere; a source callback is invoked at render
+ time so the scrape always reflects the current value without a push on every
+ change.
+ * thread-safe: handlers touch it from the event loop AND from the threadpool
+ workers (async /ingest), so every mutation takes a ``threading.Lock``.
 
 Prometheus text format (0.0.4) is emitted verbatim: ``# HELP`` / ``# TYPE`` header
 lines per family, one sample line per label-set, histograms as
@@ -52,7 +52,7 @@ def _escape(value: str) -> str:
 
 def _fmt(value: float) -> str:
     """Render a float the Prometheus way: +Inf/-Inf, integers without a trailing
-    ``.0`` when exact, else repr (round-trippable)."""
+ ``.0`` when exact, else repr (round-trippable)."""
     if value == math.inf:
         return "+Inf"
     if value == -math.inf:
@@ -110,7 +110,7 @@ class Metrics:
     def add_gauge_source(self, name: str, help: str, fn: Callable[[], object],
                          labelnames: Iterable[str] = ()) -> None:
         """Register a PULL-TIME gauge computed at render (scrape) time — for live
-        state owned elsewhere (queue depth, continuity counts)."""
+ state owned elsewhere (queue depth, continuity counts)."""
         with self._lock:
             self._sources[name] = (help, tuple(labelnames), fn)
 
@@ -221,7 +221,7 @@ class Metrics:
 
 def default_templatizer(path: str) -> str:
     """Fallback: identity. Services pass their own to collapse variable path
-    segments (routes with ids) into templates."""
+ segments (routes with ids) into templates."""
     return path
 
 

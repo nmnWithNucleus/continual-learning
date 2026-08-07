@@ -1,6 +1,6 @@
 """In-process tests for the pyannote diarization server (no ports bound).
 
-Run:  cd servers/pyannote && CUDA_VISIBLE_DEVICES=2 ./.venv/bin/python -m pytest tests/ -q
+Run: cd servers/pyannote && CUDA_VISIBLE_DEVICES=2./.venv/bin/python -m pytest tests/ -q
 
 The session fixture builds the app around a real PyannoteBackend and waits for
 warm — the first-ever run also downloads the wespeaker embedding model into the
@@ -51,7 +51,7 @@ def client():
 
 def _assert_subset(expected, actual, path="identity"):
     """Every key in `expected` must exist in `actual` with an equal value
-    (dicts recurse) — the supervisor's manifest check, in miniature."""
+ (dicts recurse) — the supervisor's manifest check, in miniature."""
     assert isinstance(expected, dict) and isinstance(actual, dict), path
     for key, want in expected.items():
         assert key in actual, f"{path}.{key} missing"
@@ -115,9 +115,9 @@ def test_golden_smoke_two_speakers(client):
 
 def test_golden_smoke_real_dialog(client):
     """Second golden (cleanup round 2026-08-06): real multi-speaker speech with
-    natural turn-taking (LibriVox dramatic reading, see INPUT_PROVENANCE.md) —
-    10 turns, 3 speakers. Bit-stable across 4 fresh-process runs on GPUs 2 and
-    3 — exact compare, zero tolerance."""
+ natural turn-taking (LibriVox dramatic reading, see INPUT_PROVENANCE.md) —
+ 10 turns, 3 speakers. Bit-stable across 4 fresh-process runs on GPUs 2 and
+ 3 — exact compare, zero tolerance."""
     audio = (FIXTURES / "speech_real_dialog.webm").read_bytes()
     resp = client.post("/infer", json={
         "input_b64": base64.b64encode(audio).decode("ascii"),

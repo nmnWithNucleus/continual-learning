@@ -2,13 +2,13 @@
 
 Real stage discovery (``stages_for("video")``), real ffmpeg over a generated fixture
 (clipprep), client-level fakes for the model sides (the ocr client + an
-``httpx.MockTransport`` OpenAI endpoint — plan §3), one GraphResult, ONE C2 v1
+``httpx.MockTransport`` OpenAI endpoint — mock-dialect rule), one GraphResult, ONE C2 v1
 record, green against the contract mirror.
 
 THE RULED COUPLING (read before "fixing" a red here): ``clipcap`` hard-``needs``
 ``screentext``. An OCR failure therefore yields an ``ocr`` HOLE **and a CANCELLED
 caption** — the record ships with BOTH slots absent and statuses
-``{screentext: failed, clipcap: cancelled}``. This is deliberate (L7 + D-09): the
+``{screentext: failed, clipcap: cancelled}``. This is deliberate (L7 +): the
 caption's prompt takes the OCR text as input, so a caption computed without it would
 be a silently different witness under an unchanged pipeline_version. v0 enforced the
 same coupling by making screentext ``required`` (failing the whole chunk); v1 ships
@@ -109,7 +109,7 @@ def test_full_graph_produces_one_valid_v1_record(monkeypatch):
     assert "QuarterlyPlanningNotes" in result.slots["ocr"]["value"]
     assert result.slots["caption"]["value"].startswith(
         "Terminal — watching a build.")
-    # D-09: the caption call carried the OCR digest in its prompt.
+    # : the caption call carried the OCR digest in its prompt.
     body = json.loads(vlm_calls[0].content)
     head_text = body["messages"][1]["content"][0]["text"]
     assert "QuarterlyPlanningNotes" in head_text
@@ -127,7 +127,7 @@ def test_full_graph_produces_one_valid_v1_record(monkeypatch):
 @requires_decoder
 def test_ocr_failure_is_a_hole_AND_a_cancelled_caption(monkeypatch):
     """THE CONE TEST (loud, deliberate): OCR down ⇒ ocr hole + caption CANCELLED —
-    never a caption computed from silently-missing OCR. See the module docstring."""
+ never a caption computed from silently-missing OCR. See the module docstring."""
     vlm_calls: list = []
     _fake_vlm(monkeypatch, vlm_calls)
     ocr = FakeOcrClient(fail=True)

@@ -1,4 +1,4 @@
-"""dp_servers_common — the shared model-server framework (Stage B, L9 machinery).
+"""dp_servers_common — the shared model-server framework.
 
 Every model server (whisper, pyannote, ast, ocr) is this framework plus one
 ModelBackend implementation: load once at startup (warmup), report identity at

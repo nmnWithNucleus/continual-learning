@@ -1,16 +1,16 @@
-"""ffmpeg-lavfi fixture builders for the clip video path (WS-B).
+"""ffmpeg-lavfi fixture builders for the clip video path.
 
 NOT named ``conftest.py`` on purpose — pytest auto-loads only ``conftest.py``, so nothing
 here runs unless a test imports it. Every fixture is generated at test time by
 ``ffmpeg lavfi`` (house rule #5: NO binaries committed, NO GPU, NO network) and cached in
 this process so the whole calibration set builds once in a few seconds.
 
-Resolution is pinned to 1440x900: the D-04 area-downscale floor is a content-independent
+Resolution is pinned to 1440x900: the area-downscale floor is a content-independent
 2/255 across the ~1.15–2.3 Mpx band (measured 1 below 1280x800, 3 above 1920x1200), and
 1440x900 sits solidly mid-band, so ``floor == 2`` is a robust CI assertion on this ffmpeg.
 
-The six calibration clips reproduce the D-04 *content classes* (idle / typing / layout /
-switch), not the exact real-capture magnitudes (those are O-1 measurements on real screen
+The six calibration clips reproduce the *content classes* (idle / typing / layout /
+switch), not the exact real-capture magnitudes (those are measurements on real screen
 footage, explicitly a pending open question). Each clip's measured signature on this ffmpeg
 build is recorded beside its builder.
 """
@@ -36,8 +36,8 @@ def ffmpeg_available() -> bool:
 
 def font_available() -> bool:
     """Can ``drawtext`` render (libfreetype + a fontconfig default)? The typing/fast-typing
-    calibration clips need it; the flat/scroll/switch clips do not, so a font-less box still
-    exercises the floor + switch + determinism guarantees."""
+ calibration clips need it; the flat/scroll/switch clips do not, so a font-less box still
+ exercises the floor + switch + determinism guarantees."""
     global _FONT_OK
     if _FONT_OK is not None:
         return _FONT_OK
@@ -88,12 +88,12 @@ def flat_clip(color: str = "black", dur: int = DEFAULT_DUR) -> bytes:
 
 def caret_clip(dur: int = DEFAULT_DUR) -> bytes:
     """Static gray screen whose only motion is a caret blinking at 1 Hz. Sampled every
-    ``VIDEO_ANALYSIS_PERIOD_S`` (2.0 s), consecutive analysis frames catch the caret in the
-    SAME phase, so each delta pair is effectively unchanged -> the floor -> IDLE (measured
-    peak 2). This is the honest thing the vector proves: a screen with no *between-sample*
-    change classifies IDLE. (A caret whose blink did straddle a sample boundary would toggle
-    a whole downscaled cell and read far above IDLE_PEAK — i.e. the design's "static + caret
-    -> peak 2-4" is itself a same-phase / sub-cell artefact, not area-suppression of motion.)"""
+ ``VIDEO_ANALYSIS_PERIOD_S`` (2.0 s), consecutive analysis frames catch the caret in the
+ SAME phase, so each delta pair is effectively unchanged -> the floor -> IDLE (measured
+ peak 2). This is the honest thing the vector proves: a screen with no *between-sample*
+ change classifies IDLE. (A caret whose blink did straddle a sample boundary would toggle
+ a whole downscaled cell and read far above IDLE_PEAK — i.e. the design's "static + caret
+ -> peak 2-4" is itself a same-phase / sub-cell artefact, not area-suppression of motion.)"""
     return _cached(f"caret:{dur}",
                    lambda: _encode(
                        "drawbox=x=200:y=300:w=8:h=30:color=black:t=fill:enable='lt(mod(t\\,1)\\,0.5)'",
@@ -102,8 +102,8 @@ def caret_clip(dur: int = DEFAULT_DUR) -> bytes:
 
 def typing_clip(dur: int = DEFAULT_DUR) -> bytes:
     """~40 wpm typing (a growing prefix over 33 ``between()`` windows) -> TEXT class:
-    measured single-delta peak 18–32, spread 1–2, while the WHOLE-FRAME mean abs-diff is 0
-    (the D-04 claim: a mean is blind to typing; binarize-then-max recovers it)."""
+ measured single-delta peak 18–32, spread 1–2, while the WHOLE-FRAME mean abs-diff is 0
+ (the claim: a mean is blind to typing; binarize-then-max recovers it)."""
     def build():
         txt = "the quick brown fox jumps over the lazy dog while typing slowly today"
         n = min(33, len(txt))
@@ -122,7 +122,7 @@ def typing_clip(dur: int = DEFAULT_DUR) -> bytes:
 
 def fasttype_clip(dur: int = DEFAULT_DUR) -> bytes:
     """Fast typing across 3 growing lines -> LAYOUT class: measured peak 51–58, spread
-    11–15 (a wider, faster change than slow typing)."""
+ 11–15 (a wider, faster change than slow typing)."""
     def build():
         lines = [
             "def process(items): return [transform(x) for x in items if valid(x)]",
@@ -147,8 +147,8 @@ def fasttype_clip(dur: int = DEFAULT_DUR) -> bytes:
 
 def scroll_clip(dur: int = DEFAULT_DUR) -> bytes:
     """A fine diagonal pattern scrolled vertically -> LAYOUT, SUSTAINED across every delta:
-    measured peak 255, spread 1024 (the whole frame changes each interval). Distinct from
-    an app switch, which is a SINGLE saturated delta with floor neighbours."""
+ measured peak 255, spread 1024 (the whole frame changes each interval). Distinct from
+ an app switch, which is a SINGLE saturated delta with floor neighbours."""
     return _cached(f"scroll:{dur}",
                    lambda: _encode("geq=lum='mod(Y*3+X\\,256)',scroll=vertical=0.02",
                                    dur=dur, src=f"color=c=gray:s={FIXTURE_W}x{FIXTURE_H}:r={FIXTURE_FPS}:d={dur}"))
@@ -156,7 +156,7 @@ def scroll_clip(dur: int = DEFAULT_DUR) -> bytes:
 
 def appswitch_clip(dur: int = DEFAULT_DUR) -> bytes:
     """A hard cut black->white at the midpoint -> ONE saturated delta (peak 255, spread
-    1024) at the interval spanning the cut, floor (peak 2) on the others."""
+ 1024) at the interval spanning the cut, floor (peak 2) on the others."""
     def build():
         half = dur // 2
         import tempfile
@@ -183,11 +183,11 @@ def appswitch_clip(dur: int = DEFAULT_DUR) -> bytes:
 
 def vfr_clip() -> bytes:
     """A VALID variable-frame-rate clip: sparse frames at irregular PTS (0,1,2.52,5,9,10 s),
-    like macOS ScreenCaptureKit emitting only on change. mp4 pins a constant timebase, so
-    duration_time reports the tick (=1/25) not the real gap — a rate-derived frame index
-    (N=round(t*fps)) lands far past the last real frame. Regression guard for the CFR
-    poison-pill: keep only 6 of a 25fps grid's frames with ``-fps_mode passthrough`` so the
-    output is genuinely VFR; clipprep must decode it, not dead-letter it."""
+ like macOS ScreenCaptureKit emitting only on change. mp4 pins a constant timebase, so
+ duration_time reports the tick (=1/25) not the real gap — a rate-derived frame index
+ (N=round(t*fps)) lands far past the last real frame. Regression guard for the CFR
+ poison-pill: keep only 6 of a 25fps grid's frames with ``-fps_mode passthrough`` so the
+ output is genuinely VFR; clipprep must decode it, not dead-letter it."""
     def build():
         if not _FFMPEG:  # pragma: no cover
             raise RuntimeError("ffmpeg is not on PATH")
@@ -215,7 +215,7 @@ def iso(epoch: float) -> str:
 def make_c1(*, t_start_epoch: float = 1_700_000_000.0, span_seconds: float = 10.0,
             chunk_id: str = "chunk-clip-test-0001") -> dict:
     """A minimal C1 envelope carrying just what ``clipprep`` reads (``t_start``,
-    ``chunk_id``) plus the standard provenance fields, so a StageContext looks real."""
+ ``chunk_id``) plus the standard provenance fields, so a StageContext looks real."""
     return {
         "contract": "C1", "version": "0",
         "user_id": "pilot-user", "device_id": "screen-1",

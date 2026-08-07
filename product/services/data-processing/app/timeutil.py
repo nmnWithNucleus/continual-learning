@@ -7,9 +7,9 @@ from datetime import datetime, timedelta, timezone
 def parse_rfc3339(value: str) -> datetime:
     """Parse an RFC3339/ISO-8601 timestamp to an aware UTC datetime.
 
-    Accepts a trailing 'Z' (Python < 3.11 fromisoformat rejects it) and treats a
-    naive stamp as UTC.
-    """
+ Accepts a trailing 'Z' (Python < 3.11 fromisoformat rejects it) and treats a
+ naive stamp as UTC.
+ """
     text = value.strip()
     if text.endswith(("Z", "z")):
         text = text[:-1] + "+00:00"

@@ -1,4 +1,4 @@
-"""Thin async client for the model-server fleet (Stage B, L9 bureaucracy side).
+"""Thin async client for the model-server fleet.
 
 One ModelClient per server kind (whisper, pyannote, ast, ocr): picks a replica
 round-robin, enforces a per-call timeout, and retries TRANSIENT failures on other
@@ -9,10 +9,10 @@ happens next.
 Identity verification (the L4 hook): before a replica serves its first call, its
 /health identity must subset-match the expected identity from the supervisor
 manifest. A mismatch is a loud IdentityMismatchError, never a silent skip — a
-stage must never talk to the wrong model. Wired into main.py at Stage C;
+stage must never talk to the wrong model. Wired into main.py at service boot;
 imported by nothing in v0.
 
-Observability (Stage D WP-D3, per the Stage C cleanup's owner assignment): an
+Observability : an
 optional duck-typed ``metrics`` registry records the server-call family —
 ``dp_server_calls_total{server,outcome}`` per completed call (outcome: ``ok`` |
 ``deterministic_error`` | ``unavailable`` | ``identity_mismatch``),
@@ -58,7 +58,7 @@ class IdentityMismatchError(ModelClientError):
 
 def identity_matches(expected: dict, actual: dict) -> list[str]:
     """Subset match: every key in `expected` must equal `actual`'s value; nested
-    dicts recurse. Returns the list of mismatch descriptions (empty = match)."""
+ dicts recurse. Returns the list of mismatch descriptions (empty = match)."""
     problems: list[str] = []
 
     def walk(exp: dict, act: object, path: str) -> None:
@@ -145,8 +145,8 @@ class ModelClient:
 
     async def _verify_replica(self, replica: _Replica) -> None:
         """Fetch /health and subset-match identity. Raises IdentityMismatchError on
-        a wrong model; raises transient httpx errors upward for the caller to
-        treat as replica-unavailable."""
+ a wrong model; raises transient httpx errors upward for the caller to
+ treat as replica-unavailable."""
         resp = await self._client.get(f"{replica.url}/health")
         if resp.status_code != 200:
             raise httpx.TransportError(
@@ -172,8 +172,8 @@ class ModelClient:
 
     async def verify_identity(self) -> dict:
         """Connect-time check: every reachable replica must match. Unreachable or
-        still-warming replicas stay unverified and are re-checked before first
-        use. Returns {url: 'ok' | 'unreachable: ...'}."""
+ still-warming replicas stay unverified and are re-checked before first
+ use. Returns {url: 'ok' | 'unreachable:...'}."""
         report: dict[str, str] = {}
         for replica in self._replicas:
             try:
@@ -197,8 +197,8 @@ class ModelClient:
 
     async def infer(self, payload: dict) -> dict:
         """POST /infer on a replica; bounded transient retry on the others.
-        Returns the server's `result`. Raises ModelCallError (deterministic),
-        IdentityMismatchError (wrong model), or ModelUnavailableError."""
+ Returns the server's `result`. Raises ModelCallError (deterministic),
+ IdentityMismatchError (wrong model), or ModelUnavailableError."""
         attempts_left = 1 + self.max_transient_retries
         last_error = "no replica attempted"
         order = self._pick_order()
@@ -219,7 +219,7 @@ class ModelClient:
                 # The replica may be mid-respawn under the supervisor: whatever
                 # comes back on that port next is a NEW process, so its identity
                 # must be re-verified before it serves again (L4 — never silently
-                # the wrong model). Stage B carried this as a hardening item.
+                # the wrong model). carried this as a hardening item.
                 replica.verified = False
                 self._inc("dp_server_call_transient_retries_total",
                           {"server": self.server})

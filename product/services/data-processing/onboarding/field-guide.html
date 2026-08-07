@@ -150,7 +150,7 @@ ul.tight li { margin-bottom:8px; max-width:72ch; }
 <header class="hero">
   <div class="hero-card">
     <h1>The Data Processing Service is where a captured life becomes <em>language</em>.</h1>
-    <p class="sub">Raw audio and video chunks flow in from recording; one structured, timestamped record per chunk flows out to storage. Every token the per-user model is ever trained on passes through this pipeline, so the quality ceiling of the whole product is set here. This guide teaches the service <strong>as it runs today</strong> — the rebuilt v1 world that replaced the old multi-record, in-place-mutation model at the Stage F cutover.</p>
+    <p class="sub">Raw audio and video chunks flow in from recording; one structured, timestamped record per chunk flows out to storage. Every token the per-user model is ever trained on passes through this pipeline, so the quality ceiling of the whole product is set here. This guide teaches the service <strong>as it runs today</strong> — the v1 model that replaced the old multi-record, in-place-mutation design at cutover.</p>
     <span class="stage-chip">⚠ Stage: PROTOTYPE (D19) — the docs speak in a production voice; the build is a prototype</span>
     <div class="note law" style="margin-top:20px">
       <b class="tag">Derived teaching view · D22</b>
@@ -239,7 +239,7 @@ ul.tight li { margin-bottom:8px; max-width:72ch; }
     }
   }
 }</code></pre>
-  <div class="note law"><b class="tag">Slot Law L2 · L3 · L5</b><p><strong>One record per <code>(chunk_id, pipeline_version)</code></strong>, the executor structurally emits one and a test asserts it (L2). <strong>Identity is two components</strong>, NUL-joined and hashed — there is no third "discriminator" component, because with one record per chunk there are no siblings to tell apart (L3). <strong>Content is a slot map</strong>, one producer per slot, each written once and never edited (L5). A speaker-aligned transcript is not an edit of the raw ASR — it is a <em>new</em> slot from an ordinary stage whose inputs are the ASR and diarization slots.</p></div>
+  <div class="note law"><b class="tag">Slot Law L2 · L3 · L5</b><p><strong>One record per <code>(chunk_id, pipeline_version)</code></strong>, the executor structurally emits one and a test asserts it (L2). <strong>Identity is two components</strong>, NUL-joined and hashed — there is no third identity component, because with one record per chunk there are no siblings to tell apart (L3). <strong>Content is a slot map</strong>, one producer per slot, each written once and never edited (L5). A speaker-aligned transcript is not an edit of the raw ASR — it is a <em>new</em> slot from an ordinary stage whose inputs are the ASR and diarization slots.</p></div>
   <p>A video chunk has the same shape: one record with a <code>caption</code> slot and an <code>ocr</code> slot. Storage assigns the durable timestamps (<code>created_at</code>, <code>updated_at</code>) — there is deliberately no wall-clock inside the record, so a re-run under the same dialect is byte-identical.</p>
 </section>
 
@@ -281,7 +281,7 @@ ul.tight li { margin-bottom:8px; max-width:72ch; }
     </div>
   </div>
   <p>The <strong>supervisor</strong> lives inside DP for now. It reads a manifest — which servers, how many replicas, which GPU each pins to — and spawns, health-checks and restarts them. A stage talks to a server through a thin client that picks a replica, enforces a per-call timeout, and retries a transient failure on another replica. When a replica dies, the supervisor brings it back; when all replicas fail one input the same way, that is a real failure and the next module owns what happens.</p>
-  <div class="note"><p>This split is why the old <code>INGEST_ISOLATION</code> subprocess shield is gone: it existed to contain a model crash <em>inside</em> the DP process. With the models outside, a poison chunk fails one stage client and the supervisor restarts a dead replica — there is nothing left in DP to isolate.</p></div>
+  <div class="note"><p>This split is why the old subprocess isolation shield is gone: it existed to contain a model crash <em>inside</em> the DP process. With the models outside, a poison chunk fails one stage client and the supervisor restarts a dead replica — there is nothing left in DP to isolate.</p></div>
 </section>
 
 <!-- ===================================================== 06 -->
@@ -323,7 +323,7 @@ ul.tight li { margin-bottom:8px; max-width:72ch; }
   </ul>
   <h3>Healing</h3>
   <p>The journal keeps a done-row per chunk: its dialect, its record id, each stage's status, and how many heals it has spent. When a chunk is redelivered, the row decides what happens — no row means process fresh; a different dialect means reprocess and land a new record <em>beside</em> the old; the same dialect all-green means skip (return the record id); the same dialect with holes and budget left means <strong>heal</strong>. A heal re-runs the whole graph and re-writes the <em>same</em> record id, so a hole that the fleet can now fill converges. The promise is convergence, not monotonicity: the re-run writes whatever it produced, and the ledger — not the record — carries the truth about which holes remain.</p>
-  <div class="note"><p>This was proven live at the Stage F cutover: an optional stage was killed so a chunk shipped with a hole, the supervisor restarted the model, and the chunk's redelivery healed the record to be byte-identical to a clean-fleet twin — then a further redelivery was a pure skip.</p></div>
+  <div class="note"><p>This was proven live at cutover: an optional stage was killed so a chunk shipped with a hole, the supervisor restarted the model, and the chunk's redelivery healed the record to be byte-identical to a clean-fleet twin — then a further redelivery was a pure skip.</p></div>
 </section>
 
 <!-- ===================================================== 08 -->
@@ -333,7 +333,7 @@ ul.tight li { margin-bottom:8px; max-width:72ch; }
   <p class="dek">How the service refuses to lose a chunk silently.</p>
   <p>Ingest is <strong>async</strong> today: recording pushes a chunk, DP writes it durably to a journal and answers <code>202 Accepted</code> immediately, and a bounded pool of workers drains the queue. Capture never blocks on model latency, and a full queue answers <code>503</code> so overload is visible backpressure rather than a silent drop. A redelivery of a finished chunk returns its record id with a <code>200</code>; an in-flight one re-acknowledges <code>202</code>.</p>
   <p>The safety net is a shared, honest accounting between us and recording. DP's <code>/continuity</code> reports, per stream, which chunks are processed and which were dead-lettered; recording marks a chunk truly confirmed only when DP says <em>processed</em>. So an accepted-then-lost chunk reads as <em>recording</em> or <em>gaps</em> in recording's report — never a false <em>clean</em>.</p>
-  <div class="note"><p><b class="tag">Proven at the Stage F soak</b>The service was hard-killed (<code>SIGKILL</code>) with 27 chunks durably accepted-but-unprocessed in its journal. On restart the boot re-drive re-enqueued all 27 and every one reached <code>processed</code> — zero in-flight loss across a crash. The durable journal is what makes that true.</p></div>
+  <div class="note"><p><b class="tag">Proven in crash-recovery soak</b>The service was hard-killed (<code>SIGKILL</code>) with 27 chunks durably accepted-but-unprocessed in its journal. On restart the boot re-drive re-enqueued all 27 and every one reached <code>processed</code> — zero in-flight loss across a crash. The durable journal is what makes that true.</p></div>
   <p><strong>The inline path is kept alive on purpose.</strong> It is byte-identical to async for a single chunk and it is C8's skeleton — the synchronous shape the input service will call one day. Do not delete it "because async exists"; that has been proposed and refused on exactly this ground.</p>
 </section>
 
@@ -345,7 +345,7 @@ ul.tight li { margin-bottom:8px; max-width:72ch; }
   <div class="board">
     <div class="bd-item"><div class="hd"><span class="pill ok">real</span><b>Audio &amp; video, end to end</b></div><p>Real faster-whisper, pyannote, AST and PP-OCR servers, and a real Qwen3-VL captioner, all ran a synthetic multi-hour soak through the live fleet at the cutover. Records are C2 v1, one per chunk.</p></div>
     <div class="bd-item"><div class="hd"><span class="pill ok">real</span><b>Crash safety</b></div><p>The durable journal, async ingest, heal-on-redrive and the zero-silent-loss accounting are built and drilled, including a live in-flight-kill recovery.</p></div>
-    <div class="bd-item"><div class="hd"><span class="pill warn">partial</span><b>Backfill by version</b></div><p>Reprocessing a whole day under a new dialect from the kept <code>/raw</code> bytes is designed (the OD-2 tool) but not built. Kill/restart recovery is done; the replay tool is owed.</p></div>
+    <div class="bd-item"><div class="hd"><span class="pill warn">partial</span><b>Backfill by version</b></div><p>Reprocessing a whole day under a new dialect from the kept <code>/raw</code> bytes is designed (the owed reprocess-by-version tool) but not built. Kill/restart recovery is done; the replay tool is owed.</p></div>
     <div class="bd-item"><div class="hd"><span class="pill dim">designed</span><b>C8 — the synchronous API</b></div><p>Offering the pipeline to the input service for interactive requests. Nothing is built; the inline path is its skeleton.</p></div>
     <div class="bd-item"><div class="hd"><span class="pill dim">designed</span><b>World-data enrichment</b></div><p>Known-faces, geolocation, place/object tags (charter M5). Not built; slots make it an additive change when it lands.</p></div>
     <div class="bd-item"><div class="hd"><span class="pill warn">watch</span><b>Video throughput</b></div><p>CPU OCR plus a 32B captioner per video chunk is the slow leg; there is no per-modality fairness cap yet, so a video burst can starve audio. Named at the soak, tuned later.</p></div>

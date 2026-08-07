@@ -1,7 +1,7 @@
-"""WP-C6 — the REAL-backend e2e: fleet up via the supervisor, one audio chunk
+"""the REAL-backend e2e: fleet up via the supervisor, one audio chunk
 (and one video chunk) end-to-end, records validated against C2 v1 and POSTed to
 a LOCAL STUB /context sink only. NEVER the live storage on :8083 — storage
-accepts v1 at Stage E, not before (the stub here is the MockTransport fake:
+accepts v1 at not before (the stub here is the MockTransport fake:
 in-process, no socket, structurally incapable of reaching a real service).
 
 Gated on DP_E2E=1: this spins real model servers on GPUs 2-7 (manifest ports
@@ -79,7 +79,7 @@ def _v0_health() -> int:
 
 def _gpu_used_mib() -> dict[int, int]:
     """Per-GPU memory.used snapshot (MiB). Empty dict if nvidia-smi is absent
-    (the delta check then degrades to a no-op rather than failing the drill)."""
+ (the delta check then degrades to a no-op rather than failing the drill)."""
     try:
         out = subprocess.run(
             ["nvidia-smi", "--query-gpu=index,memory.used",
@@ -145,7 +145,7 @@ def fleet():
 @pytest.fixture()
 def real_app(monkeypatch, tmp_path):
     """The DP app on the REAL registry (discovery — no mocks), storage bound to
-    the local stub sink; model clients point at the manifest fleet."""
+ the local stub sink; model clients point at the manifest fleet."""
     monkeypatch.setenv("STORAGE_URL", "http://stub.sink")
     monkeypatch.setenv("DP_VAR_DIR", str(tmp_path / "var"))
     monkeypatch.delenv("DP_SUPERVISOR", raising=False)  # the fixture owns the fleet
@@ -172,7 +172,7 @@ def _c1_for(fs: FakeStorage, path: Path, template: dict, **overrides) -> dict:
 
 def test_audio_chunk_end_to_end(fleet, real_app):
     fs = real_app.fake_storage
-    # The Stage B real-speech fixture, under the SAME C1 the golden-fed pins
+    # The real-speech fixture, under the SAME C1 the golden-fed pins
     # used (same t_start/t_end -> identical absolute split times).
     c1 = _c1_for(fs, _AUDIO_FIXTURE, C1_REAL, chunk_id="e2e-audio-1",
                  blob_ref="raw/e2e/audio-1")
@@ -199,15 +199,15 @@ def test_audio_chunk_end_to_end(fleet, real_app):
 
 def test_video_chunk_end_to_end(fleet, real_app):
     """One video chunk through the REAL machinery: clipprep's real ffmpeg over
-    the committed fixture, screentext against the real ocr server. clipcap's
-    endpoint (`VLM_URL` → an OpenAI-compatible server actually hosting
-    Qwen3-VL-32B) does not exist on this node — v0's live video dialect was
-    mock, the real VLM is the serve loop's, and the serve loop cannot co-run
-    with the learn loop (shared storage :8083) — so the caption slot HOLES
-    honestly: attempted (in the dialect), absent (L7/L11). The golden chain for
-    OCR is closed at the layers below: servers/ocr pins engine-vs-golden, the
-    screentext suite pins client-mapping-vs-the-same-golden; this test proves
-    the live wire produces a valid record deterministically."""
+ the committed fixture, screentext against the real ocr server. clipcap's
+ endpoint (`VLM_URL` → an OpenAI-compatible server actually hosting
+ Qwen3-VL-32B) does not exist on this node — prior live video dialect was
+ mock, the real VLM is the serve loop's, and the serve loop cannot co-run
+ with the learn loop (shared storage :8083) — so the caption slot HOLES
+ honestly: attempted (in the dialect), absent (L7/L11). The golden chain for
+ OCR is closed at the layers below: servers/ocr pins engine-vs-golden, the
+ screentext suite pins client-mapping-vs-the-same-golden; this test proves
+ the live wire produces a valid record deterministically."""
     fs = real_app.fake_storage
     template = json.loads(
         (Path(__file__).resolve().parent / "fixtures" / "video_scenes.c1.json")
@@ -250,7 +250,7 @@ def test_audio_reprocess_is_byte_identical_through_the_real_fleet(fleet, real_ap
                                                                   monkeypatch,
                                                                   tmp_path):
     """T-1's claim held against the real machinery: same bytes, same versions,
-    two independent process-and-POST runs -> identical wire bytes."""
+ two independent process-and-POST runs -> identical wire bytes."""
     fs1 = real_app.fake_storage
     c1 = _c1_for(fs1, _AUDIO_FIXTURE, C1_REAL, chunk_id="e2e-audio-det",
                  blob_ref="raw/e2e/audio-det")
