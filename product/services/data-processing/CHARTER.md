@@ -208,6 +208,8 @@ reprocess is an upsert and not a duplicate.
     `{blob_ref, meta}`. Within a run the blackboard carries `{ref, bytes}` and the executor
     frees `bytes` when the last consumer finishes. Re-derivable heavy data (deterministic
     decode of `/raw` bytes) defaults to not-persisted.
+  - A re-written slot value under an unchanged `record_id` is invisible to every diff and to
+    the upsert: refine inside the producing stage before assembly, or fork `pipeline_version`.
 - **L6 — One POST.** The blackboard fills in memory; exactly one atomic `POST /context` per
   completed graph attempt; ACK only after storage confirms (`dp_acked=1 ⇔ C2 durably
   written`, unchanged). Partial-record writes to storage are forbidden.
@@ -350,8 +352,7 @@ per-unit `assemble()`, the `enrichments` present-but-empty block, `ProcessedUnit
      an independent clock.
    - **Consequence for the Slot Law:** these fields are envelope *provenance we forward*, not
      signals we produce, so the L10 consumer-today rule does not gate them — the same way
-     `device_id` and `blob_ref` are not gated. (Under v0 this was the emission law's T2 test; the
-     rule survived the rebuild as L10.)
+     `device_id` and `blob_ref` are not gated.
    - M4 skew *estimation* remains available if a real unsynced-fleet problem appears, and would
      land as an additive corrected field beside the raw stamp, never overwriting it.
 5. Reprocessing policy on `pipeline_version` bumps: reprocess history (cost) vs version-forward only — interacts with `continuum`'s training windows.
@@ -405,9 +406,10 @@ per-unit `assemble()`, the `enrichments` present-but-empty block, `ProcessedUnit
 
     **Watch out for**
 
-    - Cost and frame-rate gates: **O-2**, the real-macOS-frame OCR bar, still governs the pilot's
-      quality budget; `servers/ocr` now serves the real PP-OCRv4 det+rec (identity-checked), not
-      a mock. The captioning window equals the C1 chunk, span-parametric, and 60 s is escalation E-1.
+    - Cost and frame-rate gates: the OCR quality bar still governs the pilot — ≥0.85 recall and
+      ≤0.10 CER over ~200 hand-labelled real macOS frames; `servers/ocr` serves the real
+      PP-OCRv4 det+rec (identity-checked), not a mock. The captioning window equals the C1
+      chunk, span-parametric, and 60 s is escalation E-1.
     - **Not screen:** which OCR model for body-cam or browser is a later per-scenario call. The
       prompt pack plus a new backend version (a `vB` bump — no env knob) make it a code change.
     - Residual engineering choices elsewhere: keyframe cadence for video, cost per screen-hour, and
@@ -439,11 +441,11 @@ per-unit `assemble()`, the `enrichments` present-but-empty block, `ProcessedUnit
     **Watch out for**
 
     - Residual: which VAD, which audio-tagging or captioning model, and cost per audio-hour.
-13. Ingest processing mode. M0 `/ingest` processed **inline** — pull → run → C2 → store inside the
-    request handler. *Resolved (2026-07-19, M7-early) and then made the operating default at the
-    rebuild's Stage F:* async (`INGEST_ASYNC=1`) is the live mode after drill 1 paid the
-    standing D16 async-default gate. Inline stays available and byte-identical (it is C8's
-    skeleton). See [handoff/ws-async-observability.md](handoff/ws-async-observability.md).
+13. Ingest processing mode. `/ingest` may run **inline** (pull → run → C2 → store inside the
+    request handler) or **async**. Per [D16](../../DECISIONS.md): code default is
+    `INGEST_ASYNC=0`; the depot's operating default is async (`INGEST_ASYNC=1`) since
+    2026-08-07 after the re-drive drill. Inline stays available and byte-identical — it is
+    C8's skeleton.
 
     **Rules**
 

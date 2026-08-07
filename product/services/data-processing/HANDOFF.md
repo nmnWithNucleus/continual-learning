@@ -63,4 +63,4 @@ Open items only. Finished work leaves the board for [handoff/worklog.md](handoff
 - **No output-affecting env knob exists** (L4). If you reach for an env var to change what a record
   says, stop — that is a code change (a `vS`/`vB` bump), and the determinism test will catch it.
 - **The inline ingest path is kept on purpose** as C8's skeleton; it is byte-identical to async for
-  one chunk. Do not delete it "because async exists" — proposed and refused on that ground.
+  one chunk. Deleting it would orphan the synchronous contract.
