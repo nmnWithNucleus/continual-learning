@@ -3,51 +3,14 @@
 > The path that turns a pilot user's raw captured life into fine-tuned weights:
 > **recording → data-processing → storage → continuum → model directory → (inference serves the adapter)**.
 > Written for a co-founder-level newcomer: our system, not general concepts. Every load-bearing
-> claim was spot-checked against code, twice independently (2026-07-25, 2026-07-26); where a doc
-> and the code disagree, the code wins and the discrepancy is flagged in §8. Companion docs:
+> claim is spot-checked against code; where a document and the code disagree, the code wins and
+> the discrepancy is flagged in §8. Companion docs:
 > [ARCHITECTURE.md](../ARCHITECTURE.md) (the contract spine's home), each service's `CHARTER.md`
 > + `HANDOFF.md`, and the schemas in [contracts/](../contracts/).
 
-**Last verified against code:** 2026-07-26 (second independent pass; citations re-resolved, suites
-re-run, the composed clip dialect re-derived by execution). **Amended 2026-07-26 (later):** the founders decided
-*timezone ownership* and *shipped it the same session* — §8.4 is rewritten from an open gap into
-how time now works (*D17*: the capturing device reports `device_tz` per chunk on C1 → verbatim
-through DP into C2 → storage columns → the renderer; storage's per-user `home_tz` is scheduling +
-fallback only; UTC stays canonical). §3, §5 and the E-4 row in §7 are updated with it. Suites after
-the change: storage *32* · continuum *189* · recording *144* · DP *770* (+21 skipped).
-
-**Amended 2026-07-27 — the storage↔continuum seam was rebuilt and this document was materially
-stale until now.** Read this before the body: **D18/D19/D20** moved day-log materialization from
-continuum to *storage*, replaced the local-date cycle window with a *watermark over storage's own
-`ingest_time`*, made `window_id` an opaque token, and minted *C12* (per-user profile),
-*C13* (recipe registry) and *C14* (reservoir). Continuum is cut over to storage's HTTP surface:
-`window_for()` / `closed_window_before()` / `Window.local_date` are *deleted* and `nightly.py --tz`
-is *retired* for the C12 profile read. The learn fleet runs on it. Sections 2, 3, 4, 6 and 7 carry
-the change; where an older passage still describes the pre-cutover shape it is marked *(pre-cutover)*
-rather than deleted, because the reasoning is still the best explanation of why the seam is where it
-is. Suites now: storage *310* · continuum *262* · recording *144* · DP *788* (+21 skipped).
-
-**Amended 2026-08-07 — the data-processing service was rebuilt (Stages A–G, D23–D28) and the DP
-internals this document teaches are the pre-rebuild v0 service.** Read this before §4.2 and §5.
-The rebuild replaced the v0 record model (several records per chunk labelled by `content.kind` +
-a discriminator, in-place mutation policed by the record-vs-mutation law, SlotView capability
-views, `INGEST_ISOLATION` subprocesses, sync-by-default ingest) with the *Slot Law* world:
-*one C2 v1 record per chunk, built from `content.slots`*, `record_id` deterministic on
-`(chunk_id, pipeline_version)` with *no discriminator*; models run as supervised long-lived
-servers (DP is a thin async orchestrator; the captioner has its own vLLM on `:8161`, E-3(b));
-`INGEST_ASYNC=1` is the *live operating default* behind a durable journal (the D16 gate is paid);
-and no output-affecting env knob exists (L4). Storage moved with it: `ingest_time` split into
-`created_at`/`updated_at` (D27), and the day-log is C10 *v2* — a slot-walk render, dedup
-*latest `updated_at` per `(chunk_id)`* (D28); the v0 `/context` store was wiped fresh-forward
-at the cutover (OD-2; `/raw` kept) and continuum trains under `consolidation-v2.0`. The §4.2
-subsections teaching the retired internals are marked *(pre-rebuild)* rather than rewritten
-(the reasoning is still the best explanation of why the v1 shape is what it is); §3's C2/C10
-cards, §5's walk-through and §6's state tables likewise describe the v0 world. This document's
-full rewrite is a client-testing-phase task; until then the running world is the
-[DP charter](../services/data-processing/CHARTER.md) (§Slot Law, §Condensed history),
-[ARCHITECTURE.md](../ARCHITECTURE.md) §Contracts, and the rebuild's record
-([refactor_dp_service.md](../services/data-processing/docs/refactor_dp_service.md)). Suites now:
-storage *354* · continuum *264* (+7 skipped) · recording *144* · DP *569* (+4 skipped).
+**Last verified against code:** 2026-08-07. Where a document and the code disagree, the code
+wins and the discrepancy is flagged in §8. Suites: storage *354* · continuum *264* (+7 skipped) ·
+recording *144* · data-processing *569* (+4 skipped).
 
 ---
 
@@ -143,7 +106,7 @@ flowchart LR
 
   subgraph dp["Data Processing :8085"]
     ING["/ingest (C1 receiver)<br/>durable journal, dedup on chunk_id"]
-    SG["stage graph per modality<br/>audio: asr+diarize+…<br/>video: keyframe | clip (VIDEO_PIPELINE)"]
+    SG["stage graph per modality<br/>audio: asr+diarize+acoustic+speaker_align<br/>video: clipprep+screentext+clipcap"]
     ING --> SG
   end
 
@@ -184,14 +147,13 @@ Rendered inline in §4.2 (DP internals — the modality stage graph and the two 
 
 The contracts are the *only* coupling between services ([ARCHITECTURE.md](../ARCHITECTURE.md)
 §Contracts). Changing one means editing ARCHITECTURE.md §Contracts first (ORG rule). The learn
-loop rides **eight** of them as of 2026-07-27 (five before the cutover). Status at a glance:
+loop rides **eight** of them. Status at a glance:
 
 | Contract | Producer → Consumer | Status | Machine schema |
 |---|---|---|---|
 | C1 | recording → data-processing (+ blob leg → storage `/raw`) | **v0 pinned** (2026-07-09) | [c1_raw_stream_envelope.v0.json](../contracts/c1_raw_stream_envelope.v0.json) |
-| C2 | data-processing → storage `/context` | **v0 pinned** (2026-07-09) | [c2_processed_record.v0.json](../contracts/c2_processed_record.v0.json) |
-| C2 `discriminator` | data-processing → storage | **additive-optional, added 2026-07-27** — surfaces the within-chunk discriminator that had fed `record_id` since v0 but lived only inside the hash. `record_id` unchanged; nothing re-keyed | same C2 schema |
-| C10 | storage → continuum | **evolved + BUILT (D18, 2026-07-27)** — a day-log fetch by `(user_id, window_id)` plus the training-window ledger, over an *ingest-time watermark*. The legacy range read is *kept*, not retired | [c10_daylog.v1.json](../contracts/c10_daylog.v1.json) · [c10_training_window.v1.json](../contracts/c10_training_window.v1.json) |
+| C2 | data-processing → storage `/context` | **v1, live** (D24) | [c2_processed_record.v1.json](../contracts/c2_processed_record.v1.json) |
+| C10 | storage → continuum | **v2, live** (D18/D28) — a day-log fetch by `(user_id, window_id)` plus the training-window ledger, over an `updated_at` watermark. The raw range read is *kept*, not retired | [c10_daylog.v2.json](../contracts/c10_daylog.v2.json) · [c10_training_window.v1.json](../contracts/c10_training_window.v1.json) |
 | C12 | storage → continuum | **BUILT** — per-user profile; `home_tz` only in v0 | [c12_user_profile.v0.json](../contracts/c12_user_profile.v0.json) |
 | C13 | storage → continuum + inference | **BUILT** — recipe registry + the separately-versioned gate policy | [c13_recipe.v0.json](../contracts/c13_recipe.v0.json) · [c13_gate_policy.v0.json](../contracts/c13_gate_policy.v0.json) |
 | C14 | continuum ↔ storage | **BUILT** — append-only reservoir ledger; audit/provenance, *not* the replay path | [c14_reservoir_ledger.v0.json](../contracts/c14_reservoir_ledger.v0.json) |
@@ -231,80 +193,54 @@ What DP writes to `/context` (`POST /context/records`, schema-gated at
 `storage/app/main.py:149-162`):
 
 ```
-{contract:"C2", version:"0", record_id, user_id,
- source:{device_id, stream_id, chunk_id, blob_ref, modality},   ← provenance to /raw
- t_start, t_end,                                                 ← the time spine
- content:{kind: transcript|caption|ocr|text, text, language?, segments?:[{t_start,t_end,text,speaker}]},
- enrichments:{speakers:[], faces:[], places:[], objects:[]},     ← present-but-empty in v0
- pipeline_version, processed_at}
+{contract:"C2", version:"1", record_id, user_id, modality,
+ source:{device_id, stream_id, chunk_id, blob_ref,
+         device_tz?, device_utc_offset_minutes?, device_clock?},  ← provenance, verbatim from C1
+ t_start, t_end,                                                  ← the time spine
+ pipeline_version,
+ content:{slots:{<slot_name>:{version, …per-slot fields…}, …}}}
 ```
 
 The two load-bearing design choices:
 
-- **`record_id` = sha256(`chunk_id` ␀ `pipeline_version` [␀ `discriminator`])**
-  (`data-processing/app/pipeline.py:33-46`).
-- Same inputs give a byte-identical id, so a redelivery or reprocess is an idempotent `/context`
-  upsert.
-- A `pipeline_version` bump *forks* new records. That is version-forward reprocessing: old records
-  are never rewritten in place.
-- The within-chunk `discriminator` (`""` for the caption, `"ocr"` for the OCR record,
-  `"translation"`, …) makes a chunk's multiple records stable and distinct.
-- An empty discriminator reproduces the original two-component v0 id byte-for-byte
-  (`pipeline.py:43-45`), so nothing forked when it landed.
-- *Was §8 item 4-adjacent drift, **closed 2026-07-26** as review item O-4.* The schema file had
-  always mandated the discriminator — *"fold a within-chunk discriminator into the id so each is
-  stable and distinct"*, while ARCHITECTURE's prose summary still said "deterministic on
-  `(chunk_id, pipeline_version)`".
-- One truth, recorded correctly in the authoritative place and lagged only by its own summary. The
-  summary now matches. **No contract change**, and none was needed: the schema was never wrong.
+- **`record_id` = sha256(`chunk_id` ␀ `pipeline_version`)** — NUL-joined, hex, a blind `/context`
+  upsert. Same inputs give a byte-identical id, so a redelivery or reprocess is idempotent.
+- Two components are enough because there is exactly **one record per chunk**: no siblings, so
+  nothing to tell apart.
+- A `pipeline_version` bump *forks* a new record beside the old. That is version-forward
+  reprocessing: records are never rewritten in place.
+- **`content.slots` is a map**, one producing stage per slot, written once and never edited. A
+  reader tells a hole from an honest empty claim from a never-attempted stage using the record
+  plus its dialect alone.
 - **`pipeline_version` is the dialect** — the statement of *which processing produced this text*.
   Continuum must train on a consistent dialect; storage never filters on it (yet), which is
-  exactly why the E-2 retraction primitive blocks the clip-pipeline cutover (§6).
+  exactly why storage keeps `pipeline_version` on every record (§6).
 
-`enrichments` is deliberately present-but-empty so diarization/world-data never reshape the
-contract; `content.segments[].speaker` is required-nullable for the same reason. Storage assigns
-`ingest_time` itself — not carried in C2. (Four texts used to promise a *storage-assigned*
-user-local timezone, which was never built. Per **D17** the timezone comes from the **capturing
-device** instead: `source.device_tz` + `source.device_utc_offset_minutes`, additive-optional,
-carried verbatim from C1. Timestamps stay UTC-canonical; the zone rides beside them. See §8.4.)
+`content` is a **slots map**: one producing stage per slot, written once, never edited. Adding a
+slot type is an additive edit to the schema and both pydantic mirrors together. Storage assigns
+`created_at` and `updated_at` itself — neither is carried in C2. Per **D17** the timezone comes
+from the **capturing device**: `source.device_tz` + `source.device_utc_offset_minutes`,
+additive-optional, carried verbatim from C1. Timestamps stay UTC-canonical; the zone rides beside
+them. See §8.4.
 
-### C10 — the training-window read (**EVOLVED + BUILT 2026-07-27**)
+### C10 — the training-window read
 
-> **What changed, in one paragraph.** Continuum no longer builds the day-log; it issues a warrant
+> **In one paragraph.** Continuum does not build the day-log; it issues a warrant
 > for one. Storage materializes C2 records into the segment/block day-log and serves it by
 > `(user_id, window_id)`, plus a training-window ledger (`POST /training/windows` is an idempotent
 > get-or-create) and a window enumeration read. The window itself is `[last_trained_t, now−δ)` on
-> **storage's `ingest_time`**, not on event time and not on a local date — so storage needs no
+> **storage's `updated_at`**, not on event time and not on a local date — so storage needs no
 > timezone to serve C10, a missed or failed night is absorbed into the next window, and *late data
-> cannot exist*, because `ingest_time` is assigned at write and can never land below a closed
+> cannot exist*, because `updated_at` is assigned at write and can never land below a closed
 > boundary. `last_trained_t` advances **if and only if a cycle publishes**. `window_id` is an
 > opaque, path-safe, lexicographically-ordered token (`w<YYYYMMDD>T<HHMMSS>Z`) that **no consumer
 > may parse**. The decisive argument for moving materialization was replay: it re-reads *prior*
 > day-logs nightly, so a continuum-side builder would re-pull every prior day's raw records every
-> night — O(days²) to rebuild what storage could have kept. Full statement:
+> night — O(days²) to reconstruct what storage could have kept. Full statement:
 > [ARCHITECTURE.md](../ARCHITECTURE.md) §Contracts → the *C10 card*.
 >
-> **The legacy range read is NOT retired.** `GET /context/records?user_id=&from=&to=` remains
+> **The raw range read is NOT retired.** `GET /context/records?user_id=&from=&to=` remains
 > first-class — it is D12's beta training feed, the debugging path, and C11-adjacent.
-
-*The passage below describes the pre-cutover shape and is kept because it explains why the seam
-moved:*
-
-**As built:** continuum reads storage's beta range read —
-`GET /context/records?user_id=&from=&to=`, half-open `[from,to)`, ordered
-`t_start ASC, rowid ASC` (`storage/app/db.py:330-355`; client:
-`continuum/app/context_reader.py:23-41`, which fails loudly on HTTP errors so a nightly can never
-train on a silently truncated window).
-
-**Proposed evolution (the pending founders' board item):** from a raw range-read to a **day-log
-fetch, random-access by `(user, window_id)`** — storage materializes the segment/block day-log and
-continuum consumes it. The seam is already cut for this: continuum's `DayLogClient` protocol
-(`continuum/app/clients/daylog_client.py:51-63`) hides *who* builds the day-log; today's
-`LocalDayLogClient` builds it in-process from the range read, and the docstring names the future
-`HttpDayLogClient` (`daylog_client.py:8-19`). The cycle keys its cache on a *content hash of the
-rendered day-log*, not the raw records (`daylog_client.py:35-48`) — deliberately, so the swap to
-storage-side materialization does not invalidate anything. *Not pinned until ratified* —
-[ARCHITECTURE.md](../ARCHITECTURE.md) C10 row says the same.
 
 ### C5 — the adapter publish (built; shape not pinned)
 
@@ -419,130 +355,72 @@ additive).
 denoise/diarize/ASR/translate; video → captions + on-screen text; one pipeline that will also
 serve interactive requests via C8 (same normalization, two entry points — C8 not yet built).
 
-#### Ingest spine *(pre-rebuild)*
+#### Ingest spine
 
-`POST /ingest` schema-gates the C1 envelope, computes the chunk's `pipeline_version` **at
-accept-time**, and claims it by `chunk_id`. A **durable journal** (`app/journal.py`) records async
-accepts *before* the 202 reply, auto-recovers at startup (kill −9 safe), and keeps dedup
-*receipts* in both sync and async modes with a `pipeline_version` staleness check — so a
-redelivery of an already-processed chunk under the same dialect serves the recorded `record_ids`
-instead of reprocessing. `INGEST_ASYNC` is off by default (inline is byte-identical and is the D16
-invariant's simplest form); `INGEST_ISOLATION=subprocess` optionally runs each chunk's processing
-in a killable child so a segfault in model code kills one chunk, not the service. A chunk that
-emits zero units is a *terminal dead-letter* (visible to recording via the gap report; never
-silently dropped). Mixed-dialect fleets are observable: DP exports one
-`dp_pipeline_dialect{modality, pipeline_version}` series per replica precisely because the day-log
-join has no dialect filter (`app/main.py:287-320` states this verbatim).
+`POST /ingest` schema-gates the C1 envelope, resolves the chunk's `pipeline_version` before any
+stage runs, and claims the chunk by `chunk_id`. A **durable journal** (`app/journal.py`) records
+an accept *before* the 202 goes out and re-drives every still-pending row at startup, so a
+`kill -9` loses nothing. The same journal holds the done-ledger: one row per chunk whose C2 is
+durably written, carrying its per-stage status and heal bookkeeping.
 
-#### The stage graph *(pre-rebuild)*
+A redelivery is judged from that row alone, never from a storage read, and lands on one of five
+verdicts: **fresh** (never seen), **skip** (same dialect, all green), **heal** (same dialect, but
+the record has holes — re-run and re-POST the same `record_id`), **version-forward** (a new
+dialect forks a new record beside the old), or **in-flight** (re-ACK the 202). Async is the
+fleet's operating default; the inline path stays byte-identical and is C8's skeleton.
 
-Every processing step is a **drop-in stage file** (`app/stagegraph/`), self-registering per
-modality with declared `kind` (primary | sidecar | mutate), `needs` (a readiness DAG — independent
-stages run concurrently), `provides` (typed slots), `order`, and `version_fragment`. The rules
-that make this safe are structural, enforced at registration and resolution:
+A chunk that can never produce a record dead-letters visibly, so recording's gap report can see
+it. There is no per-chunk subprocess shield, because models no longer run inside this process.
 
-- exactly **one enabled primary** per modality; its fragment is the base dialect;
-- a **mutate** stage (e.g. diarize filling `segments[].speaker`) must declare `writes` and a
-  non-empty fragment — a mutation invisible to the dialect is the "silent overwrite" class that
-  was killed by construction;
-- a **sidecar with non-empty `provides`** (it feeds someone else's bytes) must carry a fragment
-  (rider R1, registration-enforced since WS-E2);
-- sidecars can't even *read* the primary's mutable slots without a capability (SlotView) —
-  illegal writes raise synchronously at the offending line.
+#### The stage graph
 
-The **composed `pipeline_version`** is the primary's fragment plus every enabled fragment-bearing
-stage's fragment — the dialect string *is* the configuration statement.
+A **stage is one drop-in file** under `app/stages/<modality>/`, decorated with `@register_stage`.
+The declaration is the contract surface: name, modality, stage version `vS`, backend (name + `vB`,
+resolved in code), `needs`, the one `slot` it writes, whether it is `required`, a byte budget, and
+a named consumer. The executor resolves the graph into a DAG before anything runs, then runs
+independent stages concurrently and commits each slot on success.
 
-#### The two video pipelines (behind `VIDEO_PIPELINE`, default `keyframe`) *(pre-rebuild)*
+The invariants hold by construction rather than by policy — this is the Slot Law (L1–L12, the DP
+charter's §Slot Law):
 
-```mermaid
-flowchart TB
-  C1IN["C1 video chunk (10 s screen recording)"] --> MODE{"VIDEO_PIPELINE<br/>(unknown → keyframe)"}
+- **One record per chunk** (L2). The executor structurally emits one; there is nothing to tell
+  siblings apart because there are no siblings.
+- **One producer per slot, written once, never edited** (L5). No stage can reach another stage's
+  slot, so there is no in-place mutation to police.
+- **Identity is carried by code, never by config** (L4). `pipeline_version` is the sorted
+  `+`-join of every enabled stage's `<stage>.v<S>-<backend>.v<B>` string, and no environment
+  variable may move an output byte.
+- **A failure is a hole, not a lie** (L7/L11). A required stage's failure fails the chunk; an
+  optional stage's failure leaves its slot absent, and the record still ships. A reader tells the
+  three cases apart from the record plus its dialect: stage named in the dialect and slot absent
+  means attempted and failed; slot present but empty means an honest empty claim; stage not in
+  the dialect means never attempted.
 
-  subgraph legacy["keyframe — shipped legacy, byte-identical, DEFAULT"]
-    KF["keyframes (sidecar, order 0)<br/>6 ffmpeg subprocs, scene detect + grid<br/>fragment: '' (fixed exemption)"]
-    CAPS["captions (primary, order 10)<br/>N independent single-image VLM calls<br/>OCR woven into caption text"]
-    KF --> CAPS
-    CAPS --> R1["≈4 × kind='caption' C2 records / 10 s chunk<br/>(+4 ocr with VIDEO_OCR_RECORDS=1)<br/>dialect: vidproc-vlm-v0"]
-  end
+#### Models are servers, not libraries
 
-  subgraph clip["clip — built + integrated 2026-07-25, GATED OFF"]
-    CP["clipprep (sidecar, order 5, '+cp-v1')<br/>2 ffmpeg passes: change-delta probe + frame extract<br/>split to 768 px (caption) & 1728 px (OCR)"]
-    ST["screentext (sidecar, required, order 15, '+ocr-*')<br/>CPU OCR sidecar (loopback HTTP) @ native res<br/>conf-gate · region roles · secret redaction · budget"]
-    CC["clipcap (primary, order 20)<br/>ONE multi-image VLM call, K≤12 frames<br/>OCR injected as INPUT, never copied out"]
-    CP --> ST --> CC
-    CC --> R2["EXACTLY 2 C2 records / chunk, always:<br/>1 × kind='caption' (disc '') + 1 × kind='ocr' (disc 'ocr')<br/>dialect: vidclip-vlm-v1@p1.&lt;sha8&gt;#&lt;sha8&gt;+cp-v1+ocr-…"]
-  end
+No model loads inside the DP process. Each runs as a long-lived, replicated, health-checked
+server — `servers/whisper`, `pyannote`, `ast`, `ocr`, each in its own venv on its own port, plus
+the Qwen3-VL captioner on `:8161`. A stage is a thin client: prepare the request, call the
+server, post-process the reply into its slot.
 
-  MODE -->|keyframe| KF
-  MODE -->|clip| CP
+The supervisor that spawns and restarts those replicas runs **inside** the DP process, so DP is
+the parent of all eight. A graceful stop takes the fleet with it; a `kill -9` on DP leaves eight
+orphans holding their ports and GPU memory.
 
-  OCRSVC["OCR sidecar service (sidecars/ocr/)<br/>own venv · stdlib HTTP · CPU ONNX PP-OCRv4<br/>OCR_MODE: mock (default) | ppocr<br/>/health pins model sha256s"]
-  OCRSVC -. "POST /ocr {image} →<br/>{regions:[{text,bbox,conf}]}" .- ST
-```
+Before a replica serves its first call, its `/health` identity must match what
+`servers/manifest.json` expects. A mismatch is loud and immediate — a stage must never talk to
+the wrong model.
 
-Why the clip pipeline exists (measured, not argued — `handoff/ws-video-clip.md` §1.5): per-frame
-calls structurally cannot describe *change* ("user switched from Gmail to Slack" appears in no
-record); 60–75 % of keyframe VLM calls re-describe near-identical pixels (SSIM 0.9998+); scene
-detection is inert on screen content; and 768 px destroys the 13 pt UI text OCR exists to read.
-The clip design fixes each: one multi-image call reasons across frames; a cheap per-2 s change
-probe (binarize + 32×32 area-max — sensitive to a single line of typing, floor exactly 2/255)
-drives OCR event selection; OCR runs on CPU at native 1728 px in a **separate sidecar service**
-(dependency quarantine: paddle's stack needs `numpy<2.4`, DP has 2.5.1 — `sidecars/ocr/app.py`
-header) and its text is **injected into the caption prompt as input** under a labelled
-"input, not target" block, with a mechanical no-invention check
-(`dp_caption_ungrounded_quote_total`).
+#### Dialect discipline: the prompt pack
 
-Key stage facts (verified): `clipcap` declares `needs=("clipprep","screentext")`, emits exactly
-one caption unit with `t_start=None` so `build_c2` carries the C1 span verbatim
-(`app/stages/video/clipcap.py:40-74`, `app/pipeline.py:79-80`); `screentext` **always** emits its
-one OCR record, `content.text == ""` when nothing legible was found — record *presence* is the
-coverage signal, and continuum must never read absence as "no on-screen text"
-(`app/stages/video/screentext.py` docstring, rider R3(e)); `clipprep` provides frames/delta and
-contributes `+cp-v1` only in clip mode (`app/stages/video/clipprep.py:53-67`).
+The video captioner's prompts are a versioned pack on disk. Their aggregate digest is computed at
+import and pinned as a code constant in the `clipcap` stage; registration fails loudly if the two
+disagree. So editing a `.prompt.md` without bumping the stage's backend version is impossible to
+ship silently — the prompt bytes are part of the dialect, exactly like a model revision.
 
-#### Dialect discipline: the prompt pack and `cfg_tag` *(pre-rebuild)*
-
-The failure class this kills: editing a captioner prompt used to change every caption's bytes
-while `pipeline_version` stayed constant — a silent `/context` overwrite under a stable
-`record_id`. Now:
-
-- **The prompt pack is a versioned registry whose content digest *is* the dialect**
-  (`app/vision/prompts/`): one `.prompt.md` file per prompt, plus `routes.json`.
-- `PACK_DIGEST` = sha256 over every normalized, model-facing byte — system and user text, the
-  output schema, decode params, folded into the primary's fragment as `@p{N}.{sha8}`.
-- So a researcher edits a markdown file, the corpus forks automatically, and there is no version
-  bump to forget.
-- Packs are read once per process at import, so there is no mtime TOCTOU; `relock` tooling
-  archives full text per version.
-- **`cfg_tag` = `#` + sha8 over an explicit `OUTPUT_AFFECTING` allowlist** of config knobs
-  (`app/vision/version.py:38-56`), with an `OPERATIONAL_ONLY` complement (URLs, timeouts, threads
-  — moving an endpoint must *not* fork the corpus).
-- The union of the two lists must equal every `VisionSettings` field — asserted in
-  `tests/test_prompt_pack.py:97-98` (the emission-law matrix in `tests/test_emission_law.py`
-  polices the riders, not the allowlist), so *a new knob cannot be added without being
-  classified*.
-- The legacy `keyframes` stage carries a `""` fragment as a **single-entry fixed exemption** so
-  the legacy dialect reproduces `vidproc-vlm-v0` byte-for-byte; no new stage may join it (D-14).
-
-#### The record-vs-mutation law *(pre-rebuild)*
-
-The service's constitution for "does signal S deserve a C2 record?" — written to charter standard
-in `docs/record-emission-law.md`, executable in `tests/test_emission_law.py` +
-registration-time raises in `app/stagegraph/stage.py`. The invariant: *a C2 record is one
-independently-placeable (`t_start`), independently-labelable (`content.kind`),
-independently-losable claim about a span of the user's life.* Five ordered tests (derivable →
-reachable-by-a-real-consumer → spine → edits → own channel/span), five riders — most importantly:
-the record **set** (count, discriminators, spans) must be a pure function of
-`(chunk bytes, settings)`, never of model output or decoder build (R4); and `pipeline_version`
-states the *attempted* dialect, so a fragment-bearing stage can never be `best_effort` (R3). This
-is why the clip pipeline emits **exactly 2 records per chunk, always** — seven verified defect
-classes (survivor-ordinal renumbering, decoder-dependent identity, span-from-selection, …) die in
-that one decision (ws-video-clip D-05).
-
-**State:** v1 + hardening + WS-VC merged; 765 tests. Clip pipeline **built + integrated but gated
-off** (cutover gates in §6). Audio M1 exit still open (no denoise stage; WER/DER baseline
-unmeasured). Image/text pipelines (M2) deferred until a producing surface exists (D15).
+**State:** built and live — 569 tests (+4 skipped), audio and video both running end to end
+against the real fleet. Audio M1's exit is still open (no denoise stage; WER/DER baseline
+unmeasured). Image and text pipelines (M2) wait until a producing surface exists (D15).
 
 ### 4.3 Storage — the durable custody
 
@@ -563,17 +441,10 @@ its own durable user data (ownership split, ARCHITECTURE §Ownership). One FastA
   returns a per-user override row if present, else base. This is C6's server; it is *not* where
   continuum publishes today (§4.4, §8).
 
-**What storage does NOT have yet (all pending the storage/C10 board ratification):** the day-log
-materialization, the recipe registry, the reservoir (all currently continuum-local behind client
-seams), and — the sharpest gap, **any `/context` delete**. The *E-2 escalation* asks for a
-kind-aware retraction primitive
-(`DELETE /context/records?user_id=&from=&to=&pipeline_version=&kind=`): `record_id` forks by
-design on a
-dialect bump, old records persist, and the day-log join filters on neither `kind` nor
-`pipeline_version` — so a day re-consolidated across the clip cutover would render *both*
-dialects and double-count. It must key on `content.kind` because Phase-3 proved captions and
-transcripts can share one `pipeline_version` (a kind-blind delete would remove transcripts to
-remove captions). E-2 blocks the clip cutover, not the build.
+**Retraction** is built and live as a whole-record operation: `DELETE /context/records` keys on
+`record_id` / `chunk_id` / `pipeline_version`, with a dry-run manifest and a day-log cascade.
+One record per chunk is what makes it expressible in one sentence — there is no finer unit to
+delete. The remaining legs are Platform's orchestration and the reservoir cascade (E-2, §6).
 
 **State:** v0.0 + capture M0, built + integrated (26 tests). Deliberately thin — by design the
 last unexpanded learn-loop service; its expansion is the named next founders' act.
@@ -669,31 +540,29 @@ day N into night N+1) tracked as debt, not wired.
 The day-log is **the only interface between ingest and consolidation** (the research design's
 pinned-schema rule — `continuum/app/daylog.py:1-8`). How `/context` records become training blocks:
 
-- **Window** = `[last_trained_t, now−δ)` on *storage's `ingest_time` axis*, not a local day.
+- **Window** = `[last_trained_t, now−δ)` on *storage's `updated_at` axis*, not a local day.
   `window_id` is an opaque `w<YYYYMMDD>T<HHMMSS>Z` derived from the window's *end* instant, minted
   in exactly one place and parsed by nobody.
 - Storage owns the per-user watermark and mints the window durably and idempotently, so a retry
   gets the *same* window back. Continuum fetches; it does not derive.
-- **`window_for()`, `closed_window_before()` and `Window.local_date` are deleted**
-  (`continuum/app/window.py:9-27` records why each deletion is load-bearing). `nightly.py --tz` is
-  retired for the C12 profile read.
+- Continuum derives no window and no zone of its own: the window comes from storage and the
+  zone from the C12 profile read.
 - **`home_tz` survives with a narrowed job:** it is a *render fallback* only — the zone a block is
   written in when no contributing record carried a `device_tz`. That is D17's fact/policy split;
   the record's own zone wins, because it is a fact about where the user physically was.
-- **Membership is by `ingest_time`; bucketing is by `t_start`**, and the bucket grid is *global,
+- **Membership is by `updated_at`; bucketing is by `t_start`**, and the bucket grid is *global,
   not window-relative* (`continuum/app/daylog.py:15-22`, adopted 2026-07-27).
 - A window-relative grid made the M9 diff true only for a window whose origin happened to sit on a
   segment boundary, and real windows are second-granular, so nine origins in ten are misaligned.
 - **Segments**: every C2 record in the window lands in a `segment_seconds` (10 s) bucket by its
-  `t_start`. Routing is by `content.kind`: `transcript` → the `asr` channel — with *diarized
-  sub-spans placed by their own `t_start`*, so a VAD chunk straddling the boundary can't drag
-  in-window speech out (`daylog.py:94-107`); `ocr` → the `ocr` channel; `caption`/`text` → the
-  `caption` channel (`daylog.py:115-120`).
-- **One dialect per record, latest `ingest_time` wins**, keyed `(chunk_id, content.kind,
-  discriminator)` (`storage/app/daylog.py:250-272`). This closed the re-consolidation double-count,
-  and it is why E-2 stopped being a cutover blocker (D18).
-- It keys on `ingest_time` because `pipeline_version` is a *composed* string and not orderable, and
-  on `content.kind` because Phase-3 proved captions and transcripts can share one.
+  `t_start`. Routing is by slot: `slots.transcript` → the `asr` channel — with *diarized sub-spans
+  placed by their own `t_start`*, so a VAD chunk straddling the boundary can't drag in-window
+  speech out; `slots.ocr` → the `ocr` channel; `slots.caption` → the `caption` channel. When
+  `slots.transcript` is absent, speech falls back to `slots.asr` with speakers unlabeled.
+- **One dialect per record, latest `updated_at` wins**, keyed `(chunk_id)` with a rowid tiebreak.
+  One record per chunk leaves nothing finer to key on.
+- It keys on `updated_at` because `pipeline_version` is a *composed* string and not orderable,
+  where the store's own clock is.
 - **Blocks**: runs of ≤ `block_segments` (12) temporally-adjacent non-empty segments; a gap >
   6×segment_seconds (60 s — camera-off) starts a new block so one anchor line never spans hours of
   silence (`daylog.py:125-139`).
@@ -747,7 +616,7 @@ pending (behavior unchanged; knobs off by default).
 
 ## 5. A chunk's journey — one mac screen-recording segment, capture → adapter
 
-The concrete data shapes at every hop, for the **clip pipeline** (`VIDEO_PIPELINE=clip`; the
+The concrete data shapes at every hop, for the **video path** (the
 gated-off target path — under today's default the same journey emits ~4 keyframe captions at step
 5 instead of 2 records).
 
@@ -808,24 +677,21 @@ sequenceDiagram
      contract cost; the bbox is then discarded), min-chars, *deterministic secret redaction*
      (AWS/sk-/ghp_/PEM/Luhn shapes → `[redacted:secret]`), within-chunk dedup, budget → one
      single-line block.
-   - Provides `ocr_text`; emits *1 unit* `kind='ocr'`, discriminator `"ocr"`.
+   - Writes the `ocr` slot.
    - `clipcap` (order 20, primary): ONE multi-image chat call — interleaved time-labelled frames,
      the OCR block injected under *"On-screen text (read by a specialist pass, input, not
      target)"*, rules forbidding invention; guided-JSON reply parsed to `ClipDesc{app, activity,
-     description, sensitive}`; emits **1 unit** `kind='caption'`, discriminator `""`
-     (`clipcap.py:58-74`).
-6. **Exactly two C2 records**, both with the C1 span verbatim (`pipeline.py:79-80`), both stamped
-   the same composed dialect.
-   - Empirically resolved with the production backends (`VIDEO_BACKEND=vlm`,
-     `VIDEO_OCR_BACKEND=ppocr`):
-     `vidclip-vlm-v1@screen-clip-v1.p1.565066a0#04651d47+cp-v1+ocr-ppv4-cpu-v1`.
-   - That is the primary base, plus pack id/version/digest, plus the cfg allowlist sha, plus the
-     clipprep and OCR fragments.
-   - The design doc's example `@p1.7f3a9c21…` omits the pack id and names ppv6 — see §8.
-   - `record_id = sha256(chunk_id ␀ pipeline_version ␀ discriminator)` (`pipeline.py:33-46`), and
-     `POST /context/records` upserts them idempotently (`storage/app/main.py:149-162`).
-7. **Day-log.** When the window closes, storage materializes it: the caption and OCR land, by
-   `t_start`, in one 10 s segment's `caption`/`ocr` channels, and the ASR sibling in `asr`.
+     description, sensitive}`; writes the `caption` slot.
+6. **Exactly one C2 record**, carrying the C1 span verbatim and stamped with the composed dialect
+   — the `caption` and `ocr` slots sit inside it, side by side.
+   - The dialect on a video chunk today is
+     `clipcap.v1-vlm.v2+clipprep.v1-ffmpeg.v1+screentext.v1-ppocr.v1`: every enabled stage's
+     `<stage>.v<S>-<backend>.v<B>` segment, sorted and `+`-joined.
+   - `record_id = sha256(chunk_id ␀ pipeline_version)`, and `POST /context/records` upserts it
+     idempotently (`storage/app/main.py:149-162`).
+7. **Day-log.** When the window closes, storage materializes it: the record's `caption` and `ocr`
+   slots land, by `t_start`, in one 10 s segment's `caption`/`ocr` channels, and an audio chunk's
+   `transcript` slot in `asr`.
    - Up to 12 consecutive non-empty segments render into one ~2-min block:
      `On 2026-07-21, around 13:02–13:04 local time: / Scene: … / Heard: … / World text (OCR): …`
      (`daylog.py:144-172`). Continuum fetches the rendered result over C10.
@@ -861,11 +727,11 @@ sequenceDiagram
 | Piece | Evidence |
 |---|---|
 | Capture M1 + 3 real clients (mac CLI / phone web / extension), checked continuity | verified `clean` on real hardware 2026-07-19; 133 recording tests |
-| DP v1 + hardening: durable journal, stage graph, SlotView, permit-at-dispatch, opt-in subprocess isolation | merged `5350f7a`; byte-identity re-proven; 765 DP tests |
-| DP screen-video **clip path** (8 workstreams: clipprep/screentext/clipcap, prompt pack, emission law, eval harness, OCR sidecar) | built + integrated 2026-07-25, merged to `main` (`4779dee`; "merged to `svc/video-clip`" is stale wherever it appears — the ws file *and* DP's canvas in three places: status line, WS-VC row, Next) — **behind `VIDEO_PIPELINE=clip`, default `keyframe`** |
+| DP: one C2 record per chunk from `content.slots`, durable journal with heal-on-redrive, models as supervised servers | 569 tests (+4 skipped); audio and video both live against the real fleet |
+| DP screen-video path (clipprep → screentext → clipcap, versioned prompt pack, eval harness) | built and live; `caption` and `ocr` slots on every video record |
 | Storage v0.0: /raw, /context, /sessions, C6 resolve | integrated since 2026-07-09 |
 | **Storage D18 expansion (2026-07-27): C12 profile · training-window ledger + the sole `window_id` minter · day-log materialization (C10 evolved) · C13 registry · C14 reservoir** | **310 tests.** The day-log storage renders is proven *byte-identical* to continuum's over *two window origins including a misaligned one* (`storage/scripts/daylog_parity_diff.py`, 31 binding checks) |
-| **Continuum cut over to storage's HTTP surface (2026-07-27)** | **262 tests.** `window_for()`/`closed_window_before()`/`Window.local_date` deleted; `--tz` retired for C12. `app/morpheus/` + `tests/parity/` byte-unchanged — the research-parity kernel did not move |
+| Continuum consumes storage's HTTP surface | **264 tests** (+7 skipped). The window comes from storage and the zone from the C12 profile read; continuum derives neither |
 | **The seam proven live, two processes over HTTP** | `continuum/scripts/seam_check.py` — 10 steps, 152 checks, 0 blockers. Plus a real fleet run: capture → faster-whisper → `/context` → a nightly to **published**, with the watermark advancing only on publish and exactly one active C5 row |
 | Continuum: Morpheus port (parity-proven) + lean cycle + gate v1.1 + C5 publish/rollback + reservoir | M0 met (32B adapter → gate → C5 → vLLM); 185 tests |
 | Phase-3 dogfood: real data through the real services reproduces baseline learnability | *pipeline sOUND (p=0.018 vs no-consolidation control) |
@@ -875,12 +741,10 @@ sequenceDiagram
 
 | Gate | What it holds back | What clears it |
 |---|---|---|
-| **O-2** — real-frame OCR bar | `VIDEO_OCR_BACKEND` ships `mock`; the OCR channel carries no real text | PP-OCR cleared a 204-frame *synthetic* macOS proxy (recall 0.988, CER 0.070 @1728 px) but the gate is defined over ~200 hand-labelled **real** frames; re-run the same harness on a real capture (≥0.85 recall, ≤0.10 CER). Engine shipped is PP-OCRv4, design named v6 (flagged L-3) |
+| **O-2** — real-frame OCR bar | the OCR bar is measured on synthetic frames, not real ones | PP-OCR cleared a 204-frame *synthetic* macOS proxy (recall 0.988, CER 0.070 @1728 px) but the gate is defined over ~200 hand-labelled **real** frames; re-run the same harness on a real capture (≥0.85 recall, ≤0.10 CER). Engine shipped is PP-OCRv4, design named v6 (flagged L-3) |
 | **O-8** — blind-vs-injected A/B | the OCR→caption *injection* architecture (A) vs the minimal-hint fallback (D) | pre-registered rule: ship A iff entity-recall gain > 0.25 AND corrupted-OCR propagation < 0.10; needs a real VLM endpoint → E-3 |
-| ~~**E-2**~~ *demoted (D18)* — the day-log's one-dialect rule (latest `ingest_time` wins per `(chunk_id, kind, discriminator)`) fixes the double-render at *render* time, so the cutover no longer waits on a delete. E-2 is still wanted as the retraction/privacy/space primitive, and it *grew*: deletion must now cascade to the day-log and reservoir too. The 2026-07-27 fleet cutover hit its absence directly — clearing verification rows needed a full re-wipe | *(was)* **the clip cutover itself** | without `DELETE /context/records?…&kind=`, any day re-consolidated across the dialect flip double-counts both dialects. Until then: forward-only cutover at a UTC day boundary on a fresh `user_id`, `DP_DIALECT_FREEZE=1`, never backfill |
-| ~~**C10 evolution + storage charter expansion**~~ *BUILT + live 2026-07-27 (D18/D19/D20)* — no longer a gate | *(was)* storage-owned day-log, recipe registry, reservoir; the HTTP client seams | the pending storage/C10 founders' board session ratifies; contract IDs for registry/reservoir minted then |
+| **E-2** — the remaining retraction legs | whole-record retraction is live; Platform's orchestration and the reservoir cascade are not | Platform M2 + the cascade leg |
 | **C5 shape pin** — *deferred on purpose (D19)*, since its only consumer is inference via C6 and inference is not being built. Free to defer *because* C5 is unpinned: D18 changed `training_window`'s format at no cost. One standing rule for whoever pins it — *pin `training_window` as an opaque token, never as a date*, or the parsing D18 deleted grows back | the wired C5 → storage model directory → C6 → vLLM per-user hot-swap tail | a founders' ratification "with inference at the table"; publish.py is deliberately transport-swappable |
-| D16 async default | `INGEST_ASYNC=1` as production default | founders' call after the re-drive drill posture holds (drill landed in-slice) |
 
 ### Designed / open (no code, or explicitly deferred)
 
@@ -895,9 +759,8 @@ sequenceDiagram
 
 | # | Ask | Why it's open |
 |---|---|---|
-| **E-3(b)** | A captioner VL endpoint distinct from user-facing `:8000` (7B-class on 1–2 GPUs) | DP prefill bursts share a continuous batch with assistant decode; during a 4 h training window DP would dead-letter ~240 chunks = 4 h of screen life. A **founders' call** — it closes DP CHARTER OQ3 / platform's unresolved GPU-placement proposal. (E-3(a), the serving flags, resolved during the build: vLLM 0.24.0 defaults were verified sufficient.) |
-| **E-5** | Parked additive C2 edit (`enrichments.text_regions[]` + root `quality{}`) — the ask is to **NOT take it** | both fields would have zero readers today (continuum reads `enrichments` nowhere); diff is written and parked for the first real consumer |
-| **E-2** | Storage kind-aware retraction | blocks the clip cutover (above) |
+| **E-5** | Parked additive C2 edit (an OCR-geometry slot or field + root `quality{}`) — the ask is to **NOT take it** | both fields would have zero readers today; the diff is written and parked for the first real consumer |
+| **E-2** | The remaining retraction legs: Platform orchestration + the reservoir cascade | whole-record retraction is built and live; these two legs are not |
 | **E-1** | recording `--segment-seconds 10→60` | 5.8× GPU cost lever + the only route to a caption that reasons across a task step; moves the audio leg too → joint recording+DP-audio call |
 | **E-4** | continuum: per-fragment local timestamps in `_render_block` (+OCR dedup, renderer order, recipe fork) | without (a), time-of-day-grounded recall is structurally unreachable. **Premise dissolved 2026-07-26 (D17): the timezone was never the blocker, and C1 now carries one anyway.** Each ASR fragment's own UTC time is already in the day-log (`daylog.py:110,116` write `"t": sub["t_start"]`) and `_render_block` ignores it; the zone to render it in is now resolved per record. E-4 is a *continuum-only renderer change, available today* — no contract, no DP work. Residual: `seg.ocr`/`seg.caption` are bare strings with no `t`, so per-fragment times cover ASR fragments only until the day-log carries times for the other kinds (still continuum-side) |
 | **E-6** | recording auto-retry of `failed` segments | a recoverable 503 becomes terminal capture loss in 1.5 s; matters more once GPU unavailability is a *scheduled* nightly event |
@@ -916,16 +779,16 @@ The handful of choices to internalize to reason about this system.
 > **A. The day-log is storage's, and the reason is replay.** Alternative: keep building it in
 > continuum, where it already worked and was parity-proven. Why not: replay re-reads *prior*
 > day-logs every night, so a continuum-side builder re-pulls every prior day's raw records nightly —
-> **O(days²)** across the wire to rebuild an artifact storage could simply have kept. The general
+> **O(days²)** across the wire to reconstruct an artifact storage could simply have kept. The general
 > rule that fell out is worth more than the move: **storage owns the day-log's REPRESENTATION
 > outright; its CONTENT is a contract neither service may move alone** — *if the trainer can see it,
 > it is contract; if only storage can see it, it is storage's*. Block text is the training corpus, so
 > re-shaping an anchor line silently changes what the model learns and makes every prior measurement
 > incomparable.
 >
-> **B. The cycle window watermarks on `ingest_time`, not event time.** Alternative: a local-date
+> **B. The cycle window watermarks on the store's own clock, not event time.** Alternative: a local-date
 > window, which is what ran. Why: it *dissolves* the late-data problem rather than handling it —
-> `ingest_time` is assigned at write, so a record can never land below a closed boundary, and a
+> `updated_at` is assigned at write, so a record can never land below a closed boundary, and a
 > phone offline for three days simply trains on Friday in a block anchored to Tuesday. It also
 > retires the 23h/25h-day and dateline pathologies, and storage needs **no timezone at all** to
 > serve C10. `last_trained_t` advances **iff a cycle publishes**, which makes the research design's
@@ -956,7 +819,7 @@ The handful of choices to internalize to reason about this system.
    (WebSocket/RTSP), or metadata-with-bytes. Why (D11/D14): capture is the loss-intolerant archive
    job — segmented HTTP + at-least-once + `chunk_id` dedup + `(stream_id, sequence)` gap math give
    checkable zero-silent-loss; a blob that lands before its envelope can never dangle.
-4. **`record_id` is deterministic on `(chunk_id, pipeline_version, discriminator)`; the dialect is
+4. **`record_id` is deterministic on `(chunk_id, pipeline_version)`; the dialect is
    the version.** Alternative: random ids + in-place updates. Why: redelivery must be an upsert,
    not a duplicate; reprocessing must *fork*, never overwrite, because `content.text` is training
    data — a silently rewritten target is invisible to every diff (the "silent overwrite" class DP
@@ -977,7 +840,7 @@ The handful of choices to internalize to reason about this system.
      at consolidation).
    - Why: the nightly loop's only model is *instructed not to fuse* — so string→action binding
      ("wrote to Sarah about the Q3 deck") must be written *once, at caption time*, where
-     pixels+PTS+regions live; and OCR text as a separate `kind='ocr'` record keeps a
+     pixels+PTS+regions live; and OCR text in its own slot keeps a
      machine-checkable, independently-filterable channel.
    - The injection premise is
    honest enough to be *measured* (O-8) rather than argued.
@@ -1011,15 +874,13 @@ Stated so breadth is not mistaken for completeness. Carried over from the review
 it (now closed and removed, its findings folded into the docs they belonged to):
 
 - Phase-3 and parity **statistics** are traced to their reports, not recomputed here.
-- `ws-video-clip.md` is 2,513 lines; the ~15 claims this doc draws from it were verified, not the
-  whole document.
 - **Real capture, GPU and fleet state:** partially exercised.
 - The D17 session restarted the node-7 learn fleet and drove a real `--smoke` capture; the
-  2026-07-27 cutover re-ran that on a wiped store through faster-whisper to a published nightly.
+  and it has since been re-run on a fresh store through faster-whisper to a published nightly.
 - *GPU training and real client capture (phone / extension on hardware) remain unexercised* —
   `TRAINER_BACKEND=mock` throughout.
 - Read but not line-audited: input/output/inference charters, the extension and phone clients,
-  `stagegraph/executor.py` internals (SlotView, permit-at-dispatch).
+  `stagegraph/executor.py` internals (graph resolution, the readiness executor).
 
 ## 8. Doc discrepancies found (code wins)
 
@@ -1033,10 +894,9 @@ error).**
 **Closed 2026-07-27 — every remaining item in this section is now resolved, and the review that
 tracked them is closed too** (O-1 → D17 · O-2/3/4 → 2026-07-26 · O-5…O-11 → 2026-07-27; the
 review file that tracked them was folded into the docs it explained and deleted, per
-[ORG.md](../ORG.md) §Keeping documents true, rule 5). The C10/`window_for` items are superseded by the D18 build; the C2 discriminator
-prose item (O-4) was the schema being right and the summary lagging it, and the field is now
-*emitted* as well as hashed. This section is retained as a **decision record**, not a live defect
-list — a future pass appends rather than reopens.
+[ORG.md](../ORG.md) §Keeping documents true, rule 5). The C10 items are superseded by the D18
+build. This section is retained as a **decision record**, not a live defect list — a future pass
+appends rather than reopens.
 
 **The pattern is the part worth keeping.** Every serious defect in the D18 slice — a day-log
 stamping a recipe whose knobs it never used, a default path that silently trained on nothing, a
@@ -1110,7 +970,7 @@ that costs, not as a list to tick off.
    description (the machine-readable schema — the review's own write-up listed three and missed
    this one), and `continuum/app/window.py:7`. What actually supplied the tz was a **CLI flag
    defaulting to `"UTC"`**, feeding *three* silent consumers: the window boundary, the anchor
-   line every block trains on, and `cycle.py:217`'s prior-window rebuild. Meanwhile C1 collected
+   line every block trains on, and `cycle.py:217`'s prior-window reconstruction. Meanwhile C1 collected
    `device_location` and *C2 dropped it*, and `device_location`/`device_clock` were declared in
    two services' `models.py` and read by neither.
 
@@ -1141,7 +1001,7 @@ that costs, not as a list to tick off.
 
    **Data-processing does no timezone logic at all** — it copies these fields verbatim, like
    `device_id`. They are envelope *provenance we forward*, not signals we *produce*, so the
-   record-emission law's T2 test doesn't gate them (§4.2).
+   the executor's own checks don't gate them (§4.2).
 
    **Verified end to end:** a Tokyo-captured chunk driven through recording → DP → storage →
    continuum, with the operator's fallback deliberately set to UTC, renders *"around 15:00 local
@@ -1162,11 +1022,10 @@ that costs, not as a list to tick off.
    (mic+camera) + Chrome extension — no wearable yet, and phone-web *does* capture (only mobile
    *screen* capture is deferred per D5).
    - The DP box's "denoise→diarize→ASR" also overstates: no denoise stage exists (M1 exit open).
-6. **OCR engine naming:** the design and several fragments say PP-OCR*v6*; the shipped sidecar
-   engine is PP-OCR*v4* (what `rapidocr-onnxruntime` bundles), file-swappable, sha-pinned in
-   `/health` (ws-video-clip O-2 verdict, flag L-3).
-   - The human-readable token in the dialect was corrected to `+ocr-ppv4-cpu-v1`; treat any
-     `-ppv6-` mention as the design name, not provenance.
+6. **OCR engine naming:** some prose says PP-OCR*v6*; the engine that ships is PP-OCR*v4* (what
+   `rapidocr-onnxruntime` bundles), file-swappable, with its det/rec sha256 pins in
+   `servers/manifest.json` and asserted at `/health`. Treat any `-ppv6-` mention as a design
+   name, not provenance.
 7. **`continuum/app/daylog.py:11-12` docstring** still describes video captions as "per-keyframe
    records" — true of the default keyframe pipeline, stale w.r.t. the clip path (which emits one
    chunk-span caption). Cosmetic; the join itself is kind-based and handles both.
