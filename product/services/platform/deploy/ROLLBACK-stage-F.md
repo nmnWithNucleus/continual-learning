@@ -43,6 +43,11 @@ ln -s /home/ubuntu/nmn/continual_learning/product/services/storage/.venv \
 (The worktree adds detached at `9307b7e` — v0's exact code. The DP side needs no
 venv inside the worktree: the fleet launches it under `deploy/.venv-learn`.)
 
+Verify: `git worktree list` shows `/home/ubuntu/nmn/dp-v0-live` at `9307b7e`
+(detached); `git -C /home/ubuntu/nmn/dp-v0-live rev-parse HEAD` prints
+`9307b7e…`; `readlink -f /home/ubuntu/nmn/dp-v0-live/product/services/storage/.venv`
+resolves into this tree's `storage/.venv`.
+
 ## 3. Restore learn.env
 
 ```

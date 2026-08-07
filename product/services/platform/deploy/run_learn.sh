@@ -5,7 +5,7 @@
 # Starts the three services of the capture skeleton, in dependency order,
 # waiting on each /health before starting the next:
 #
-#     storage (8083) -> data-processing (8085, ASR_BACKEND=mock) -> recording (8084)
+#     storage (8083) -> data-processing (8085) -> recording (8084)
 #
 # The capture spine: recording carves a continuous audio source into chunks,
 # PUTs each blob to storage /raw, and PUSHes a C1 envelope to data-processing,
@@ -36,7 +36,8 @@
 #   * read HOST and PORT from the environment and bind uvicorn to them;
 #   * expose GET /health returning HTTP 200 when ready;
 #   * use the active venv on PATH (do not create a private venv);
-#   * data-processing additionally reads ASR_BACKEND + STORAGE_URL;
+#   * data-processing additionally reads STORAGE_URL (the v1 rebuild pins its
+#     model dialect in code — the v0 ASR_BACKEND knob is gone, Stage F);
 #   * recording additionally reads STORAGE_URL + DP_URL.
 #
 set -u
@@ -68,7 +69,6 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 : "${HOST:=127.0.0.1}"
-: "${ASR_BACKEND:=mock}"
 
 : "${STORAGE_PORT:=8083}"
 : "${DP_PORT:=8085}"
@@ -93,7 +93,7 @@ fi
 PY="$(command -v python3 || command -v python || printf 'python3')"
 
 # Export the wiring so every child (and its run.sh) inherits it.
-export HOST ASR_BACKEND
+export HOST
 export STORAGE_URL DP_URL RECORDING_URL
 export STORAGE_PORT DP_PORT RECORDING_PORT
 
@@ -258,7 +258,7 @@ start_service() {
   info "starting $name on :$port  (log: ${log#$PLATFORM_DIR/})"
 
   # Launch in the service dir with PORT set for this service. Everything else
-  # (HOST, ASR_BACKEND, *_URL) is already exported.
+  # (HOST, *_URL) is already exported.
   ( cd "$svc_dir" && exec env PORT="$port" bash -c "$runner" ) >"$log" 2>&1 &
   local pid=$!
   printf '%s' "$pid" > "$pf"
@@ -399,7 +399,7 @@ cmd_up() {
   ensure_venv
 
   log ""
-  info "bringing up the learn loop (capture skeleton, ASR_BACKEND=${c_bold}${ASR_BACKEND}${c_reset})"
+  info "bringing up the learn loop (capture skeleton)"
   local failed=0 name port
   for entry in "${SERVICES[@]}"; do
     name="${entry%%:*}"; port="${entry##*:}"
@@ -429,7 +429,7 @@ print_checklist() {
   log ""
   log "  Services (start order):"
   log "    storage          http://${HOST}:${STORAGE_PORT}/health   (/raw blobs + /context C2)"
-  log "    data-processing  http://${HOST}:${DP_PORT}/health   (POST /ingest; ASR_BACKEND=${ASR_BACKEND})"
+  log "    data-processing  http://${HOST}:${DP_PORT}/health   (POST /ingest)"
   log "    recording        http://${HOST}:${RECORDING_PORT}/health   (capturer + POST /capture/run)"
   log ""
   log "  ${c_bold}Drive one capture run${c_reset} (carves the sample WAV into ${CHUNK_SECONDS}s chunks, C1->ASR->C2):"
@@ -447,10 +447,6 @@ print_checklist() {
   log "  Status: bash run_learn.sh --status"
   log "  Stop:   bash run_learn.sh --stop"
   log ""
-  if [ "$ASR_BACKEND" = "mock" ]; then
-    log "  ${c_dim}Running the MOCK ASR backend (canned transcript, no GPU/torch). To go real:${c_reset}"
-    log "  ${c_dim}  set ASR_BACKEND=faster_whisper in learn.env + restart (slow on CPU).${c_reset}"
-  fi
 }
 
 cmd_stop() {
@@ -514,7 +510,7 @@ usage() {
 run_learn.sh — platform bring-up for the Nucleus LEARN-loop capture MVP (M0).
 
 Starts, health-gated in dependency order:
-  storage (8083) -> data-processing (8085, ASR_BACKEND=mock) -> recording (8084)
+  storage (8083) -> data-processing (8085) -> recording (8084)
 
 Usage:
   bash run_learn.sh            # bring the capture loop up (default)

@@ -28,14 +28,6 @@
 set -u
 
 # ---------------------------------------------------------------------------
-# Pins (code, reviewed — see header). The revision is the exact snapshot the
-# caption first-contact smoke ran against; bumping it is a dialect-adjacent
-# change that re-runs that smoke, not an env edit.
-# ---------------------------------------------------------------------------
-VLM_MODEL="Qwen/Qwen3-VL-32B-Instruct"
-VLM_REVISION="0cfaf48183f594c314753d30a4c4974bc75f3ccb"
-
-# ---------------------------------------------------------------------------
 # Operational config (env-overridable, learn.env sourced like run_learn.sh)
 # ---------------------------------------------------------------------------
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -46,6 +38,17 @@ if [ -f "$ENV_FILE" ]; then
   . "$ENV_FILE"
   set +a
 fi
+
+# ---------------------------------------------------------------------------
+# Pins (code, reviewed — see header). Assigned AFTER the learn.env sourcing,
+# deliberately: an env-file line must not be able to override what model or
+# revision this launcher serves (GATE 1 verification round, finding 3; the
+# guard test lives in test_cutover_wipe.py). The revision is the exact snapshot
+# the caption first-contact smoke ran against; bumping it is a dialect-adjacent
+# change that re-runs that smoke, not an env edit.
+# ---------------------------------------------------------------------------
+VLM_MODEL="Qwen/Qwen3-VL-32B-Instruct"
+VLM_REVISION="0cfaf48183f594c314753d30a4c4974bc75f3ccb"
 
 : "${VLLM_HOST:=127.0.0.1}"        # loopback only — never a bind-all default
 : "${VLLM_PORT:=8161}"             # fleet port map: servers 8121-8152, VLM 8161
@@ -146,6 +149,7 @@ cmd_stop() {
 
 cmd_status() {
   local p=""; [ -f "$PID_FILE" ] && p="$(cat "$PID_FILE" 2>/dev/null)"
+  printf '  pins: %s @ %.8s (code, not env)\n' "$VLM_MODEL" "$VLM_REVISION"
   printf '  %-8s %-10s %s\n' "PORT" "PID" "MODELS"
   if models_ok; then
     printf '  %-8s %-10s %b\n' "$VLLM_PORT" "${p:--}" "${c_green}up${c_reset} ($VLM_MODEL)"

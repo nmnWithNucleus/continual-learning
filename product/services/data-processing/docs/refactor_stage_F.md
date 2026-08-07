@@ -243,3 +243,67 @@ push, if any, is gated with the cutover approval). Cross-suite at the branch tip
 DP **576 passed, 4 skipped** · servers/common **30 passed** · storage **354 passed**
 · continuum (post-teaching) **264 passed, 7 skipped**. The two onboarding strays
 remain uncommitted.
+
+## 2026-08-07 — GATE 1 verification round (founder, 3 lenses; fixes applied)
+
+> verification · an independent 3-lens round over the first GATE 1 post, the wipe
+> script exercised WET against live copies; substance confirmed ready, the gate
+> re-cut before approval. Everything above stands as written; corrections below
+> amend, never rewrite.
+
+- **The phantom hash, caught at verification (finding 1):** the first GATE 1 post
+  cited the WP-F0c commit as "`06e11d4`*" — that hash exists nowhere in this
+  repository (`git cat-file -t 06e11d4` → `fatal: Not a valid object name`; the
+  founder's round verified against the object store, all reflogs and fsck). The real
+  WP-F0c commit is **`d21a38a`**. The asterisk caveat in the post does not excuse it:
+  a gate citation is a claim, and an unverified claim at a gate is exactly what
+  verification rounds exist to catch. The commit message's "41 ahead" was likewise a
+  stale pre-F0c measurement — true figure at `d21a38a`: **42 ahead, 0 behind**.
+- **Reset-disposition text corrected everywhere (finding 2a):** WP-F0c above says
+  reset means "recording re-emits those chunks on redrive, i.e. an immediate
+  uncontrolled backfill" — **wrong, and the founder's verifiers proved it against
+  the code**: no redrive path selects a NULL `dp_state` row (the chunk redrive
+  queries `dp_state='accepted'` only, `ledger.py:495`; startup re-enqueue drives
+  `'received'` SEGMENTS, `emitter.py:115-128`). Reset therefore causes **no
+  backfill**; its true cost is inert metric incoherence — a processed chunk reads
+  as never-emitted forever, and the `dp_acked ⇔ C2-durable` reading stops holding
+  for those rows. Corrected in the script docstring, the manifest print, and the
+  gate re-post; the keep recommendation stands, now for the corrected reason: reset
+  buys nothing and breaks a ledger meaning.
+- **Freeze covers every wet-touchable DB (finding 2b):** under `--recording-claims
+  reset`, ledger.db is a wet target, so the recording port is appended to the freeze
+  list IN CODE (not via the flag — the operator cannot forget it). Implemented
+  conditionally, which is a stated interpretation of the founder's "add :8084":
+  under `keep`, ledger.db is not a wet target and recording keeps capturing through
+  the wipe, which is the F1 design — an unconditional :8084 freeze would contradict
+  it. Flagged in the re-post for veto.
+- **Missing wipe-target is an abort (finding 2c):** a mistyped `--*-db`/dir path
+  previously printed "(missing db — nothing to do)" and exited 0 — a silent no-op
+  at F1 would be a corpse in the new world. Now both modes abort on any missing
+  target; `--allow-missing` is the explicit escape.
+- **The evidence suite is committed (finding 2d):** `deploy/test_cutover_wipe.py` —
+  it previously lived only in the session scratchpad, so the repo could not
+  reproduce the evidence; and WP-F0c above claims "25/25 checks" — the true count
+  of the scratchpad suite was **29** (miscounted, never verified). With this
+  round's additions (missing-target aborts, the conditional recording freeze, the
+  vLLM pin guard) the committed suite is **39 checks — ALL PASSED**, red watched
+  first for every new behavior (8 failed against the pre-round scripts).
+- **run_vllm.sh pins hardened (finding 3):** the model/revision constants were
+  assigned BEFORE the learn.env sourcing, so an env-file line would have silently
+  overridden them with nothing to catch it. Pins now assigned after sourcing, with
+  `--status` printing them; the guard test (evil env file → pins unmoved) is two of
+  the 39 checks.
+- **F1 sequencing corrected in the staged plan (finding 4):** the worktree holds
+  `main` checked out, so `git checkout main` in this tree would be refused before
+  the worktree retires. The staged F1 order is: stop v0 ingest (:8085) → stop v0
+  storage (:8083) → **retire the dp-v0-live worktree** → `git checkout main` →
+  `git merge --no-ff dp-rebuild-v1` → wipe (post-freeze) → un-repoint → relaunch →
+  retire symlink remnants → kill :8097 → resume ingest → redrive.
+- **Small (finding 5):** ROLLBACK step 2 gained its Verify line (`git worktree
+  list` + `rev-parse` + `readlink -f`); run_learn.sh's stale `ASR_BACKEND`
+  default/export/banner/hint scrubbed (v1 pins its dialect in code); noted for F2:
+  the caption smoke's 200-ack proved graph mechanics against FakeStorage — real
+  storage acceptance of a v1 video record is first proven by drill 5's real chunk;
+  noted for F1: the two onboarding strays ride the merge uncommitted by design (a
+  merge does not touch uncommitted working-tree files; they stay out of every
+  commit as they have all stage).

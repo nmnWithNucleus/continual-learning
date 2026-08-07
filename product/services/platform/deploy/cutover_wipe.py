@@ -31,13 +31,17 @@ the sacred sources. The classification is the contract:
     keep  (default) — 'processed' claims that name wiped C2s stay as documented
                       reconciliation noise: recording never re-emits them, the
                       gap-report may name them, /raw still holds their bytes.
-    reset           — 'processed' -> NULL: recording re-emits those chunks on
-                      redrive, i.e. an immediate uncontrolled backfill of the
-                      wiped corpus through the new fleet. That contradicts
-                      fresh-forward (OD-2 builds the backfill tool LATER), so it
-                      is not the default; 'accepted' rows are preserved under
-                      BOTH dispositions — they are the buffered-chunk redrive
-                      the cutover relies on.
+    reset           — 'processed' -> NULL. Corrected at the GATE 1 verification
+                      round: NULLed rows are selected by NO redrive path (the
+                      chunk redrive queries dp_state='accepted' only; startup
+                      re-enqueue drives 'received' SEGMENTS), so reset causes
+                      no backfill — it is INERT METRIC INCOHERENCE: a chunk
+                      that was processed reads as never-emitted forever, and
+                      the dp_acked ⇔ C2-durable reading stops holding for those
+                      rows. It buys nothing and breaks a ledger meaning; not
+                      the default. 'accepted' rows are preserved under BOTH
+                      dispositions — they are the buffered-chunk redrive the
+                      cutover relies on.
 
 Structure of the safety story, not just prose:
   * full-classification-or-refusal — every table in every DB must be named KEEP
@@ -49,7 +53,14 @@ Structure of the safety story, not just prose:
   * DRY-RUN IS MANDATORY and is the default: databases are opened read-only
     (sqlite URI mode=ro), and --execute additionally refuses to run while the
     freeze ports (:8083 v0 storage, :8085 v0 DP) still answer — the freeze comes
-    first, per the Stage F order;
+    first, per the Stage F order. The freeze covers every DB wet mode can touch:
+    under --recording-claims reset, ledger.db becomes a wet target, so the
+    recording port (:8084, --recording-port) is APPENDED IN CODE to the freeze
+    list; under keep it is not a target and recording keeps capturing, which is
+    the F1 design;
+  * a MISSING wipe-target path (a mistyped --*-db / dir) ABORTS both modes — a
+    silent no-op at F1 would be a corpse in the new world; --allow-missing is
+    the explicit escape for the genuinely-absent case;
   * the wet manifest is computed by the same code path as the dry manifest, so
     "wet output must match the dry-run" is checkable line by line.
 
@@ -104,11 +115,22 @@ def _classify_or_die(name: str, found: list[str], keep: tuple[str, ...],
                  "it does not fully understand. Classify them (a code edit) first.")
 
 
+def _missing(kind: str, name: str, path: Path, allow: bool) -> None:
+    if allow:
+        return
+    sys.exit(f"ABORT: {name} {kind} is MISSING at {path} — a mistyped path would "
+             "silently no-op the wipe and leave a corpse in the new world. Fix "
+             "the path, or pass --allow-missing if it is genuinely absent.")
+
+
 def db_manifest(name: str, path: Path, keep: tuple[str, ...],
-                wipe: tuple[str, ...]) -> list[tuple[str, str, str, int]]:
-    """(db, table, verdict, rows) rows for the manifest; aborts on the unknown."""
+                wipe: tuple[str, ...], allow_missing: bool = False,
+                ) -> list[tuple[str, str, str, int]]:
+    """(db, table, verdict, rows) rows for the manifest; aborts on the unknown
+    and on a missing db (unless --allow-missing)."""
     if not path.exists():
-        return [(name, "(missing db — nothing to do)", "-", 0)]
+        _missing("db", name, path, allow_missing)
+        return [(name, "(missing db — allowed by flag)", "-", 0)]
     con = _open_ro(path)
     try:
         found = _tables(con)
@@ -123,10 +145,12 @@ def tree_files(root: Path) -> int:
     return sum(1 for p in root.rglob("*") if p.is_file()) if root.exists() else 0
 
 
-def continuum_manifest(var: Path) -> list[tuple[str, str, str, int]]:
+def continuum_manifest(var: Path, allow_missing: bool = False,
+                       ) -> list[tuple[str, str, str, int]]:
     rows: list[tuple[str, str, str, int]] = []
     if not var.exists():
-        return [("continuum var", "(missing dir — nothing to do)", "-", 0)]
+        _missing("dir", "continuum var", var, allow_missing)
+        return [("continuum var", "(missing dir — allowed by flag)", "-", 0)]
     unknown = sorted(
         p.name for p in var.iterdir() if p.is_dir()
         and p.name not in CONTINUUM_WIPE_SUBDIRS + CONTINUUM_KEEP_SUBDIRS)
@@ -158,13 +182,20 @@ def recording_states(path: Path) -> dict[str, int]:
 
 def print_manifest(args) -> None:
     rows: list[tuple[str, str, str, int]] = []
-    rows += db_manifest("storage dev.db", args.storage_db, STORAGE_KEEP, STORAGE_WIPE)
-    rows += db_manifest("DP journal (v0)", args.dp_db, DP_KEEP, DP_WIPE)
+    rows += db_manifest("storage dev.db", args.storage_db, STORAGE_KEEP,
+                        STORAGE_WIPE, args.allow_missing)
+    rows += db_manifest("DP journal (v0)", args.dp_db, DP_KEEP, DP_WIPE,
+                        args.allow_missing)
     rows += db_manifest("recording ledger", args.recording_db,
-                        RECORDING_KEEP, RECORDING_WIPE)
-    rows.append(("storage reservoir", "files under the dir", "WIPE",
-                 tree_files(args.reservoir_dir)))
-    rows += continuum_manifest(args.continuum_var)
+                        RECORDING_KEEP, RECORDING_WIPE, args.allow_missing)
+    if not args.reservoir_dir.exists():
+        _missing("dir", "storage reservoir", args.reservoir_dir,
+                 args.allow_missing)
+        rows.append(("storage reservoir", "(missing dir — allowed by flag)", "-", 0))
+    else:
+        rows.append(("storage reservoir", "files under the dir", "WIPE",
+                     tree_files(args.reservoir_dir)))
+    rows += continuum_manifest(args.continuum_var, args.allow_missing)
 
     print(f"{'LEDGER':<18} {'TABLE / TREE':<28} {'VERDICT':<8} {'ROWS/FILES':>10}")
     print("-" * 68)
@@ -185,9 +216,12 @@ def print_manifest(args) -> None:
           f"would name wiped C2s at execution time:")
     print("  keep  (default): stays as documented reconciliation noise; recording")
     print("                   never re-emits them; /raw still holds their bytes.")
-    print("  reset          : 'processed' -> NULL, an immediate uncontrolled backfill")
-    print("                   through the new fleet — contradicts fresh-forward (the")
-    print("                   /raw-replay backfill tool is deliberately built later).")
+    print("  reset          : 'processed' -> NULL. No redrive path selects a NULL row")
+    print("                   (chunk redrive queries dp_state='accepted' only; startup")
+    print("                   re-enqueue drives 'received' segments), so this causes NO")
+    print("                   backfill — it is inert metric incoherence: a processed")
+    print("                   chunk reads as never-emitted forever, and the dp_acked <=>")
+    print("                   C2-durable reading stops holding for those rows.")
     print("  'accepted' rows are preserved either way (the buffered redrive the")
     print(f"  cutover relies on). This run: --recording-claims {args.recording_claims}")
 
@@ -205,12 +239,18 @@ def freeze_check(ports: list[int]) -> None:
 
 
 def execute(args) -> None:
-    freeze_check([int(p) for p in args.freeze_ports.split(",") if p])
+    ports = [int(p) for p in args.freeze_ports.split(",") if p]
+    if args.recording_claims == "reset":
+        # Reset writes ledger.db, so the freeze must cover recording too.
+        # Appended in code, not via the flag: the operator cannot forget it.
+        ports.append(args.recording_port)
+    freeze_check(sorted(set(ports)))
 
     def wipe_db(name: str, path: Path, keep: tuple[str, ...],
                 wipe: tuple[str, ...]) -> None:
         if not path.exists():
-            print(f"[wet] {name}: missing, skipped")
+            _missing("db", name, path, args.allow_missing)
+            print(f"[wet] {name}: missing — allowed by flag, skipped")
             return
         con = sqlite3.connect(path)
         try:
@@ -274,7 +314,13 @@ def main(argv: list[str] | None = None) -> int:
                     default=TREE / "continuum" / "var")
     ap.add_argument("--freeze-ports", default="8083,8085",
                     help="wet mode refuses while any of these still listen")
+    ap.add_argument("--recording-port", type=int, default=8084,
+                    help="appended to the freeze list in code when "
+                         "--recording-claims reset makes ledger.db a wet target")
     ap.add_argument("--recording-claims", choices=("keep", "reset"), default="keep")
+    ap.add_argument("--allow-missing", action="store_true",
+                    help="explicit escape: a missing wipe-target path is "
+                         "otherwise an abort in BOTH modes")
     ap.add_argument("--execute", action="store_true",
                     help="run the wipe (default is the mandatory dry-run)")
     args = ap.parse_args(argv)
