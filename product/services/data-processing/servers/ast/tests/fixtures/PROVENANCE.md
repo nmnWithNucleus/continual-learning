@@ -6,36 +6,36 @@
 generation provenance in `INPUT_PROVENANCE.md`; the committed bytes are the fixture).
 
 ## Params
-`{"top_k": 20}` — the prior pipeline construction value, this server's in-code default.
+`{"top_k": 20}` — the v0 pipeline construction value, this server's in-code default.
 `codec` sent as `"audio/webm"` (advisory; ffmpeg sniffs the container).
 
 ## Identity (verbatim, from /health on every run — all runs identical)
 ```json
 {
- "device": "cuda",
- "frameworks": {
- "ffmpeg": "7.1",
- "torch": "2.8.0+cu128",
- "transformers": "5.14.1"
- },
- "model_name": "MIT/ast-finetuned-audioset-10-10-0.4593",
- "weights": {
- "revision": "f826b80d28226b62986cc218e5cec390b1096902"
- }
+  "device": "cuda",
+  "frameworks": {
+    "ffmpeg": "7.1",
+    "torch": "2.8.0+cu128",
+    "transformers": "5.14.1"
+  },
+  "model_name": "MIT/ast-finetuned-audioset-10-10-0.4593",
+  "weights": {
+    "revision": "f826b80d28226b62986cc218e5cec390b1096902"
+  }
 }
 ```
 
 ## Runs (2026-08-06, node-7, H100 80GB)
-Each run: a FRESH process — `build_app(AstBackend)` under fastapi TestClient (no port
+Each run: a FRESH process — `build_app(AstBackend())` under fastapi TestClient (no port
 bound), wait for `/health` 200, POST `/infer` with the fixture bytes + params above,
 canonicalize `result` as `json.dumps(..., sort_keys=True, indent=2) + "\n"`.
 
 | run | GPU (`CUDA_VISIBLE_DEVICES`) | sha256 of canonical result |
 |-----|------------------------------|----------------------------|
-| 1 | 6 | `8905b4a1f8a5b46cab4004935206d112017f4dce812b448ca61752ca80605022` |
-| 2 | 6 | `8905b4a1f8a5b46cab4004935206d112017f4dce812b448ca61752ca80605022` |
-| 3 | 6 | `8905b4a1f8a5b46cab4004935206d112017f4dce812b448ca61752ca80605022` |
-| 4 | 7 | `8905b4a1f8a5b46cab4004935206d112017f4dce812b448ca61752ca80605022` |
+| 1   | 6                            | `8905b4a1f8a5b46cab4004935206d112017f4dce812b448ca61752ca80605022` |
+| 2   | 6                            | `8905b4a1f8a5b46cab4004935206d112017f4dce812b448ca61752ca80605022` |
+| 3   | 6                            | `8905b4a1f8a5b46cab4004935206d112017f4dce812b448ca61752ca80605022` |
+| 4   | 7                            | `8905b4a1f8a5b46cab4004935206d112017f4dce812b448ca61752ca80605022` |
 
 `golden_tags.json` is run 1's canonical bytes verbatim (same sha256). Golden was cut
 ONCE; runs 2–4 are verification only.
@@ -54,12 +54,12 @@ loosening the exact compare blindly.
 
 ## Notes
 - Top-4 labels are exactly the Speech family — `Speech` (0.663), `Speech synthesizer`
- (0.279), `Narration, monologue` (0.015), `Male speech, man speaking` (0.006).
- "Speech synthesizer" is a correct detection: the fixture is piper-TTS synthesized.
+  (0.279), `Narration, monologue` (0.015), `Male speech, man speaking` (0.006).
+  "Speech synthesizer" is a correct detection: the fixture is piper-TTS synthesized.
 - transformers 5.14.1 computes AST fbank features via its numpy `spectrogram` path
- (torchaudio not installed; not demanded by this stack). It emits a benign
- `audio_utils` UserWarning about one all-zero mel filter — cosmetic, deterministic,
- present on every run.
+  (torchaudio not installed; not demanded by this stack). It emits a benign
+  `audio_utils` UserWarning about one all-zero mel filter — cosmetic, deterministic,
+  present on every run.
 
 ## 2026-08-06 — cleanup round: second golden, real speech
 

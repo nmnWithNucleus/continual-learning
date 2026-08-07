@@ -47,11 +47,11 @@ _TASKS = {"transcribe", "translate"}
 
 def _preload_nvidia_libs() -> None:
     """ctypes-preload the venv's nvidia cublas/cudnn shared libs with
- RTLD_GLOBAL so ctranslate2 resolves them without LD_LIBRARY_PATH games.
+    RTLD_GLOBAL so ctranslate2 resolves them without LD_LIBRARY_PATH games.
 
- Some libs only resolve after a sibling is loaded, so retry in passes; a lib
- that truly cannot load fails loud later when the model constructs on CUDA.
- """
+    Some libs only resolve after a sibling is loaded, so retry in passes; a lib
+    that truly cannot load fails loud later when the model constructs on CUDA.
+    """
     pattern = f"{sysconfig.get_path('purelib')}/nvidia/*/lib/*.so*"
     pending = sorted(glob.glob(pattern))
     for _ in range(3):
@@ -71,7 +71,7 @@ class WhisperBackend(ModelBackend):
 
     def __init__(self) -> None:
         self._model = None
-        # av's error base class, set in load(); () catches nothing before then.
+        # av's error base class, set in load;  catches nothing before then.
         self._av_error: type[BaseException] | tuple = ()
 
     def load(self) -> None:

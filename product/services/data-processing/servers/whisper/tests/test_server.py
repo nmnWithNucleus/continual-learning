@@ -1,6 +1,6 @@
 """servers/whisper tests — real model, in-process TestClient, no ports bound.
 
-Run: cd servers/whisper && CUDA_VISIBLE_DEVICES=4./.venv/bin/python -m pytest tests/ -q
+Run:  cd servers/whisper && CUDA_VISIBLE_DEVICES=4 ./.venv/bin/python -m pytest tests/ -q
 
 The session fixture starts ONE app (one model load, cold ~30-90 s) and records
 the very first /health response so the framework-conformance warming check
@@ -99,8 +99,8 @@ def test_identity_matches_manifest_and_shape(warm_client):
 
 def test_golden_transcribe_real_dialog_exact(warm_client):
     """Second golden (cleanup round 2026-08-06): real multi-speaker speech
- (LibriVox dramatic reading, see INPUT_PROVENANCE.md). Bit-stable across 4
- fresh-process runs on GPUs 4 and 5 — exact compare, zero tolerance."""
+    (LibriVox dramatic reading, see INPUT_PROVENANCE.md). Bit-stable across 4
+    fresh-process runs on GPUs 4 and 5 — exact compare, zero tolerance."""
     client, _ = warm_client
     audio = (FIXTURES / "speech_real_dialog.webm").read_bytes()
     resp = _infer(client, audio, GOLDEN_PARAMS)

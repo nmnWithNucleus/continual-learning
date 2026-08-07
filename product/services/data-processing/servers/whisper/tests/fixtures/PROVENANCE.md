@@ -8,17 +8,17 @@
 ## Server identity (verbatim from /health at generation time, 2026-08-06)
 ```json
 {
- "compute_type": "float16",
- "device": "cuda",
- "frameworks": {
- "av": "18.0.0",
- "ctranslate2": "4.8.1",
- "faster_whisper": "1.2.1"
- },
- "model_name": "Systran/faster-whisper-large-v3",
- "weights": {
- "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478"
- }
+  "compute_type": "float16",
+  "device": "cuda",
+  "frameworks": {
+    "av": "18.0.0",
+    "ctranslate2": "4.8.1",
+    "faster_whisper": "1.2.1"
+  },
+  "model_name": "Systran/faster-whisper-large-v3",
+  "weights": {
+    "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478"
+  }
 }
 ```
 
@@ -38,10 +38,10 @@ FastAPI TestClient, POST /infer, result saved as canonical JSON
 
 | run | GPU (CUDA_VISIBLE_DEVICES) | sha256 of canonical result JSON |
 |-----|----------------------------|----------------------------------|
-| 1 | 4 | ccda989fdc134815cfaab84f453654bac19cbcbe9a5f603183936f1388d61376 |
-| 2 | 4 | ccda989fdc134815cfaab84f453654bac19cbcbe9a5f603183936f1388d61376 |
-| 3 | 4 | ccda989fdc134815cfaab84f453654bac19cbcbe9a5f603183936f1388d61376 |
-| 4 | 5 | ccda989fdc134815cfaab84f453654bac19cbcbe9a5f603183936f1388d61376 |
+| 1   | 4                          | ccda989fdc134815cfaab84f453654bac19cbcbe9a5f603183936f1388d61376 |
+| 2   | 4                          | ccda989fdc134815cfaab84f453654bac19cbcbe9a5f603183936f1388d61376 |
+| 3   | 4                          | ccda989fdc134815cfaab84f453654bac19cbcbe9a5f603183936f1388d61376 |
+| 4   | 5                          | ccda989fdc134815cfaab84f453654bac19cbcbe9a5f603183936f1388d61376 |
 
 **Verdict: bit-stable across 4 fresh-process runs, GPUs 4 and 5** (H100 80GB
 HBM3 both; replica equivalence holds). Text, language, and all segment
@@ -61,7 +61,7 @@ Previously-floating transitives pinned in requirements.txt: onnxruntime==1.28.0,
 huggingface_hub==1.26.0, tokenizers==0.23.1 — all equal to what this venv already
 ran when the golden was cut, so `golden_transcribe.json` is untouched
 (sha256 ccda989fdc134815cfaab84f453654bac19cbcbe9a5f603183936f1388d61376
-re-verified after the change; see the worklog cleanup round).
+re-verified after the change; see the migration drill worklog cleanup round).
 
 ## 2026-08-06 — cleanup round: second golden, real speech
 

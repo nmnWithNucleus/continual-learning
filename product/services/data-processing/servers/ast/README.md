@@ -6,17 +6,17 @@ seam. Model id, revision, and device (cuda, no CPU fallback) are pinned in `serv
 folding (`caption_from_tags`) stays client-side — this server returns raw tags only.
 
 - **/infer input**: `input_b64` = raw audio container bytes (webm/opus, mp4/aac, wav —
- the transformers pipeline's `ffmpeg_read` shells to system ffmpeg to demux + resample
- to 16 kHz; `codec` is advisory and not consulted). Params: `top_k` (int, default 20).
- Unknown params, bad base64, or undecodable audio → deterministic 422.
+  the transformers pipeline's `ffmpeg_read` shells to system ffmpeg to demux + resample
+  to 16 kHz; `codec` is advisory and not consulted). Params: `top_k` (int, default 20).
+  Unknown params, bad base64, or undecodable audio → deterministic 422.
 - **result**: `{"tags": [{"label": str, "score": float}]}`, descending score.
 - **identity**: model_name, weights.revision, frameworks {transformers, torch, ffmpeg},
- device — checked against `servers/manifest.json` `expected_identity`.
+  device — checked against `servers/manifest.json` `expected_identity`.
 
-Run (supervisor): `DP_SERVER_PORT=<port> CUDA_VISIBLE_DEVICES=<gpu>.venv/bin/python server.py`
+Run (supervisor): `DP_SERVER_PORT=<port> CUDA_VISIBLE_DEVICES=<gpu> .venv/bin/python server.py`
 
 Tests (in-process TestClient, no ports):
 
- cd servers/ast && CUDA_VISIBLE_DEVICES=6./.venv/bin/python -m pytest tests/ -q
+    cd servers/ast && CUDA_VISIBLE_DEVICES=6 ./.venv/bin/python -m pytest tests/ -q
 
 Golden fixture + determinism evidence: `tests/fixtures/PROVENANCE.md`.

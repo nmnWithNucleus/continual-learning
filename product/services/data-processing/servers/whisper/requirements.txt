@@ -16,7 +16,7 @@ tokenizers==0.23.1
 
 # ctranslate2 GPU runtime needs cuBLAS + cuDNN 9 for CUDA 12 (driver 580.159 is
 # CUDA 13-capable and runs CUDA-12 userspace fine). server.py preloads these
-#.so's with RTLD_GLOBAL so no LD_LIBRARY_PATH is required.
+# .so's with RTLD_GLOBAL so no LD_LIBRARY_PATH is required.
 nvidia-cublas-cu12==12.9.2.10
 nvidia-cudnn-cu12==9.24.0.43
 

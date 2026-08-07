@@ -1,8 +1,8 @@
-"""dp-server: pyannote speaker diarization.
+"""dp-server: pyannote speaker diarization .
 
 One ModelBackend around pyannote/speaker-diarization-3.1, served by the
 dp_servers_common framework (warmup thread, /health identity, /infer). The
-diarization behavior is a faithful copy of the prior in-process seam
+diarization behavior is a faithful copy of the v0 in-process seam
 (app/audio/diarize/pyannote.py, node-7 smoke-validated 2026-07-19) moved behind
 the model-server wire contract.
 
@@ -12,24 +12,24 @@ HUGGINGFACE_TOKEN (auth for the gated repos; the token's VALUE is never printed,
 logged, or written anywhere).
 
 Empirical gotchas preserved from v0 (do not "clean up"):
- * torch >= 2.6 flips ``torch.load(weights_only=)`` to True and then rejects
- pyannote's Lightning checkpoints (non-tensor globals) — the scoped
- ``_trusted_checkpoint_load()`` context forces ``weights_only=False`` for the
- duration of the pipeline load only.
- * ``Pipeline.from_pretrained`` returns ``None`` (does not raise) on a missing/
- invalid token or un-accepted gated conditions — check and raise loudly.
- BOTH pyannote/speaker-diarization-3.1 AND pyannote/segmentation-3.0 must be
- accepted by the token's account.
- * GPU placement is ``pipeline.to(torch.device(...))`` AFTER load — never a
- ``device=`` kwarg on ``from_pretrained``.
- * torchaudio's soundfile backend cannot demux webm/opus — pre-decode every
- chunk to 16 kHz mono WAV via ffmpeg, giving the temp file the codec-derived
- extension so ffmpeg demuxes the right container.
- * ``itertracks(yield_label=True)`` yields ``(Segment, track_id, label)`` — the
- THIRD value is the speaker. Turns may temporally OVERLAP (overlapped
- speech); we keep them. Turns are clamped to ``[0, span_seconds]`` and raw
- ``SPEAKER_xx`` labels are renormalized to ``spk_0..`` by first onset (raw
- label as the deterministic tie-break).
+  * torch >= 2.6 flips ``torch.load(weights_only=)`` to True and then rejects
+    pyannote's Lightning checkpoints (non-tensor globals) — the scoped
+    ``_trusted_checkpoint_load()`` context forces ``weights_only=False`` for the
+    duration of the pipeline load only.
+  * ``Pipeline.from_pretrained`` returns ``None`` (does not raise) on a missing/
+    invalid token or un-accepted gated conditions — check and raise loudly.
+    BOTH pyannote/speaker-diarization-3.1 AND pyannote/segmentation-3.0 must be
+    accepted by the token's account.
+  * GPU placement is ``pipeline.to(torch.device(...))`` AFTER load — never a
+    ``device=`` kwarg on ``from_pretrained``.
+  * torchaudio's soundfile backend cannot demux webm/opus — pre-decode every
+    chunk to 16 kHz mono WAV via ffmpeg, giving the temp file the codec-derived
+    extension so ffmpeg demuxes the right container.
+  * ``itertracks(yield_label=True)`` yields ``(Segment, track_id, label)`` — the
+    THIRD value is the speaker. Turns may temporally OVERLAP (overlapped
+    speech); we keep them. Turns are clamped to ``[0, span_seconds]`` and raw
+    ``SPEAKER_xx`` labels are renormalized to ``spk_0..`` by first onset (raw
+    label as the deterministic tie-break).
 """
 from __future__ import annotations
 
@@ -63,16 +63,16 @@ _ALLOWED_PARAMS = {"span_seconds", "min_speakers", "max_speakers"}
 def _trusted_checkpoint_load():
     """Force ``weights_only=False`` for the duration of the pyannote model load.
 
- torch 2.6 flipped ``torch.load``'s ``weights_only`` default to ``True``, and
- pyannote's Lightning checkpoints carry non-tensor globals (e.g.
- ``torch.torch_version.TorchVersion``) that the safe-unpickler rejects — so
- ``Pipeline.from_pretrained`` raises ``UnpicklingError: Weights only load
- failed`` on any box with torch >= 2.6 (found empirically on node-7
- 2026-07-19: torch 2.8, pyannote 3.3.2). The gated model is pulled with OUR
- HF token from a trusted repo, so ``weights_only=False`` is safe HERE; the
- override is scoped to the load and the original ``torch.load`` is restored
- immediately after — never a global monkeypatch. pyannote loads several
- sub-checkpoints (segmentation + embedding), all covered by the scope."""
+    torch 2.6 flipped ``torch.load``'s ``weights_only`` default to ``True``, and
+    pyannote's Lightning checkpoints carry non-tensor globals (e.g.
+    ``torch.torch_version.TorchVersion``) that the safe-unpickler rejects — so
+    ``Pipeline.from_pretrained`` raises ``UnpicklingError: Weights only load
+    failed`` on any box with torch >= 2.6 (found empirically on node-7
+    2026-07-19: torch 2.8, pyannote 3.3.2). The gated model is pulled with OUR
+    HF token from a trusted repo, so ``weights_only=False`` is safe HERE; the
+    override is scoped to the load and the original ``torch.load`` is restored
+    immediately after — never a global monkeypatch. pyannote loads several
+    sub-checkpoints (segmentation + embedding), all covered by the scope."""
     import torch  # lazy
 
     original = torch.load
@@ -91,15 +91,15 @@ def _trusted_checkpoint_load():
 def _hf_cache_snapshot_revision(repo_id: str) -> str:
     """Resolve the snapshot revision of ``repo_id`` from the local cache.
 
- The pipeline config references its sub-models without a revision, so
- ``Pipeline.from_pretrained`` resolves them at ``main`` — the cache's
- ``refs/main`` file records exactly the commit that resolution produced.
- pyannote 3.3.2 downloads into ITS OWN hub-layout cache
- (``pyannote.audio.core.model.CACHE_DIR`` — ``~/.cache/torch/pyannote``
- unless PYANNOTE_CACHE points elsewhere; found empirically here: the
- sub-models are NOT in the default HF hub cache), so that cache is checked
- first, the HF hub cache second. Fall back to a single snapshot dir;
- anything ambiguous fails loud (identity must be truthful, never guessed)."""
+    The pipeline config references its sub-models without a revision, so
+    ``Pipeline.from_pretrained`` resolves them at ``main`` — the cache's
+    ``refs/main`` file records exactly the commit that resolution produced.
+    pyannote 3.3.2 downloads into ITS OWN hub-layout cache
+    (``pyannote.audio.core.model.CACHE_DIR`` — ``~/.cache/torch/pyannote``
+    unless PYANNOTE_CACHE points elsewhere; found empirically here: the
+    sub-models are NOT in the default HF hub cache), so that cache is checked
+    first, the HF hub cache second. Fall back to a single snapshot dir;
+    anything ambiguous fails loud (identity must be truthful, never guessed)."""
     from huggingface_hub.constants import HF_HUB_CACHE  # transitive dep of pyannote
     from pyannote.audio.core.model import CACHE_DIR as PYANNOTE_CACHE_DIR
 
@@ -126,13 +126,13 @@ def _hf_cache_snapshot_revision(repo_id: str) -> str:
 
 def _ffmpeg_version() -> str:
     """The ffmpeg version token (e.g. '7.1') — part of identity: ffmpeg is the
- decode front-end for every chunk, so its version is output-affecting."""
+    decode front-end for every chunk, so its version is output-affecting."""
     proc = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True)
     if proc.returncode != 0 or not proc.stdout:
         raise RuntimeError("ffmpeg -version failed — ffmpeg is required to decode chunks")
     first_line = proc.stdout.splitlines()[0].strip()
     parts = first_line.split()
-    # "ffmpeg version 7.1 Copyright..." -> "7.1"
+    # "ffmpeg version 7.1 Copyright ..." -> "7.1"
     if len(parts) >= 3 and parts[0] == "ffmpeg" and parts[1] == "version":
         return parts[2]
     return first_line
@@ -141,15 +141,15 @@ def _ffmpeg_version() -> str:
 def _decode_to_wav(audio_bytes: bytes, codec: str | None) -> bytes:
     """Decode the raw chunk to 16 kHz mono PCM WAV via ffmpeg (v0 behavior).
 
- pyannote loads audio through torchaudio, whose default backend on this stack
- is soundfile/libsndfile — which does NOT demux compressed capture containers
- ("Format not recognised" on webm/opus, found empirically on node-7
- 2026-07-19). ffmpeg demuxes webm/opus + m4a/aac + wav uniformly, so we
- pre-decode to a WAV soundfile CAN read. 16 kHz mono matches pyannote's
- internal working rate, so this adds no resample the pipeline wouldn't
- already do. The temp file gets the codec-derived extension so ffmpeg picks
- the right demuxer. A decode failure is deterministic for the same bytes ->
- BackendError (422)."""
+    pyannote loads audio through torchaudio, whose default backend on this stack
+    is soundfile/libsndfile — which does NOT demux compressed capture containers
+    ("Format not recognised" on webm/opus, found empirically on node-7
+    2026-07-19). ffmpeg demuxes webm/opus + m4a/aac + wav uniformly, so we
+    pre-decode to a WAV soundfile CAN read. 16 kHz mono matches pyannote's
+    internal working rate, so this adds no resample the pipeline wouldn't
+    already do. The temp file gets the codec-derived extension so ffmpeg picks
+    the right demuxer. A decode failure is deterministic for the same bytes ->
+    BackendError (422)."""
     ext = (codec or "wav").split(";")[0].split("/")[-1].strip().lower() or "wav"
     with tempfile.NamedTemporaryFile(suffix=f".{ext}") as src:
         src.write(audio_bytes)
@@ -169,7 +169,7 @@ def _decode_to_wav(audio_bytes: bytes, codec: str | None) -> bytes:
 
 def _normalize(raw_turns: list[tuple[float, float, str]]) -> list[dict]:
     """Map raw pyannote labels to a stable ``spk_0..`` vocabulary by first onset
- (raw label as the deterministic tie-break) — v0 behavior."""
+    (raw label as the deterministic tie-break) — v0 behavior."""
     first_onset: dict[str, float] = {}
     for start, _end, raw in raw_turns:
         if raw not in first_onset or start < first_onset[raw]:
@@ -185,10 +185,10 @@ def _normalize(raw_turns: list[tuple[float, float, str]]) -> list[dict]:
 def _parse_params(params: dict) -> tuple[float, dict[str, int]]:
     """Validate /infer params — fail loud (BackendError -> 422) on anything off.
 
- span_seconds: REQUIRED finite float > 0 (the chunk's span; turns are clamped
- to it). min_speakers / max_speakers: optional ints >= 1 passed to the
- pipeline as clustering hints. Unknown params are a deterministic error, not
- silently ignored."""
+    span_seconds: REQUIRED finite float > 0 (the chunk's span; turns are clamped
+    to it). min_speakers / max_speakers: optional ints >= 1 passed to the
+    pipeline as clustering hints. Unknown params are a deterministic error, not
+    silently ignored."""
     unknown = sorted(set(params) - _ALLOWED_PARAMS)
     if unknown:
         raise BackendError(f"unknown params: {unknown}; allowed: {sorted(_ALLOWED_PARAMS)}")

@@ -8,7 +8,7 @@ sha256 `18803e4b1cfddc32e41da98f3515286055a96f1305eb66c6a8cbcb7b3e6a81b0`
 
 ## What was measured
 
-The `/infer` `result` object, captured through the real wire path — `build_app(OcrBackend)`
+The `/infer` `result` object, captured through the real wire path — `build_app(OcrBackend())`
 + fastapi `TestClient`, `POST /infer {input_b64: <fixture b64>, codec: "image/jpeg"}` —
 in a fresh process, serialized canonically (`json.dumps(..., sort_keys=True, indent=2)`).
 Environment: CPU (`CUDA_VISIBLE_DEVICES=`), node-7, Python 3.12.12, 2026-08-06.
@@ -18,22 +18,22 @@ in every run):
 
 ```json
 {
- "model_name": "rapidocr-onnxruntime PP-OCRv4 det+rec",
- "weights": {
- "det_sha256": "d2a7720d45a54257208b1e13e36a8479894cb74155a5efe29462512d42f49da9",
- "rec_sha256": "48fc40f24f6d2a207a2b1091d3437eb3cc3eb6b676dc3ef9c37384005483683b"
- },
- "frameworks": {
- "onnxruntime": "1.27.0",
- "rapidocr_onnxruntime": "1.4.4"
- },
- "device": "cpu",
- "ep": "CPUExecutionProvider",
- "threads": 4
+  "model_name": "rapidocr-onnxruntime PP-OCRv4 det+rec",
+  "weights": {
+    "det_sha256": "d2a7720d45a54257208b1e13e36a8479894cb74155a5efe29462512d42f49da9",
+    "rec_sha256": "48fc40f24f6d2a207a2b1091d3437eb3cc3eb6b676dc3ef9c37384005483683b"
+  },
+  "frameworks": {
+    "onnxruntime": "1.27.0",
+    "rapidocr_onnxruntime": "1.4.4"
+  },
+  "device": "cpu",
+  "ep": "CPUExecutionProvider",
+  "threads": 4
 }
 ```
 
-(These are the same det/rec shas the prior OCR service served — same bundled
+(These are the same det/rec shas the v0 OCR service served — same bundled
 ch_PP-OCRv4 ONNX pair.)
 
 ## Runs
