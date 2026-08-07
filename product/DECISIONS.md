@@ -9,7 +9,7 @@
 > Only the founders (CTO + AI co-founder) add rows here. Service owners **propose** via
 > [HANDOFF.md](HANDOFF.md) §Escalations; a founders' session ratifies and numbers it.
 >
-> History before 2026-08-08 lives in git history, not in this tree. A skipped number is a removed
+> History before 2026-08-07 lives in git history, not in this tree. A skipped number is a removed
 > row, not an error.
 
 **Newest first.** A new decision is *prepended*: a row at the top of the index, and its card
@@ -69,7 +69,7 @@ That is expected, and this register is built for it:
 
 | # | Decision | Date | Status | Lineage | Card |
 |---|---|---|---|---|---|
-| **D29** | Purge license at PROTOTYPE: append-only suspended for this stage | 2026-08-08 | ratified | suspends roll-never-prune / never-edited-away *for this stage only* · does not overrule them | [↓](#d29--purge-license-at-prototype) |
+| **D29** | Purge license at PROTOTYPE: append-only suspended for this stage | 2026-08-07 | ratified | suspends roll-never-prune / never-edited-away *for this stage only* · does not overrule them | [↓](#d29--purge-license-at-prototype) |
 | **D28** | C10 v2 + whole-record retraction | 2026-08-06 | ratified | joint row with storage · re-baselines **D20**'s parity bar | [↓](#d28--c10-v2--whole-record-retraction) |
 | **D27** | The heal ledger, and `created_at`/`updated_at` in storage | 2026-08-06 | ratified | joint row with storage · moves **D18**'s watermark axis | [↓](#d27--the-heal-ledger-and-created_atupdated_at) |
 | **D26** | Machinery/bureaucracy split: models become servers | 2026-08-06 | ratified | retires `isolation.py` · `INGEST_ISOLATION` · `DP_DIALECT_FREEZE` | [↓](#d26--the-machinerybureaucracy-split) |
@@ -100,7 +100,7 @@ That is expected, and this register is built for it:
 
 ### D29 — purge license at PROTOTYPE
 
-> `ratified` 2026-08-08 · suspends [STYLE.md](STYLE.md) §Growing a worklog's roll-never-prune and
+> `ratified` 2026-08-07 · suspends [STYLE.md](STYLE.md) §Growing a worklog's roll-never-prune and
 > this register's never-edited-away rule *for this stage only* · does not overrule them
 > · recorded in [STYLE.md](STYLE.md) §Growing a worklog; [ORG.md](ORG.md) §Documentation protocol;
 > [storage CHARTER](services/storage/CHARTER.md) §Open questions; [README.md](README.md)

@@ -57,7 +57,8 @@ processed it, without ever reporting a lost chunk as `clean`.
 - A `202` opens a silent-loss window. Confirming only on `processed` is what keeps an
   accepted-then-lost chunk reading `recording` or `gaps` instead of a silent `clean`.
 - Detail, including DP's side of the wire:
-  [ws-async-observability](../data-processing/handoff/ws-async-observability.md).
+  [the DP charter's ingest-processing-mode entry](../data-processing/CHARTER.md) (open
+  question 13), which states the `202` / `200` / `503` replies as a joint contract.
 
 ## Current state
 - **M0 spine unchanged and green** (`:8084`, `/capture/run`, blob-first PUT → C1 push,

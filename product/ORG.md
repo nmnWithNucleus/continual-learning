@@ -5,7 +5,8 @@
 > document reads like. Launch prompts: [PROMPTS.md](PROMPTS.md) · live status:
 > [HANDOFF.md](HANDOFF.md).
 
-**Last updated:** 2026-07-30 (onboarding teaching views, [D22](DECISIONS.md))
+**Last updated:** 2026-08-07 (doc-nature and writing-modes cells carry the
+[D29](DECISIONS.md) stage license; onboarding teaching views, [D22](DECISIONS.md), 2026-07-30)
 
 ## The structure
 

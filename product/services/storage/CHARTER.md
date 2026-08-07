@@ -15,9 +15,10 @@
 > unrecorded, silent breakage, or calling a thing BUILT when it is only ratified.
 > Full posture + what changes at dev/prod: [ARCHITECTURE.md](../../ARCHITECTURE.md) §Stage.
 
-**Status:** chartered · **Last updated:** 2026-08-06 (the D27/D28 joint rows built on
-branch `dp-rebuild-v1` at rebuild Stage E: E-2 whole-record shape on the M5 card, M9
-re-baselined; nothing running here changed) · the [D18](../../DECISIONS.md) scope
+**Status:** chartered · **Last updated:** 2026-08-07 (the open-questions preamble carries the
+[D29](../../DECISIONS.md) removed-whole clause; the D27/D28 joint rows landed 2026-08-06 with
+E-2's whole-record shape on the M5 card and M9 re-baselined, and nothing running here changed)
+· the [D18](../../DECISIONS.md) scope
 expansion is `built` (`a5a48fb`, 310 tests). Lineage: [§How this charter got here](#how-this-charter-got-here).
 
 ## Mission

@@ -4,7 +4,7 @@
 > Read [CHARTER.md](CHARTER.md) first (mission/scope/interfaces), then this file — the
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
-**Status:** built — v1 live on `main` · DP suite green · *Last updated:* 2026-08-08
+**Status:** built — v1 live on `main` · DP suite green · *Last updated:* 2026-08-07
 
 **Where we are.** The service ingests C1 chunks and writes **one C2 v1 record per chunk** —
 built from `content.slots`, one stage per slot, never edited ([CHARTER.md](CHARTER.md)

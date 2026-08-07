@@ -5,7 +5,7 @@
 > durable outcome lands in its proper home — code, the board, or the charter — and this file
 > tracks only what is still open.
 
-**Last updated:** 2026-08-08
+**Last updated:** 2026-08-07
 
 ## Active
 

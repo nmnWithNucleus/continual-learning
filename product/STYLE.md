@@ -3,9 +3,9 @@
 > [ORG.md](ORG.md) decides **which file** a fact belongs in; this file decides **what it reads
 > like**. Binds every node: root, service, workstream.
 
-**Last updated:** 2026-08-08 · ratified — [D21](DECISIONS.md). The file is ratified, not this
+**Last updated:** 2026-08-07 · ratified — [D21](DECISIONS.md). The file is ratified, not this
 revision; editing it is a founders' act. §Growing a worklog gained the [D29](DECISIONS.md)
-suspended-for-this-stage clause 2026-08-08 (the roll-never-prune rule stays; the license
+suspended-for-this-stage clause 2026-08-07 (the roll-never-prune rule stays; the license
 lapses at production end-to-end). §Teaching views added 2026-07-30 ([D22](DECISIONS.md)):
 onboarding views are read start to finish, so three rules are lifted for them and four imposed. §Was / Changed / Now / Payoff trimmed 2026-07-28: the
 example is the teaching, so the glosses restating it and the duplicate worklog-entry block went.

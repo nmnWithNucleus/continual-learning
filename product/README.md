@@ -4,7 +4,7 @@
 > feeders). Everything about building Nucleus v0 — vision, architecture, org, and one
 > directory per service lives here.
 
-**Last updated:** 2026-07-28
+**Last updated:** 2026-08-07 (the [DECISIONS.md](DECISIONS.md) pointer line, [D29](DECISIONS.md))
 
 ## Cold start — read in this order
 
@@ -46,7 +46,7 @@ product/
     └── platform/          infra · CI/CD · security/privacy · cost · observability
 ```
 
-History before 2026-08-08 lives in git history, not in this tree. A skipped number is a removed
+History before 2026-08-07 lives in git history, not in this tree. A skipped number is a removed
 row, not an error.
 
 ## Conventions

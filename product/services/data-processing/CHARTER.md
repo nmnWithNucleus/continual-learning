@@ -107,8 +107,8 @@ belong to `recording`.
 `record_id` is deterministic on `(chunk_id, pipeline_version)` — NUL-joined, hex, a blind
 `/context` upsert — matching the v1 schema
 ([../../contracts/c2_processed_record.v1.json](../../contracts/c2_processed_record.v1.json)).
-There is exactly **one record per chunk** (Slot Law L2), and no discriminator: dropping it is
-safe precisely because one-record-per-chunk is structural. The record carries source
+There is exactly **one record per chunk** (Slot Law L2), so identity has exactly those two
+components: with one record per chunk there are no siblings to tell apart. The record carries source
 provenance (verbatim from C1, minus modality), the C1 span `t_start`/`t_end`, `pipeline_version`,
 and `content.slots` — a map keyed by slot name, one producing stage per slot, each written once
 and never edited. Storage assigns `created_at`/`updated_at`; no wall-clock lives inside the
@@ -152,7 +152,7 @@ reprocess is an upsert and not a duplicate.
   `(chunk_id, pipeline_version)`: the executor structurally emits one, a test asserts it, the
   contract states it. Adding a second record per chunk requires forking the contract (C2 v2).
 - **L3 — Identity.** `record_id = sha256(chunk_id ␀ pipeline_version)` — NUL-joined, hex, a
-  blind `/context` upsert. No discriminator; L2 is why dropping it is safe.
+  blind `/context` upsert. Two components are enough: under L2 a chunk has no siblings.
 - **L4 — Version law.** `pipeline_version` is the `+`-joined *sorted* list of every enabled
   stage's string `<stage>.v<S>-<backend>.v<B>[.exp-<code>]`, resolved before any stage runs.
   Plain string, never hashed; it states the *attempted* dialect.
@@ -384,8 +384,8 @@ reprocess is an upsert and not a duplicate.
       the remaining piece.
 14. C2-additive gaps from the modality-seam pressure-test. Both deferred, non-blocking; both closed.
 
-    **(a) Video chunk timing.** A video chunk is one record carrying the C1 span verbatim (L2);
-      per-keyframe sibling collision class is structurally closed.
+    **(a) Video chunk timing.** A video chunk is one record carrying the C1 span verbatim (L2),
+      so a chunk makes exactly one timing claim and there is nothing finer to reconcile.
 
     **(b) Image and clip OCR frame-location (bbox) — deliberately not emitted.**
 
