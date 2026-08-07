@@ -147,3 +147,13 @@ concept precisely to say it is gone. `app.main` imports (docs-only change; suite
 Residual dead-vocabulary in `ARCHITECTURE.md` now sits only in the retired Vocabulary row's
 pointer, the C2/C10 card §How-it-got-here history, and rules that name the retired key precisely
 to mark it superseded.
+
+## WP-G5 — the plan doc becomes the rebuild's historical record
+
+`refactor_dp_service.md`: **Status → EXECUTED 2026-08-07 (D23–D28)**, Stages A–G complete on
+`main`. Added an execution-record table mapping each stage to its commit range (A `f639fda→42e90a8`,
+B `3b70b68→4d70ecb`, C `1589c0f→5f88fbb`, D `494e396→06b0534`, E `139b1ce→e3cedb6`,
+F `413b3a6→26f763f`, G `afe0103→`this close). The §Supersedes line marks every superseded artifact
+EXECUTED (record-emission-law.md retired into §Condensed history). §8 Stage G rewritten from a plan
+into the executed record, and its Exit criterion restated as met (the dead-vocabulary grep returns
+hits only in history/worklogs/this plan; all suites green; fleet 200 across every commit).

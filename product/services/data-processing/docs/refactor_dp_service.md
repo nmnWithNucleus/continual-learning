@@ -1,9 +1,19 @@
 # DP Service Rebuild — Design & Migration Plan
 
-**Status:** RATIFIED 2026-08-06 (D23–D28) — executing; Stage A complete. Design consensus reached point-by-point in founder session 2026-08-05; migration decisions OD-1/2/3 ruled (§8); the §7 rows entered the register 2026-08-06 as amended by the Stage A cleanup round (rulings of 2026-08-06: `processed_at` dropped, Heard-lines `asr` fallback in, `device_clock` stays, empty slots map legal).
+**Status:** EXECUTED 2026-08-07 (D23–D28) — Stages A–G complete on `main`; the rebuild is live and this doc is now its historical record. Design consensus reached point-by-point in founder session 2026-08-05; migration decisions OD-1/2/3 ruled (§8); the §7 rows entered the register 2026-08-06 as amended by the Stage A cleanup round (rulings of 2026-08-06: `processed_at` dropped, Heard-lines `asr` fallback in, `device_clock` stays, empty slots map legal). The Slot Law is the running law; C2 v1 is the live wire since the Stage F cutover; `record-emission-law.md` is retired into the DP charter §Condensed history; the code demolition and doc rewrite are Stage G. **Execution record — the stages and their commit ranges:**
+
+| Stage | What landed | Commit range (first WP → close) |
+|---|---|---|
+| A — Ratify & cut paper | D23–D28 into the register, CHARTER §Slot Law, C2 v1 + C10 v2 schemas | `f639fda` → `42e90a8` |
+| B — Machinery | `servers/common` + supervisor + model client; whisper/pyannote/ast/ocr behind the seam | `3b70b68` → `4d70ecb` |
+| C — New stagegraph | uniform `Stage`, executor rewrite, two-component id, C2 v1 assembler, T-1…T-6 spine; dead concepts + `isolation.py` deleted | `1589c0f` → `5f88fbb` |
+| D — Ledger v2 | journal done-row (stage_status/heal_attempts), L8 claim tree, heal containment + crash-table (T-5) | `494e396` → `06b0534` |
+| E — Storage v2 | `created_at`/`updated_at` byte-compare, C10 v2 slot-walk renderer, E-2 whole-record retraction, D20 parity re-baseline | `139b1ce` → `e3cedb6` |
+| F — Cutover | vLLM + probe (F0a), continuum v2 stamps (F0b), cutover kit (F0c), GATE 1, merge `bf1e806` no-ff, five drills, the amended synthetic soak + in-flight kill + train leg | `413b3a6` → `26f763f` |
+| G — Demolition & docs | sidecars/ + dead scripts + circuit.py + per-frame-v0 retired (clipcap vlm.v1→v2); emission law folded into §Condensed history; CHARTER/ARCHITECTURE/plan/field-guide/boards rewritten to the new world | `afe0103` → *this stage's close* |
 **Date:** 2026-08-05
 **Scope:** everything downstream of chunk acceptance (the stage graph, record emission, C2 shape, model execution). The pre-graph machinery — journal, dedup claims, ingest queue, backpressure, continuity, blob-first pull, D16 reply wire — is explicitly KEPT and is the foundation this design stands on.
-**Supersedes on ratification:** CHARTER §Record-vs-mutation law; `docs/record-emission-law.md`; D10's C2-v0-shape clause; D16's fan-out `record_ids` clause; D19's "discriminator surfaced" clause; D8's shipped two-record shape (its one-liner — specialist OCR feeding the caption — survives).
+**Supersedes on ratification (all EXECUTED by Stage G):** CHARTER §Record-vs-mutation law; `docs/record-emission-law.md` (retired at Stage G, condensed into the DP charter §Condensed history); D10's C2-v0-shape clause; D16's fan-out `record_ids` clause; D19's "discriminator surfaced" clause; D8's shipped two-record shape (its one-liner — specialist OCR feeding the caption — survives as the L11 provenance corollary).
 **Untouched:** C1 / D11, D15, D17 (tz trio rides `source{}` verbatim), D22, all recording-side decisions, storage's ingest-upsert core.
 
 ---
@@ -190,9 +200,9 @@ WP-E1: `db.py` `created_at`/`updated_at` + byte-compare bump. WP-E2: `daylog.py`
 Freeze old DP → wipe `/context` + DP journal (per OD-2), keep `/raw` → deploy v1 fleet + supervisor manifest → resume ingest → run the three drills: (1) D16 re-drive drill (owed anyway — the standing gate), (2) version-bump drill (bump one `vB`, verify beside-semantics + next-window), (3) heal drill (kill one optional server mid-day, watch holes heal on redrive). Recording never stops capturing; its gap-report reconciliation stays as the safety net during the wipe (that's exactly why it was retained).
 **Exit:** one full pilot day captured → processed → day-log rendered → trained end-to-end on v1.
 
-**Stage G — Demolition & docs (S/M).**
-Delete: old emission path remnants, `isolation.py`, `sidecars/`, dead config knobs, retired tests. Docs: CHARTER rewrite complete; `record-emission-law.md` removed with condensed history in the handoff; field guide rewritten to the new world (D22: repo wins, same-session correction); worklog + handoff condensed-history entries; this doc flips to `Status: EXECUTED`.
-**Exit:** grep finds no dead vocabulary (`discriminator`, `mutate`, `sidecar`, `best_effort`, `DIALECT_FREEZE`, `INGEST_ISOLATION`) outside history sections.
+**Stage G — Demolition & docs (S/M). EXECUTED 2026-08-07 ([refactor_stage_G.md](refactor_stage_G.md)).**
+Deleted: `sidecars/` (live OCR is `servers/ocr`), `smoke_audio_backends.py`, the offline-eval harness (`prompt_ab.py` + `capture_chunkset.py` + `oracle_gemini.py`) with its rebuild path named, `app/vision/circuit.py` (wired nowhere), the legacy `per-frame-v0` prompt pack (clipcap `vlm.v1→v2`); `isolation.py` and the dead config knobs went at Stage C. Docs: CHARTER rewritten to the new world with a **§Condensed history** (the brief placed the six-paragraph fold in the charter, not the handoff); `record-emission-law.md` retired; ARCHITECTURE §Vocabulary + C2/C10 cards flipped; the field guide rewritten (D22: repo wins, same-session correction); the four service boards + the founders' board moved the rebuild to history and seeded the next phase; this doc flipped to `Status: EXECUTED`.
+**Exit (met):** the dead-vocabulary grep (`discriminator|mutate|sidecar|best_effort|DIALECT_FREEZE|INGEST_ISOLATION|ProcessedUnit|emission law`) returns hits only in history sections, worklogs, and this plan doc; all suites green (DP/storage/continuum/servers-common); the live v1 fleet answered 200 before and after every commit.
 
 ---
 
