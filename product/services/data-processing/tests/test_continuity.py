@@ -158,9 +158,9 @@ def test_continuity_counts_dedup_fast_path_deliveries(client):
     assert client.post("/ingest", json=c1).status_code == 200
     assert client.post("/ingest", json=c1).status_code == 200  # dedup fast path
 
-    # Dedup DID absorb the reprocessing (one C2 write)...
+    # Dedup DID absorb the reprocessing (one C2 write) ...
     assert len(fs.record_posts) == 1
-    #... but NOT the continuity signal: both deliveries counted, one as a dup.
+    # ... but NOT the continuity signal: both deliveries counted, one as a dup.
     entry = client.get("/continuity/stream-ULID-AAAA").json()
     assert entry["received"] == 2
     assert entry["duplicate_deliveries"] == 1

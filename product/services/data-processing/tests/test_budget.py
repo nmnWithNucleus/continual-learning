@@ -1,7 +1,7 @@
-"""The character budget (): span-parametric caps + deterministic truncation.
+"""The character budget (D-11): span-parametric caps + deterministic truncation.
 
-Rebuilt for the (L4): the rates are explicit arguments now — the live
-values are code pins in the stage files (clipcap: 16, screentext: 6; the prior 22-total
+Rebuilt for the DP rebuild (L4): the rates are explicit arguments now — the live
+values are code pins in the stage files (clipcap: 16, screentext: 6; the v0 22-total
 split), not env knobs. These tests exercise the math at those pinned rates.
 """
 from __future__ import annotations
@@ -31,15 +31,15 @@ def test_ocr_cap_is_rate_times_span():
 
 
 def test_dose_is_span_invariant_at_a_fixed_rate():
-    """The whole point of : chars/second-of-life is constant, so the training dose is
- identical at any chunk length — that is what makes the design span-parametric ()."""
+    """The whole point of D-11: chars/second-of-life is constant, so the training dose is
+    identical at any chunk length — that is what makes the design span-parametric (D-01)."""
     assert caption_cap(60, CAPTION_RATE) / 60 == caption_cap(10, CAPTION_RATE) / 10
     assert ocr_cap(60, OCR_RATE) / 60 == ocr_cap(10, OCR_RATE) / 10
 
 
 def test_rate_change_moves_the_cap():
     """Changing a rate changes record bytes — which is exactly why the rates are vB-pinned
- in the stage files, never env (L4)."""
+    in the stage files, never env (L4)."""
     assert caption_cap(60, 10) == 600
     assert ocr_cap(60, 5) == 300
 

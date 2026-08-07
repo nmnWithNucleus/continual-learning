@@ -6,8 +6,8 @@ semantics — different wire and different configuration posture:
 
 - **Wire**: the framework contract (`GET /health` with identity, `POST /infer`
   `{input_b64, codec, params}` → `{ok, result}`), not a bespoke `/ocr`. Error
-  split: bad input → `422 transient:false`; not warm → `503 transient:true`;
-  unexpected crash → `500 transient:true`.
+  split: deterministic bad input → `422 transient:false`; replica hiccup / not
+  warm → `503 transient:true`; unexpected crash → `500 transient:true`.
 - **No env knobs (L4)**: engine settings are pinned in `server.py` — 4 intra-op
   threads, angle classifier off (screen text is upright), CPU-only, models
   discovered from the installed package and sha256-hashed at load. A model swap

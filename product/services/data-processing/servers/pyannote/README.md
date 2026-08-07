@@ -1,9 +1,8 @@
 # servers/pyannote — speaker diarization model server
 
-Serves `pyannote/speaker-diarization-3.1` behind the migration drill model-server seam
+Serves `pyannote/speaker-diarization-3.1` behind the model-server seam
 (`dp_servers_common`): warmup thread, `GET /health` (identity), `POST /infer`.
-The diarization behavior is a faithful copy of the v0 in-process seam
-(`app/audio/diarize/pyannote.py`, node-7 smoke-validated 2026-07-19): ffmpeg
+The diarization behavior: ffmpeg
 pre-decode to 16 kHz mono WAV (torchaudio's soundfile backend can't demux
 webm/opus), scoped `weights_only=False` around the checkpoint load (torch >= 2.6
 rejects pyannote's Lightning checkpoints otherwise), turns clamped to

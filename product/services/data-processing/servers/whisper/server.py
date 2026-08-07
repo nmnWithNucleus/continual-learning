@@ -71,7 +71,7 @@ class WhisperBackend(ModelBackend):
 
     def __init__(self) -> None:
         self._model = None
-        # av's error base class, set in load;  catches nothing before then.
+        # av's error base class, set in load(); () catches nothing before then.
         self._av_error: type[BaseException] | tuple = ()
 
     def load(self) -> None:

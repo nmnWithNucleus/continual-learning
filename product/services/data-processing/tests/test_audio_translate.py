@@ -1,15 +1,14 @@
 """TranslateStage: built + tested but NOT registered.
 
-The ratified §2 example dialect excludes translation, prior beta fleet ran it
-off, and C2 v1 has no ``translation`` sub-schema yet — so the stage exists as
-code (semantics pinned by these tests) and joins a dialect only when its
-contract slot lands additively. Tests therefore drive it through EXPLICIT
-resolve() stage sets, never the registry.
+No registered dialect includes translation and C2 v1 has no ``translation``
+sub-schema yet — so the stage exists as code (semantics pinned by these tests)
+and joins a dialect only when its contract slot lands additively. Tests therefore
+drive it through EXPLICIT resolve() stage sets, never the registry.
 
-Semantics under test (v0 parity + plan): no server call when the ASR value is
+Semantics under test: no server call when the ASR value is
 empty or already English (a fake that raises-if-called proves it); otherwise
 whisper task=translate with the source auto-detected and the result language
-hardcoded "en" (the prior design point — the server does this too).
+hardcoded "en" (the v0 design point — the server does this too).
 """
 from __future__ import annotations
 
@@ -32,7 +31,7 @@ from .test_audio_stages import (
 
 class _RaisesOnTranslate(FakeModelClient):
     """Serves task=transcribe from the canned result; a task=translate call is
- a test failure — proving the no-call paths never touch the server."""
+    a test failure — proving the no-call paths never touch the server."""
 
     async def infer(self, payload: dict) -> dict:
         if payload["params"].get("task") == "translate":
@@ -113,8 +112,8 @@ def test_empty_translation_result_is_an_honest_empty_claim():
 
 def test_translate_missing_client_is_a_loud_runtime_error():
     """A missing "whisper" pool fails loudly (never catch-and-fake). Driven
- directly (both stages share the pool, so a graph run would fail at asr
- first — that path is covered by test_audio_stages)."""
+    directly (both stages share the pool, so a graph run would fail at asr
+    first — that path is covered by test_audio_stages)."""
     import asyncio
 
     from app.stagegraph.stage import StageContext, StageOutput
@@ -131,8 +130,8 @@ def test_translate_missing_client_is_a_loud_runtime_error():
 
 def test_translation_slot_has_no_contract_home_yet():
     """WHY the stage is unregistered: an emitted translation slot fails the C2
- v1 gate today — the sub-schema lands additively when this producer ships
- into a dialect (additionalProperties:false fails unknown slots closed)."""
+    v1 gate today — the sub-schema lands additively when this producer ships
+    into a dialect (additionalProperties:false fails unknown slots closed)."""
     fake = _Dispatch(SPANISH_ASR, ENGLISH_TRANSLATION)
     resolved_stages = [AsrStage(), TranslateStage()]
     resolved, result = execute(resolved_stages, {"whisper": fake})

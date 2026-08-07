@@ -26,7 +26,7 @@ class GraphProcessor:
 
     def pipeline_version(self) -> str:
         """The attempted dialect — resolved from the registered stage set, in
- code, before any stage runs (L4)."""
+        code, before any stage runs (L4)."""
         return self._resolved().pipeline_version
 
     async def process_async(
@@ -39,7 +39,7 @@ class GraphProcessor:
         metrics: Any = None,
     ) -> GraphResult:
         """Run one chunk through this modality's graph: exactly one GraphResult
- (slots + statuses) or the leaf exception of a required failure."""
+        (slots + statuses) or the leaf exception of a required failure."""
         return await run_graph(
             self._resolved(), c1=c1, blob=blob, span_seconds=span_seconds,
             clients=clients, metrics=metrics,
@@ -48,7 +48,7 @@ class GraphProcessor:
 
 def graph_processor(modality: str) -> GraphProcessor:
     """The modality router. Raises ``KeyError`` when no stage set exists for
- ``modality`` (C1-valid modality, no pipeline yet — the 501 path)."""
+    ``modality`` (C1-valid modality, no pipeline yet — the 501 path)."""
     if modality not in registered_modalities():
         raise KeyError(modality)
     return GraphProcessor(modality)

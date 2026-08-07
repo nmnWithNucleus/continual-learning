@@ -1,20 +1,20 @@
 """Per-modality C1 fixtures + a POST helper the verifier can drive.
 
 Each modality has TWO committed files in this directory:
- * ``<modality>.c1.json`` — a standalone, schema-valid C1 envelope (blob_sha256 /
- blob_bytes already baked to match the blob), so it can be inspected or POSTed
- as-is against a live ``/ingest``;
- * ``<modality>.blob`` — the trivial raw bytes the envelope references. The
- stub processors don't decode the bytes, so these are tiny.
+  * ``<modality>.c1.json`` — a standalone, schema-valid C1 envelope (blob_sha256 /
+    blob_bytes already baked to match the blob), so it can be inspected or POSTed
+    as-is against a live ``/ingest``;
+  * ``<modality>.blob``     — the trivial raw bytes the envelope references. The
+    stub processors don't decode the bytes, so these are tiny.
 
 Regenerate with ``scratchpad/gen_fixtures.py`` if the shapes ever change.
 
 Helper surface (for tests AND the integration verifier):
- * ``MODALITIES`` / ``EXPECTED_RECORDS`` — the modality list + how many C2 records
- each fixture must yield (video is the 1-chunk-many-records case: 3).
- * ``load_c1(modality)`` / ``load_blob(modality)`` — read a fixture.
- * ``register_and_post(client, modality)`` — register the blob in the client's fake
- storage and POST the envelope to ``/ingest``; returns the httpx ``Response``.
+  * ``MODALITIES`` / ``EXPECTED_RECORDS`` — the modality list + how many C2 records
+    each fixture must yield (video is the 1-chunk-many-records case: 3).
+  * ``load_c1(modality)`` / ``load_blob(modality)`` — read a fixture.
+  * ``register_and_post(client, modality)`` — register the blob in the client's fake
+    storage and POST the envelope to ``/ingest``; returns the httpx ``Response``.
 """
 from __future__ import annotations
 
@@ -48,8 +48,8 @@ def load_blob(modality: str) -> bytes:
 
 def register_and_post(client, modality: str):
     """Register the fixture blob in the client's fake storage, then POST its C1 to
- ``/ingest``. Returns the httpx Response. ``client`` is a TestClient carrying a
- ``fake_storage`` (see ``tests.conftest.client``)."""
+    ``/ingest``. Returns the httpx Response. ``client`` is a TestClient carrying a
+    ``fake_storage`` (see ``tests.conftest.client``)."""
     c1 = load_c1(modality)
     client.fake_storage.add_blob(c1["blob_ref"], load_blob(modality))
     return client.post("/ingest", json=c1)

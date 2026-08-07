@@ -1,5 +1,6 @@
-"""the server-call observability family in ModelClient : one counter per call outcome, a transient-retry counter, an
-identity-failure counter, and a per-server latency histogram. Declared in
+"""The server-call observability family in ModelClient: one counter per call
+outcome, a transient-retry counter, an identity-failure counter, and a
+per-server latency histogram. Declared in
 main._setup_metrics; ModelClient records against whatever registry it is handed
 (duck-typed — the servers/common suite keeps constructing it metrics-less).
 
@@ -127,7 +128,7 @@ def test_identity_mismatch_counts():
 
 def test_metrics_less_construction_stays_silent():
     """servers/common's suite constructs ModelClient without metrics — the
- parameter is optional and nothing records."""
+    parameter is optional and nothing records."""
     def handler(request):
         return _health(request) or httpx.Response(200, json={"result": {}})
 
@@ -140,9 +141,9 @@ def test_metrics_less_construction_stays_silent():
 
 def test_malformed_200_body_is_transient_and_counted():
     """A 200 that is not the framework envelope (a proxy answering for a dead
- replica): transient presentation, retried, and the call's outcome is
- ``unavailable`` when the budget exhausts — never an uncounted raw
- JSONDecodeError, never a false ``ok``."""
+    replica): transient presentation, retried, and the call's outcome is
+    ``unavailable`` when the budget exhausts — never an uncounted raw
+    JSONDecodeError, never a false ``ok``."""
     metrics = Metrics()
     _declare(metrics)
 
@@ -176,7 +177,7 @@ def test_200_without_result_key_is_not_ok():
 
 def test_malformed_health_body_is_transient_not_a_crash():
     """/health answering non-JSON (mid-respawn port squatter) is a transient
- replica presentation — retried and counted, never an escaped ValueError."""
+    replica presentation — retried and counted, never an escaped ValueError."""
     metrics = Metrics()
     _declare(metrics)
 
@@ -195,10 +196,10 @@ def test_malformed_health_body_is_transient_not_a_crash():
 
 def test_app_registry_wiring_renders_seeded_server_series(monkeypatch, tmp_path):
     """Review round: the dp_server_* families must be provably wired through the
- APP registry (a dropped ``metrics=`` in _build_model_clients, or a label
- drift between declaration and client, would silently kill the family — the
- 0-increment-vs-missing-series trap). The seeded zeros are the tell: they
- render at app construction iff the wiring AND the label sets are right."""
+    APP registry (a dropped ``metrics=`` in _build_model_clients, or a label
+    drift between declaration and client, would silently kill the family — the
+    0-increment-vs-missing-series trap). The seeded zeros are the tell: they
+    render at app construction iff the wiring AND the label sets are right."""
     from tests.conftest import install_mock_audio_registry
 
     install_mock_audio_registry(monkeypatch)

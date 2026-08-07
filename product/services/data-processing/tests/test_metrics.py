@@ -146,7 +146,7 @@ def test_float_formatting():
 
 def test_graph_stage_latency_is_emitted_per_stage(client):
     """M8 win: the stage graph emits per-STAGE latency (asr/…) not just the coarse
- 'process' stage — the intra-pipeline granularity the charter asks for."""
+    'process' stage — the intra-pipeline granularity the charter asks for."""
     from tests.conftest import make_c1
     client.post("/ingest", json=make_c1(client.fake_storage, chunk_id="gs-1"))
     text = client.get("/metrics").text

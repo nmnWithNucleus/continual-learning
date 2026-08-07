@@ -2,15 +2,15 @@
 
 Pure string handling, zero backend / config / network dependency — so these run
 headless with nothing but ``app/vision/parse.py`` + the frozen ``clip_types``. The
-ladder is the "contract of record" (§5.3): it must turn every shape a weak,
+ladder is the "contract of record": it must turn every shape a weak,
 Flash-class 32B emits — clean JSON, fenced, prose-wrapped, truncated mid-object,
 wrong keys, a refusal, a prompt echo — into a ``ClipDesc``, classify HOW degraded
 the reply was (so the caller can count ``dp_video_parse_fallback_total{pack,step}``),
 and RAISE on an empty reply so the chunk redelivers.
 
-Exit criterion: "the parse ladder over 12 malformed replies (fenced,
+The bar this suite holds: the parse ladder over 12 malformed replies (fenced,
 prose-prefixed, truncated mid-JSON, wrong-keys, refusal, prompt echo, empty) —
-every fallback counted; empty raises."
+every fallback counted; empty raises.
 """
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ def test_clean_step_is_the_only_non_fallback():
 
 # ---- The 12 malformed replies (the exit-criterion table) ---------------------
 
-# 1 — fenced (```json... ```)
+# 1 — fenced (```json ... ```)
 def test_fenced_json_is_recovered_as_a_fallback():
     reply = "```json\n" + _CLEAN + "\n```"
     out = parse_clip(reply)
@@ -123,7 +123,7 @@ def test_raw_newline_inside_string_is_repaired_and_collapsed():
     out = parse_clip(reply)
     assert out.step == "repair"
     assert out.desc.app == "VS Code"
-    # : the recovered field carries no newline (whitespace collapsed to spaces).
+    # D-12: the recovered field carries no newline (whitespace collapsed to spaces).
     assert "\n" not in out.desc.description
     assert out.desc.description == "The person edits a Python file, adding a new function."
 
@@ -252,7 +252,7 @@ def test_first_real_object_wins_over_a_leading_placeholder_object():
     assert out.desc.description.startswith("The person is writing")
 
 
-# ---- cleaning invariants ------------------------------------------------
+# ---- D-12 cleaning invariants ------------------------------------------------
 
 def test_no_field_ever_carries_a_newline():
     reply = (
@@ -336,9 +336,9 @@ def test_parse_is_deterministic(reply):
 )
 def test_deeply_nested_json_does_not_raise(reply):
     """A brace-balanced but 20000-deep reply is yielded whole by the scanner; CPython's
- recursive json decoder then raises RecursionError (a RuntimeError, not a ValueError).
- The ladder must catch it and fall through — a NON-empty reply must never raise
- (only empty raises). Regression for the adversarial-hardening finding."""
+    recursive json decoder then raises RecursionError (a RuntimeError, not a ValueError).
+    The ladder must catch it and fall through — a NON-empty reply must never raise
+    (only empty raises). Regression for the adversarial-hardening finding."""
     out = parse_clip(reply)           # must NOT raise
     assert out.step in STEPS
     assert out.fallback is True       # nothing usable parsed -> a fallback rung

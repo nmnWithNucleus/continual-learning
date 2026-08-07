@@ -61,7 +61,7 @@ Previously-floating transitives pinned in requirements.txt: onnxruntime==1.28.0,
 huggingface_hub==1.26.0, tokenizers==0.23.1 — all equal to what this venv already
 ran when the golden was cut, so `golden_transcribe.json` is untouched
 (sha256 ccda989fdc134815cfaab84f453654bac19cbcbe9a5f603183936f1388d61376
-re-verified after the change; see the migration drill worklog cleanup round).
+re-verified after the change).
 
 ## 2026-08-06 — cleanup round: second golden, real speech
 

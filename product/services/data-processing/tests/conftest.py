@@ -2,13 +2,13 @@
 
 The service under test runs MOCK DIALECTS: stage sets whose backends are
 client-level fakes, selected the same way real backends are — in code, named in
-the version string (mock-dialect rule). ``mock_registry`` installs the default mock audio
+the version string (plan §3). ``mock_registry`` installs the default mock audio
 set into a clean stage registry (a test module can override the fixture to
 install its own set); ``client`` builds the app on top of it with the
 MockTransport fake storage and an isolated journal dir.
 
 ``FakeGraphProcessor`` is the processor-seam fake for the queue/journal/fairness
-suites: canned slots produced by a SYNC callable run in the threadpool, so prior
+suites: canned slots produced by a SYNC callable run in the threadpool, so v0's
 blocking-gate test idioms (threading.Event) keep working without deadlocking the
 event loop.
 """
@@ -32,13 +32,13 @@ from .fake_storage import FakeStorage
 SAMPLE_AUDIO = b"RIFF\x00\x00\x00\x00WAVEfmt mock-audio-chunk-bytes"
 
 # The default mock audio dialect (one stage). Mock fixtures are deliberately
-# DISTINCT from any real-backend golden (the carry-over).
+# DISTINCT from any real-backend golden.
 MOCK_AUDIO_PV = "asr.v1-mock.v1"
 
 
 class MockAsrStage(Stage):
     """The default mock asr: canned transcript + one split spanning the chunk —
- a pure function of the C1 envelope (L1), no client, no server."""
+    a pure function of the C1 envelope (L1), no client, no server."""
 
     name = "asr"
     modality = "audio"
@@ -61,7 +61,7 @@ class MockAsrStage(Stage):
 
 def install_mock_audio_registry(monkeypatch) -> dict:
     """Empty the stage registry (discovery disabled — real stage files must never
- leak into a mock dialect) and register the default mock audio set."""
+    leak into a mock dialect) and register the default mock audio set."""
     monkeypatch.setattr(stage_mod, "_REGISTRY", {})
     monkeypatch.setattr(stage_mod, "_discovered", True)
     stage_mod.register_stage(MockAsrStage)
@@ -82,9 +82,9 @@ def fake_storage() -> FakeStorage:
 @pytest.fixture()
 def client(monkeypatch, fake_storage, tmp_path, mock_registry) -> TestClient:
     """A fresh data-processing app on the mock dialect, with its storage client
- bound to the MockTransport fake (env read at create_app() time). DP_VAR_DIR is
- isolated per test so the durable journal (var/dp.db) never leaks state between
- tests or into the repo tree."""
+    bound to the MockTransport fake (env read at create_app() time). DP_VAR_DIR is
+    isolated per test so the durable journal (var/dp.db) never leaks state between
+    tests or into the repo tree."""
     monkeypatch.setenv("STORAGE_URL", "http://storage.test")
     monkeypatch.setenv("DP_VAR_DIR", str(tmp_path / "var"))
     from app.main import create_app
@@ -99,8 +99,8 @@ def client(monkeypatch, fake_storage, tmp_path, mock_registry) -> TestClient:
 
 class FakeGraphProcessor:
     """A processor-seam fake (the object ``process_chunk`` drives): canned slots
- from a sync callable, run in the threadpool — prior gate/fail-injection test
- idioms carry over unchanged. The slot map defaults to one mock asr slot."""
+    from a sync callable, run in the threadpool — v0's gate/fail-injection test
+    idioms carry over unchanged. The slot map defaults to one mock asr slot."""
 
     def __init__(
         self,
@@ -142,7 +142,7 @@ def make_c1(
     register_blob: bool = True,
 ) -> dict[str, Any]:
     """Build a valid C1 envelope AND register its blob in the fake storage, so the
- declared blob_sha256/blob_bytes match what /raw/blobs will serve."""
+    declared blob_sha256/blob_bytes match what /raw/blobs will serve."""
     if register_blob:
         fake_storage.add_blob(blob_ref, audio)
     return {

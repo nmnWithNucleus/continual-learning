@@ -3,17 +3,20 @@
 Thin client over an OpenAI-compatible endpoint (the self-hosted Qwen3-VL — an
 external cloud-style endpoint, not a supervised model server, so ``server = ""`` and
 the wire lives in ``app/vision/clipcap/vlm.py``). Consumes ``clipprep``'s transient
-frames and ``screentext``'s digest, injects the OCR text into the prompt (one witness
-on two channels, the L11 corollary), parses the reply through the tolerant ladder, and
-renders the slot value via ``render_caption`` — the one-paragraph
-``"{app} — {activity}. {description}"`` form, single-line collapse, and the
-chars-per-second-of-life cap applied on a sentence boundary. The verbatim-span rule
-lives in ``pipeline.build_c2``; the L12 grid rule lives in the law + its tests.
+frames and ``screentext``'s digest, injects the OCR text into the prompt (D-09 — one
+witness on two channels, the L11 corollary), parses the reply through the tolerant
+ladder, and ABSORBS the retired ``vision/emit.py``'s render: the slot value is
+``render_caption`` — the D-10 one-paragraph ``"{app} — {activity}. {description}"``
+render, D-12 single-line collapse, and the D-11 char cap (a CORRECTNESS knob: the
+chars-per-second-of-life dose) applied on a sentence boundary. The rest of emit.py
+did NOT move here: the D-05 verbatim-span rule lives in ``pipeline.build_c2`` and the
+L12 grid rule lives in the law + its tests.
 
 OPTIONAL (L7): a captioner failure is a ``caption`` hole (record ships, healed by
-redrive). ``needs = ("clipprep", "screentext")``: an OCR failure cancels this stage
-(statuses ``failed`` + ``cancelled``), so a caption is NEVER produced from
-silently-missing OCR.
+redrive) — v0's raise-and-redeliver posture, translated. ``needs = ("clipprep",
+"screentext")``: an OCR failure cancels this stage (statuses ``failed`` +
+``cancelled``), so a caption is NEVER produced from silently-missing OCR — the
+coupling v0 enforced by making screentext required.
 
 PROMPT-PACK IDENTITY (the L4 hard gate): the packs stay in ``app/vision/prompts``
 with their LOCK; this file pins the aggregate ``PACK_DIGEST`` as a CODE CONSTANT and
@@ -22,17 +25,17 @@ registration fails LOUD below if the on-disk pack digests differently — a
 impossible to ship silently. Decode params (max_tokens, temperature) live in the pack
 front-matter, inside the digest.
 
-Code pins (L4):
+Code pins (L4) — the v0 env knobs they replace:
 
   =============================  ==================  ============================
-  pin                            constant            value
+  v0 env knob (dead)             pin                 value
   =============================  ==================  ============================
-  served model name              MODEL               Qwen/Qwen3-VL-32B-Instruct
-  prompt route                   SCENARIO            screen-mac
-  caption chars/sec share        CAPTION_RATE        16  (of the 22 total)
-  prompt file override           (dead)              routes.json + SCENARIO decide
-  structured decoding            (dead)              guided decoding pinned OFF
-  max prompt images check        (dead)              clipprep's max_frames=12 bounds K
+  VIDEO_VLM_MODEL                MODEL               Qwen/Qwen3-VL-32B-Instruct
+  VIDEO_SCENARIO                 SCENARIO            screen-mac
+  VIDEO_CAPTION_CHARS_SHARE      CAPTION_RATE        16  (of the 22 total, D-11)
+  VIDEO_CLIP_PROMPT              (dead)              routes.json + SCENARIO decide
+  VIDEO_VLM_STRUCTURED           (dead)              guided decoding pinned OFF
+  VIDEO_MAX_PROMPT_IMAGES_CHECK  (dead)              clipprep's max_frames=12 bounds K
   =============================  ==================  ============================
 
 Operational env (output-INERT, L4: the same served model behind any endpoint yields
@@ -42,7 +45,6 @@ the same bytes; a timeout can only fail the call — a hole, never different byt
 """
 from __future__ import annotations
 
-import logging
 import os
 
 from ...stagegraph.stage import (
@@ -58,21 +60,18 @@ from ...vision.budget import caption_cap, truncate_sentence
 from ...vision.clip_types import ClipDesc, ClipFrames
 from ...vision.clipcap import vlm
 
-logger = logging.getLogger("data-processing.stages.video.clipcap")
-
 # ---- code pins (L4). Editing any of these is a vB bump. --------------------------
 MODEL = "Qwen/Qwen3-VL-32B-Instruct"   # served-model-name requested on the wire
 SCENARIO = "screen-mac"                # prompt route (routes.json) + [[scenario_label]]
-CAPTION_RATE = 16                      # caption chars/second-of-life (of 22 total)
+CAPTION_RATE = 16                      # D-11: caption chars/second-of-life (of 22 total)
 
 # The aggregate prompt-pack digest this backend version was shipped against. Computed
 # by app/vision/prompts at import from the on-disk pack; `python -m app.vision.prompts`
 # prints the current value. EDITING A PACK => recompute, update this pin AND bump vB.
-# 2026-08-07: the legacy per-frame prompt pack was removed. The digest covers the
-# whole pack dir, so its removal moved the aggregate digest 565066a0 -> 80efa39f
-# even though screen-clip-v1's caption bytes are byte-identical — the guard is aggregate
-# by design (no pack file changes silently) and the price is a dialect fork on any dir
-# change. Re-pinned + vB bumped vlm.v1 -> vlm.v2 below.
+# The digest covers the WHOLE pack dir, so any change there moves the aggregate even
+# when the caption bytes a stage actually reads are byte-identical. That is the guard
+# working as designed — no pack file changes silently — and its accepted price is a
+# dialect fork on any dir change, which is why the pin and vB always move together.
 PACK_DIGEST_PIN = "80efa39f"
 
 if prompts.PACK_DIGEST != PACK_DIGEST_PIN:
@@ -90,8 +89,8 @@ _warned_timeout: set[str] = set()
 
 def _vlm_timeout_s() -> float:
     """VLM_TIMEOUT_S with the house warn-and-default posture for operational
- enum/number knobs: an unparsable value falls back LOUDLY (once per value),
- never crashes the chunk (a typo'd timeout must not fail ingestion)."""
+    enum/number knobs: an unparsable value falls back LOUDLY (once per value),
+    never crashes the chunk (a typo'd timeout must not fail ingestion)."""
     raw = os.getenv("VLM_TIMEOUT_S", "120")
     try:
         return float(raw)
@@ -103,14 +102,15 @@ def _vlm_timeout_s() -> float:
 
 
 def render_caption(desc: ClipDesc, span_seconds: float) -> tuple[str, bool]:
-    """The single-line, budgeted caption string, plus whether the cap actually truncated
-    it (the ``dp_video_truncated_total{pass="caption"}`` signal). Pure and deterministic:
+    """The single-line, budgeted caption string (D-10 / D-11 / D-12), absorbed from the
+    retired vision/emit.py, plus whether the D-11 cap actually truncated it (the
+    ``dp_video_truncated_total{pass="caption"}`` signal). Pure and deterministic:
     identical ``(desc, span)`` → identical result on every worker."""
     app = desc.app.strip()
     activity = desc.activity.strip()
     description = desc.description.strip()
 
-    # Lead: "app — activity." when present, degrading so a fallback (empty app /
+    # D-10: "app — activity." lead when present, degrading so a fallback (empty app /
     # activity) never renders a dangling " — " or a leading ". ".
     if app and activity:
         lead = f"{app} — {activity}."
@@ -122,11 +122,11 @@ def render_caption(desc: ClipDesc, span_seconds: float) -> tuple[str, bool]:
         lead = ""
     text = f"{lead} {description}".strip() if lead else description
 
-    # Collapse every whitespace run (incl. any stray newline) to one space. The
+    # D-12: collapse every whitespace run (incl. any stray newline) to one space. The
     # parse ladder already cleaned each field; this guards the joined string.
     text = " ".join(text.split())
 
-    # Truncate to the per-record char budget on a sentence boundary (word-boundary
+    # D-11: truncate to the per-record char budget on a sentence boundary (word-boundary
     # fallback inside truncate_sentence). cap == 0 → "" (a valid empty caption).
     capped = truncate_sentence(text, caption_cap(span_seconds, CAPTION_RATE))
     return capped, capped != text
@@ -138,13 +138,13 @@ class ClipcapStage(Stage):
     modality = "video"
     slot = "caption"
     stage_version = 1
-    # vB bumped v1 -> v2 when the legacy per-frame prompt pack was removed and the
-    # aggregate PACK_DIGEST_PIN moved (see the pin comment above).
+    # vB tracks the aggregate PACK_DIGEST_PIN (see the pin comment above): the pack dir
+    # and this number move together, so every video record stamps clipcap.v1-vlm.v2.
     backend = Backend("vlm", 2)
     needs = ("clipprep", "screentext")
     required = False          # L7: failure = caption hole; record ships; heal redrives
     server = ""               # external OpenAI-compatible endpoint, not a fleet server
-    # L10: C10 v2 routes slots.caption to Scene lines. ~16 chars/s cap.
+    # L10: C10 v2 routes slots.caption to Scene lines (D28). ~16 chars/s cap.
     consumer = "daylog:scene"
     # L5/L10 budget: version key + JSON overhead + the caption. The text is capped at
     # CAPTION_RATE × span (960 chars at the 60 s design max), so 4096 bytes holds even

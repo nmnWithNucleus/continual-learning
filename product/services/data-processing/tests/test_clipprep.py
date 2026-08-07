@@ -1,11 +1,11 @@
-"""The ``clipprep`` stage — real ffmpeg over generated fixtures ().
+"""The ``clipprep`` stage — real ffmpeg over generated fixtures (DP rebuild).
 
 New-API tests: the stage runs REAL ffmpeg (the two passes) over ``ffmpeg lavfi``
 fixtures built at test time (tests/conftest_video.py — no binaries committed).
 The contract proven here: frames land in ``StageOutput.bytes`` and NO record slot
 is emitted (``value=None`` — frames are re-derivable heavy data, not-persisted by
 default under L5); an undecodable blob RAISES (required stage → the chunk attempt
-fails; the prior mock synthetic fallback is dead).
+fails; the v0 mock synthetic fallback is dead).
 """
 from __future__ import annotations
 
@@ -116,7 +116,7 @@ def test_determinism_same_bytes_same_frames():
 
 def test_undecodable_blob_raises_never_placeholders():
     """Required-stage posture (L7): no synthetic frames, no record — the chunk attempt
- fails and the worker's retry/dead-letter taxonomy owns it."""
+    fails and the worker's retry/dead-letter taxonomy owns it."""
     with pytest.raises(ClipDecodeError):
         ClipPrepStage().run_sync(_ctx(b"not-a-video-blob-\x00\x01\x02"))
     with pytest.raises(ClipDecodeError):

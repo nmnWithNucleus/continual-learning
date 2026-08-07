@@ -1,7 +1,9 @@
 """Frozen dataclasses shared by the clip video stages.
 
-Foundation shapes for the screen-video pipeline. Do not change these without a
-contract review — every stage imports this module rather than redefining types locally.
+FOUNDATION file for the screen-video path: these are the only video shapes, and every
+stage that touches a clip imports its definition from here rather than restating it.
+That single authoritative definition is the point — treat these shapes as a pinned
+interface and change them only deliberately, since every clip stage moves with them.
 """
 from __future__ import annotations
 
@@ -10,10 +12,10 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Frame:
-    """One extracted still. Two JPEG renditions: ``jpeg_lo`` downscaled to the
-    caption frame width for the VLM, ``jpeg_hi`` at the OCR frame width (native)
-    for OCR. Either may be ``None`` (synthetic / undecodable), and a captioner/OCR
-    backend must tolerate that."""
+    """One extracted still. Two JPEG renditions: ``jpeg_lo`` downscaled to
+    ``VIDEO_CLIP_FRAME_WIDTH`` for the captioner, ``jpeg_hi`` at
+    ``VIDEO_OCR_FRAME_WIDTH`` (native) for OCR. Either may be ``None`` (synthetic
+    / undecodable), and a captioner/OCR backend must tolerate that."""
 
     index: int
     t_offset_s: float
@@ -25,14 +27,14 @@ class Frame:
 class DeltaCell:
     """One 32x32 cell of a change map between two analysis frames."""
 
-    peak: int      # 0..255 max binarized change within the cell
+    peak: int      # 0..255  max binarized change within the cell
     spread: int    # 0..1024 count of cells over the change threshold
 
 
 @dataclass(frozen=True)
 class Delta:
     """The analysis-pass output: per-analysis-time change maps + the anchor
- accumulator (per-cell change accumulated since the last OCR read)."""
+    accumulator (per-cell change accumulated since the last OCR read)."""
 
     times: tuple[float, ...]
     cells: tuple[DeltaCell, ...]
@@ -42,7 +44,7 @@ class Delta:
 @dataclass(frozen=True)
 class ClipFrames:
     """What ``clipprep`` provides: the captioner frames, the OCR-frame times the
- delta gate selected, an idle flag, and the chunk span in seconds."""
+    delta gate selected, an idle flag, and the chunk span in seconds."""
 
     frames: tuple[Frame, ...]
     ocr_times: tuple[float, ...]
@@ -53,8 +55,8 @@ class ClipFrames:
 @dataclass(frozen=True)
 class OcrRegion:
     """One recognized text region: the string, a coarse role assigned from bbox
- position, the pixel bbox (used internally for reading order + role, then
- discarded — NOT emitted to C2, see), and the engine confidence."""
+    position, the pixel bbox (used internally for reading order + role, then
+    discarded — NOT emitted to C2, see D-08), and the engine confidence."""
 
     text: str
     role: str      # titlebar|tab|sidebar|main|compose|message|toolbar|statusbar|dialog|notification
@@ -73,8 +75,8 @@ class OcrRead:
 @dataclass(frozen=True)
 class ClipDesc:
     """What the clip captioner returns: the structured fields the prompt asks for
- plus the raw reply and whether the strict parse succeeded (a lenient fallback
- sets ``parsed=False``)."""
+    plus the raw reply and whether the strict parse succeeded (a lenient fallback
+    sets ``parsed=False``)."""
 
     app: str
     activity: str

@@ -6,37 +6,37 @@ so a kill lost queued chunks (re-drivable only from recording's side) and a DP r
 forgot what it had durably written (the deferred false-``gaps`` caveat). This journal closes
 that boundary:
 
- * ``pending`` — every async-ACCEPTED chunk's full C1, inserted inside the claim BEFORE
- the 202 goes out. Startup re-drives every ``state='accepted'`` row (recording's
- ``reenqueue_pending`` precedent), so a kill -9 auto-recovers with no external re-drive.
- A dead-lettered chunk stays here as ``state='dead_letter'`` (durable, for ops), and a
- redelivery resets it to ``accepted`` for another attempt.
- * ``processed`` — one row per chunk whose C2 is durably written (BOTH modes). This is
- L8's DONE-LEDGER : beside the receipt it carries ``stage_status`` (the
- executor's per-stage map, verbatim — ``failed`` vs ``cancelled`` stay distinct),
- ``heal_attempts`` / ``done_final`` (the heal budget), ``cached_slots`` (a specified,
- UNPOPULATED seat for run-only-the-failed-cone — schema only, no logic) and
- ``superseded_pv`` (the dialect a version-forward replaced; the row is keyed per
- chunk_id — latest attempt wins). Feeds: (a) continuity REHYDRATION at boot —
- including still-pending rows as SEEN — so a restart forgets nothing and recording's
- gap report can never mis-read intact history as loss; (b) the L8 claim tree
- (``dedup.py``): fresh / version-forward / skip / heal decided from THIS row alone,
- never from a storage read.
+  * ``pending``   — every async-ACCEPTED chunk's full C1, inserted inside the claim BEFORE
+    the 202 goes out. Startup re-drives every ``state='accepted'`` row (recording's
+    ``reenqueue_pending`` precedent), so a kill -9 auto-recovers with no external re-drive.
+    A dead-lettered chunk stays here as ``state='dead_letter'`` (durable, for ops), and a
+    redelivery resets it to ``accepted`` for another attempt.
+  * ``processed``  — one row per chunk whose C2 is durably written (BOTH modes). This is
+    L8's DONE-LEDGER (D27): beside the receipt it carries ``stage_status`` (the
+    executor's per-stage map, verbatim — ``failed`` vs ``cancelled`` stay distinct),
+    ``heal_attempts`` / ``done_final`` (the heal budget), ``cached_slots`` (a specified,
+    UNPOPULATED seat for run-only-the-failed-cone — schema only, no logic) and
+    ``superseded_pv`` (the dialect a version-forward replaced; the row is keyed per
+    chunk_id — latest attempt wins). Feeds: (a) continuity REHYDRATION at boot —
+    including still-pending rows as SEEN — so a restart forgets nothing and recording's
+    gap report can never mis-read intact history as loss; (b) the L8 claim tree
+    (``dedup.py``): fresh / version-forward / skip / heal decided from THIS row alone,
+    never from a storage read.
 
 Two safety mechanisms shape every write (from the design review):
 
- * **Epochs.** Each ``accept`` bumps the row's ``epoch``; terminal writes
- (``mark_processed`` pending-delete, ``mark_dead_letter``) are guarded on the epoch the
- worker was handed. A stale worker finishing AFTER a redelivery re-accepted the chunk
- can no longer clobber the fresh row — its write no-ops. (The processed INSERT itself is
- deliberately unguarded: if the C2s were written, the receipt is true regardless.)
- * **Bounded re-drive.** ``redrive_attempts`` accrues per PROCESSING attempt
- (``note_redrive_attempt``, charged at worker dispatch — never per restart);
- ``pending_for_redrive`` resolves over-cap rows in one transaction — record-less
- poison flips to ``dead_letter`` (visible loss), while a chunk WITH a durable
- record is FINALIZED instead (heal containment) — so a crash-looping
- chunk breaks the loop VISIBLY instead of forever. An external redelivery (a
- conscious re-push) resets the counter.
+  * **Epochs.** Each ``accept`` bumps the row's ``epoch``; terminal writes
+    (``mark_processed`` pending-delete, ``mark_dead_letter``) are guarded on the epoch the
+    worker was handed. A stale worker finishing AFTER a redelivery re-accepted the chunk
+    can no longer clobber the fresh row — its write no-ops. (The processed INSERT itself is
+    deliberately unguarded: if the C2s were written, the receipt is true regardless.)
+  * **Bounded re-drive.** ``redrive_attempts`` accrues per PROCESSING attempt
+    (``note_redrive_attempt``, charged at worker dispatch — never per restart);
+    ``pending_for_redrive`` resolves over-cap rows in one transaction — record-less
+    poison flips to ``dead_letter`` (visible loss), while a chunk WITH a durable
+    record is FINALIZED instead (heal containment, L8) — so a crash-looping
+    chunk breaks the loop VISIBLY instead of forever. An external redelivery (a
+    conscious re-push) resets the counter.
 
 Storage discipline mirrors recording's ledger (the proven pattern): SQLite in
 ``$DP_VAR_DIR/dp.db``, WAL, connection-per-call, ``BEGIN IMMEDIATE`` for multi-step ops.
@@ -59,31 +59,31 @@ from typing import Any, Callable, Optional
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS pending (
- chunk_id TEXT PRIMARY KEY,
- c1_json TEXT NOT NULL,
- state TEXT NOT NULL DEFAULT 'accepted', -- accepted | dead_letter
- epoch INTEGER NOT NULL DEFAULT 0, -- bumped per accept; guards terminal writes
- attempts INTEGER NOT NULL DEFAULT 0, -- dead-letter events on this chunk
- redrive_attempts INTEGER NOT NULL DEFAULT 0, -- startup re-drives since last accept
- last_error TEXT,
- accepted_at TEXT NOT NULL,
- updated_at TEXT NOT NULL
+  chunk_id         TEXT PRIMARY KEY,
+  c1_json          TEXT NOT NULL,
+  state            TEXT NOT NULL DEFAULT 'accepted',  -- accepted | dead_letter
+  epoch            INTEGER NOT NULL DEFAULT 0,        -- bumped per accept; guards terminal writes
+  attempts         INTEGER NOT NULL DEFAULT 0,        -- dead-letter events on this chunk
+  redrive_attempts INTEGER NOT NULL DEFAULT 0,        -- startup re-drives since last accept
+  last_error       TEXT,
+  accepted_at      TEXT NOT NULL,
+  updated_at       TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS processed (
- chunk_id TEXT PRIMARY KEY,
- stream_id TEXT NOT NULL,
- sequence INTEGER NOT NULL,
- user_id TEXT NOT NULL,
- device_id TEXT NOT NULL,
- modality TEXT NOT NULL,
- record_ids TEXT NOT NULL, -- JSON list (one id —)
- pipeline_version TEXT NOT NULL,
- processed_at TEXT NOT NULL,
- stage_status TEXT, -- JSON {stage: ok|failed|cancelled}; NULL = pre-D row
- heal_attempts INTEGER NOT NULL DEFAULT 0, -- this chunk's own non-green heals (L8)
- done_final INTEGER NOT NULL DEFAULT 0, -- heal budget spent: holes permanent
- cached_slots TEXT, -- SPECIFIED, UNPOPULATED (L8 seat, no logic)
- superseded_pv TEXT -- dialect a version-forward replaced
+  chunk_id         TEXT PRIMARY KEY,
+  stream_id        TEXT NOT NULL,
+  sequence         INTEGER NOT NULL,
+  user_id          TEXT NOT NULL,
+  device_id        TEXT NOT NULL,
+  modality         TEXT NOT NULL,
+  record_ids       TEXT NOT NULL,                     -- JSON list (one id — D24)
+  pipeline_version TEXT NOT NULL,
+  processed_at     TEXT NOT NULL,
+  stage_status     TEXT,                              -- JSON {stage: ok|failed|cancelled}; NULL = pre-D row
+  heal_attempts    INTEGER NOT NULL DEFAULT 0,        -- this chunk's own non-green heals (L8)
+  done_final       INTEGER NOT NULL DEFAULT 0,        -- heal budget spent: holes permanent
+  cached_slots     TEXT,                              -- SPECIFIED, UNPOPULATED (L8 seat, no logic)
+  superseded_pv    TEXT                               -- dialect a version-forward replaced
 );
 CREATE INDEX IF NOT EXISTS idx_processed_stream ON processed (stream_id, sequence);
 """
@@ -93,11 +93,11 @@ CREATE INDEX IF NOT EXISTS idx_processed_stream ON processed (stream_id, sequenc
 # declared permanent (done_final) and the chunk skips forever under that dialect.
 HEAL_MAX_ATTEMPTS = 3
 
-# Ledger-v2 columns. Pre-D journals MIGRATE in place (additive ALTER
-# TABLE) rather than recreate: dropping processed rows would un-SEE intact history
-# at rehydration — the exact false-gap the journal exists to prevent. A NULL
-# stage_status marks a pre-D row: it carries no hole evidence, so the claim tree
-# reads it as green (skip) when the dialect matches.
+# Ledger-v2 columns (L8, D27). A journal written before these columns existed MIGRATES
+# in place (additive ALTER TABLE) rather than recreate: dropping processed rows would
+# un-SEE intact history at rehydration — the exact false-gap the journal exists to
+# prevent. A NULL stage_status marks such a row: it carries no hole evidence, so the
+# claim tree reads it as green (skip) when the dialect matches.
 _V2_COLUMNS = (
     ("stage_status", "TEXT"),
     ("heal_attempts", "INTEGER NOT NULL DEFAULT 0"),
@@ -132,7 +132,7 @@ class Journal:
 
     def _connect(self, *, create: bool) -> Optional[sqlite3.Connection]:
         """Open a connection. ``create=False`` (reads / best-effort updates) returns None
- when the DB file doesn't exist yet — a fresh service reads empty, no mkdir."""
+        when the DB file doesn't exist yet — a fresh service reads empty, no mkdir."""
         if not create and not self._exists():
             return None
         key = str(self._path)
@@ -157,12 +157,12 @@ class Journal:
     def accept(self, c1: dict[str, Any], now: str) -> tuple[int, Optional[dict]]:
         """Record an async-accepted chunk BEFORE its 202 goes out.
 
- Returns ``(epoch, prior_snapshot)``: the NEW epoch to thread through the worker
- job (terminal writes are guarded on it), and the prior row (dict of columns) or
- None — the ``unaccept`` restore point for the QueueFull path. A redelivery of a
- dead-lettered chunk resets it to 'accepted' for another attempt (its dead-letter
- count survives in ``attempts``; ``redrive_attempts`` resets — an external re-push
- is a conscious re-arm)."""
+        Returns ``(epoch, prior_snapshot)``: the NEW epoch to thread through the worker
+        job (terminal writes are guarded on it), and the prior row (dict of columns) or
+        None — the ``unaccept`` restore point for the QueueFull path. A redelivery of a
+        dead-lettered chunk resets it to 'accepted' for another attempt (its dead-letter
+        count survives in ``attempts``; ``redrive_attempts`` resets — an external re-push
+        is a conscious re-arm)."""
         with closing(self._connect(create=True)) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
@@ -188,9 +188,9 @@ class Journal:
 
     def unaccept(self, chunk_id: str, prior: Optional[dict]) -> None:
         """Roll back an ``accept`` whose enqueue failed (QueueFull -> 503). The 503 told
- recording "NOT accepted", so the journal must not contradict it — but it must
- also not lose history: a replaced dead_letter row is RESTORED (with its error),
- only a genuinely fresh row is deleted. Exists ONLY on the HTTP accept path."""
+        recording "NOT accepted", so the journal must not contradict it — but it must
+        also not lose history: a replaced dead_letter row is RESTORED (with its error),
+        only a genuinely fresh row is deleted. Exists ONLY on the HTTP accept path."""
         conn = self._connect(create=False)
         if conn is None:
             return
@@ -210,8 +210,8 @@ class Journal:
 
     def mark_dead_letter(self, chunk_id: str, error: str, now: str, epoch: int) -> None:
         """Durably mark a chunk dead-lettered (terminal / retries exhausted) — guarded on
- the worker's epoch AND state='accepted', so a stale worker finishing after a
- redelivery re-accepted the chunk no-ops instead of clobbering the fresh row."""
+        the worker's epoch AND state='accepted', so a stale worker finishing after a
+        redelivery re-accepted the chunk no-ops instead of clobbering the fresh row."""
         conn = self._connect(create=False)
         if conn is None:
             return
@@ -227,22 +227,22 @@ class Journal:
         self, max_attempts: int, now: str
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """The startup re-drive set, with EVIDENCE-BASED crash-loop bounding: in ONE
- transaction, resolve every accepted row whose ``redrive_attempts`` (accrued by
- ``note_redrive_attempt`` — a per-PROCESSING-attempt counter, NOT a per-restart
- one) already EXCEEDS ``max_attempts``, then return ``(redrive_rows,
- finalized)``: the C1s of the survivors (oldest first) plus the over-cap rows
- that were finalized. The count is attributed to a chunk only when its OWN
- processing was attempted, so a hard crash-loop poisoned by ONE chunk can never
- dead-letter an innocent co-pending backlog that was never dequeued (the blanket
- per-restart increment did exactly that).
+        transaction, resolve every accepted row whose ``redrive_attempts`` (accrued by
+        ``note_redrive_attempt`` — a per-PROCESSING-attempt counter, NOT a per-restart
+        one) already EXCEEDS ``max_attempts``, then return ``(redrive_rows,
+        finalized)``: the C1s of the survivors (oldest first) plus the over-cap rows
+        that were finalized. The count is attributed to a chunk only when its OWN
+        processing was attempted, so a hard crash-loop poisoned by ONE chunk can never
+        dead-letter an innocent co-pending backlog that was never dequeued (the blanket
+        per-restart increment did exactly that).
 
- Over-cap rows split on heal containment (L8): a chunk WITHOUT a durable record
- (true poison) flips to dead_letter as always — visible as gaps after
- rehydration. A chunk WITH a processed row (a crash-looping heal or
- version-forward re-run) is FINALIZED instead: pending cleared, ``done_final``
- set, reported back (``newly_final`` marks the metric-firing edge) — a heal must
- never dead-letter a chunk that has a durable record, or recording would read an
- existing record as a gap."""
+        Over-cap rows split on heal containment (L8): a chunk WITHOUT a durable record
+        (true poison) flips to dead_letter as always — visible as gaps after
+        rehydration. A chunk WITH a processed row (a crash-looping heal or
+        version-forward re-run) is FINALIZED instead: pending cleared, ``done_final``
+        set, reported back (``newly_final`` marks the metric-firing edge) — a heal must
+        never dead-letter a chunk that has a durable record, or recording would read an
+        existing record as a gap."""
         conn = self._connect(create=False)
         if conn is None:
             return [], []
@@ -295,9 +295,9 @@ class Journal:
 
     def note_redrive_attempt(self, chunk_id: str, now: str) -> None:
         """Charge ONE re-drive processing attempt to a chunk — called by the worker just
- BEFORE it processes a re-driven job, so the crash-loop cap counts a chunk's OWN
- attempts (a chunk whose processing kills the service accrues; one merely queued
- behind it never does). No-op once the row is gone (processed) or not accepted."""
+        BEFORE it processes a re-driven job, so the crash-loop cap counts a chunk's OWN
+        attempts (a chunk whose processing kills the service accrues; one merely queued
+        behind it never does). No-op once the row is gone (processed) or not accepted."""
         conn = self._connect(create=False)
         if conn is None:
             return
@@ -335,23 +335,23 @@ class Journal:
         heal: bool = False,
     ) -> dict[str, Any]:
         """The durable receipt: C2 written -> pending row deleted (epoch-guarded) +
- processed row upserted, one transaction. The processed INSERT is deliberately
- NOT epoch-guarded: if the C2 was written, the receipt is true regardless of
- which delivery's worker wrote it. Called in BOTH modes (inline has no pending
- row; the guarded DELETE simply no-ops).
+        processed row upserted, one transaction. The processed INSERT is deliberately
+        NOT epoch-guarded: if the C2 was written, the receipt is true regardless of
+        which delivery's worker wrote it. Called in BOTH modes (inline has no pending
+        row; the guarded DELETE simply no-ops).
 
- Ledger v2 (L8): ``statuses`` is the executor's per-stage map, stored verbatim
- (``failed`` vs ``cancelled`` distinct; None = a legacy-shaped call, stored
- NULL). ``heal=True`` computes the heal budget against the prior row in the
- SAME transaction: a completed heal that still leaves any non-ok stage
- increments ``heal_attempts``; a fully green heal does not (the row is
- skip-state; the counter records this chunk's own non-green heals, never
- deliveries); at ``HEAL_MAX_ATTEMPTS`` with holes the row finalizes. A prior
- row under a DIFFERENT dialect is a version-forward: the new row supersedes per
- (chunk_id), the replaced dialect lands in ``superseded_pv``, and the budget
- resets (the new version's own). Returns the written budget state —
- ``{heal_attempts, done_final, newly_final}`` (``newly_final`` is True exactly
- when this write set ``done_final``: the permanent-holes metric edge)."""
+        Ledger v2 (L8): ``statuses`` is the executor's per-stage map, stored verbatim
+        (``failed`` vs ``cancelled`` distinct; None = a legacy-shaped call, stored
+        NULL). ``heal=True`` computes the heal budget against the prior row in the
+        SAME transaction: a completed heal that still leaves any non-ok stage
+        increments ``heal_attempts``; a fully green heal does not (the row is
+        skip-state; the counter records this chunk's own non-green heals, never
+        deliveries); at ``HEAL_MAX_ATTEMPTS`` with holes the row finalizes. A prior
+        row under a DIFFERENT dialect is a version-forward: the new row supersedes per
+        (chunk_id), the replaced dialect lands in ``superseded_pv``, and the budget
+        resets (the new version's own). Returns the written budget state —
+        ``{heal_attempts, done_final, newly_final}`` (``newly_final`` is True exactly
+        when this write set ``done_final``: the permanent-holes metric edge)."""
         status_json: Optional[str] = None
         holes = False
         if statuses is not None:
@@ -414,24 +414,24 @@ class Journal:
     def heal_failed(self, chunk_id: str, now: str, epoch: int = 0
                     ) -> Optional[dict[str, Any]]:
         """A heal attempt whose re-run FAILED outright (any exception — even a
- required stage, e.g. the fleet down): the chunk KEEPS its record and done-row
- untouched except ``heal_attempts`` increments; at ``HEAL_MAX_ATTEMPTS`` the
- row finalizes (holes permanent). The pending row (an async heal claim) is
- cleared epoch-guarded; the increment itself is deliberately NOT epoch-guarded
- — the failed attempt truly ran (same posture as mark_processed's unguarded
- INSERT). A heal never dead-letters a chunk that has a durable record.
+        required stage, e.g. the fleet down): the chunk KEEPS its record and done-row
+        untouched except ``heal_attempts`` increments; at ``HEAL_MAX_ATTEMPTS`` the
+        row finalizes (holes permanent). The pending row (an async heal claim) is
+        cleared epoch-guarded; the increment itself is deliberately NOT epoch-guarded
+        — the failed attempt truly ran (same posture as mark_processed's unguarded
+        INSERT). A heal never dead-letters a chunk that has a durable record.
 
- Evidence-based, mirroring mark_processed (close-out round): a row whose
- CURRENT statuses are all-green (a racing worker healed it green between
- this attempt's claim and its failure report) is neither charged nor
- finalized — there are no holes to budget or make permanent, and a stale
- finalize here would land with ``newly_final`` only ever surfacing on the
- holey rewrite, silently swallowing the permanent-holes metric. The
- pending clear still runs (the delivery is over either way). Returns
- the new budget state (plus the untouched ``record_ids``/``stage_status``
- for the caller's 200 reply + metrics), or None when no done-row exists —
- then the failure was never a heal and the caller's normal taxonomy owns
- it."""
+        Evidence-based, mirroring mark_processed (close-out round): a row whose
+        CURRENT statuses are all-green (a racing worker healed it green between
+        this attempt's claim and its failure report) is neither charged nor
+        finalized — there are no holes to budget or make permanent, and a stale
+        finalize here would land with ``newly_final`` only ever surfacing on the
+        holey rewrite, silently swallowing the permanent-holes metric. The
+        pending clear still runs (the delivery is over either way). Returns
+        the new budget state (plus the untouched ``record_ids``/``stage_status``
+        for the caller's 200 reply + metrics), or None when no done-row exists —
+        then the failure was never a heal and the caller's normal taxonomy owns
+        it."""
         conn = self._connect(create=False)
         if conn is None:
             return None
@@ -481,10 +481,10 @@ class Journal:
 
     def clear_pending(self, chunk_id: str, epoch: int) -> None:
         """The redrive loop's skip-reconcile (review round): a skip verdict is
- proof the ledger says done under the current dialect, so the stale
- pending row the re-drive was launched to resolve is cleared — guarded on
- the SNAPSHOT epoch, so a row re-accepted by a live delivery since the
- snapshot survives untouched (that delivery's worker owns it)."""
+        proof the ledger says done under the current dialect, so the stale
+        pending row the re-drive was launched to resolve is cleared — guarded on
+        the SNAPSHOT epoch, so a row re-accepted by a live delivery since the
+        snapshot survives untouched (that delivery's worker owns it)."""
         conn = self._connect(create=False)
         if conn is None:
             return
@@ -497,8 +497,8 @@ class Journal:
 
     def done_row(self, chunk_id: str) -> Optional[dict[str, Any]]:
         """The full extended done-row (L8): the claim tree decides fresh /
- version-forward / skip / heal from THIS row alone — never a storage read.
- ``stage_status`` None marks a pre-D row (no hole evidence -> reads green)."""
+        version-forward / skip / heal from THIS row alone — never a storage read.
+        ``stage_status`` None marks a pre-D row (no hole evidence -> reads green)."""
         conn = self._connect(create=False)
         if conn is None:
             return None
@@ -529,11 +529,11 @@ class Journal:
         pv_for_modality: Optional[Callable[[str], Optional[str]]] = None,
     ) -> Optional[list[str]]:
         """The durable dedup backstop, reimplemented over ``done_row`` (one lookup
- path): record_ids for an already-processed chunk, or None. When
- ``pv_for_modality`` is given, a receipt whose stored ``pipeline_version`` no
- longer matches the CURRENT dialect for its modality returns None — the
- redelivery reprocesses under the new config instead of being served stale ids
- (version-forward; the old records remain in /context)."""
+        path): record_ids for an already-processed chunk, or None. When
+        ``pv_for_modality`` is given, a receipt whose stored ``pipeline_version`` no
+        longer matches the CURRENT dialect for its modality returns None — the
+        redelivery reprocesses under the new config instead of being served stale ids
+        (version-forward; the old records remain in /context)."""
         row = self.done_row(chunk_id)
         if row is None:
             return None
@@ -546,12 +546,12 @@ class Journal:
     # --------------------------------------------------------------- rehydration
     def rehydration(self) -> dict[str, dict[str, Any]]:
         """Per-stream state for ContinuityTracker rehydration at boot. THREE classes:
- ``processed`` (seen + C2 written), ``dead`` (seen + terminally failed), and
- ``accepted`` (seen, still in flight — the keystone: a pending chunk counts as
- DELIVERED coverage, so a restart can never fabricate a gap out of a chunk that
- is merely waiting to be re-driven). Shape:
- ``{stream_id: {user_id, device_id, modality,
- processed|dead|accepted: [(seq, chunk_id, at)]}}``."""
+        ``processed`` (seen + C2 written), ``dead`` (seen + terminally failed), and
+        ``accepted`` (seen, still in flight — the keystone: a pending chunk counts as
+        DELIVERED coverage, so a restart can never fabricate a gap out of a chunk that
+        is merely waiting to be re-driven). Shape:
+        ``{stream_id: {user_id, device_id, modality,
+        processed|dead|accepted: [(seq, chunk_id, at)]}}``."""
         conn = self._connect(create=False)
         if conn is None:
             return {}

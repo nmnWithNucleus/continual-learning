@@ -3,7 +3,7 @@ exactly one POST /context per completed graph attempt (L6); schema-hard.
 
 Structural, not conventional: run_graph returns ONE GraphResult (there is no
 list to be non-singular), process_chunk performs ONE POST, and the C2 v1
-contract itself rejects the prior multi-record vocabulary (discriminator) — so
+contract itself rejects the v0 multi-record vocabulary (discriminator) — so
 adding a second record per chunk requires forking the contract.
 """
 from __future__ import annotations
@@ -34,7 +34,7 @@ def _stage(name, slot=None, value=None):
 
 def test_many_stages_still_one_result():
     """However many stages run, the graph yields ONE GraphResult — slots fan IN,
- records never fan out."""
+    records never fan out."""
     stages = [_stage("asr"), _stage("acoustic", value={"values": []}),
               _stage("diarize", slot="diarization", value={"splits": []})]
     result = asyncio.run(run_graph(resolve("audio", stages), c1=C1, blob=b"",
@@ -51,8 +51,8 @@ def test_exactly_one_post_per_chunk_through_the_service(client):
 
 
 def test_contract_rejects_the_multi_record_vocabulary():
-    """Schema-hard: a record carrying the prior discriminator (the multi-record
- marker) fails closed against C2 v1."""
+    """Schema-hard: a record carrying the v0 discriminator (the multi-record
+    marker) fails closed against C2 v1."""
     from app.pipeline import build_c2
     record = build_c2(dict(C1), {}, "asr.v1-mock.v1")
     record["discriminator"] = "keyframe-3"

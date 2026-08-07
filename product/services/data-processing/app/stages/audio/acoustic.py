@@ -1,25 +1,25 @@
 """acoustic — acoustic-event tags: thin client over ``servers/ast`` (L9).
 
 The server returns the RAW top-20 AudioSet ``[label, score]`` tags (descending);
-the SELECTION that prior caption folding performed is ported here, client-side,
+the SELECTION that v0's caption folding performed is ported here, client-side,
 and its outputs land as structured values instead of a rendered sentence.
 
 v0 selection semantics (audio/acoustic/caption.py), preserved EXACTLY:
- 1. DROP the AudioSet speech-family labels (case-insensitive) — speech is the
- transcript's job, never the acoustic slot's claim;
- 2. keep tags scoring >= THRESHOLD (v0 env default ACOUSTIC_THRESHOLD=0.1,
- now a code pin);
- 3. rank by (-score, raw label) — the deterministic tie-break;
- 4. cap at TOP_K (v0 env default ACOUSTIC_TOP_K=3, now a code pin; prior
- ``max(1, top_k)`` floor is kept);
- 5. emit the surviving labels lowercased+stripped (exactly the tokens v0
- folded into its caption).
+  1. DROP the AudioSet speech-family labels (case-insensitive) — speech is the
+     transcript's job, never the acoustic slot's claim;
+  2. keep tags scoring >= THRESHOLD (v0 env default ACOUSTIC_THRESHOLD=0.1,
+     now a code pin);
+  3. rank by (-score, raw label) — the deterministic tie-break;
+  4. cap at TOP_K (v0 env default ACOUSTIC_TOP_K=3, now a code pin; v0's
+     ``max(1, top_k)`` floor is kept);
+  5. emit the surviving labels lowercased+stripped (exactly the tokens v0
+     folded into its caption).
 
 DELIBERATELY DROPPED with the caption rendering: the sentence join ("a, b, and
 c.") and the "Ambient background noise." fallback — the slot's ``values: []``
 IS the ran-nothing-detected honest empty claim (L11), so a fallback string
 would be a false positive claim. The server-side ``top_k=20`` retrieval width
-is the prior pipeline-construction value (the golden's params).
+is the value the goldens are pinned to.
 
 Slot value (C2 v1 ``acoustic`` sub-schema): ``{"values": [...], "confidence":
 <top selected score>}``; ``confidence`` omitted when nothing survived.
@@ -31,10 +31,10 @@ import base64
 from ...stagegraph.stage import Backend, Stage, StageContext, StageOutput, register_stage
 from .asr import require_client
 
-# ---- code pins (L4): the prior env-knob defaults, frozen ------------------------
+# ---- code pins (L4): the v0 env-knob defaults, frozen ------------------------
 TOP_K = 3            # was ACOUSTIC_TOP_K (default 3): max tags emitted
 THRESHOLD = 0.1      # was ACOUSTIC_THRESHOLD (default 0.1): min per-tag score
-SERVER_TOP_K = 20    # raw tag retrieval width — prior pipeline(top_k=20)
+SERVER_TOP_K = 20    # raw tag retrieval width — v0's pipeline(top_k=20)
 
 # AudioSet speech-family labels this slot must never claim (v0 list, verbatim).
 SPEECH_LABELS = frozenset({
@@ -51,7 +51,7 @@ SPEECH_LABELS = frozenset({
 
 def select_tags(tags) -> list[tuple[str, float]]:
     """The v0 folding selection over raw ``{label, score}`` tags: speech-drop,
- threshold, (-score, label) rank, top-k cap. Returns (raw label, score)."""
+    threshold, (-score, label) rank, top-k cap. Returns (raw label, score)."""
     ranked = sorted(
         ((t["label"], float(t["score"])) for t in tags
          if t["label"].strip().lower() not in SPEECH_LABELS
@@ -72,7 +72,7 @@ class AcousticStage(Stage):
     byte_budget = 2048      # <= 3 short labels + a float; goldens emit 44 B
     server = "ast"
     # L10: no C10 v2 route exists for the acoustic slot yet — an honest
-    # speculative marker, not a fabricated consumer.
+    # speculative marker, not a fabricated consumer (the route is unruled).
     consumer = "speculative:c10_ambient_route_unruled"
 
     async def run_async(self, ctx: StageContext) -> StageOutput:

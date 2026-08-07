@@ -1,4 +1,4 @@
-"""Real clip captioner — ONE multi-image VLM call per chunk (/).
+"""Real clip captioner — ONE multi-image VLM call per chunk (D-02 / D-09).
 
 Plain ``httpx.AsyncClient`` against an OpenAI-compatible ``/v1/chat/completions`` —
 the wire the Qwen3-VL served on the GPU node speaks. No heavy dependency (httpx is a
@@ -8,20 +8,20 @@ passes every output-affecting parameter EXPLICITLY (model name, scenario, captio
 rate — all code pins under its backend version, L4); only the endpoint wire (url /
 api key / timeout) is operational input.
 
-**The payload is the design's headline (): K stills in ONE call, NOT
+**The payload is the design's headline (D-02): K stills in ONE call, NOT
 ``video_url``.** Message shape: ``[{system}, {user: [head_text, Frame-label, image,
 Frame-label, image, …, task_text]}]`` — the frame time labels ``Frame k (+t.s):``
 interleaved before each image, and the task + JSON contract LAST. Frame selection
 stays on DP's pinned ffmpeg rather than the serving box's decoder (the determinism
 argument).
 
-**OCR is injected, not read ().** The specialist pass's text arrives as
+**OCR is injected, not read (D-09).** The specialist pass's text arrives as
 ``ocr_text`` and is rendered into the pack's ``## On-screen text … (INPUT, not
 target)`` block; the system prompt forbids copying it out.
 
 The tolerant parse ladder (``app.vision.parse``) is the contract of record: a
 Flash-class 32B ignores rules, so every reply runs through the ladder. Guided
-decoding is NOT requested (the prior ``VIDEO_VLM_STRUCTURED`` knob defaulted to a probe
+decoding is NOT requested (the v0 ``VIDEO_VLM_STRUCTURED`` knob defaulted to a probe
 that was never wired, i.e. off; pinned off here — the ladder converges guided and
 unguided replies to the same ``ClipDesc``). An empty reply RAISES; a fallback is
 counted by the caller via ``ParseOutcome``.
@@ -42,21 +42,21 @@ from ..parse import ParseOutcome, parse_clip
 
 logger = logging.getLogger("data-processing.vision.clipcap.vlm")
 
-# Runtime pack variants (): the 1-image fallback and the idle-screen profile.
+# Runtime pack variants (D-03): the 1-image fallback and the idle-screen profile.
 # Both are inside the aggregate PACK_DIGEST the clipcap stage pins, so a change to
 # either is caught by the registration digest gate.
 _SINGLE_PACK = "screen-clip-single-v1"
 _IDLE_PACK = "screen-clip-idle-v1"
 
 # The pack templates put the task + JSON contract after the OCR block; we split there so
-# the images land BETWEEN the OCR block and the task, keeping the task text LAST ().
+# the images land BETWEEN the OCR block and the task, keeping the task text LAST (D-02).
 # Absent (a reworded pack) -> the whole user text goes after the images (task still last).
 _TASK_MARKER = "Reply with ONE JSON"
 
 
 def make_async_client(timeout_s: float) -> httpx.AsyncClient:
     """Construct the VL HTTP client. A single patchable factory (tests inject an
- ``httpx.MockTransport`` here), and the one place a shared pool would later live."""
+    ``httpx.MockTransport`` here), and the one place a shared pool would later live."""
     return httpx.AsyncClient(timeout=timeout_s)
 
 
@@ -66,8 +66,8 @@ def _data_url(jpeg: bytes) -> str:
 
 def _select_spec(scenario: str, k: int, idle: bool) -> prompts.PromptSpec:
     """Pick the runtime pack variant: single frame -> the K=1 pack; an idle clip -> the
- idle pack; else the scenario default. Falls back to the scenario pack if a named
- variant is missing from the registry (a registry gap, never a crash)."""
+    idle pack; else the scenario default. Falls back to the scenario pack if a named
+    variant is missing from the registry (a registry gap, never a crash)."""
     name = _SINGLE_PACK if k <= 1 else (_IDLE_PACK if idle else None)
     if name is not None:
         try:
@@ -86,7 +86,7 @@ def _build_messages(
     scenario: str,
     caption_rate: int,
 ) -> list[dict[str, Any]]:
-    """Render the pack and assemble the multi-image user message ()."""
+    """Render the pack and assemble the multi-image user message (D-02)."""
     lo, hi = caption_word_bounds(span_s, caption_rate)
     context = {
         "span_s": f"{span_s:.0f}",
@@ -132,14 +132,14 @@ async def describe(
     timeout_s: float,
 ) -> ParseOutcome:
     """One multi-image VLM call → the parse ladder's ``ParseOutcome``. Raises on no
- decodable frame, a choice-less 200, or an empty reply (the stage is optional under
- L7, so a raise is a HOLE + a cancelled cone, healed by redrive — never a blank
- caption persisted as truth).
+    decodable frame, a choice-less 200, or an empty reply (the stage is optional under
+    L7, so a raise is a HOLE + a cancelled cone, healed by redrive — never a blank
+    caption persisted as truth).
 
- ``model`` / ``scenario`` / ``caption_rate`` are the caller's CODE PINS (vB
- identity); ``url`` / ``api_key`` / ``timeout_s`` are operational wire — the same
- served model behind any of them yields the same bytes (L4).
- """
+    ``model`` / ``scenario`` / ``caption_rate`` are the caller's CODE PINS (vB
+    identity); ``url`` / ``api_key`` / ``timeout_s`` are operational wire — the same
+    served model behind any of them yields the same bytes (L4).
+    """
     frames = [f for f in clip.frames if f.jpeg_lo is not None]
     if not frames:
         raise ValueError(

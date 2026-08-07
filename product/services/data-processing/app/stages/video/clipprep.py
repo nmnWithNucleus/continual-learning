@@ -2,7 +2,8 @@
 
 The one REQUIRED video stage (L7): everything downstream consumes its frames, so an
 undecodable chunk fails the attempt loudly (worker retry → dead-letter) — placeholder
-frames are never emitted as processed truth; mock dialects are client-level fakes.
+frames are never emitted as processed truth (the v0 mock synthetic fallback is dead;
+mock dialects are client-level fakes now, plan §3).
 
 Emits NO record slot: ``StageOutput(value=None, bytes=ClipFrames)``. The frames are
 re-derivable heavy data (a deterministic decode of the ``/raw`` bytes), which defaults
@@ -14,27 +15,29 @@ ffmpeg stays a SUBPROCESS (self-isolating, L9 — no model server), so ``run_syn
 the executor's worker threadpool is the right execution mode: the blocking
 ``subprocess.run`` waits can never freeze the event loop.
 
-Every output-affecting knob is a CODE PIN below (L4):
+EVERY output-affecting knob is a CODE PIN below (L4) — the v0 env knobs they replace,
+with their v0 defaults (all carried forward unchanged):
 
   ================================  =========================  ======
-  pin field                         ClipSettings attr          value
+  v0 env knob (dead)                pin                        value
   ================================  =========================  ======
-  seconds per caption frame         seconds_per_frame          2.5
-  max caption frames                max_frames                 12
-  min caption frames                min_frames                 2
-  caption frame width               frame_width                768
-  OCR frame width                   ocr_frame_width            1728
-  analysis period                   analysis_period_s          2.0
-  OCR idle peak                     ocr_idle_peak              8
-  OCR layout peak                   ocr_layout_peak            40
-  OCR max events                    ocr_max_events             3
-  OCR floor interval                ocr_floor_s                120.0
+  VIDEO_CLIP_SECONDS_PER_FRAME      seconds_per_frame          2.5
+  VIDEO_CLIP_MAX_FRAMES             max_frames                 12
+  VIDEO_CLIP_MIN_FRAMES             min_frames                 2
+  VIDEO_CLIP_FRAME_WIDTH            frame_width                768
+  VIDEO_OCR_FRAME_WIDTH             ocr_frame_width            1728
+  VIDEO_ANALYSIS_PERIOD_S           analysis_period_s          2.0
+  VIDEO_OCR_IDLE_PEAK               ocr_idle_peak              8
+  VIDEO_OCR_LAYOUT_PEAK             ocr_layout_peak            40
+  VIDEO_OCR_MAX_EVENTS              ocr_max_events             3
+  VIDEO_OCR_FLOOR_S                 ocr_floor_s                120.0
   ================================  =========================  ======
 
-(The delta-gate constants — pixel binarize 24, 32×32 grid, spread thresholds — live in
-``app/vision/delta.py``.) Changing ANY pin changes downstream bytes ⇒ bump
-``backend.version`` (vB). The delta trace is computed inside ``prepare_clip`` and
-discarded here.
+(The delta-gate constants that were never env — pixel binarize 24, 32×32 grid, spread
+thresholds — stay where they always were, in ``app/vision/delta.py``.) Changing ANY of
+these changes downstream bytes ⇒ bump ``backend.version`` (vB). The v0 ``delta``
+observability slot is not carried forward (no consumer — L10); the delta trace is
+computed inside ``prepare_clip`` and discarded here.
 """
 from __future__ import annotations
 
@@ -48,7 +51,7 @@ CLIP_SETTINGS = ClipSettings(
     seconds_per_frame=2.5,
     max_frames=12,
     min_frames=2,
-    frame_width=768,        # 768 -> exactly 360 Qwen3-VL vision tokens/frame
+    frame_width=768,        # 768 -> exactly 360 Qwen3-VL vision tokens/frame (D-03/A-16)
     ocr_frame_width=1728,   # the mac capture cap — OCR reads native res, no resample
     analysis_period_s=2.0,
     ocr_idle_peak=8,

@@ -1,4 +1,4 @@
-"""the four REGISTERED audio stages as thin clients under the new API.
+"""The four REGISTERED audio stages as thin clients over the model fleet.
 
 Golden-driven: the fake model clients replay the REAL server golden payloads
 (servers/*/tests/fixtures/golden_*.json — both the synthetic 6.496 s fixture and
@@ -69,7 +69,7 @@ SPAN_REAL = 17.808
 
 class FakeModelClient:
     """Client-level fake: replays a canned server result (or raises), recording
- every /infer payload so the tests can pin the exact wire envelope."""
+    every /infer payload so the tests can pin the exact wire envelope."""
 
     def __init__(self, result=None, *, error: Exception | None = None):
         self.result = result
@@ -165,7 +165,7 @@ DIARIZATION_SLOT_REAL = {
     ],
 }
 
-# Both golden inputs are speech-only clips: the prior selection drops the AudioSet
+# Both golden inputs are speech-only clips: the v0 selection drops the AudioSet
 # speech family and nothing non-speech reaches the 0.1 threshold, so the pinned
 # acoustic slot is the honest empty claim (values [], no confidence key).
 ACOUSTIC_SLOT_GOLDEN = {"version": "acoustic.v1-ast.v1", "values": []}
@@ -224,7 +224,7 @@ def test_asr_pins_the_synthetic_golden_slot_and_the_wire_envelope():
     _, result = execute([AsrStage()], {"whisper": fake})
     assert result.slots["asr"] == ASR_SLOT_SYN
     assert result.statuses == {"asr": "ok"}
-    # The exact envelope + golden params, pinned in code (L4).
+    # The exact envelope + whisper golden params, pinned in code (L4).
     assert fake.calls == [{
         "input_b64": B64,
         "codec": "audio/webm",
@@ -458,7 +458,7 @@ def test_speaker_align_equal_overlap_tie_breaks_on_the_lower_label():
 
 def test_speaker_align_reads_inputs_tolerant_of_a_version_key():
     """The blackboard carries stage values without the executor's version stamp,
- but the join must tolerate stamped dicts (the slot-value shape) too."""
+    but the join must tolerate stamped dicts (the slot-value shape) too."""
     stage = SpeakerAlignStage()
     ctx = StageContext(
         c1=C1_SYN, blob=BLOB, span_seconds=SPAN_SYN,

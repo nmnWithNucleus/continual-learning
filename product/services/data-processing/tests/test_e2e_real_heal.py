@@ -1,4 +1,4 @@
-"""the DP_E2E heal drill (L8 case 4 against the REAL fleet).
+"""The DP_E2E heal drill (L8 case 4 against the REAL fleet).
 
 Audio chunk with the ast server DOWN → the record ships with an acoustic hole
 and the ledger shows `failed` (+ its cancelled cone — empty for acoustic, which
@@ -76,7 +76,7 @@ def _spawn_supervisor(manifest_path, ports, procs, timeout=360):
 @pytest.fixture(scope="module")
 def heal_fleet(tmp_path_factory):
     """The split fleet: everything-but-ast up front; ast started on demand via
- the yielded ``start_ast`` callable. Teardown covers both supervisors."""
+    the yielded ``start_ast`` callable. Teardown covers both supervisors."""
     assert _v0_health() == 200, "v0 not healthy before the drill"
     all_ports = _manifest_ports()
     assert not any(_listening(p) for p in all_ports), "fleet ports already in use"

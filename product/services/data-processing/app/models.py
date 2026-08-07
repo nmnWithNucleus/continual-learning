@@ -5,10 +5,10 @@ payloads against them directly, and the ingest path runs that gate first. These
 models are a secondary, structural mirror (``extra="forbid"`` matches the
 schemas' ``additionalProperties: false``) used for parse-time sanity.
 
-Mirrors must move with the schema (the trap hit): a contract edit is ONE
+Mirrors must move with the schema (the trap D17 hit): a contract edit is ONE
 change with four parts — the contract file, ``schemas.py``, this mirror, and the
 tests that hold them together. The C2 side mirrors
-``c2_processed_record.v1.json``: one record per
+``c2_processed_record.v1.json`` (D24): one record per
 chunk, a slots map, no enrichments / discriminator / content.kind. Adding a slot
 type is an additive edit to the schema file AND the slots model here, together.
 """
@@ -51,7 +51,7 @@ class C1Envelope(BaseModel):
     blob_ref: str = Field(min_length=1)
     blob_sha256: str
     blob_bytes: int = Field(ge=0)
-    # civil-time context (optional-additive). extra="forbid" above means an
+    # D17 civil-time context (optional-additive). extra="forbid" above means an
     # envelope carrying these would be REJECTED if they weren't declared here.
     device_tz: Optional[str] = Field(default=None, min_length=1)
     device_utc_offset_minutes: Optional[int] = Field(default=None, ge=-1080, le=1080)
@@ -63,14 +63,14 @@ class C1Envelope(BaseModel):
 
 class C2SourceV1(BaseModel):
     """Provenance verbatim from C1, minus modality (root-level in v1) and minus
- the transport-only fields (sequence, codec, blob_sha256, blob_bytes)."""
+    the transport-only fields (sequence, codec, blob_sha256, blob_bytes)."""
 
     model_config = ConfigDict(extra="forbid")
     device_id: str = Field(min_length=1)
     stream_id: str = Field(min_length=1)
     chunk_id: str = Field(min_length=1)
     blob_ref: str = Field(min_length=1)
-    # trio + location: carried verbatim; omitted, never null, when absent.
+    # D17 trio + location: carried verbatim; omitted, never null, when absent.
     device_tz: Optional[str] = Field(default=None, min_length=1)
     device_utc_offset_minutes: Optional[int] = Field(default=None, ge=-1080, le=1080)
     device_clock: Optional[Literal["synced", "unsynced"]] = None
@@ -103,7 +103,7 @@ class DiarizationSplit(BaseModel):
 
 class DiarizationSlot(BaseModel):
     """From the diarize stage: raw speaker turns only — the aligned transcript
- is the separate transcript slot (no stage edits another's slot, L5)."""
+    is the separate transcript slot (no stage edits another's slot, L5)."""
 
     model_config = ConfigDict(extra="forbid")
     version: str = Field(pattern=_SEGMENT_PATTERN)
@@ -153,7 +153,7 @@ class OcrSlot(BaseModel):
 
 class C2SlotsV1(BaseModel):
     """The slots map. extra='forbid' = unknown slot names fail closed; a new
- slot type is an additive edit to the contract file and here, together."""
+    slot type is an additive edit to the contract file and here, together."""
 
     model_config = ConfigDict(extra="forbid")
     asr: Optional[AsrSlot] = None

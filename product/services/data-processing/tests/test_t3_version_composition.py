@@ -1,8 +1,8 @@
 """T-3 — version composition (L4): pipeline_version is the sorted '+'-join of
 every enabled stage's segment; a stage-set change changes the string; the
 schema regex cannot express sortedness, so THIS suite owns it; each emitted
-slot's version equals its stage's segment of the dialect (the composition
-carry-over — the contract's deliberate redundancy can never drift).
+slot's version equals its stage's segment of the dialect (the contract's
+deliberate redundancy can never drift).
 
 The registration snapshot (a `needs`/slot/budget change without a vS bump = red)
 pins the REAL registered stage sets' contract surface at the bottom.
@@ -79,8 +79,8 @@ def test_composed_string_fullmatches_the_contract_grammar():
 
 
 def test_every_emitted_slot_version_equals_its_stages_dialect_segment():
-    """The carry-over, end-to-end: slot.version is not merely
- grammar-valid — it IS the producing stage's segment of pipeline_version."""
+    """End-to-end: slot.version is not merely
+    grammar-valid — it IS the producing stage's segment of pipeline_version."""
     stages = [
         _stage("asr", vS=2, backend=("fw", 3)),
         _stage("acoustic", backend=("ast", 1), value={"values": []},

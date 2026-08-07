@@ -1,7 +1,7 @@
 """translate — speech translation to English: built + tested, NOT REGISTERED.
 
 NO ``@register_stage`` on purpose: the ratified plan-§2 example dialect
-excludes translation, prior beta fleet ran TRANSLATE_BACKEND=off, and C2 v1 has
+excludes translation, v0's beta fleet ran TRANSLATE_BACKEND=off, and C2 v1 has
 no ``translation`` slot — its sub-schema lands ADDITIVELY when this producer
 ships into a dialect (an emitted translation slot fails today's contract gate,
 by design: unknown slots fail closed). Enabling it is a code change: add the
@@ -9,19 +9,19 @@ decorator + the contract slot + the dialect bump, one ceremony.
 
 Thin client over the SAME ``servers/whisper`` pool as asr (v0 parity: one
 loaded model serves both tasks). Semantics (v0 stage + plan):
- * asr value empty OR detected language already "en" -> NO server call, emit
- ``{"value": ""}`` — the honest nothing-to-translate claim (L11). prior
- TRANSLATE_TARGET knob is dead: the target is the code pin "en" (whisper's
- task=translate is X->English only — v0 enforced exactly this).
- * otherwise call whisper with task=translate: the SOURCE is auto-detected
- (``language: None`` — deliberately NOT asr's "en" pin, the prior design
- point), same beam/VAD pins as asr; the RESULT language is hardcoded "en"
- (task=translate output is always English — v0 hardcoded it, the server
- does too).
- * splits ride the same absolute mapping as asr's (shared helper — one
- definition of the 3-key split shape); omitted when no segments came back;
- an empty translation text still emits (honest empty claim, a deliberate
- change from prior emit-no-record).
+  * asr value empty OR detected language already "en" -> NO server call, emit
+    ``{"value": ""}`` — the honest nothing-to-translate claim (L11). v0's
+    TRANSLATE_TARGET knob is dead: the target is the code pin "en" (whisper's
+    task=translate is X->English only — v0 enforced exactly this).
+  * otherwise call whisper with task=translate: the SOURCE is auto-detected
+    (``language: None`` — deliberately NOT asr's "en" pin, the v0 design
+    point), same beam/VAD pins as asr; the RESULT language is hardcoded "en"
+    (task=translate output is always English — v0 hardcoded it, the server
+    does too).
+  * splits ride the same absolute mapping as asr's (shared helper — one
+    definition of the 3-key split shape); omitted when no segments came back;
+    an empty translation text still emits (honest empty claim, a deliberate
+    change from v0's emit-no-record).
 """
 from __future__ import annotations
 

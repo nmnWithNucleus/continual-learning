@@ -156,7 +156,7 @@ def test_missing_blob_dead_letters_and_is_visible(async_client):
 
 class _FlakyProcessor(FakeGraphProcessor):
     """Raises an UNEXPECTED (non-ProcessingError) error the first N graph runs, then
- succeeds — models an infra hiccup (model server cold 503, CUDA OOM, ffmpeg error)."""
+    succeeds — models an infra hiccup (model server cold 503, CUDA OOM, ffmpeg error)."""
 
     def __init__(self, fail_times: int) -> None:
         self._left = fail_times
@@ -174,8 +174,8 @@ class _FlakyProcessor(FakeGraphProcessor):
 
 def test_unexpected_processor_error_is_retried_not_dead_lettered(monkeypatch, fake_storage, tmp_path):
     """Fix (review #2): an infra error out of the processor is TRANSIENT — inline mode 500s
- → recording retries, so the async worker retries too rather than dead-lettering the
- first blip. Only after INGEST_MAX_RETRIES does it dead-letter."""
+    → recording retries, so the async worker retries too rather than dead-lettering the
+    first blip. Only after INGEST_MAX_RETRIES does it dead-letter."""
     monkeypatch.setenv("STORAGE_URL", "http://storage.test")
     monkeypatch.setenv("DP_VAR_DIR", str(tmp_path / "var"))
     monkeypatch.setenv("INGEST_ASYNC", "1")
@@ -216,7 +216,7 @@ def test_transient_blob_failure_retries_then_succeeds(async_client):
 
 class _GatedProcessor(FakeGraphProcessor):
     """Blocks the graph run until an Event is set — lets a test hold workers busy to
- exercise in-flight dedup + queue-full backpressure deterministically."""
+    exercise in-flight dedup + queue-full backpressure deterministically."""
 
     def __init__(self) -> None:
         self.gate = threading.Event()
@@ -282,9 +282,9 @@ def test_queue_full_returns_503_backpressure(monkeypatch, fake_storage, tmp_path
 
 def test_failed_journal_accept_releases_claim(monkeypatch, fake_storage, tmp_path):
     """Review fix #1: if the durable accept write raises (disk-full / lock-contention),
- the in-flight claim MUST be released — otherwise every retry ACKs 202-duplicate
- forever (silent loss + a lying ACK). After the transient failure clears, a
- redelivery re-claims cleanly and processes."""
+    the in-flight claim MUST be released — otherwise every retry ACKs 202-duplicate
+    forever (silent loss + a lying ACK). After the transient failure clears, a
+    redelivery re-claims cleanly and processes."""
     install_mock_audio_registry(monkeypatch)
     monkeypatch.setenv("STORAGE_URL", "http://storage.test")
     monkeypatch.setenv("DP_VAR_DIR", str(tmp_path / "var"))

@@ -8,18 +8,18 @@ in-flight-dup paths alike), and read back via ``GET /continuity`` so recording's
 report can close the loop across both legs.
 
 Per stream it keeps:
- * identity (``user_id``/``device_id``/``modality``) + ``first_seen``/``last_seen``
- (RFC3339, stamped by the caller so time is injectable);
- * ``max_sequence`` and ``received`` — the TOTAL delivery count, duplicates and
- conflicts included (unique coverage is the interval mass, below);
- * seen sequences as sorted, merged, non-adjacent ``[lo, hi]`` runs — compact for
- dense streams (a million in-order chunks is one run), and every hole between
- runs is by construction a real gap;
- * ``duplicate_deliveries`` — the same ``(sequence, chunk_id)`` re-seen: expected
- at-least-once noise, counted but not alarming;
- * ``sequence_conflicts`` — the same ``sequence`` claimed by a DIFFERENT
- ``chunk_id``: an anomaly (two distinct chunks in one slot) flagged loudly via a
- warning log plus a capped per-stream sample list.
+  * identity (``user_id``/``device_id``/``modality``) + ``first_seen``/``last_seen``
+    (RFC3339, stamped by the caller so time is injectable);
+  * ``max_sequence`` and ``received`` — the TOTAL delivery count, duplicates and
+    conflicts included (unique coverage is the interval mass, below);
+  * seen sequences as sorted, merged, non-adjacent ``[lo, hi]`` runs — compact for
+    dense streams (a million in-order chunks is one run), and every hole between
+    runs is by construction a real gap;
+  * ``duplicate_deliveries`` — the same ``(sequence, chunk_id)`` re-seen: expected
+    at-least-once noise, counted but not alarming;
+  * ``sequence_conflicts`` — the same ``sequence`` claimed by a DIFFERENT
+    ``chunk_id``: an anomaly (two distinct chunks in one slot) flagged loudly via a
+    warning log plus a capped per-stream sample list.
 
 ``missing`` in a report is every gap below ``max_sequence``, INCLUDING the leading
 gap ``[0, first-1]`` when the first run starts above 0 — per C1, sequences start at
@@ -84,7 +84,7 @@ class _StreamState:
 
 def _insert(intervals: list[list[int]], sequence: int) -> None:
     """Insert a NOT-yet-seen sequence into the sorted runs, merging with adjacent
- runs so holes between runs are always real gaps."""
+    runs so holes between runs are always real gaps."""
     i = bisect_right(intervals, sequence, key=lambda run: run[0])
     left = intervals[i - 1] if i > 0 else None
     right = intervals[i] if i < len(intervals) else None
@@ -103,7 +103,7 @@ def _insert(intervals: list[list[int]], sequence: int) -> None:
 
 def _gaps(intervals: list[list[int]]) -> list[list[int]]:
     """The missing runs below the max seen — every hole between runs, including
- the leading hole ``[0, lo-1]`` when the first run starts above 0."""
+    the leading hole ``[0, lo-1]`` when the first run starts above 0."""
     gaps: list[list[int]] = []
     prev_hi = -1
     for lo, hi in intervals:
@@ -115,7 +115,7 @@ def _gaps(intervals: list[list[int]]) -> list[list[int]]:
 
 def _runs(seqs: set[int]) -> list[list[int]]:
     """Collapse a set of sequences into sorted, non-adjacent ``[lo, hi]`` runs — the
- same compact shape ``missing`` uses, so recording reconciles them uniformly."""
+    same compact shape ``missing`` uses, so recording reconciles them uniformly."""
     runs: list[list[int]] = []
     for s in sorted(seqs):
         if runs and s == runs[-1][1] + 1:
@@ -142,8 +142,8 @@ class ContinuityTracker:
         now_iso: str,
     ) -> None:
         """Record one schema-valid delivery. Called on EVERY /ingest path — fresh,
- dedup-hit, and in-flight-dup — so dedup can never silently absorb a break
- signal. ``now_iso`` is caller-stamped (injectable time)."""
+        dedup-hit, and in-flight-dup — so dedup can never silently absorb a break
+        signal. ``now_iso`` is caller-stamped (injectable time)."""
         with self._lock:
             state = self._streams.get(stream_id)
             if state is None:
@@ -189,21 +189,21 @@ class ContinuityTracker:
     def rehydrate(self, streams: dict[str, dict[str, Any]]) -> None:
         """Rebuild per-stream state from the durable journal at boot (both modes).
 
- Input is ``Journal.rehydration()``: per stream, its identity + THREE sequence
- classes — ``processed`` (C2 durably written), ``dead`` (durably dead-lettered),
- and ``accepted`` (still pending re-drive). EVERY rehydrated sequence counts as
- SEEN (intervals + ``first_chunk``) — it WAS delivered — so a post-restart report
- never re-reads history as a leading gap; the accepted class is the keystone: a
- chunk merely waiting to be re-driven must read as in-flight coverage, never be
- fabricated into a gap. ``processed``/``dead_lettered`` survive the restart
- (recording's confirm loop keeps working; the false-``gaps`` window is closed).
+        Input is ``Journal.rehydration()``: per stream, its identity + THREE sequence
+        classes — ``processed`` (C2 durably written), ``dead`` (durably dead-lettered),
+        and ``accepted`` (still pending re-drive). EVERY rehydrated sequence counts as
+        SEEN (intervals + ``first_chunk``) — it WAS delivered — so a post-restart report
+        never re-reads history as a leading gap; the accepted class is the keystone: a
+        chunk merely waiting to be re-driven must read as in-flight coverage, never be
+        fabricated into a gap. ``processed``/``dead_lettered`` survive the restart
+        (recording's confirm loop keeps working; the false-``gaps`` window is closed).
 
- What's honestly lost across a restart: duplicate/conflict counters and the true
- ``received`` total — rehydrated ``received`` = unique sequences (a floor),
- counters restart at 0 (rate-style observability, not loss accounting). Live
- streams already observed in this process are never overwritten, which also makes
- a double startup (TestClient runs the lifespan per client) a no-op — counters
- can never inflate from re-rehydration."""
+        What's honestly lost across a restart: duplicate/conflict counters and the true
+        ``received`` total — rehydrated ``received`` = unique sequences (a floor),
+        counters restart at 0 (rate-style observability, not loss accounting). Live
+        streams already observed in this process are never overwritten, which also makes
+        a double startup (TestClient runs the lifespan per client) a no-op — counters
+        can never inflate from re-rehydration."""
         with self._lock:
             for stream_id, info in streams.items():
                 if stream_id in self._streams:  # live/prior state wins — idempotent boot
@@ -238,8 +238,8 @@ class ContinuityTracker:
 
     def note_processed(self, stream_id: str, sequence: int) -> None:
         """Mark a sequence's C2 as DURABLY WRITTEN to /context. Called (both modes)
- once processing succeeds — the signal recording's report uses to confirm a
- chunk landed. Clears any prior dead-letter mark (a redelivery reprocessed it)."""
+        once processing succeeds — the signal recording's report uses to confirm a
+        chunk landed. Clears any prior dead-letter mark (a redelivery reprocessed it)."""
         with self._lock:
             state = self._streams.get(stream_id)
             if state is None:  # note() always precedes; defensive no-op otherwise
@@ -249,8 +249,8 @@ class ContinuityTracker:
 
     def note_dead_letter(self, stream_id: str, sequence: int) -> None:
         """Mark a sequence as DEAD-LETTERED — retries exhausted or a terminal error,
- so no C2 was written. Surfaced to recording so an accepted-then-lost chunk
- reads 'gaps' (visible loss), never a silent 'clean'."""
+        so no C2 was written. Surfaced to recording so an accepted-then-lost chunk
+        reads 'gaps' (visible loss), never a silent 'clean'."""
         with self._lock:
             state = self._streams.get(stream_id)
             if state is None:
@@ -260,7 +260,7 @@ class ContinuityTracker:
 
     def report(self) -> dict[str, Any]:
         """The ``GET /continuity`` payload: every observed stream's entry, in
- first-observation order."""
+        first-observation order."""
         with self._lock:
             return {
                 "streams": [
@@ -277,7 +277,7 @@ class ContinuityTracker:
 
     def conflict_samples(self, stream_id: str) -> list[dict[str, Any]]:
         """Copies of the recorded conflict samples for a stream (diagnosis
- surface, capped at _MAX_CONFLICT_SAMPLES; empty for unknown streams)."""
+        surface, capped at _MAX_CONFLICT_SAMPLES; empty for unknown streams)."""
         with self._lock:
             state = self._streams.get(stream_id)
             return [dict(s) for s in state.conflict_samples] if state else []

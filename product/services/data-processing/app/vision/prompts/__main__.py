@@ -1,4 +1,4 @@
-"""CLI entry: ``python -m app.vision.prompts <show|relock|status>...`` (, goal 4)."""
+"""CLI entry: ``python -m app.vision.prompts <show|relock|status> ...`` (D-13, goal 4)."""
 from __future__ import annotations
 
 import sys

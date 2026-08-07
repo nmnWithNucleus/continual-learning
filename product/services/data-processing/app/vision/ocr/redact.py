@@ -1,4 +1,4 @@
-"""Deterministic secret redaction for OCR strings (step 4).
+"""Deterministic secret redaction for OCR strings (D-07 step 4).
 
 A prompt rule ("never transcribe a password") is not an access control — a CTC engine
 has no notion of a rule. This is the access control: a pure, regex-driven pass that
@@ -12,7 +12,7 @@ worker in the fleet (§4 R4 / house rule 6). Every replacement is counted so the
 sees ``dp_ocr_redactions_total`` climb — a redaction that fires a lot is a signal, not a
 silent scrub.
 
-The six shapes the OCR exit criteria pin, plus two the design names in :
+The eight shapes this redactor pins:
 AWS access-key id · ``sk-`` / ``ghp_`` (& sibling GitHub/OpenAI tokens) · ``xox[baprs]-``
 Slack tokens · >=32-char base64 runs · PEM ``-----BEGIN … KEY-----`` headers ·
 Luhn-valid 13-19 digit card runs · all-bullet/asterisk masked fields.
@@ -73,8 +73,8 @@ def _luhn_ok(digits: str) -> bool:
 def redact(text: str) -> tuple[str, int]:
     """Return ``(redacted_text, n_replacements)``. Pure and deterministic.
 
- Regex-shaped secrets first, then the Luhn-verified card pass. ``n`` is the number of
- distinct spans replaced (the caller folds it into ``dp_ocr_redactions_total``)."""
+    Regex-shaped secrets first, then the Luhn-verified card pass. ``n`` is the number of
+    distinct spans replaced (the caller folds it into ``dp_ocr_redactions_total``)."""
     count = 0
 
     def _sub(pattern: re.Pattern, s: str) -> str:

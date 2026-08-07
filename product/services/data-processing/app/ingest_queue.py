@@ -25,15 +25,15 @@ permit for the sleep (a sleeping chunk must not occupy a modality slot) and re-a
 before the next attempt.
 
 Failure handling per chunk:
- * ``TransientError`` (blob 5xx / timeout, /context blip) → retry up to
- ``INGEST_MAX_RETRIES`` with linear backoff, then dead-letter;
- * ``TerminalError`` (since-deleted blob, sha mismatch, no units, invalid C2) →
- dead-letter immediately (no futile head-of-line backoff on the pool);
- * dead-letter = release the dedup claim + mark the sequence ``dead_lettered`` in
- continuity (recording's report reads that as ``gaps`` — visible loss, never a
- silent ``clean``) + bump a counter + append to a capped in-memory list. It is a
- COUNTER, not a recoverable DLQ: nothing re-drives it in this slice (durable
- pending-journal auto-recovery stays M7). The loss is VISIBLE, not silent.
+  * ``TransientError`` (blob 5xx / timeout, /context blip) → retry up to
+    ``INGEST_MAX_RETRIES`` with linear backoff, then dead-letter;
+  * ``TerminalError`` (since-deleted blob, sha mismatch, no units, invalid C2) →
+    dead-letter immediately (no futile head-of-line backoff on the pool);
+  * dead-letter = release the dedup claim + mark the sequence ``dead_lettered`` in
+    continuity (recording's report reads that as ``gaps`` — visible loss, never a
+    silent ``clean``) + bump a counter + append to a capped in-memory list. It is a
+    COUNTER, not a recoverable DLQ: nothing re-drives it in this slice (durable
+    pending-journal auto-recovery stays M7). The loss is VISIBLE, not silent.
 
 Graceful drain: on shutdown, wait (bounded by ``INGEST_DRAIN_TIMEOUT``) for queued +
 in-flight work to finish, then workers are cancelled. A chunk cancelled mid-flight
@@ -69,14 +69,14 @@ class QueueFull(Exception):
 
 class IngestQueue:
     """A bounded job buffer + N worker tasks with permit-at-dispatch fairness,
- pinned to the running loop.
+    pinned to the running loop.
 
- Wakeup discipline: every state change that could make a blocked coroutine
- runnable (enqueue, permit release, slot freed) wakes ALL relevant waiters, which
- re-scan and re-wait if still blocked. No permit/item is ever transferred through
- a future, so a waiter cancelled between wake and resume can never strand one
- (lost-wakeup-safe by construction; the herd is tiny at worker-pool scale).
- """
+    Wakeup discipline: every state change that could make a blocked coroutine
+    runnable (enqueue, permit release, slot freed) wakes ALL relevant waiters, which
+    re-scan and re-wait if still blocked. No permit/item is ever transferred through
+    a future, so a waiter cancelled between wake and resume can never strand one
+    (lost-wakeup-safe by construction; the herd is tiny at worker-pool scale).
+    """
 
     def __init__(self, app: FastAPI, *, workers: int, maxsize: int,
                  max_retries: int, backoff: float, modality_limits: str = "") -> None:
@@ -136,10 +136,10 @@ class IngestQueue:
     async def drain_and_close(self, timeout: float) -> None:
         """Finish queued + in-flight work (bounded by ``timeout``), then stop workers.
 
- Whatever couldn't drain in time is cancelled; each cancelled chunk releases its
- dedup claim in a ``finally`` (never orphaned) and stays re-drivable. Anything
- still merely QUEUED at a hard timeout is lost-but-visible (reads 'recording' /
- re-POST-able) — the honest boundary of this slice (durable-queue recovery = M7)."""
+        Whatever couldn't drain in time is cancelled; each cancelled chunk releases its
+        dedup claim in a ``finally`` (never orphaned) and stays re-drivable. Anything
+        still merely QUEUED at a hard timeout is lost-but-visible (reads 'recording' /
+        re-POST-able) — the honest boundary of this slice (durable-queue recovery = M7)."""
         try:
             await asyncio.wait_for(self._all_done.wait(), timeout)
         except asyncio.TimeoutError:
@@ -167,16 +167,16 @@ class IngestQueue:
     # ---------------------------------------------------------------------- submit
     def submit(self, job: dict[str, Any]) -> None:
         """Enqueue a claimed chunk. Raises ``QueueFull`` if at capacity — the caller
- MUST release the dedup claim + return 503 (never a silent drop)."""
+        MUST release the dedup claim + return 503 (never a silent drop)."""
         if len(self._buf) >= self._maxsize:
             raise QueueFull()
         self._enqueue(job)
 
     async def submit_wait(self, job: dict[str, Any]) -> None:
         """Enqueue, WAITING for capacity — the startup re-drive path. Unlike the HTTP
- accept (which must answer now: full -> 503), the re-driver is a background task
- that can simply wait for workers to drain a slot, so a pending backlog larger
- than the queue bound is re-driven completely instead of stranded."""
+        accept (which must answer now: full -> 503), the re-driver is a background task
+        that can simply wait for workers to drain a slot, so a pending backlog larger
+        than the queue bound is re-driven completely instead of stranded."""
         while len(self._buf) >= self._maxsize:
             await self._wait_on(self._putters)
         self._enqueue(job)
@@ -206,8 +206,8 @@ class IngestQueue:
 
     def _take_permit(self, modality: str) -> bool:
         """Atomically (single loop tick) claim a modality slot FOR DISPATCH; True if
- unlimited. Permits reserved for parked re-acquirers are not up for grabs —
- dispatch may only take the surplus."""
+        unlimited. Permits reserved for parked re-acquirers are not up for grabs —
+        dispatch may only take the surplus."""
         avail = self._permits.get(modality)
         if avail is None:
             return True
@@ -225,8 +225,8 @@ class IngestQueue:
 
     async def _acquire_permit(self, modality: str) -> None:
         """Blocking permit re-acquire (the retry path, after a backoff sleep). Holds a
- reservation while parked so the dispatch scan cannot barge every freed permit
- to newer queued jobs of the same modality (retriers are the OLDEST work)."""
+        reservation while parked so the dispatch scan cannot barge every freed permit
+        to newer queued jobs of the same modality (retriers are the OLDEST work)."""
         self._reacquiring[modality] = self._reacquiring.get(modality, 0) + 1
         try:
             while True:
@@ -243,10 +243,10 @@ class IngestQueue:
 
     async def _get_dispatchable(self) -> dict[str, Any]:
         """Remove and return the FIRST job whose modality permit is available, taking
- the permit in the same tick (atomic w.r.t. the loop — no await between check,
- take and removal). Capped-modality jobs are scanned PAST, not blocked on: this
- is the finding-#3 fix. FIFO holds among eligible jobs, and per-modality FIFO
- holds absolutely (a skipped job stays ahead of its modality peers)."""
+        the permit in the same tick (atomic w.r.t. the loop — no await between check,
+        take and removal). Capped-modality jobs are scanned PAST, not blocked on: this
+        is the finding-#3 fix. FIFO holds among eligible jobs, and per-modality FIFO
+        holds absolutely (a skipped job stays ahead of its modality peers)."""
         while True:
             for i, job in enumerate(self._buf):
                 if self._take_permit(job["c1"]["modality"]):
@@ -372,10 +372,10 @@ class IngestQueue:
 
     async def _heal_failed(self, c1: dict, detail: dict, *, epoch: int = 0) -> None:
         """The worker-side heal containment: charge the budget (``heal_failed`` —
- one increment per heal claim), clear the pending row (epoch-guarded),
- release the claim. The chunk's existing record and done-row are untouched;
- recording sees no gap. Falls back to the normal dead-letter taxonomy only
- if no done-row exists (then the failure was never a heal)."""
+        one increment per heal claim), clear the pending row (epoch-guarded),
+        release the claim. The chunk's existing record and done-row are untouched;
+        recording sees no gap. Falls back to the normal dead-letter taxonomy only
+        if no done-row exists (then the failure was never a heal)."""
         deps = self._deps()
         state = await run_in_threadpool(
             deps.journal.heal_failed, c1["chunk_id"], now_iso(), epoch

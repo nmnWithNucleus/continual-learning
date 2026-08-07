@@ -2,22 +2,22 @@
 
 Replaces the six-subprocess ``app/vision/frames.py`` (a container-duration probe + a
 cut-detection pass + N output-seek extracts) with **exactly two ffmpeg subprocesses, one
-decode each** ():
+decode each** (D-04):
 
- * **Pass A (analysis)** — one decode, ~4 KB out: sample the stream every
- ``analysis_period_s`` via ``select`` on TRUE PTS, ``format=gray`` →
- ``tblend=difference`` → binarize per pixel (``gt(val,24)``) → ``scale=32:32:area`` →
- ``showinfo``. stdout is one 32x32 binarized change map per delta; stderr's
- ``pts_time`` + integer ``pts`` give each analysis frame's true time AND its exact
- presentation timestamp (the handle Pass B re-selects by). The change math + the
- OCR-frame selection live in ``delta.py``.
- * **Pass B (extraction)** — one decode: ``split`` the single decode to two widths and
- ``select`` the caption frames at ``frame_width`` (lo, for the VLM) and the OCR events
- at ``ocr_frame_width`` (hi, native, for the CPU OCR pass). ``-frame_pts 1`` names each
- file, the per-chain count is asserted, and outputs map to targets in time order — so a
- silently-dropped frame RAISES instead of mis-assigning pixels/timestamps (defect #24).
+  * **Pass A (analysis)** — one decode, ~4 KB out: sample the stream every
+    ``analysis_period_s`` via ``select`` on TRUE PTS, ``format=gray`` →
+    ``tblend=difference`` → binarize per pixel (``gt(val,24)``) → ``scale=32:32:area`` →
+    ``showinfo``. stdout is one 32x32 binarized change map per delta; stderr's
+    ``pts_time`` + integer ``pts`` give each analysis frame's true time AND its exact
+    presentation timestamp (the handle Pass B re-selects by). The change math + the
+    OCR-frame selection live in ``delta.py``.
+  * **Pass B (extraction)** — one decode: ``split`` the single decode to two widths and
+    ``select`` the caption frames at ``frame_width`` (lo, for the VLM) and the OCR events
+    at ``ocr_frame_width`` (hi, native, for the CPU OCR pass). ``-frame_pts 1`` names each
+    file, the per-chain count is asserted, and outputs map to targets in time order — so a
+    silently-dropped frame RAISES instead of mis-assigning pixels/timestamps (defect #24).
 
-The span comes from the C1 envelope, NOT a container-duration probe (deleted that
+The span comes from the C1 envelope, NOT a container-duration probe (D-04 deleted that
 whole legacy subprocess), so record identity can never be decoder-dependent; and there is
 NO cut-detection pass (the legacy metric was inert on screens — measured 0 cuts on
 scrolling code whose SSIM fell to 0.47).
@@ -34,7 +34,8 @@ only on a genuine decoder anomaly, and a clip shorter than its declared span deg
 gracefully (fewer frames) instead of dead-lettering. It also drops the 29.97/23.976
 integer-rounding drift, because no rate is reconstructed at all.
 
-NO CONFIG (L4). Legacy env shims that used to live here are gone: every knob is a field of
+NO CONFIG (DP rebuild, L4). The v0 ``VIDEO_CLIP_*`` / ``VIDEO_OCR_*`` /
+``VIDEO_ANALYSIS_*`` env shim that used to live here is gone: every knob is a field of
 :class:`ClipSettings`, and the ONE place values come from is the ``clipprep`` stage file
 (``app/stages/video/clipprep.py``), where they are pinned in code under the stage's
 backend version (changing one is a vB bump, never an env flip). This module is pure
@@ -69,23 +70,23 @@ _OPENING = object()
 
 class ClipDecodeError(RuntimeError):
     """The blob did not decode / is too short to analyse (ffmpeg absent, undecodable
- bytes, or < 2 analysis frames). The stage turns this into the mock synthetic fallback
- or, under a non-mock backend, a loud raise — NEVER a placeholder persisted as truth."""
+    bytes, or < 2 analysis frames). The stage turns this into the mock synthetic fallback
+    or, under a non-mock backend, a loud raise — NEVER a placeholder persisted as truth."""
 
 
 class FrameCountError(RuntimeError):
     """Pass B produced fewer frames than requested — a requested frame index the stream
- does not contain (measured ``-frame_pts`` guard, defect #24). ALWAYS raised (any
- backend): a silent drop mis-assigns pixels and frame timestamps. Distinct
- from ``ClipDecodeError`` so the stage never masks it with the synthetic fallback."""
+    does not contain (measured ``-frame_pts`` guard, defect #24). ALWAYS raised (any
+    backend): a silent drop mis-assigns pixels and frame timestamps. Distinct
+    from ``ClipDecodeError`` so the stage never masks it with the synthetic fallback."""
 
 
 @dataclass(frozen=True)
 class ClipSettings:
     """The clip-path knobs. NOT read from anywhere at run time: the one live instance
- is the code-pinned constant in ``app/stages/video/clipprep.py`` (L4 — a knob change
- is a vB bump there). Kept as an explicit dataclass so the machinery below stays a
- pure function of ``(bytes, ClipSettings)`` and tests can construct variants."""
+    is the code-pinned constant in ``app/stages/video/clipprep.py`` (L4 — a knob change
+    is a vB bump there). Kept as an explicit dataclass so the machinery below stays a
+    pure function of ``(bytes, ClipSettings)`` and tests can construct variants."""
 
     seconds_per_frame: float   # caption grid cadence; K = clamp(ceil(span/x), min, max)
     max_frames: int            # hard prefill ceiling on caption frames (<= server mm limit)
@@ -93,26 +94,26 @@ class ClipSettings:
     frame_width: int           # caption (lo) JPEG width; 768 = 360 Qwen3-VL tokens/frame
     ocr_frame_width: int       # OCR (hi) JPEG width; 1728 = the mac capture cap, no resample
     analysis_period_s: float   # Pass-A delta probe period (2.0 s: sensitivity beats precision)
-    ocr_idle_peak: int         # class=IDLE at accumulated peak <= this ()
-    ocr_layout_peak: int       # class=LAYOUT above this peak ()
+    ocr_idle_peak: int         # class=IDLE at accumulated peak <= this (D-07)
+    ocr_layout_peak: int       # class=LAYOUT above this peak (D-07)
     ocr_max_events: int        # rank-free even-spaced cap on OCR reads/chunk (3->8 is ~2.7x CPU)
     ocr_floor_s: float         # a static screen still reads once per this many wall-clock s
 
 
 def ffmpeg_available() -> bool:
     """ffmpeg only — the clip path needs no container-duration probe (the span is a C1
- field,), so a box with only ffmpeg is fully capable."""
+    field, D-04), so a box with only ffmpeg is fully capable."""
     return shutil.which("ffmpeg") is not None
 
 
 # ---------------------------------------------------------------------------------------
-# The deterministic caption grid (content-independent;).
+# The deterministic caption grid (content-independent; D-03).
 # ---------------------------------------------------------------------------------------
 def caption_frame_count(span_seconds: float, cs: ClipSettings) -> int:
     """``K = clamp(ceil(span/seconds_per_frame), min_frames, max_frames)`` — a pure function
- of the declared C1 span (content-INDEPENDENT): 4 @10 s, 12 @60 s (the cap binds). The
- caption then takes K frames evenly spaced across the frames the delta pass actually
- decoded, so the COUNT is span-driven while the frames are guaranteed to exist."""
+    of the declared C1 span (content-INDEPENDENT): 4 @10 s, 12 @60 s (the cap binds). The
+    caption then takes K frames evenly spaced across the frames the delta pass actually
+    decoded, so the COUNT is span-driven while the frames are guaranteed to exist."""
     interval = cs.seconds_per_frame if cs.seconds_per_frame and cs.seconds_per_frame > 0 else span_seconds
     n = math.ceil(span_seconds / interval) if interval > 0 else 1
     return max(max(1, cs.min_frames), min(n, max(1, cs.max_frames)))
@@ -120,8 +121,8 @@ def caption_frame_count(span_seconds: float, cs: ClipSettings) -> int:
 
 def caption_grid(span_seconds: float, cs: ClipSettings) -> list[float]:
     """The K evenly-spaced grid times over ``[0, span)`` (the frames.py ``_uniform_times``
- idiom, always including ``t=0``). Retained as the deterministic COUNT reference — Pass B
- snaps this to the decoded frames rather than requesting these exact times (VFR-safe)."""
+    idiom, always including ``t=0``). Retained as the deterministic COUNT reference — Pass B
+    snaps this to the decoded frames rather than requesting these exact times (VFR-safe)."""
     n = caption_frame_count(span_seconds, cs)
     if n <= 1 or span_seconds <= 0:
         return [0.0]
@@ -133,9 +134,9 @@ def caption_grid(span_seconds: float, cs: ClipSettings) -> list[float]:
 # ---------------------------------------------------------------------------------------
 def _pass_a(src: str, period: float) -> tuple[list[tuple[int, ...]], list[float], list[int]]:
     """Pass A: returns ``(change_maps, delta_times, delta_pts_ints)`` — one 32x32 change map
- per delta plus each delta frame's true ``pts_time`` and its exact integer ``pts`` (the
- handle Pass B re-selects by). Raises ``ClipDecodeError`` if ffmpeg is absent, the bytes
- don't decode, or the clip is too short to yield a delta."""
+    per delta plus each delta frame's true ``pts_time`` and its exact integer ``pts`` (the
+    handle Pass B re-selects by). Raises ``ClipDecodeError`` if ffmpeg is absent, the bytes
+    don't decode, or the clip is too short to yield a delta."""
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise ClipDecodeError("ffmpeg is not on PATH (the single canonical decoder)")
@@ -176,12 +177,12 @@ def _pass_b(
     lo_width: int, hi_width: int, out_dir: str,
 ) -> tuple[dict[float, bytes], dict[float, bytes]]:
     """Pass B: from ONE decode (``split``), extract the caption frames at ``lo_width`` and
- the OCR frames at ``hi_width``. Each target is ``(key, t_offset)`` where ``key`` is
- ``_OPENING`` (select frame ``n=0``) or an integer PTS (select ``eq(pts,P)``). Outputs are
- named by ``-frame_pts`` (monotone in time) and mapped to targets in TIME order; the
- per-chain count is asserted, so a dropped frame RAISES (``FrameCountError``) rather than
- mis-assigning pixels/timestamps (defect #24). Returns ``({t_offset: lo_bytes}, {t_offset:
- hi_bytes})``."""
+    the OCR frames at ``hi_width``. Each target is ``(key, t_offset)`` where ``key`` is
+    ``_OPENING`` (select frame ``n=0``) or an integer PTS (select ``eq(pts,P)``). Outputs are
+    named by ``-frame_pts`` (monotone in time) and mapped to targets in TIME order; the
+    per-chain count is asserted, so a dropped frame RAISES (``FrameCountError``) rather than
+    mis-assigning pixels/timestamps (defect #24). Returns ``({t_offset: lo_bytes}, {t_offset:
+    hi_bytes})``."""
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise ClipDecodeError("ffmpeg is not on PATH (the single canonical decoder)")
@@ -227,8 +228,8 @@ def _pass_b(
 def _map_outputs(out_dir: str, prefix: str, targets: list[tuple[object, float]],
                  proc) -> dict[float, bytes]:
     """Map the ``{prefix}*.jpg`` outputs (sorted by their frame-number filename, which is
- monotone in time) onto ``targets`` sorted by ``t_offset`` — a value-safe 1:1 zip. The
- count guard raises if any requested frame is missing."""
+    monotone in time) onto ``targets`` sorted by ``t_offset`` — a value-safe 1:1 zip. The
+    count guard raises if any requested frame is missing."""
     if not targets:
         return {}
     files = sorted(
@@ -255,9 +256,9 @@ def prepare_clip(
     blob: bytes, span_seconds: float, t_start_epoch: float, cs: ClipSettings
 ) -> tuple[ClipFrames, Delta]:
     """Two ffmpeg passes -> ``(ClipFrames, Delta)``. Raises ``ClipDecodeError`` if the blob
- won't decode (a required-stage failure under L7 — the chunk retries then dead-letters;
- placeholder frames are never emitted) and ``FrameCountError`` if a frame the delta
- pass decoded is missing in Pass B (a genuine anomaly — always fatal)."""
+    won't decode (a required-stage failure under L7 — the chunk retries then dead-letters;
+    placeholder frames are never emitted) and ``FrameCountError`` if a frame the delta
+    pass decoded is missing in Pass B (a genuine anomaly — always fatal)."""
     if not blob:
         raise ClipDecodeError("empty blob")
     with tempfile.TemporaryDirectory(prefix="clipprep-") as tmp:
@@ -298,7 +299,7 @@ def prepare_clip(
         )
         return clip_frames, delta
 
-# DELETED (): ``synthetic_clip_frames`` + ``empty_delta`` — the prior mock-backend
+# DELETED (DP rebuild): ``synthetic_clip_frames`` + ``empty_delta`` — the v0 mock-backend
 # fallback that emitted placeholder frames for an undecodable blob. In v1 mock dialects are
 # client-level fakes and ``clipprep`` is required: an undecodable blob RAISES, the chunk
 # retries then dead-letters (L7). Placeholders never persist as processed truth.

@@ -2,9 +2,9 @@
 from the record + its dialect ALONE. No journal peek, no logs, no side channel —
 a consumer holding one record can always tell the three states apart:
 
- * stage named in pipeline_version + slot ABSENT = attempted and failed (hole)
- * slot PRESENT with an empty value = honest empty claim
- * stage name NOT in the dialect = never attempted
+  * stage named in pipeline_version + slot ABSENT   = attempted and failed (hole)
+  * slot PRESENT with an empty value                = honest empty claim
+  * stage name NOT in the dialect                   = never attempted
 
 Plus the provenance corollary: a slot derived from another slot is one witness
 on two channels — agreement is not corroboration (held as documentation on the
@@ -44,7 +44,7 @@ def _record(stages):
 
 def _reader(record):
     """The L11 read, implemented exactly as a consumer would: from the record
- + dialect alone."""
+    + dialect alone."""
     attempted = {seg.split(".")[0] for seg in record["pipeline_version"].split("+")}
     slots = record["content"]["slots"]
 
@@ -78,11 +78,11 @@ def test_three_states_distinguishable_from_record_plus_dialect():
 
 def test_consumer_never_infers_a_negative_under_an_unattempting_dialect():
     """The record without acoustic in its dialect says NOTHING about acoustic
- events — 'never-attempted' is a distinct state, not evidence of silence."""
+    events — 'never-attempted' is a distinct state, not evidence of silence."""
     record = _record([_stage("asr", value={"value": "words"}, required=True)])
     classify = _reader(record)
     assert classify("acoustic", "acoustic", lambda s: True) == "never-attempted"
-    #...and that is a different answer than an attempted-and-empty claim:
+    # ...and that is a different answer than an attempted-and-empty claim:
     record2 = _record([
         _stage("asr", value={"value": "words"}, required=True),
         _stage("acoustic", value={"values": []}),
@@ -106,9 +106,9 @@ def test_empty_slots_map_is_honest_under_an_all_optional_failure():
 
 def test_cancelled_cone_reads_as_holes_too():
     """A cancelled downstream stage was attempted (its name is in the dialect —
- the dialect states the ATTEMPTED graph) and produced nothing: a hole, by the
- same read. The statuses ledger will additionally record
- failed-vs-cancelled; the record alone honestly says 'no slot'."""
+    the dialect states the ATTEMPTED graph) and produced nothing: a hole, by the
+    same read. The statuses ledger additionally records
+    failed-vs-cancelled; the record alone honestly says 'no slot'."""
     stages = [
         _stage("asr", value={"value": "w"}, required=True),
         _stage("gate", run=_boom),

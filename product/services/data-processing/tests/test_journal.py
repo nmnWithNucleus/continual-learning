@@ -3,13 +3,13 @@
 Proves the three guarantees the journal exists for, each across a REAL app restart
 (two create_app() instances over the same DP_VAR_DIR):
 
- 1. kill-recovery — an accepted-but-unprocessed chunk survives and is auto-re-driven
- at the next startup, with no recording involvement;
- 2. restart amnesia closed — continuity's processed/dead_lettered (and coverage)
- rehydrate, so a post-restart /continuity answer can never mis-read intact
- history as a leading gap (the deferred false-`gaps` caveat);
- 3. durable dedup — a redelivery after restart is answered with the prior
- record_ids (200), never a reprocess.
+  1. kill-recovery — an accepted-but-unprocessed chunk survives and is auto-re-driven
+     at the next startup, with no recording involvement;
+  2. restart amnesia closed — continuity's processed/dead_lettered (and coverage)
+     rehydrate, so a post-restart /continuity answer can never mis-read intact
+     history as a leading gap (the deferred false-`gaps` caveat);
+  3. durable dedup — a redelivery after restart is answered with the prior
+     record_ids (200), never a reprocess.
 
 Plus unit tests of the journal's own state machine (accept/dead-letter/processed,
 QueueFull delete, counts) and lazy filesystem behaviour.
@@ -93,7 +93,7 @@ def test_journal_state_machine(tmp_path):
 
 def test_stale_worker_epoch_writes_no_op(tmp_path):
     """The epoch contract (memo L1-F1): a stale worker's terminal write after a
- redelivery re-accepted the chunk NO-OPS — the fresh accepted row survives."""
+    redelivery re-accepted the chunk NO-OPS — the fresh accepted row survives."""
     j = Journal(tmp_path / "dp.db")
     fs = FakeStorage()
     c1 = _c1(fs, chunk_id="j-e", stream_id="s-e", sequence=0)
@@ -118,7 +118,7 @@ def test_stale_worker_epoch_writes_no_op(tmp_path):
 
 def test_unaccept_restores_or_deletes(tmp_path):
     """QueueFull rollback: a fresh row is deleted; a replaced dead_letter row is
- RESTORED with its history (the 503 must not erase durable dead-letter state)."""
+    RESTORED with its history (the 503 must not erase durable dead-letter state)."""
     j = Journal(tmp_path / "dp.db")
     fs = FakeStorage()
     c1 = _c1(fs, chunk_id="j-503", stream_id="s-j", sequence=1)
@@ -139,9 +139,9 @@ def test_unaccept_restores_or_deletes(tmp_path):
 
 def test_redrive_cap_is_per_processing_attempt_not_per_restart(tmp_path):
     """Crash-loop cap is EVIDENCE-BASED: pending_for_redrive dead-letters only rows whose
- OWN processing attempts (note_redrive_attempt) exceed the cap — a restart that never
- dequeues a chunk must not charge it (the old blanket per-restart increment did, mass
- dead-lettering innocent co-pending chunks)."""
+    OWN processing attempts (note_redrive_attempt) exceed the cap — a restart that never
+    dequeues a chunk must not charge it (the old blanket per-restart increment did, mass
+    dead-lettering innocent co-pending chunks)."""
     j = Journal(tmp_path / "dp.db")
     fs = FakeStorage()
     poison = _c1(fs, chunk_id="poison", stream_id="s", sequence=0)
@@ -172,7 +172,7 @@ def test_redrive_cap_is_per_processing_attempt_not_per_restart(tmp_path):
 
 def test_processed_record_ids_pipeline_version_check(tmp_path):
     """A receipt under an OLD dialect is not served: the redelivery reprocesses under
- the new config (version-forward) instead of getting stale ids."""
+    the new config (version-forward) instead of getting stale ids."""
     j = Journal(tmp_path / "dp.db")
     fs = FakeStorage()
     c1 = _c1(fs, chunk_id="j-pv", stream_id="s-pv", sequence=0)
@@ -184,11 +184,11 @@ def test_processed_record_ids_pipeline_version_check(tmp_path):
     assert j.processed_record_ids("j-pv", lambda m: None) == ["old-id"]    # can't judge
 
 
-# ---- Ledger v2 : done-row extension + heal bookkeeping --------
+# ---- Ledger v2 (L8/D27): done-row extension + heal bookkeeping ----------------
 
 def test_done_row_returns_ledger_v2_fields(tmp_path):
     """The extended done-row: statuses verbatim (failed vs cancelled DISTINCT),
- heal budget fields, and the specified-but-unpopulated cached_slots seat."""
+    heal budget fields, and the specified-but-unpopulated cached_slots seat."""
     j = Journal(tmp_path / "dp.db")
     fs = FakeStorage()
     c1 = _c1(fs, chunk_id="d-row", stream_id="s-d", sequence=0)
@@ -209,7 +209,7 @@ def test_done_row_returns_ledger_v2_fields(tmp_path):
 
 def test_mark_processed_without_statuses_is_a_legacy_row(tmp_path):
     """Pre-D-shaped calls still work; the row reads with NULL statuses and benign
- defaults (a legacy row carries no hole evidence — classification must skip)."""
+    defaults (a legacy row carries no hole evidence — classification must skip)."""
     j = Journal(tmp_path / "dp.db")
     fs = FakeStorage()
     c1 = _c1(fs, chunk_id="d-legacy", stream_id="s-d", sequence=1)
@@ -221,8 +221,8 @@ def test_mark_processed_without_statuses_is_a_legacy_row(tmp_path):
 
 def test_heal_marks_increment_only_while_holes_remain(tmp_path):
     """A completed heal that still leaves holes increments the budget; a fully
- green heal clears to skip-state WITHOUT an increment (the counter counts this
- chunk's own non-green heals, never deliveries)."""
+    green heal clears to skip-state WITHOUT an increment (the counter counts this
+    chunk's own non-green heals, never deliveries)."""
     j = Journal(tmp_path / "dp.db")
     fs = FakeStorage()
     c1 = _c1(fs, chunk_id="d-heal", stream_id="s-d", sequence=2)
@@ -242,7 +242,7 @@ def test_heal_marks_increment_only_while_holes_remain(tmp_path):
 
 def test_heal_budget_exhaustion_finalizes_once(tmp_path):
     """At HEAL_MAX_ATTEMPTS with holes still present the row goes done_final —
- newly_final is True exactly once (the metric-firing edge)."""
+    newly_final is True exactly once (the metric-firing edge)."""
     from app.journal import HEAL_MAX_ATTEMPTS
 
     j = Journal(tmp_path / "dp.db")
@@ -262,8 +262,8 @@ def test_heal_budget_exhaustion_finalizes_once(tmp_path):
 
 def test_heal_failed_increments_never_regresses_and_finalizes_at_budget(tmp_path):
     """A heal whose re-run FAILED (even a required stage — fleet down): the chunk
- keeps its record and done-row untouched except the budget; at budget the row
- finalizes. A heal never dead-letters a chunk that has a durable record."""
+    keeps its record and done-row untouched except the budget; at budget the row
+    finalizes. A heal never dead-letters a chunk that has a durable record."""
     from app.journal import HEAL_MAX_ATTEMPTS
 
     j = Journal(tmp_path / "dp.db")
@@ -293,11 +293,11 @@ def test_heal_failed_increments_never_regresses_and_finalizes_at_budget(tmp_path
 
 def test_heal_failed_on_an_all_green_row_is_a_no_op(tmp_path):
     """Close-out round: heal_failed mirrors mark_processed's evidence-based
- arithmetic — a row with no hole evidence (all-green: a racing worker healed
- it green first) is neither charged nor finalized by a stale failure report.
- Without the guard, stale writers could finalize a row with newly_final only
- ever False on the holey rewrite, silently swallowing the permanent-holes
- metric. The pending clear (the delivery IS over) still runs."""
+    arithmetic — a row with no hole evidence (all-green: a racing worker healed
+    it green first) is neither charged nor finalized by a stale failure report.
+    Without the guard, stale writers could finalize a row with newly_final only
+    ever False on the holey rewrite, silently swallowing the permanent-holes
+    metric. The pending clear (the delivery IS over) still runs."""
     from app.journal import HEAL_MAX_ATTEMPTS
 
     j = Journal(tmp_path / "dp.db")
@@ -323,8 +323,8 @@ def test_heal_failed_on_an_all_green_row_is_a_no_op(tmp_path):
 
 def test_heal_failed_pending_delete_is_epoch_guarded_but_truth_is_not(tmp_path):
     """Same posture as mark_processed: the budget increment is TRUE regardless of
- which delivery's worker ran the failed heal; only the pending delete is
- epoch-guarded so a stale worker cannot clobber a fresh redelivery's row."""
+    which delivery's worker ran the failed heal; only the pending delete is
+    epoch-guarded so a stale worker cannot clobber a fresh redelivery's row."""
     j = Journal(tmp_path / "dp.db")
     fs = FakeStorage()
     c1 = _c1(fs, chunk_id="d-ep", stream_id="s-d", sequence=5)
@@ -342,8 +342,8 @@ def test_heal_failed_pending_delete_is_epoch_guarded_but_truth_is_not(tmp_path):
 
 def test_version_forward_records_superseded_pv_and_resets_budget(tmp_path):
     """L8 case 2: the done-row is keyed per chunk_id — the latest attempt wins,
- the superseded dialect is recorded in the row, and the heal budget is the NEW
- version's own (reset)."""
+    the superseded dialect is recorded in the row, and the heal budget is the NEW
+    version's own (reset)."""
     j = Journal(tmp_path / "dp.db")
     fs = FakeStorage()
     c1 = _c1(fs, chunk_id="d-vf", stream_id="s-d", sequence=6)
@@ -363,27 +363,28 @@ def test_version_forward_records_superseded_pv_and_resets_budget(tmp_path):
 
 
 def test_pre_stage_d_journal_migrates_in_place(tmp_path):
-    """Schema evolution ruling: pre-D rows MIGRATE (ALTER TABLE, additive) rather
- than recreate — var/ is disposable disposable dev, but dropping processed rows
- would un-SEE intact history at rehydration and fabricate gaps."""
+    """Schema evolution ruling: a journal written before the ledger-v2 columns
+    existed MIGRATES (ALTER TABLE, additive) rather than recreate — var/ is
+    disposable, but dropping processed rows would un-SEE intact history at
+    rehydration and fabricate gaps."""
     import sqlite3
 
     db = tmp_path / "dp.db"
     conn = sqlite3.connect(db)
     conn.executescript("""
- CREATE TABLE pending (
- chunk_id TEXT PRIMARY KEY, c1_json TEXT NOT NULL,
- state TEXT NOT NULL DEFAULT 'accepted', epoch INTEGER NOT NULL DEFAULT 0,
- attempts INTEGER NOT NULL DEFAULT 0, redrive_attempts INTEGER NOT NULL DEFAULT 0,
- last_error TEXT, accepted_at TEXT NOT NULL, updated_at TEXT NOT NULL
-);
- CREATE TABLE processed (
- chunk_id TEXT PRIMARY KEY, stream_id TEXT NOT NULL, sequence INTEGER NOT NULL,
- user_id TEXT NOT NULL, device_id TEXT NOT NULL, modality TEXT NOT NULL,
- record_ids TEXT NOT NULL, pipeline_version TEXT NOT NULL, processed_at TEXT NOT NULL
-);
- CREATE INDEX idx_processed_stream ON processed (stream_id, sequence);
- """)
+        CREATE TABLE pending (
+          chunk_id TEXT PRIMARY KEY, c1_json TEXT NOT NULL,
+          state TEXT NOT NULL DEFAULT 'accepted', epoch INTEGER NOT NULL DEFAULT 0,
+          attempts INTEGER NOT NULL DEFAULT 0, redrive_attempts INTEGER NOT NULL DEFAULT 0,
+          last_error TEXT, accepted_at TEXT NOT NULL, updated_at TEXT NOT NULL
+        );
+        CREATE TABLE processed (
+          chunk_id TEXT PRIMARY KEY, stream_id TEXT NOT NULL, sequence INTEGER NOT NULL,
+          user_id TEXT NOT NULL, device_id TEXT NOT NULL, modality TEXT NOT NULL,
+          record_ids TEXT NOT NULL, pipeline_version TEXT NOT NULL, processed_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_processed_stream ON processed (stream_id, sequence);
+    """)
     conn.execute(
         "INSERT INTO processed VALUES ('old-1','s-old',0,'u','d','audio',"
         "'[\"rid-old\"]','asr-fw-v1','t0')")
@@ -414,11 +415,11 @@ def test_pre_stage_d_journal_migrates_in_place(tmp_path):
 
 def test_receipt_supersedes_a_dead_letter_pending_row_any_epoch(tmp_path):
     """Review round (races lens): a durable receipt contradicts ANY dead_letter
- pending row — a chunk with a C2 written must never read as terminally lost.
- The epoch guard protects fresh ACCEPTED rows only; a dead_letter row is
- cleared by the receipt regardless of epoch (the stale-redrive-vs-live-worker
- interleaving: live attempt dead-letters at epoch N+1, the redrive job's
- receipt lands with snapshot epoch N — the row must not survive)."""
+    pending row — a chunk with a C2 written must never read as terminally lost.
+    The epoch guard protects fresh ACCEPTED rows only; a dead_letter row is
+    cleared by the receipt regardless of epoch (the stale-redrive-vs-live-worker
+    interleaving: live attempt dead-letters at epoch N+1, the redrive job's
+    receipt lands with snapshot epoch N — the row must not survive)."""
     j = Journal(tmp_path / "dp.db")
     fs = FakeStorage()
     c1 = _c1(fs, chunk_id="j-super", stream_id="s-x", sequence=0)
@@ -451,9 +452,9 @@ def test_receipt_supersedes_a_dead_letter_pending_row_any_epoch(tmp_path):
 
 def test_clear_pending_is_epoch_guarded(tmp_path):
     """Review round: the redrive loop's skip-reconcile — a skip verdict is proof
- the ledger says done, so the stale pending row it was launched to resolve is
- cleared (guarded on the snapshot epoch: a row re-accepted since belongs to a
- live delivery and survives)."""
+    the ledger says done, so the stale pending row it was launched to resolve is
+    cleared (guarded on the snapshot epoch: a row re-accepted since belongs to a
+    live delivery and survives)."""
     j = Journal(tmp_path / "dp.db")
     fs = FakeStorage()
     c1 = _c1(fs, chunk_id="j-clear", stream_id="s-x", sequence=0)
@@ -467,10 +468,10 @@ def test_clear_pending_is_epoch_guarded(tmp_path):
 
 def test_redrive_cap_finalizes_durable_record_chunks_never_dead_letters(tmp_path):
     """Heal containment at the crash-loop cap: a pending chunk that HAS a durable
- record (a crash-looping heal) is FINALIZED — pending cleared, done_final set,
- reported to the caller — never flipped to dead_letter (recording must not read
- a chunk with a durable record as a gap). A record-less poison chunk still
- dead-letters exactly as before."""
+    record (a crash-looping heal) is FINALIZED — pending cleared, done_final set,
+    reported to the caller — never flipped to dead_letter (recording must not read
+    a chunk with a durable record as a gap). A record-less poison chunk still
+    dead-letters exactly as before."""
     j = Journal(tmp_path / "dp.db")
     fs = FakeStorage()
     healing = _c1(fs, chunk_id="heal-loop", stream_id="s", sequence=0)
@@ -499,7 +500,7 @@ def test_redrive_cap_finalizes_durable_record_chunks_never_dead_letters(tmp_path
 
 class _GateProcessor(FakeGraphProcessor):
     """Blocks the graph run on an Event so a test can hold a chunk un-processed
- (the callable runs in the threadpool — prior blocking-gate idiom carries over)."""
+    (the callable runs in the threadpool — v0's blocking-gate idiom carries over)."""
 
     def __init__(self) -> None:
         self.gate = threading.Event()
@@ -516,7 +517,7 @@ class _GateProcessor(FakeGraphProcessor):
 
 def _async_env(monkeypatch, tmp_path, **extra):
     """Env + the mock audio registry (create_app-based tests bypass the `client`
- fixture, so the registry install happens here)."""
+    fixture, so the registry install happens here)."""
     install_mock_audio_registry(monkeypatch)
     monkeypatch.setenv("STORAGE_URL", "http://storage.test")
     monkeypatch.setenv("DP_VAR_DIR", str(tmp_path / "var"))
@@ -528,8 +529,8 @@ def _async_env(monkeypatch, tmp_path, **extra):
 
 def test_kill_recovery_startup_redrive(monkeypatch, tmp_path):
     """Accept a chunk, 'kill' the app before it processes (drain timeout 0 cancels the
- gated worker), then boot a NEW app on the same var dir: the journal re-drives it
- to completion with no external re-POST."""
+    gated worker), then boot a NEW app on the same var dir: the journal re-drives it
+    to completion with no external re-POST."""
     _async_env(monkeypatch, tmp_path, INGEST_DRAIN_TIMEOUT="0")
     import app.main as main_mod
     from app.stagegraph.processor import graph_processor as real_graph_processor
@@ -570,8 +571,8 @@ def test_kill_recovery_startup_redrive(monkeypatch, tmp_path):
 
 def test_restart_amnesia_closed_for_continuity(monkeypatch, tmp_path):
     """Process seqs 0-2 in app1; restart; WITHOUT any new delivery the new app's
- /continuity already knows them as seen+processed — recording's confirm loop
- works and no leading gap is fabricated when a later chunk arrives."""
+    /continuity already knows them as seen+processed — recording's confirm loop
+    works and no leading gap is fabricated when a later chunk arrives."""
     _async_env(monkeypatch, tmp_path)
     import app.main as main_mod
 
@@ -603,7 +604,7 @@ def test_restart_amnesia_closed_for_continuity(monkeypatch, tmp_path):
 
 def test_durable_dedup_answers_redelivery_after_restart(monkeypatch, tmp_path):
     """A chunk processed before a restart: redelivery to the NEW app returns the
- prior record_ids (200) without reprocessing — no blob pull, no /context write."""
+    prior record_ids (200) without reprocessing — no blob pull, no /context write."""
     _async_env(monkeypatch, tmp_path)
     import app.main as main_mod
 
@@ -628,7 +629,7 @@ def test_durable_dedup_answers_redelivery_after_restart(monkeypatch, tmp_path):
 
 def test_dead_letter_survives_restart(monkeypatch, tmp_path):
     """A dead-lettered chunk (missing blob = terminal) stays visible as dead_lettered
- after a restart — recording keeps reading it as gaps until a redelivery heals it."""
+    after a restart — recording keeps reading it as gaps until a redelivery heals it."""
     _async_env(monkeypatch, tmp_path)
     import app.main as main_mod
 
@@ -658,8 +659,8 @@ def test_dead_letter_survives_restart(monkeypatch, tmp_path):
 
 def test_pending_rehydrates_as_seen_not_processed():
     """A still-pending (accepted, unprocessed) chunk rehydrates as SEEN coverage but
- NEITHER processed NOR dead — so a restart can't fabricate a gap out of an in-flight
- chunk (the keystone), and recording reads it as 'recording', not 'clean'/'gaps'."""
+    NEITHER processed NOR dead — so a restart can't fabricate a gap out of an in-flight
+    chunk (the keystone), and recording reads it as 'recording', not 'clean'/'gaps'."""
     from app.continuity import ContinuityTracker
     t = ContinuityTracker()
     t.rehydrate({
@@ -680,7 +681,7 @@ def test_pending_rehydrates_as_seen_not_processed():
 
 def test_pending_backlog_larger_than_queue_all_recover(monkeypatch, tmp_path):
     """Startup re-drive of MORE pending rows than the queue bound: the waiting submit
- drains them all as workers free slots (none stranded, none deleted)."""
+    drains them all as workers free slots (none stranded, none deleted)."""
     _async_env(monkeypatch, tmp_path, INGEST_QUEUE_MAX="1", INGEST_WORKERS="1")
     import app.main as main_mod
     from app.journal import Journal
@@ -704,7 +705,7 @@ def test_pending_backlog_larger_than_queue_all_recover(monkeypatch, tmp_path):
 
 def test_double_lifespan_does_not_inflate_counters(monkeypatch, tmp_path):
     """Entering the lifespan twice on the SAME app (TestClient runs it per `with`) must
- not re-rehydrate over live state — duplicate_deliveries/received stay honest."""
+    not re-rehydrate over live state — duplicate_deliveries/received stay honest."""
     _async_env(monkeypatch, tmp_path)
     import app.main as main_mod
     fs = FakeStorage()

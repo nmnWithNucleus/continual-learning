@@ -9,8 +9,8 @@ surviving operational knobs (VERIFY_BLOB_SHA256, METRICS_ENABLED, INGEST_ASYNC,
 worker counts): operational-only means output-inert.
 
 Runs on MOCK dialects (client-level fakes named in the version string), fixtures
-distinct from the real backends' goldens. real-backend e2e extends the same matrix over the
-real stage classes with fake clients injected.
+distinct from the real backends' goldens. The real-backend e2e extends the same
+matrix over the real stage classes with fake clients injected.
 """
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ ENV_MATRIX: list[dict[str, str]] = [
 
 def _wire_bytes_for(monkeypatch, tmp_path, env: dict[str, str], run_tag: str) -> bytes:
     """Boot a fresh app under `env`, ingest the fixed chunk, return the exact
- bytes POSTed to /context."""
+    bytes POSTed to /context."""
     for key, value in env.items():
         monkeypatch.setenv(key, value)
     monkeypatch.setenv("STORAGE_URL", "http://storage.test")
@@ -91,7 +91,7 @@ def test_record_bytes_identical_across_env_matrix(monkeypatch, tmp_path,
 
 def test_reprocess_is_byte_identical(monkeypatch, tmp_path):
     """§4's crash-table claim: a full reprocess under fixed versions is
- byte-identical (no wall-clock field exists inside the record)."""
+    byte-identical (no wall-clock field exists inside the record)."""
     first = _wire_bytes_for(monkeypatch, tmp_path, {}, "a")
     time.sleep(0.05)  # any wall-clock leak would move the second run's bytes
     second = _wire_bytes_for(monkeypatch, tmp_path, {}, "b")
@@ -353,8 +353,7 @@ def test_matrix_goes_red_on_a_deliberate_violator(monkeypatch, tmp_path):
 # it lands HERE with its disposition, or the suite is red.
 # ---------------------------------------------------------------------------
 
-# The documented operational surface (each has a disposition in
-# stagegraph docs):
+# The documented operational surface:
 OPERATIONAL_ENV_ALLOWLIST = {
     # config.py — the Settings survivors
     "STORAGE_URL", "DP_HTTP_TIMEOUT", "VERIFY_BLOB_SHA256",

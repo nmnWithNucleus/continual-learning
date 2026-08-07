@@ -1,12 +1,12 @@
 """InjectedCaptionStage: built + tested but NOT registered.
 
 Dogfood-only (Phase-3 replay descriptions): enabling it is a code-level graph
-composition — the ratified §2 dialect excludes it, C2 v1 has no
-``injected_caption`` sub-schema, and the prior env knobs
-(INJECT_CAPTION_BACKEND/INJECT_CAPTION_INDEX) are dead: the index path is a
-CONSTRUCTOR argument. Tests drive explicit resolve() stage sets.
+composition — no registered dialect includes it, C2 v1 has no
+``injected_caption`` sub-schema, and no env knob selects its backend or index
+(L4): the index path is a CONSTRUCTOR argument. Tests drive explicit resolve()
+stage sets.
 
-Ported v0 semantics under test: the wall-clock join (rows whose t_start falls
+Semantics under test: the wall-clock join (rows whose t_start falls
 inside the chunk's half-open C1 span), the index's OWN time strings carried
 VERBATIM (never re-rendered — a re-rendered stamp silently moves a record out
 of its window), blank rows skipped, unsorted indexes handled, and a missing or
@@ -55,7 +55,7 @@ def test_injected_caption_is_not_registered():
 
 def test_rows_inside_the_span_become_splits_verbatim(tmp_path):
     # Two spellings the index might carry — both must ride through CHAR-FOR-CHAR
-    # (the prior rule: the index strings ARE the spine recording stamped from).
+    # (the v0 rule: the index strings ARE the spine recording stamped from).
     path = _write_index(tmp_path, [
         _row("2026-08-06T12:00:05Z", "2026-08-06T12:00:10Z", "making coffee"),
         _row("2026-08-06T12:00:59+00:00", "2026-08-06T12:01:04+00:00",

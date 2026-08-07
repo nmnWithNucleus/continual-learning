@@ -5,7 +5,7 @@ precisely what will be sent to the model. This renders a pack's system + user te
 realistic context (frame count, offsets, budget-derived word band, a sample OCR block) and
 prints the composed prompt dialect tag alongside — no GPU, no network.
 
- python -m app.vision.prompts show --pack screen-clip-v1 --frames 12 --span 60
+    python -m app.vision.prompts show --pack screen-clip-v1 --frames 12 --span 60
 """
 from __future__ import annotations
 

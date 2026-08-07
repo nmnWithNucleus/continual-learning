@@ -1,34 +1,34 @@
 """data-processing service HTTP surface (FastAPI, :8085) — MODALITY-AGNOSTIC core.
 
-POST /ingest — body = a pushed C1 raw-stream envelope. Validate C1 -> dedup on
- chunk_id -> pull the blob by ref from storage -> run the modality's
- stage graph -> assemble the ONE C2 v1 record from its slots ->
- ONE atomic POST to storage /context -> return
- {ok, record_ids:[<the one id>]}. This is the C1 push receiver.
+POST /ingest  — body = a pushed C1 raw-stream envelope. Validate C1 -> dedup on
+                chunk_id -> pull the blob by ref from storage -> run the modality's
+                stage graph -> assemble the ONE C2 v1 record from its slots ->
+                ONE atomic POST to storage /context -> return
+                {ok, record_ids:[<the one id>]}. This is the C1 push receiver.
 
- Two processing modes (INGEST_ASYNC, FROZEN once at startup):
- * INLINE (default): process inside the request, return
- {ok, record_ids:[...]} (200). Byte-identical to M0.
- * ASYNC (M7, arriving early): ACK 202 {ok, accepted, chunk_id} the
- moment the chunk is claimed, process on a worker pool. Retry safety
- rides chunk_id dedup + deterministic record_id upserts. A redelivery
- of an ALREADY-DONE chunk still returns its record_ids (200); an
- in-flight redelivery re-ACKs 202; a full queue is 503 backpressure.
- Deterministic C1/modality rejections (400/422/501) resolve
- SYNCHRONOUSLY in BOTH modes — never deferred into a silent dead-letter.
-GET /health — liveness + per-modality resolved dialects + ingest mode.
-GET /metrics — Prometheus text exposition (D9 observability; METRICS_ENABLED).
-GET /continuity — per-stream break/dup report (ContinuityTracker),
- the check behind "zero silent loss": recording's gap report
- queries it to close the loop across both capture legs. Async /ingest
- ACKs at ACCEPT, so this now also carries `processed` + `dead_lettered`
- so recording tells an in-flight chunk from a lost one.
-GET /continuity/{stream_id} — one stream's entry (404 unknown).
+                Two processing modes (INGEST_ASYNC, FROZEN once at startup):
+                  * INLINE (default): process inside the request, return
+                    {ok, record_ids:[...]} (200). Byte-identical to M0.
+                  * ASYNC (M7, arriving early): ACK 202 {ok, accepted, chunk_id} the
+                    moment the chunk is claimed, process on a worker pool. Retry safety
+                    rides chunk_id dedup + deterministic record_id upserts. A redelivery
+                    of an ALREADY-DONE chunk still returns its record_ids (200); an
+                    in-flight redelivery re-ACKs 202; a full queue is 503 backpressure.
+                Deterministic C1/modality rejections (400/422/501) resolve
+                SYNCHRONOUSLY in BOTH modes — never deferred into a silent dead-letter.
+GET  /health  — liveness + per-modality resolved dialects + ingest mode.
+GET  /metrics — Prometheus text exposition (D9 observability; METRICS_ENABLED).
+GET  /continuity              — per-stream break/dup report (ContinuityTracker),
+                the check behind "zero silent loss": recording's gap report
+                queries it to close the loop across both capture legs. Async /ingest
+                ACKs at ACCEPT, so this now also carries `processed` + `dead_lettered`
+                so recording tells an in-flight chunk from a lost one.
+GET  /continuity/{stream_id}  — one stream's entry (404 unknown).
 
 The core knows nothing about audio/image/video/text: modality behavior lives in
 disjoint stage files under ``app/stages/<modality>/`` (the stage registry), so a
 future session owns a stage by dropping in one file. One chunk yields exactly ONE
-C2 v1 record built from slots (L2/L5,); ``pipeline_version`` is resolved from
+C2 v1 record built from slots (L2/L5, D24); ``pipeline_version`` is resolved from
 code alone before any stage runs (L4 — no output-affecting env knob exists).
 
 Model servers (L9): ``app.state.model_clients`` carries one ModelClient per
@@ -72,7 +72,7 @@ logger = logging.getLogger("data-processing")
 _PROM_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
 
 # (DP_DIALECT_FREEZE and its flip-window logic died with the env-flippable
-# dialect model —. Dialects live in code; a deploy IS the flip.)
+# dialect model — D26. Dialects live in code; a deploy IS the flip.)
 
 
 def _default_manifest_path() -> Path:
@@ -86,22 +86,22 @@ def _manifest_path() -> Path:
 
 def _supervisor_enabled() -> bool:
     """Operational opt-in: run.sh / deploy set DP_SUPERVISOR=1 so the service owns
- the fleet; tests and ad-hoc runs never spawn model servers by accident."""
+    the fleet; tests and ad-hoc runs never spawn model servers by accident."""
     return os.getenv("DP_SUPERVISOR", "").strip().lower() in ("1", "true", "yes", "on")
 
 
 async def _assert_vlm_identity() -> None:
     """Boot-time VLM identity probe.
 
- clipcap's endpoint sits OUTSIDE the manifest identity scheme — it speaks the
- OpenAI wire, not the fleet /infer envelope — so the pinned model NAME is the
- only identity DP can assert about it. Assert it before serving: a deploy
- pointed at the wrong endpoint must fail its boot loudly, not caption the
- corpus with an unpinned model. Runs only under the DP_SUPERVISOR opt-in (the
- deploy shape); unit tests construct apps freely and never want a VLM. Uses
- clipcap's own env reads and the patchable ``vlm.make_async_client`` factory,
- so the probe and the stage can never disagree about which endpoint is real.
- """
+    clipcap's endpoint sits OUTSIDE the manifest identity scheme — it speaks the
+    OpenAI wire, not the fleet /infer envelope — so the pinned model NAME is the
+    only identity DP can assert about it. Assert it before serving: a deploy
+    pointed at the wrong endpoint must fail its boot loudly, not caption the
+    corpus with an unpinned model. Runs only under the DP_SUPERVISOR opt-in (the
+    deploy shape); unit tests construct apps freely and never want a VLM. Uses
+    clipcap's own env reads and the patchable ``vlm.make_async_client`` factory,
+    so the probe and the stage can never disagree about which endpoint is real.
+    """
     from app.stages.video.clipcap import MODEL, _vlm_timeout_s
     from app.vision.clipcap import vlm
 
@@ -133,10 +133,9 @@ async def _assert_vlm_identity() -> None:
 
 def _build_model_clients(manifest_path: Path, metrics=None) -> dict[str, ModelClient]:
     """One ModelClient per manifest server. ``client_timeout_s`` is wired from the
- manifest (client timeouts were unwired before the model-client pass); remember client call
- timeouts include queue wait — replicas serialize inference. ``metrics`` is
- the app registry (server-call families, model-client metrics) — declared before the clients
- are built so each client can seed its zeros."""
+    manifest; remember client call timeouts include queue wait — replicas serialize
+    inference. ``metrics`` is the app registry (server-call families) — declared
+    before the clients are built so each client can seed its zeros."""
     if not manifest_path.exists():
         return {}
     manifest = json.loads(manifest_path.read_text())
@@ -162,7 +161,7 @@ _CHAR_BUCKETS: tuple[float, ...] = (0, 16, 32, 64, 128, 256, 512, 1024, 2048, 40
 
 def _dp_route_template(path: str) -> str:
     """Collapse variable path segments so HTTP-metric label cardinality is bounded to
- one series per ROUTE, not per stream_id."""
+    one series per ROUTE, not per stream_id."""
     if path.startswith("/continuity/"):
         return "/continuity/{stream_id}"
     return path
@@ -170,7 +169,7 @@ def _dp_route_template(path: str) -> str:
 
 def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
     """Declare the DP metric families + register pull-time gauge sources (queue depth,
- continuity aggregates read live at scrape time)."""
+    continuity aggregates read live at scrape time)."""
     metrics.declare_counter(
         "dp_ingest_total", "C1 /ingest outcomes.", ["modality", "result"],
     )  # result: accepted | processed | deduped | duplicate | rejected
@@ -188,7 +187,7 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
     metrics.declare_histogram(
         "dp_stage_seconds", "Per-stage processing latency (seconds).", ["modality", "stage"],
     )
-    # Stage-graph: per-STAGE latency (asr/diarize/translate/acoustic, clipcap/screentext,
+    # Stage-graph: per-STAGE latency (asr/diarize/translate/acoustic, keyframes/captions,
     # and every future drop-in stage) + per-stage failures/skips — the intra-pipeline
     # granularity the coarse dp_stage_seconds{stage=process} couldn't show.
     metrics.declare_histogram(
@@ -199,7 +198,7 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
         ["modality", "stage", "reason"],
     )
 
-    # ---- Ledger v2 / heal observability (L8, model-client metrics) ---------------------------------
+    # ---- Ledger v2 / heal observability (L8) -----------------------------------------
     metrics.declare_counter(
         "dp_heal_attempts_total",
         "Heal attempts: full-graph re-runs on redelivery of a holey chunk, success "
@@ -212,7 +211,7 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
         "stage — fires once per finalization per non-ok stage.",
         ["stage"],
     )
-    # ---- Server-call observability (model_client; cleanup §C assignment) ----
+    # ---- Server-call observability (model_client) ------------------------------------
     metrics.declare_counter(
         "dp_server_calls_total",
         "Model-server calls by outcome (ok | deterministic_error | unavailable | "
@@ -237,15 +236,15 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
         ["server"],
     )
 
-    # ---- screen-video observability ------------------------------------------------
-    # The metric NAMES + label sets stay §8's; this is the single declaration
-    # site (as it already is for the graph-stage families above). Two tiers:
-    # * PARENT-side — emitted by ingest_core's per-slot accounting on the one
-    # durably-written record. Seeded to zero below so rate() is well-defined
-    # from process start (no missing-series gap).
-    # * STAGE-side — emitted from inside the clip stages via ctx.metrics.
-    # Declared here so the families exist from t=0; the labelled ones
-    # surface on first emit (their label values are the stages' to choose).
+    # ---- Screen-video observability --------------------------------------------------
+    # This is the single declaration site for the metric names + label sets (as it
+    # already is for the graph-stage families above). Two tiers:
+    #   * PARENT-side — emitted by ingest_core's per-slot accounting on the one
+    #     durably-written record. Seeded to zero below so rate() is well-defined
+    #     from process start (no missing-series gap).
+    #   * STAGE-side — emitted from inside the clip stages via ctx.metrics.
+    #     Declared here so the families exist from t=0; the labelled ones
+    #     surface on first emit (their label values are the stages' to choose).
     metrics.declare_counter(
         "dp_units_total", "C2 units durably written, by modality + content kind.",
         ["modality", "kind"],
@@ -279,12 +278,11 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
         "dp_ocr_frame_errors_total",
         "Per-frame OCR errors absorbed (>50% of a chunk's frames erroring raises).",
     )
-    # (Cleanup round: the declared-but-producerless families are gone —
-    # dp_video_delta_peak, dp_video_ocr_events, dp_video_scenario_mismatch_total
-    # (their legacy producers died with the prior graph / the scenario env knob)
-    # and dp_caption_ungrounded_quote_total (offline-eval scorer owns it; re-declare
-    # WITH the producer). A declared series with no producer is the same lying
-    # zero that killed dp_partial_write_total.)
+    # (Deliberately NOT declared, because nothing produces them: dp_video_delta_peak,
+    # dp_video_ocr_events, dp_video_scenario_mismatch_total and
+    # dp_caption_ungrounded_quote_total — the caption scorer owns that last one, so
+    # re-declare it WITH its producer. A declared series with no producer is the same
+    # lying zero that killed dp_partial_write_total.)
 
     # Seed the PARENT-side counters to zero for every registered stage's slot, so
     # a scrape before any traffic already shows the series (a missing series reads
@@ -337,7 +335,7 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
 
     def _continuity_agg():
         """Aggregate continuity counts across streams (bounded cardinality — totals,
- not per-stream series). Recomputed from live tracker state each scrape."""
+        not per-stream series). Recomputed from live tracker state each scrape."""
         report = app.state.continuity.report()
         streams = report["streams"]
 
@@ -378,15 +376,15 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
     # from both (daylog.py filters on neither kind nor pipeline_version). One series per
     # (modality, pipeline_version) is exactly the shape the mixed-dialect alert needs.
     #
-    # ALERT (replica-count robust):
-    # count(count by (modality, pipeline_version) (dp_pipeline_dialect)) by (modality) > 1
+    #   ALERT (replica-count robust):
+    #     count(count by (modality, pipeline_version) (dp_pipeline_dialect)) by (modality) > 1
     #
     # This refines §8's shorthand `count by (modality) (dp_pipeline_dialect) > 1`, which
     # over-fires once there is >1 replica: Prometheus adds an `instance` label per target,
     # so N replicas AGREEING on one dialect already yield N series and would trip the bare
     # count. The inner `count by (modality, pipeline_version)` collapses replicas first, so
     # the alert fires strictly on >1 DISTINCT dialect per modality — the drain-and-replace
-    # (never rolling) signal,. Per-modality resolution is guarded: a modality that
+    # (never rolling) signal, D-14. Per-modality resolution is guarded: a modality that
     # cannot resolve right now is simply absent, never hiding the others.
     def _pipeline_dialects():
         out = []
@@ -410,13 +408,13 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
 def _assert_not_offline_eval() -> None:
     """``DP_OFFLINE_EVAL=1`` ⇒ this process MUST NOT serve.
 
- The offline A/B harness (``scripts/prompt_ab.py``) unlocks prompt-pack overrides —
- experimental packs, a fault-injected OCR arm — under this one flag, and it drives
- ``resolve()`` / ``run_graph()`` / ``build_c2`` directly, never FastAPI and never
- ``StorageClient``, so it is structurally incapable of reaching ``/context``. This guard
- closes the mirror hazard: **the flag that enables experiments is the flag that prevents
- serving**, so an eval env leaking into a deployment fails at boot — loudly, before one
- experimental caption can be written to a real corpus under a real dialect."""
+    The offline A/B harness (``scripts/prompt_ab.py``) unlocks prompt-pack overrides —
+    experimental packs, a fault-injected OCR arm — under this one flag, and it drives
+    ``resolve()`` / ``run_graph()`` / ``build_c2`` directly, never FastAPI and never
+    ``StorageClient``, so it is structurally incapable of reaching ``/context``. This guard
+    closes the mirror hazard: **the flag that enables experiments is the flag that prevents
+    serving**, so an eval env leaking into a deployment fails at boot — loudly, before one
+    experimental caption can be written to a real corpus under a real dialect."""
     if os.getenv("DP_OFFLINE_EVAL", "").strip().lower() not in ("", "0", "false", "no", "off"):
         raise RuntimeError(
             "DP_OFFLINE_EVAL is set — refusing to build the serving app. This flag unlocks "
@@ -427,20 +425,20 @@ def _assert_not_offline_eval() -> None:
 
 def create_app() -> FastAPI:
     """App factory. Reads env at call time so tests can point STORAGE_URL at a
- stub before construction and inject a mock storage transport after (backend
- selection is code — there is no backend env to flip)."""
+    stub before construction and inject a mock storage transport after (backend
+    selection is code — there is no backend env to flip)."""
     _assert_not_offline_eval()
     settings = get_settings()
 
     async def _redrive_pending(app: FastAPI, queue: IngestQueue, rows: list) -> None:
         """Startup auto-recovery (M7): a PURE enqueue loop over the journal's re-drive
- set. Continuity visibility already happened (rehydration marked every pending
- row as SEEN before this runs) and the durable attempt accounting + crash-loop
- cap happened inside ``pending_for_redrive`` — this loop only claims + enqueues.
- Runs as a BACKGROUND task with the WAITING submit, so a backlog larger than the
- queue bound drains completely as workers free slots and serving starts
- immediately. Re-driven jobs use CURRENT config (same posture as a redelivery);
- recording never has to notice."""
+        set. Continuity visibility already happened (rehydration marked every pending
+        row as SEEN before this runs) and the durable attempt accounting + crash-loop
+        cap happened inside ``pending_for_redrive`` — this loop only claims + enqueues.
+        Runs as a BACKGROUND task with the WAITING submit, so a backlog larger than the
+        queue bound drains completely as workers free slots and serving starts
+        immediately. Re-driven jobs use CURRENT config (same posture as a redelivery);
+        recording never has to notice."""
         from starlette.concurrency import run_in_threadpool as _tp
         redriven = skipped = 0
         for row in rows:
@@ -492,14 +490,14 @@ def create_app() -> FastAPI:
         from starlette.concurrency import run_in_threadpool as _tp
         journal: Journal = app.state.journal
         # ORDER MATTERS at startup:
-        # 1. async mode: pending_for_redrive — durably counts this re-drive attempt and
-        # flips crash-loop suspects (> DP_REDRIVE_MAX_ATTEMPTS) to dead_letter;
-        # 2. BOTH modes: rehydrate continuity from the journal — processed + dead +
-        # STILL-PENDING rows all count as SEEN coverage (the keystone: a restart can
-        # never fabricate a gap out of a chunk that is merely waiting to be
-        # re-driven), with the cap-flips from step 1 already visible as dead;
-        # 3. async mode: start workers, then re-drive as a background task (pure
-        # enqueue; waits for queue capacity instead of stranding a large backlog).
+        #   1. async mode: pending_for_redrive — durably counts this re-drive attempt and
+        #      flips crash-loop suspects (> DP_REDRIVE_MAX_ATTEMPTS) to dead_letter;
+        #   2. BOTH modes: rehydrate continuity from the journal — processed + dead +
+        #      STILL-PENDING rows all count as SEEN coverage (the keystone: a restart can
+        #      never fabricate a gap out of a chunk that is merely waiting to be
+        #      re-driven), with the cap-flips from step 1 already visible as dead;
+        #   3. async mode: start workers, then re-drive as a background task (pure
+        #      enqueue; waits for queue capacity instead of stranding a large backlog).
         # Model-server fleet (L9): the supervisor is an operational opt-in
         # (DP_SUPERVISOR=1 — deploys set it; unit tests never spawn model
         # servers). Clients exist whenever a manifest does — an externally-run
@@ -582,8 +580,8 @@ def create_app() -> FastAPI:
     # transport AFTER create_app() but BEFORE the TestClient `with` block, and
     # process_chunk reads app.state.storage per call — so the fake transport is honored.
     app.state.storage = StorageClient(settings.storage_url, timeout=settings.http_timeout)
-    # Metrics BEFORE the model clients: the server-call families (model-client metrics) must be
-    # declared when the clients construct and seed their zeros.
+    # Metrics BEFORE the model clients: the server-call families must be declared
+    # when the clients construct and seed their zeros.
     app.state.metrics = Metrics() if settings.metrics_enabled else None
     if app.state.metrics is not None:
         _setup_metrics(app, app.state.metrics)
@@ -594,7 +592,7 @@ def create_app() -> FastAPI:
                                                    metrics=app.state.metrics)
     # Journal is LAZY (no filesystem touch until first use) — safe at module import.
     app.state.journal = Journal(Path(settings.dp_var_dir) / "dp.db")
-    # The L8 claim tree : every delivery is judged from the journal's
+    # The L8 claim tree: every delivery is judged from the journal's
     # done-row — fresh / version-forward / skip / heal / in-flight — with the
     # caller's freshly-resolved pipeline_version as the version-compare input.
     # The tree lives in dedup.classify; the row comes from HERE and only here
@@ -690,7 +688,7 @@ def create_app() -> FastAPI:
 
     async def _ingest_inline(request, c1, settings, processor, pipeline_version) -> JSONResponse:
         """Process inside the request, return record_ids — the wire shape is
- byte-identical to M0; the redelivery verdict now comes from the L8 tree."""
+        byte-identical to M0; the redelivery verdict now comes from the L8 tree."""
         dedup: DedupStore = request.app.state.dedup
         chunk_id = c1["chunk_id"]
         metrics = request.app.state.metrics
@@ -748,7 +746,7 @@ def create_app() -> FastAPI:
 
     async def _ingest_async(request, c1, settings, processor, pipeline_version) -> JSONResponse:
         """ACK 202 the moment the chunk is claimed; a worker processes it. The L8
- tree routes the verdicts; a heal claim rides the queue like any job."""
+        tree routes the verdicts; a heal claim rides the queue like any job."""
         dedup: DedupStore = request.app.state.dedup
         chunk_id = c1["chunk_id"]
 

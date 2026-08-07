@@ -1,8 +1,8 @@
 """An in-process fake storage service, wired via an httpx MockTransport.
 
 Serves the two endpoints data-processing calls:
- * GET /raw/blobs?ref=<blob_ref> -> the registered bytes (404 if unknown)
- * POST /context/records -> records the C2 body (idempotent on record_id)
+  * GET  /raw/blobs?ref=<blob_ref>   -> the registered bytes (404 if unknown)
+  * POST /context/records            -> records the C2 body (idempotent on record_id)
 
 Because it is a MockTransport (no real socket), the test can inspect exactly what
 was fetched and written — and count how many times /context was POSTed, which is
