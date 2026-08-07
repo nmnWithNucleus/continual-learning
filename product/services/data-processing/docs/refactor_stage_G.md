@@ -132,3 +132,18 @@ Evidence: no broken markdown links to the deleted doc remain in `CHARTER.md`/`DE
 `ARCHITECTURE.md`; the residual dead-vocabulary in `CHARTER.md` sits only in §Condensed history,
 the Slot Law dead-concepts list, the dated changelog, and new-world sentences that name a retired
 concept precisely to say it is gone. `app.main` imports (docs-only change; suites untouched).
+
+## WP-G4 — ARCHITECTURE §Vocabulary + the C2/C10 cards
+
+| Change | What |
+|---|---|
+| §Vocabulary `record` row | **UPDATED** — one record per chunk (C2 v1), built from `content.slots`; a transcript/caption/OCR are *slots* in one record, not separate records. |
+| §Vocabulary `dialect` row | **UPDATED** — "which processing produced this record" (the composed `pipeline_version`); one dialect per chunk. |
+| §Vocabulary `discriminator` row | **RETIRED** — marked retired with a pointer to the data-processing charter's §Condensed history (why it existed, what killed it), exactly as the brief directs. |
+| §Contracts index C2 / C10 rows | **FLIPPED** — C2 `built (v1, live since the Stage F cutover)`; C10 `built (v2, live since the Stage F cutover)` (were "built v0 · v1 designed" / "built v1 · v2 designed"). |
+| C2 card status + Shape + "v1 is the wire" rule | **FLIPPED** — v1 built and live since the cutover; v0 schema archived; the "v0 remains the wire today" rule replaced with "v1 is the wire; v0 wiped fresh-forward (OD-2), `/raw` kept." Mirrors watch-out tense corrected (were cut at Stage C). |
+| C10 card status + v2-deltas + dedup rule + a reasoning bullet | **FLIPPED** — v2 built and live; the dedup Rule leads with the live v2 `(chunk_id)`/`updated_at` key and notes the v0/v1 `(chunk_id, content.kind, discriminator)`/`ingest_time` key as retired; the "pipeline_version cannot be the dialect key" reasoning reworded off the `mutate` example. |
+
+Residual dead-vocabulary in `ARCHITECTURE.md` now sits only in the retired Vocabulary row's
+pointer, the C2/C10 card §How-it-got-here history, and rules that name the retired key precisely
+to mark it superseded.

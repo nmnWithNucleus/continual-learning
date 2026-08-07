@@ -136,9 +136,9 @@ Terms this repo coined. Nobody arrives knowing them.
 | **envelope** | The metadata describing a captured chunk: who, which device and stream, when, and where the bytes live. |
 | **chunk** | A few seconds of captured stream. The unit of dedup, via `chunk_id`. |
 | `/context` | The durable store of processed records — what was said, seen and read, timestamped. |
-| **record** | One processed unit in `/context`: a transcript, a caption, an OCR pass. |
-| **dialect** | *Which processing produced this text.* The trainer must see only one dialect per unit. |
-| **discriminator** | What tells a chunk's several records apart — an `ocr` beside a `caption`. `""` when there is only one. |
+| **record** | One processed unit in `/context`: **exactly one per chunk** (C2 v1), built from `content.slots` — a transcript, a caption and an OCR pass are *slots* in the same record, not separate records. |
+| **dialect** | *Which processing produced this record* — the composed `pipeline_version`. The trainer must see only one dialect per chunk. |
+| **discriminator** | *Retired.* Under v0 it told a chunk's several records apart; C2 v1 is one record per chunk, so it is gone (why it existed, and what killed it: [data-processing §Condensed history](services/data-processing/CHARTER.md#condensed-history--the-v0-governance-the-slot-law-replaced)). |
 | **window** | The span one night's training covers: `[last_trained_t, now−δ)` on storage's ingest axis. |
 | **watermark** | `last_trained_t` — how far this user's adapter has actually been trained. Moves only on a publish. |
 | **day-log** | The rendered account of a window that the trainer reads: anchored scene blocks. |
@@ -158,7 +158,7 @@ Terms this repo coined. Nobody arrives knowing them.
 | ID | Producer → Consumer | Carries | Status | Card |
 |---|---|---|---|---|
 | **C1** | recording → data-processing | Every captured chunk's metadata, and where its bytes landed | `built` | [↓](#c1--the-raw-stream-envelope) |
-| **C2** | data-processing → storage `/context` | One processed record: what was said, seen or read, and when | `built` (v0) · v1 `designed` | [↓](#c2--the-processed-record) |
+| **C2** | data-processing → storage `/context` | One processed record: what was said, seen or read, and when | `built` (v1, live since the Stage F cutover) | [↓](#c2--the-processed-record) |
 | **C3** | input (QueryBuilder) → inference | A user's request, turned into model input | `built` | [↓](#c3--the-userprompt) |
 | **C4** | inference → storage `/sessions` | The full record of one turn, traces included | `built` | [↓](#c4--the-turn-record) |
 | **C5** | continuum → model directory | A newly trained adapter, and whether it may serve | `built` | [↓](#c5--the-adapter-publish) |
@@ -166,7 +166,7 @@ Terms this repo coined. Nobody arrives knowing them.
 | **C7** | inference ↔ mentors | Questions to frontier models, and everything they answer with | `designed` | [↓](#c7--the-mentor-protocol) |
 | **C8** | QueryBuilder ↔ data-processing | The capture pipeline, offered synchronously to a live request | `designed` | [↓](#c8--the-shared-pipeline-api) |
 | **C9** | inference → output | The answer, streaming, and what happened at the end of the turn | `built` | [↓](#c9--the-response-stream) |
-| **C10** | storage → continuum | Tonight's training window, and the day-log rendered over it | `built` (v1) · v2 `designed` | [↓](#c10--the-training-window-read) |
+| **C10** | storage → continuum | Tonight's training window, and the day-log rendered over it | `built` (v2, live since the Stage F cutover) | [↓](#c10--the-training-window-read) |
 | **C11** | storage → input (QueryBuilder) | What the user did today, before tonight's training reaches the weights | `designed` | [↓](#c11--the-recent-context-read) |
 | **C12** | storage → continuum | Per-user policy the system reads to decide its own behaviour | `built` | [↓](#c12--the-user-profile-read) |
 | **C13** | storage → continuum + inference | Versioned recipes and gate policies, fetched by id | `built` | [↓](#c13--the-recipe-registry) |
@@ -245,18 +245,18 @@ Envelope leg  recording ──push──▶ data-processing
 
 ### C2 — the processed record
 
-> **data-processing → storage `/context`** · v1 `designed`, ratified 2026-08-06
-> ([D24](DECISIONS.md)) · v0 `built`, the running wire until the
-> Stage F cutover · [D10](DECISIONS.md) · [D17](DECISIONS.md) · [D19](DECISIONS.md)
+> **data-processing → storage `/context`** · v1 `built` and **live since the Stage F cutover**
+> (2026-08-07), ratified 2026-08-06 ([D24](DECISIONS.md)) · v0 retired at the cutover (records
+> wiped fresh-forward, OD-2) · [D10](DECISIONS.md) · [D17](DECISIONS.md) · [D19](DECISIONS.md)
 > · schemas [c2_processed_record.v1.json](contracts/c2_processed_record.v1.json) ·
-> [c2_processed_record.v0.json](contracts/c2_processed_record.v0.json)
+> [c2_processed_record.v0.json](contracts/c2_processed_record.v0.json) (archived)
 
 **In one line.** Data-processing writes down what a chunk actually contained — the words spoken, the
 scene described, the text on screen, with the timestamps that let separate devices be lined up
 against each other.
 
-**Shape** — v1, the pinned target the rebuild builds against. The v0 wire the running service
-still emits is its schema plus §How it got here.
+**Shape** — v1, the wire the service emits since the Stage F cutover. The v0 schema is archived;
+its shape and why it was replaced are in §How it got here.
 
 ```
 {contract:"C2", version:"1", record_id, user_id, modality,
@@ -289,8 +289,8 @@ still emits is its schema plus §How it got here.
   breaks the byte-compare and T-1. Processing latency is a `/metrics` matter.
 - Reading a record is Slot Law L11: stage in the dialect + slot absent = attempted and failed;
   slot present with empty value = honest empty claim; stage not in the dialect = never attempted.
-- **v0 remains the wire today.** The running service emits v0 until the Stage F cutover (OD-1
-  beside-build); nothing emits v1 before then.
+- **v1 is the wire.** The service emits v1 since the Stage F cutover (2026-08-07); v0 records were
+  wiped fresh-forward at the cutover (OD-2) and `/raw` was kept — bytes are sacred.
 
 **Why it's this way**
 
@@ -309,7 +309,7 @@ still emits is its schema plus §How it got here.
 
 - **Mirrors must move with the schema.** DP's and storage's pydantic mirrors are `extra="forbid"`
   — the trap D17 hit. A field added to the schema but not to both mirrors fails closed. The v1
-  mirrors are cut at Stage C (`schemas.py` rewrite: one change, four parts).
+  mirrors were cut at Stage C (`schemas.py` rewrite: one change, four parts).
 - A record whose chunk carried no zone simply omits those fields. Absence is normal, not an error.
 - `enrichments` and `discriminator` **do not exist in v1**, and neither does `content.kind`. Do
   not re-add them additively; the first two are named on the charter §Slot Law dead-concepts
@@ -516,9 +516,9 @@ carrying `{error:"..."}`.
 
 ### C10 — the training-window read
 
-> **storage → continuum** · day-log v2 `designed`, ratified 2026-08-06
-> ([D28](DECISIONS.md)) · v1 `built` 2026-07-27 (`a5a48fb`
-> storage · `1757efb` continuum · `2698b63` DP), the running read until the Stage F cutover
+> **storage → continuum** · day-log v2 `built` and **live since the Stage F cutover**
+> (2026-08-07), ratified 2026-08-06 ([D28](DECISIONS.md)) · v1 was the running read
+> 2026-07-27 → cutover (`a5a48fb` storage · `1757efb` continuum · `2698b63` DP)
 > · [D18](DECISIONS.md) · [D20](DECISIONS.md)
 > · schemas [c10_daylog.v2.json](contracts/c10_daylog.v2.json) ·
 > [c10_daylog.v1.json](contracts/c10_daylog.v1.json) ·
@@ -576,15 +576,17 @@ Day-log body:
   a backlog simply forms its own blocks.
 - Segment buckets sit on a **global epoch grid**, `floor(t_start / segment_seconds)` — never
   relative to the window start.
-- **One dialect per record, latest wins.** Among records sharing
-  `(chunk_id, content.kind, discriminator)`, keep the latest `ingest_time` and drop the rest.
+- **One dialect per record, latest wins.** Under the live v2 renderer the dedup key is latest
+  `updated_at` per `(chunk_id)` (one record per chunk; see the v2 deltas). *(v0/v1 keyed
+  `(chunk_id, content.kind, discriminator)` over `ingest_time` — retired with the discriminator.)*
 - **The consumer verifies the dialect; the stamp does not.** Compare `daylog_format_version` and
   `recipe_id` against the night you are about to run, and refuse on mismatch.
 - `home_tz` in the body records **the fallback zone actually used**, so a wrong-timezone adapter is
   falsifiable after the fact instead of invisible.
 
-- The **v2 deltas** (`designed`; ratified 2026-08-06 as [D28](DECISIONS.md) with
-  [D27](DECISIONS.md); built at Stage E) against the rules above, everything else standing:
+- The **v2 deltas** (`built` and live since the Stage F cutover; ratified 2026-08-06 as
+  [D28](DECISIONS.md) with [D27](DECISIONS.md); built at Stage E) against the rules above,
+  everything else standing:
   - The renderer walks C2 v1 `content.slots` instead of per-kind records: `slots.caption` →
     Scene · `slots.ocr` → World text (OCR) · `slots.transcript` → speaker-bucketed transcript
     lines via its `splits[]`.
@@ -651,10 +653,10 @@ Day-log body:
 - **One id collision corrupts the journal, the reservoir and C5 lineage at once** — hence second
   granularity, and belt-and-braces the cycle refuses a window whose end is not strictly greater than
   `last_trained_t`.
-- **`pipeline_version` cannot be the dialect key.** It is a *composed* string (a mutate stage's
+- **`pipeline_version` cannot be the dialect key.** It is a *composed* string (an optional stage's
   enabledness is a version fragment) and therefore not orderable, where `ingest_time` is storage's
-  own monotone clock and is. The key must include `content.kind`, because Phase-3 proved captions
-  and transcripts can share one `pipeline_version`.
+  own monotone clock and is. (This was the v0/v1 reasoning; C10 v2 dedups on `(chunk_id)` alone —
+  one record per chunk removed the need to key on `content.kind`.)
 - **`seg_id` carries no cross-materialization stability guarantee** (D20). What is stable is the
   bucket grid, which decides grouping; the label is only the segment's position in the rendered
   day-log, so a re-materialization that legitimately drops a record renumbers everything after it.
