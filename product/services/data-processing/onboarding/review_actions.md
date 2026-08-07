@@ -14,8 +14,8 @@ superseded by that rewrite, and this board is reset to match.
 - **First review of the rewritten (v1) guide — pending.** The old module-by-module review rounds
   (CTO, 2026-08-05, modules 06–07 executed / 08–15 parked) are **retired**: they reviewed the v0
   guide, whose subject — the record-vs-mutation law, discriminators, the two-record video shape,
-  the OCR sidecar — the rebuild deleted. The guide is now ten modules teaching one record per
-  chunk, slots, the version law, the machinery/bureaucracy split, heal, and an honest
+  the OCR sidecar — the rebuild deleted. The guide is now eleven modules (00–10) teaching one
+  record per chunk, slots, the version law, the machinery/bureaucracy split, heal, and an honest
   real-vs-unbuilt board. It wants a fresh read against the running service.
 
 - **The v0-guide finding list is cleared, not carried.** Those findings were repo defects the v0

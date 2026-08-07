@@ -27,6 +27,28 @@ the change; where an older passage still describes the pre-cutover shape it is m
 rather than deleted, because the reasoning is still the best explanation of why the seam is where it
 is. Suites now: storage *310* · continuum *262* · recording *144* · DP *788* (+21 skipped).
 
+**Amended 2026-08-07 — the data-processing service was rebuilt (Stages A–G, D23–D28) and the DP
+internals this document teaches are the pre-rebuild v0 service.** Read this before §4.2 and §5.
+The rebuild replaced the v0 record model (several records per chunk labelled by `content.kind` +
+a discriminator, in-place mutation policed by the record-vs-mutation law, SlotView capability
+views, `INGEST_ISOLATION` subprocesses, sync-by-default ingest) with the *Slot Law* world:
+*one C2 v1 record per chunk, built from `content.slots`*, `record_id` deterministic on
+`(chunk_id, pipeline_version)` with *no discriminator*; models run as supervised long-lived
+servers (DP is a thin async orchestrator; the captioner has its own vLLM on `:8161`, E-3(b));
+`INGEST_ASYNC=1` is the *live operating default* behind a durable journal (the D16 gate is paid);
+and no output-affecting env knob exists (L4). Storage moved with it: `ingest_time` split into
+`created_at`/`updated_at` (D27), and the day-log is C10 *v2* — a slot-walk render, dedup
+*latest `updated_at` per `(chunk_id)`* (D28); the v0 `/context` store was wiped fresh-forward
+at the cutover (OD-2; `/raw` kept) and continuum trains under `consolidation-v2.0`. The §4.2
+subsections teaching the retired internals are marked *(pre-rebuild)* rather than rewritten
+(the reasoning is still the best explanation of why the v1 shape is what it is); §3's C2/C10
+cards, §5's walk-through and §6's state tables likewise describe the v0 world. This document's
+full rewrite is a client-testing-phase task; until then the running world is the
+[DP charter](../services/data-processing/CHARTER.md) (§Slot Law, §Condensed history),
+[ARCHITECTURE.md](../ARCHITECTURE.md) §Contracts, and the rebuild's record
+([refactor_dp_service.md](../services/data-processing/docs/refactor_dp_service.md)). Suites now:
+storage *354* · continuum *264* (+7 skipped) · recording *144* · DP *569* (+4 skipped).
+
 ---
 
 ## 1. Why the learn loop exists
@@ -397,7 +419,7 @@ additive).
 denoise/diarize/ASR/translate; video → captions + on-screen text; one pipeline that will also
 serve interactive requests via C8 (same normalization, two entry points — C8 not yet built).
 
-#### Ingest spine
+#### Ingest spine *(pre-rebuild)*
 
 `POST /ingest` schema-gates the C1 envelope, computes the chunk's `pipeline_version` **at
 accept-time**, and claims it by `chunk_id`. A **durable journal** (`app/journal.py`) records async
@@ -412,7 +434,7 @@ silently dropped). Mixed-dialect fleets are observable: DP exports one
 `dp_pipeline_dialect{modality, pipeline_version}` series per replica precisely because the day-log
 join has no dialect filter (`app/main.py:287-320` states this verbatim).
 
-#### The stage graph
+#### The stage graph *(pre-rebuild)*
 
 Every processing step is a **drop-in stage file** (`app/stagegraph/`), self-registering per
 modality with declared `kind` (primary | sidecar | mutate), `needs` (a readiness DAG — independent
@@ -431,7 +453,7 @@ that make this safe are structural, enforced at registration and resolution:
 The **composed `pipeline_version`** is the primary's fragment plus every enabled fragment-bearing
 stage's fragment — the dialect string *is* the configuration statement.
 
-#### The two video pipelines (behind `VIDEO_PIPELINE`, default `keyframe`)
+#### The two video pipelines (behind `VIDEO_PIPELINE`, default `keyframe`) *(pre-rebuild)*
 
 ```mermaid
 flowchart TB
@@ -479,7 +501,7 @@ coverage signal, and continuum must never read absence as "no on-screen text"
 (`app/stages/video/screentext.py` docstring, rider R3(e)); `clipprep` provides frames/delta and
 contributes `+cp-v1` only in clip mode (`app/stages/video/clipprep.py:53-67`).
 
-#### Dialect discipline: the prompt pack and `cfg_tag`
+#### Dialect discipline: the prompt pack and `cfg_tag` *(pre-rebuild)*
 
 The failure class this kills: editing a captioner prompt used to change every caption's bytes
 while `pipeline_version` stayed constant — a silent `/context` overwrite under a stable
@@ -503,7 +525,7 @@ while `pipeline_version` stayed constant — a silent `/context` overwrite under
 - The legacy `keyframes` stage carries a `""` fragment as a **single-entry fixed exemption** so
   the legacy dialect reproduces `vidproc-vlm-v0` byte-for-byte; no new stage may join it (D-14).
 
-#### The record-vs-mutation law
+#### The record-vs-mutation law *(pre-rebuild)*
 
 The service's constitution for "does signal S deserve a C2 record?" — written to charter standard
 in `docs/record-emission-law.md`, executable in `tests/test_emission_law.py` +

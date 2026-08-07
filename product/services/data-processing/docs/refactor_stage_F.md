@@ -574,6 +574,18 @@ kill exercised mid-run. Feed built from the committed fixtures only: `speech_rea
 across two users (`u-soak`, `u-soak-b`) on four devices, paced against the DP journal
 depth. Evidence script + logs live in the session scratchpad, the caption-smoke precedent.
 
+> **Evidence caveat + a later ledger pass (2026-08-07, post-rebuild paper round).** The session
+> scratchpad the line above points at was ephemeral and is gone; the tables pasted in this
+> worklog are the primary evidence record, and the live stores corroborate the headline figures
+> (the recording ledger holds exactly 1,100 chunks over the five soak captures, DP's journal a
+> green receipt for every one, storage one C2 v1 record per chunk). Later the same day a
+> sanctioned redrive pass (`POST /capture/captures/{id}/redrive` over the five soak captures)
+> propagated the soak's accepted-but-unconfirmed acks: **1,098** ledger chunks flipped
+> `accepted → processed` — 1,096 served straight from DP's dedup receipts; two soak-burst video
+> chunks re-entered processing (same dialect, so the reprocess upserted the *same* `record_id` —
+> no fork, no dup) and confirmed on a follow-up pass. The ledger now reads
+> **1,100 processed · 0 accepted**, agreeing with DP's journal exactly.
+
 **Load delivered.** 950 durable segments across the four captures (soak-dialog 480 ·
 soak-piper 200 · soak-av 126 video · soak-b-dialog 120) plus a 24-segment video burst,
 demuxing to **~830 C1 chunks** pushed through the real emit path. Captured stream-time
@@ -584,6 +596,14 @@ Processed at the soak's steady point: **477 chunks** (`processed` journal) — 4
 (`acoustic.v1-ast.v1+asr.v1-fw.v1+diarize.v1-pyannote.v1+speaker_align.v1-builtin.v1` for
 audio; `clipcap.v1-vlm.v1+clipprep.v1-ffmpeg.v1+screentext.v1-ppocr.v1` for video); the
 remainder still draining (video-bound, below) with the fleet healthy.
+
+> **Corrected 2026-08-07 (post-rebuild paper round).** The paragraph above says "demuxing to
+> **~830 C1 chunks**" — the delivered figure is **1,100**, and it reconstructs exactly: the
+> three audio-only captures demux 1:1 (480 + 200 + 120 = 800 chunks) and the two A/V captures
+> demux 1:2 — each segment splits into an audio *and* a video chunk (126 → 252, 24 → 48) — so
+> 800 + 300 = **1,100**. The recording ledger agrees: 1,100 chunks over the five soak captures,
+> and DP's journal finished the drain holding 1,100 receipts (980 `u-soak` + 120 `u-soak-b`).
+> The soak-verdict table's "950 segments → ~830 chunks" cell carries the same undercount.
 
 **Fleet stability over the run (RSS + VRAM, start → end).** The soak ran ~40 min
 (07:19 → 07:58Z); snapshots at both ends (read-only) in the scratchpad:
@@ -658,6 +678,12 @@ chunks stacked, the DP journal's `pending(accepted)` set was driven to **27** du
 breath later: **31** durable `accepted` rows survived the hard kill (a few more chunks
 recording 202-accepted as the socket died), DP `/health` answered nothing (down). The
 captioner was `SIGCONT`ed so the recovered chunks could complete.
+
+> **Corrected 2026-08-07 (post-rebuild paper round).** The parenthetical above attaches the
+> "(23 audio + 8 video)" split to the pre-kill **27** — but 23 + 8 = 31: that split belongs to
+> the post-kill **31** (the extras being the audio chunks recording 202-accepted as the socket
+> died; video was frozen behind the `SIGSTOP`ped captioner). The 27 at the pre-kill read
+> reconstructs as **19 audio + 8 video**.
 
 Recovery via the deploy's own bring-up (`run_learn.sh --skip-install`, after clearing the
 orphaned supervised fleet — the drill-1 `fuser -k` lesson): full fleet 9/9 healthy in

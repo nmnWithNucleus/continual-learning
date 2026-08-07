@@ -21,7 +21,7 @@ slot-walk day-log to the live fleet; the `dp-v0-live` worktree retired at the cu
 
 ## Current state
 
-**Suite: 310 passed** (re-run 2026-07-27). FastAPI + SQLite on `:8083`.
+**Suite: 354 passed** (re-run 2026-08-07). FastAPI + SQLite on `:8083`.
 
 **Serve loop** — `POST /sessions/turns` (C4, validated against `contracts/c4_turn_record.v0.json`
 incl. the nested-C3 `$ref`, idempotent on `turn_id`) · `GET /sessions/turns/{turn_id}` ·
@@ -36,7 +36,8 @@ may contain `/`; 404 also when the blob was since-deleted, which consumers must 
 /context/records/{record_id}` · `GET /context/records?user_id=&from=&to=` (half-open `[from, to)`,
 per-user isolation enforced by the mandatory `user_id`).
 
-**The D18 expansion — built 2026-07-27, this is what changed most recently:**
+**The D18 expansion — built 2026-07-27** (the most recent change is the D27/D28 rebuild rows,
+below):
 
 - **C12 profile** — `GET/PUT /users/{user_id}/profile`. *404 on absence, no server-side default*,
   so a user without `home_tz` is *not schedulable*: an operational alert, never a silent skip.
@@ -50,9 +51,11 @@ per-user isolation enforced by the mandatory `user_id`).
 - Storage is the only minter and the only validator.
 - **Day-log materialization (C10 evolved)** — `GET /training/daylog?user_id=&window_id=`,
   materialized *on demand at fetch* ([D19](../../DECISIONS.md)) rather than by a scheduler.
-- Reprocessed records resolve *latest `ingest_time` wins per `(chunk_id, content.kind,
+- Reprocessed records resolved *latest `ingest_time` wins per `(chunk_id, content.kind,
   discriminator)`* — on `ingest_time` because `pipeline_version` is a composed string and not
-  orderable, on `kind` because captions and transcripts can share one `pipeline_version`. Every
+  orderable, on `kind` because captions and transcripts can share one `pipeline_version`. *(That
+  was the D18 rule; since [D27/D28](../../DECISIONS.md) the live renderer dedups latest
+  `updated_at` per `(chunk_id)` — §The DP rebuild's joint rows, below.)* Every
   body is stamped with its `recipe_id` *and* `daylog_format_version`, and continuum *refuses* a
   body whose stamps are not the ones it trains under.
 - **C13 recipe registry** (`GET /recipes/{recipe_id}`, `GET /policies/{policy_id}`) and

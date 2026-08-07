@@ -190,6 +190,11 @@ stage that demolished the v0 code, IS that correction, owed since Stage A.
 Residual dead-vocabulary in the guide sits only where it names a retired concept precisely to say
 it is gone and point at the charter §Condensed history — the honest transition a teaching view owes.
 
+> **Corrected 2026-08-07 (post-rebuild paper round).** The first bullet says the rewrite teaches
+> "the running v1 world in **ten modules**" — the shipped guide is **eleven** modules, 00–10: the
+> Module 00 briefing rode in front of the ten teaching modules and the count was never re-said.
+> The ten-term glossary figure is right.
+
 ## WP-G7 — the boards: today-state = the live v1 world, the rebuild moved to history
 
 Boards are rewritten in place to describe *today* (ORG §Documentation protocol). All four

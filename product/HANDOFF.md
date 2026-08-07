@@ -99,7 +99,7 @@ machinery/bureaucracy split.
 
 ### Storage
 
-> `built` · 310 tests · [canvas](services/storage/HANDOFF.md)
+> `built` · 354 tests · [canvas](services/storage/HANDOFF.md)
 
 **In one line.** The D18 expansion is built and live: storage owns the day-log.
 
@@ -112,7 +112,7 @@ machinery/bureaucracy split.
 
 ### Continuum
 
-> `built` · 262 tests (+7 skipped) · [canvas](services/continuum/HANDOFF.md)
+> `built` · 264 tests (+7 skipped) · [canvas](services/continuum/HANDOFF.md)
 
 **In one line.** The learn loop is closed and runs on storage's HTTP surface.
 
@@ -247,9 +247,11 @@ rather than a cutover gate.
 
 **Why it's this way**
 
-- D18 changed this row's premise. The WS-VC double-count is fixed by the **day-log materialization
-  rule** — one dialect per record, latest `ingest_time` wins per `(chunk_id, content.kind,
-  discriminator)`, not by a delete.
+- D18 changed this row's premise. The WS-VC double-count was fixed by the **day-log
+  materialization rule**, not by a delete — at D18 that rule read latest `ingest_time` wins per
+  `(chunk_id, content.kind, discriminator)`; under the live v2 renderer it is latest `updated_at`
+  per `(chunk_id)` ([D27/D28](DECISIONS.md); `kind` and the discriminator retired with the v0
+  record model).
 - It also **grows**: once storage materializes day-logs and hosts the reservoir, every deletion must
   cascade to both, because each is a second copy of user content.
 - Shape and the widened M5 are recorded in the [storage charter](services/storage/CHARTER.md).
