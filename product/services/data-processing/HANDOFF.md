@@ -42,7 +42,7 @@ lives as the rebuild's historical record, not on this board:
 |---|---|---|
 | A–E | ratify · machinery · stagegraph · ledger v2 · storage v2 | `f639fda` → `e3cedb6` |
 | F | cutover (merge `bf1e806`), five drills, the amended soak + in-flight kill + train leg | `413b3a6` → `26f763f` |
-| G | demolition (sidecars/, dead scripts, circuit.py, per-frame-v0) + doc rewrite | `afe0103` → this stage |
+| G | demolition (sidecars/, dead scripts, circuit.py, per-frame-v0) + doc rewrite | `afe0103` → `242eb31` |
 
 ## Next
 

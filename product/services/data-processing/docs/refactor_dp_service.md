@@ -10,7 +10,7 @@
 | D — Ledger v2 | journal done-row (stage_status/heal_attempts), L8 claim tree, heal containment + crash-table (T-5) | `494e396` → `06b0534` |
 | E — Storage v2 | `created_at`/`updated_at` byte-compare, C10 v2 slot-walk renderer, E-2 whole-record retraction, D20 parity re-baseline | `139b1ce` → `e3cedb6` |
 | F — Cutover | vLLM + probe (F0a), continuum v2 stamps (F0b), cutover kit (F0c), GATE 1, merge `bf1e806` no-ff, five drills, the amended synthetic soak + in-flight kill + train leg | `413b3a6` → `26f763f` |
-| G — Demolition & docs | sidecars/ + dead scripts + circuit.py + per-frame-v0 retired (clipcap vlm.v1→v2); emission law folded into §Condensed history; CHARTER/ARCHITECTURE/plan/field-guide/boards rewritten to the new world | `afe0103` → *this stage's close* |
+| G — Demolition & docs | sidecars/ + dead scripts + circuit.py + per-frame-v0 retired (clipcap vlm.v1→v2); emission law folded into §Condensed history; CHARTER/ARCHITECTURE/plan/field-guide/boards rewritten to the new world | `afe0103` → `242eb31` |
 **Date:** 2026-08-05
 **Scope:** everything downstream of chunk acceptance (the stage graph, record emission, C2 shape, model execution). The pre-graph machinery — journal, dedup claims, ingest queue, backpressure, continuity, blob-first pull, D16 reply wire — is explicitly KEPT and is the foundation this design stands on.
 **Supersedes on ratification (all EXECUTED by Stage G):** CHARTER §Record-vs-mutation law; `docs/record-emission-law.md` (retired at Stage G, condensed into the DP charter §Condensed history); D10's C2-v0-shape clause; D16's fan-out `record_ids` clause; D19's "discriminator surfaced" clause; D8's shipped two-record shape (its one-liner — specialist OCR feeding the caption — survives as the L11 provenance corollary).
