@@ -45,6 +45,7 @@ the same bytes; a timeout can only fail the call — a hole, never different byt
 """
 from __future__ import annotations
 
+import logging
 import os
 
 from ...stagegraph.stage import (
@@ -59,6 +60,8 @@ from ...vision import prompts
 from ...vision.budget import caption_cap, truncate_sentence
 from ...vision.clip_types import ClipDesc, ClipFrames
 from ...vision.clipcap import vlm
+
+logger = logging.getLogger("data-processing.stages.video.clipcap")
 
 # ---- code pins (L4). Editing any of these is a vB bump. --------------------------
 MODEL = "Qwen/Qwen3-VL-32B-Instruct"   # served-model-name requested on the wire
