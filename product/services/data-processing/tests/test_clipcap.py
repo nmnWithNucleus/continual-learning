@@ -93,7 +93,7 @@ def _run(ctx):
 def test_declaration():
     s = ClipcapStage()
     assert (s.name, s.modality, s.slot_name) == ("clipcap", "video", "caption")
-    assert s.segment == "clipcap.v1-vlm.v1"
+    assert s.segment == "clipcap.v1-vlm.v2"
     assert s.needs == ("clipprep", "screentext")
     assert s.required is False
     assert s.server == ""               # external endpoint, not a fleet server

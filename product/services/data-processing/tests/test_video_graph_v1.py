@@ -36,7 +36,7 @@ requires_decoder = pytest.mark.skipif(
 _OCR_FIXTURES = (Path(__file__).parent.parent / "servers" / "ocr" / "tests" / "fixtures")
 GOLDEN_REGIONS = json.loads((_OCR_FIXTURES / "golden_regions.json").read_text())
 
-EXPECTED_PV = "clipcap.v1-vlm.v1+clipprep.v1-ffmpeg.v1+screentext.v1-ppocr.v1"
+EXPECTED_PV = "clipcap.v1-vlm.v2+clipprep.v1-ffmpeg.v1+screentext.v1-ppocr.v1"
 
 CANNED_REPLY = json.dumps({
     "app": "Terminal",
@@ -103,7 +103,7 @@ def test_full_graph_produces_one_valid_v1_record(monkeypatch):
     # clipprep emits NO slot; the record carries exactly caption + ocr (plan §2).
     assert set(result.slots) == {"ocr", "caption"}
     assert result.slots["ocr"]["version"] == "screentext.v1-ppocr.v1"
-    assert result.slots["caption"]["version"] == "clipcap.v1-vlm.v1"
+    assert result.slots["caption"]["version"] == "clipcap.v1-vlm.v2"
     # The appswitch cut fired one OCR read; the digest is self-anchored at its time.
     assert ocr.calls == 1
     assert "QuarterlyPlanningNotes" in result.slots["ocr"]["value"]
@@ -149,7 +149,7 @@ def test_ocr_failure_is_a_hole_AND_a_cancelled_caption(monkeypatch):
     # L11 honesty: the dialect still NAMES both stages — a reader distinguishes
     # "attempted and failed" (named + absent) from "never attempted" (unnamed).
     assert "screentext.v1-ppocr.v1" in record["pipeline_version"]
-    assert "clipcap.v1-vlm.v1" in record["pipeline_version"]
+    assert "clipcap.v1-vlm.v2" in record["pipeline_version"]
 
 
 @requires_decoder

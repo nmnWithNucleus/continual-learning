@@ -68,10 +68,13 @@ CAPTION_RATE = 16                      # D-11: caption chars/second-of-life (of 
 # The aggregate prompt-pack digest this backend version was shipped against. Computed
 # by app/vision/prompts at import from the on-disk pack; `python -m app.vision.prompts`
 # prints the current value. EDITING A PACK => recompute, update this pin AND bump vB.
-# EXPECTED CHURN: the digest covers the whole pack dir INCLUDING the legacy
-# per-frame-v0 pack; its Stage-G removal will move this digest — that bump is
-# planned demolition, not drift (re-pin + vB bump there).
-PACK_DIGEST_PIN = "565066a0"
+# 2026-08-07 (Stage G demolition): the legacy per-frame-v0 pack was removed. The digest
+# covers the whole pack dir, so its removal moved the aggregate digest 565066a0 -> 80efa39f
+# even though screen-clip-v1's caption bytes are byte-identical — the guard is aggregate
+# by design (no pack file changes silently) and the price is a dialect fork on any dir
+# change. Recorded, planned demolition: re-pinned + vB bumped vlm.v1 -> vlm.v2 below, so
+# every video record now stamps clipcap.v1-vlm.v2 (the accepted expected consequence).
+PACK_DIGEST_PIN = "80efa39f"
 
 if prompts.PACK_DIGEST != PACK_DIGEST_PIN:
     raise StageRegistrationError(
@@ -137,7 +140,11 @@ class ClipcapStage(Stage):
     modality = "video"
     slot = "caption"
     stage_version = 1
-    backend = Backend("vlm", 1)
+    # vB bumped v1 -> v2 at Stage G when the legacy per-frame-v0 pack was removed and the
+    # aggregate PACK_DIGEST_PIN moved (see the pin comment above). The dialect fork is the
+    # recorded, accepted consequence of the aggregate-digest guard; caption bytes are
+    # otherwise unchanged.
+    backend = Backend("vlm", 2)
     needs = ("clipprep", "screentext")
     required = False          # L7: failure = caption hole; record ships; heal redrives
     server = ""               # external OpenAI-compatible endpoint, not a fleet server

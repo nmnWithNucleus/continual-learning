@@ -34,8 +34,16 @@ from app.vision.prompts import (
 PACKAGED = Path(P.__file__).resolve().parent
 _ALL = {
     "screen-clip-v1", "screen-clip-idle-v1", "screen-clip-single-v1",
-    "screen-ocr-v1", "camera-clip-v1", "per-frame-v0",
+    "screen-ocr-v1", "camera-clip-v1",
 }
+# The legacy per-frame-v0 pack was removed at Stage G demolition; the two tests that
+# used it as a schema-less / placeholder-free example now build inline fixtures, so the
+# parser coverage does not depend on a retired pack.
+_SCHEMALESS_PROMPT = (
+    "---\nid: legacy-x\nrole: legacy\nschema: none\n---\n"
+    "[system]\nA static describer with no placeholders.\n\n"
+    "[user]\nDescribe the frame in two lines and nothing else.\n"
+)
 
 
 def _copy_pack(dst: Path, *, with_lock: bool = True) -> Path:
@@ -205,7 +213,7 @@ def test_parse_round_trips_a_clip_pack():
 
 
 def test_parse_schema_none_pack():
-    spec = parse_prompt((PACKAGED / "per-frame-v0.prompt.md").read_text(), {})
+    spec = parse_prompt(_SCHEMALESS_PROMPT, {})
     assert spec.schema_name == "" and spec.schema == {}
 
 
@@ -242,7 +250,8 @@ def test_render_missing_context_raises():
 
 
 def test_render_ignores_extra_context_and_packs_without_placeholders():
-    r = render(get("per-frame-v0"), unused="ignored")
+    spec = parse_prompt(_SCHEMALESS_PROMPT, {})
+    r = render(spec, unused="ignored")
     assert "[[" not in r.system and "[[" not in r.user
 
 

@@ -90,3 +90,21 @@ safe — the design survives here and in git):**
 
 Evidence: `app.main` imports after removal; DP suite **569 passed, 4 skipped**
 (576 − the 7 `test_circuit.py` tests = 569, exactly as expected).
+
+### Commit — prompt pack: remove `per-frame-v0`, bump clipcap vB, clear `experimental/` + `archive/`
+
+| Target | Disposition |
+|---|---|
+| `app/vision/prompts/per-frame-v0.prompt.md` | **DELETE.** The legacy keyframe-era pack (`role: legacy`, `scenario: legacy-keyframe`), unreachable via `routes.json` — no live scenario selects it, and the legacy keyframe graph that used it died at Stage C. |
+| `app/stages/video/clipcap.py` — `PACK_DIGEST_PIN` + `Backend` vB | **EDITED (the recorded churn).** The `PACK_DIGEST` is an aggregate over the whole pack dir, so removing per-frame-v0 moved it `565066a0 → 80efa39f`. Re-pinned, and `Backend("vlm", 1) → Backend("vlm", 2)` with a dated docstring line — exactly the "planned demolition (re-pin + vB bump)" the pin's own comment anticipated. Consequence, accepted and recorded: every video record now stamps `clipcap.v1-vlm.v2` (the dialect forks) even though `screen-clip-v1`'s caption bytes are byte-identical — the aggregate-digest guard trades that precision for the guarantee that no pack file can change silently. |
+| `app/vision/prompts/LOCK.json` | **EDITED** — `pack_digest → 80efa39f`, per-frame-v0 dropped from `packs{}`. `pack_version` stays `"1"`: the human token was not relocked (this file's own rule — a pack edit forks the dialect via the live digest + the vB bump, not via the version token), which also keeps the relock tests' v1→v2 fixtures valid. |
+| `app/vision/prompts/experimental/` (`screen-clip-blind-v1`, `screen-clip-hint-v1`, `README.md`) | **CLEARED (delete), stated.** Their only consumer was `prompt_ab.py`'s A/B arms, deleted above. The live experiment mechanism is unaffected — it is the in-code `.exp-<code>` Backend path (`app/vision/prompts/__init__.py`, `app/stagegraph/stage.py`), not this on-disk arm dir. |
+| `app/vision/prompts/archive/` (`p1.json`) | **CLEARED (delete), stated.** It was the digest-input snapshot for reconstructing a historical video `pipeline_version`'s exact wire text — a promise that the OD-2 cutover mooted (every v0 record was wiped; no record produced under the old pack survives to reconstruct), and the pack it most needed to preserve (per-frame-v0) is now deleted. `relock` still writes a fresh `archive/pN.json` when a future version is deliberately cut; the relock tests generate their own archive in a tmp copy, so clearing the committed one leaves them green. |
+| `tests/test_prompt_pack.py`, `tests/test_clipcap.py`, `tests/test_video_graph_v1.py`, `tests/test_t3_version_composition.py`, `tests/test_e2e_real.py` | **EDITED** — `_ALL` drops per-frame-v0; the two per-frame-specific parser tests rewritten to inline schema-less/placeholder-free fixtures (parser coverage no longer depends on a retired pack); every `clipcap.v1-vlm.v1` dialect assertion updated to `vlm.v2`. |
+
+Evidence: DP suite **569 passed, 4 skipped** (unchanged — the two per-frame tests were
+rewritten in place, not dropped). **Production continuity:** the running DP process
+(old code, imported before the edit) still reports the video dialect
+`clipcap.v1-vlm.v1+…` on `/health` — the vB bump is a *pending deploy* that takes effect
+on the next deliberate fleet restart (drain-and-replace, D-14), not a live disruption;
+the new pin is consistent with the demolished pack on disk for that restart.

@@ -223,7 +223,7 @@ def test_video_chunk_end_to_end(fleet, real_app):
     assert schemas.validate_c2(record) == []
     C2RecordV1.model_validate(record)
     assert record["pipeline_version"] == (
-        "clipcap.v1-vlm.v1+clipprep.v1-ffmpeg.v1+screentext.v1-ppocr.v1")
+        "clipcap.v1-vlm.v2+clipprep.v1-ffmpeg.v1+screentext.v1-ppocr.v1")
 
     slots = record["content"]["slots"]
     # clipprep ran (required — the 200 proves it) and emits no slot.

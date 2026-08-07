@@ -124,7 +124,7 @@ EXPECTED_CONTRACTS: dict[str, dict[str, dict]] = {
                           "consumer": "daylog:heard"},
     },
     "video": {
-        "clipcap": {"segment": "clipcap.v1-vlm.v1", "slot": "caption",
+        "clipcap": {"segment": "clipcap.v1-vlm.v2", "slot": "caption",
                     "needs": ("clipprep", "screentext"), "required": False,
                     "byte_budget": 4096, "consumer": "daylog:scene"},
         # clipprep emits no record slot (value=None); byte_budget=1 is the
