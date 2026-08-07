@@ -51,6 +51,69 @@ here so the carry survives the stage (Stage E).
   `onboarding/review_actions.md`) stay uncommitted through everything, as every stage
   before this one held.
 
+## WP-F0a — vLLM up, the identity probe built, caption first-contact
+
+GPU inventory first, per the brief: all eight H100s idle, GPUs 0-1 free, no foreign
+eval jobs (pre-flight above). vLLM serves on **:8161** — the next server decade after
+ocr's 815x, loopback only, deliberately distinct from the serve loop's user-facing
+:8000 (that split is tracked escalation E-3(b); this stage implements the split, the
+founder's gate approval rules it — board rows annotate at F1).
+
+**Model + weights provenance (the pins):** `Qwen/Qwen3-VL-32B-Instruct` at revision
+`0cfaf48183f594c314753d30a4c4974bc75f3ccb` — the exact snapshot already resident in
+this machine's HF hub cache (`~/.cache/huggingface/hub/models--Qwen--Qwen3-VL-32B-Instruct`),
+downloaded from huggingface.co 2026-07-01→02, 63 GB, 14/14 safetensors shards present,
+`refs/main` pointing at that same commit. Serving stack: `vllm==0.11.2` (the version
+already proven on this box) in a dedicated `platform/deploy/.venv-vllm` (Python 3.12),
+tensor-parallel 2 over GPUs 0-1, `--max-model-len 32768`, `--served-model-name` pinned
+to the clipcap string. Both pins are CONSTANTS in the launcher, not env knobs — same
+law as clipcap's model pin and the fleet manifest revisions.
+
+| File | Action | Why |
+|---|---|---|
+| `platform/deploy/run_vllm.sh` | NEW | launcher on the run_learn.sh precedent: up/stop/status/restart, pidfile + log, adopt-if-healthy; "healthy" REQUIRES /v1/models to list the pinned model, so a wrong-weights server on the right port reads as down |
+| `platform/deploy/.gitignore` | edited | `.venv-vllm/` + `run-vllm/` runtime artifacts excluded, beside their learn-loop twins |
+| `dp/app/main.py` | edited (TDD) | `_assert_vlm_identity()` — boot probe GETs `{VLM_URL}/v1/models` and refuses to serve unless clipcap's pinned model is listed; wired first in the lifespan under the `DP_SUPERVISOR` opt-in (the deploy shape), before the fleet starts; uses clipcap's own env reads + the patchable `vlm.make_async_client` factory so probe and stage can never disagree about the endpoint |
+| `dp/tests/test_vlm_boot_probe.py` | NEW (TDD) | wrong endpoint refuses boot naming found-vs-pinned; right endpoint boots; unit-shaped construction (no opt-in) never touches the VLM factory |
+| `product/STACK.md` §ports | edited | learn-loop port additions recorded: DP servers 8121–8152, captioner vLLM 8161 |
+| `platform/deploy/README-learn.md` | edited | port table + the E-3(b) rationale line |
+
+**Evidence (2026-08-07):** probe TDD red watched first
+(`test_boot_refuses_when_v1_models_lacks_the_pinned_model` → `DID NOT RAISE` against
+shipped code), green after; DP suite **576 passed, 4 skipped** (Stage E exit was
+573+4; +3 are the probe tests), env-allowlist test untouched-green (the probe reads
+only already-allowlisted names). vLLM boot: launcher reported
+`vLLM healthy (pid 470702): /v1/models lists Qwen/Qwen3-VL-32B-Instruct`;
+`GET :8161/v1/models` → `{"id": "Qwen/Qwen3-VL-32B-Instruct", … "max_model_len": 32768}`;
+~70 GiB used on each of GPUs 0-1.
+
+**Caption first-contact (the clip dialect meets a real VLM):** one real clipcap call
+through the live endpoint against the committed fixture
+(`tests/fixtures/video_scenes.mp4` under its committed C1 template), run through the
+actual graph — `POST /ingest`, real ffmpeg clipprep, real ocr server pair on
+8151/8152 via a filtered manifest (the Stage D drill idiom), FakeStorage as the only
+stand-in. Output, pasted verbatim:
+
+```
+[smoke] ocr replicas healthy on [8151, 8152]
+[smoke] POST /ingest -> 200 in 34.3s
+[smoke] response: {"ok":true,"record_ids":["6cc0b6f5687669ca207d96c03711abb5e9c706370e4abef5f0d22a5fd80d6fde"]}
+[smoke] pipeline_version: clipcap.v1-vlm.v1+clipprep.v1-ffmpeg.v1+screentext.v1-ppocr.v1
+[smoke] slots present: ['caption', 'ocr']
+[smoke] CAPTION SLOT, verbatim:
+{
+  "version": "clipcap.v1-vlm.v1",
+  "value": "an unidentified presentation application — switching between slides."
+}
+[smoke] ocr fleet torn down; ports free: True
+```
+
+The fixture is synthetic slide-like scenes, so "an unidentified presentation
+application — switching between slides" is a sane first caption: the dialect's
+scenario framing (`screen-mac`), the D-11/D-12 caps and the parse ladder all held on
+a real reply. `VLM_URL=http://127.0.0.1:8161` is staged for learn.env in WP-F0c's
+un-repoint diff; nothing live reads it yet.
+
 ## WP-F0b — continuum stamp teaching (the one licensed continuum change)
 
 The v2 stamps are exactly the pair Stage E named: `daylog_format_version "2"` and

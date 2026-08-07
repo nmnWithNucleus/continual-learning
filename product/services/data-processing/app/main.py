@@ -90,6 +90,47 @@ def _supervisor_enabled() -> bool:
     return os.getenv("DP_SUPERVISOR", "").strip().lower() in ("1", "true", "yes", "on")
 
 
+async def _assert_vlm_identity() -> None:
+    """Boot-time VLM identity probe (Stage C carry, built at Stage F).
+
+    clipcap's endpoint sits OUTSIDE the manifest identity scheme — it speaks the
+    OpenAI wire, not the fleet /infer envelope — so the pinned model NAME is the
+    only identity DP can assert about it. Assert it before serving: a deploy
+    pointed at the wrong endpoint must fail its boot loudly, not caption the
+    corpus with an unpinned model. Runs only under the DP_SUPERVISOR opt-in (the
+    deploy shape); unit tests construct apps freely and never want a VLM. Uses
+    clipcap's own env reads and the patchable ``vlm.make_async_client`` factory,
+    so the probe and the stage can never disagree about which endpoint is real.
+    """
+    from app.stages.video.clipcap import MODEL, _vlm_timeout_s
+    from app.vision.clipcap import vlm
+
+    url = os.getenv("VLM_URL", "http://127.0.0.1:8000").rstrip("/")
+    headers = {}
+    api_key = os.getenv("VLM_API_KEY", "")
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    try:
+        async with vlm.make_async_client(_vlm_timeout_s()) as client:
+            resp = await client.get(f"{url}/v1/models", headers=headers)
+            resp.raise_for_status()
+            served = sorted(
+                str(m.get("id")) for m in resp.json().get("data", []) if m.get("id")
+            )
+    except Exception as exc:
+        raise RuntimeError(
+            f"VLM identity probe: GET {url}/v1/models failed ({exc!r}) — clipcap "
+            f"is pinned to {MODEL!r} and cannot verify the endpoint serves it; "
+            "refusing to boot (is the VLM up? is VLM_URL pointing at it?)"
+        ) from exc
+    if MODEL not in served:
+        raise RuntimeError(
+            f"VLM identity probe: {url}/v1/models serves {served!r}, which does "
+            f"not include clipcap's pinned model {MODEL!r} — wrong endpoint or "
+            "wrong weights; refusing to boot"
+        )
+
+
 def _build_model_clients(manifest_path: Path, metrics=None) -> dict[str, ModelClient]:
     """One ModelClient per manifest server. ``client_timeout_s`` is wired from the
     manifest (it was parsed by nothing before Stage C); remember client call
@@ -465,6 +506,10 @@ def create_app() -> FastAPI:
         # fleet (drills) is reachable either way.
         supervisor: Supervisor | None = None
         supervisor_task: asyncio.Task | None = None
+        if _supervisor_enabled():
+            # Before the fleet, before serving: the cheapest check with the
+            # loudest failure. See _assert_vlm_identity.
+            await _assert_vlm_identity()
         if _supervisor_enabled() and _manifest_path().exists():
             supervisor = Supervisor.from_file(_manifest_path())
             await supervisor.start()
