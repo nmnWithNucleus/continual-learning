@@ -129,7 +129,7 @@ flowchart LR
   DEMUX -- "C1 envelope push" --> ING
   SG -- "C2 POST /context/records" --> CTX
   CTX -- "C10 EVOLVED: GET /training/daylog<br/>?user_id&window_id (storage renders)" --> DLC
-  CTX -- "C10 legacy range read: GET /context/records<br/>?user_id&from&to (kept — D12 beta feed)" --> DLC
+  CTX -- "C10 raw range read: GET /context/records<br/>?user_id&from&to (kept — D12 beta feed)" --> DLC
   SMD -- "C6 resolve (base only today)" --> INF
   CMD -. "C5 target: storage-hosted directory<br/>(shape NOT PINNED — D19; consumer is inference)" .-> SMD
   SMD -- "C12 profile: GET /users/{id}/profile<br/>home_tz — scheduling + render fallback" --> DLC
@@ -578,14 +578,14 @@ pinned-schema rule — `continuum/app/daylog.py:1-8`). How `/context` records be
   World text (OCR): <ocr | ...>
   ```
 
-  `anchors={date, place:None}`; block quality = min of scored segments (C2 v0 has no quality
+  `anchors={date, place:None}`; block quality = min of scored segments (C2 carries no quality
   field, so everything passes the `quality_min` gate today, `daylog.py:175-180`).
 
 This rendered text is what the amplifier retells 48× and the adapter trains on. Two consequences a
 co-founder should hold: **block characters are the training currency** (Phase-3 measured acquisition
 falling 3.2× for a 3.7× rise in chars/block — the reason DP's chars-per-second budget D-11 is a
 *correctness* knob), and **ordinal truncation is a real hazard** (the amplifier reads
-`block.text[:6000]`; OCR renders last; at legacy caption volumes 100 % of the OCR channel was
+`block.text[:6000]`; OCR renders last; at high caption volumes 100 % of the OCR channel was
 silently truncated away, the clip budget keeps blocks at ~3.3 k chars; renderer reorder is E-4(c)).
 
 ### 4.6 Inference — the learn-loop tail
