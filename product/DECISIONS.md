@@ -239,14 +239,14 @@ five ordered tests and five riders — because the capabilities that needed gove
 - Dead with their subject matter: primary/mutate/sidecar kinds, the discriminator,
   `writes`/`mutable_slots`, SlotView, the R1 fork rider and its exemption, `best_effort`
   policy machinery.
-- The law is executable at Stage C (test spine T-1…T-6); until that lands the section is a
-  statement, and says so.
+- The law is executable at Stage C (test spine T-1…T-6); EXECUTED — the spine lands at Stage C
+  and enforces the law in CI on the running service (Stage F cutover, Stage G close).
 
 **Watch out for**
 
-- `services/data-processing/docs/record-emission-law.md` keeps the retired law's long-form
-  reasoning until Stage G folds it into condensed history. Deleting it earlier orphans the
-  "why it existed" record.
+- `services/data-processing/docs/record-emission-law.md` kept the retired law's long-form
+  reasoning through Stages A–F; at Stage G (2026-08-07) it was retired and its "why it existed"
+  record folded into the DP charter's §Condensed history, as this row's own plan required.
 
 ### D22 — onboarding teaching views
 

@@ -108,3 +108,27 @@ rewritten in place, not dropped). **Production continuity:** the running DP proc
 `clipcap.v1-vlm.v1+…` on `/health` — the vB bump is a *pending deploy* that takes effect
 on the next deliberate fleet restart (drain-and-replace, D-14), not a live disruption;
 the new pin is consistent with the demolished pack on disk for that restart.
+
+## WP-G2 + WP-G3 — DP CHARTER: retire the emission law into §Condensed history, flip to the new world
+
+The D22 debt's other half: the charter still taught the v0 record model. Both the condensed
+history (G2) and the new-world flip (G3) are `CHARTER.md` edits, so they land in one commit.
+
+| Change | What |
+|---|---|
+| `docs/record-emission-law.md` | **RETIRED (delete).** The retired law's long-form reasoning is folded into a new charter **§Condensed history** — six paragraphs (emission law · discriminators · SlotView · `INGEST_ISOLATION` · `DP_DIALECT_FREEZE` · the two-record video shape), one each, why it existed and what killed it, per [refactor_dp_service.md](refactor_dp_service.md) §10. The brief places this in the CHARTER (not the handoff, as §10 originally drafted). |
+| §On C2 | **FLIPPED.** `record_id` on `(chunk_id, pipeline_version)` (no discriminator); one record per chunk built from `content.slots`; storage-assigned `created_at`/`updated_at`; the v0 shape (`content{kind,text,segments}`, `enrichments`, discriminator, `processed_at`) named as gone with a pointer to §Condensed history. C2 v1 schema link. |
+| §Position C2 row | **FLIPPED** from "v0 pinned (D10)" to "v1 live (D24), the running wire since the Stage F cutover — one slot-built record per chunk." |
+| §Slot Law intro | **FLIPPED** from "becomes executable at Stage C … until then this section is its statement" to "executable, not aspirational — the T-1…T-6 spine enforces it in CI, the executor emits one record structurally, a violation is a red test." |
+| OQ10 (screen OCR) | **FLIPPED** — the CPU OCR is `servers/ocr` under the supervised fleet (not a `sidecars/ocr` HTTP sidecar), frame width is a code pin (not `VIDEO_OCR_FRAME_WIDTH`), OCR is an `ocr` slot (not a `kind='ocr'` record), and it serves real PP-OCRv4 (not mock). |
+| OQ12 (non-speech audio) | **FLIPPED** — ambient sound is an `acoustic` slot beside `asr`/`transcript` in one record (`servers/ast`), not a second record via a discriminator or `enrichments` tags. |
+| OQ13 (ingest mode) | **FLIPPED** — async is the live operating default (drill 1 paid the D16 gate at Stage F), the reply's `record_ids` list is exactly one id per chunk (L2, not fan-out), and the durable journal + boot re-drive close the kill-recovery half of M7 (soak in-flight kill). |
+| OQ14 (C2-additive gaps) | **FLIPPED** — (a) the per-keyframe collision is dissolved at the root (one record per chunk, span verbatim), not patched with a per-`ProcessedUnit` hook; (b) bbox omission reframed under Slot Law L10 (named-consumer-today), the E-5 field would land as an additive slot, not an `enrichments` block. |
+| §Condensed history OQ9 sentence | **EDITED** — the civil-time passthrough's "consequence for the record-emission law / T2" reframed as "consequence for the Slot Law / L10". |
+| `product/DECISIONS.md` D23 | **EDITED** — the row's "law executable at Stage C" watch-out flipped to EXECUTED, and its pointer repointed from the deleted `record-emission-law.md` to the charter's §Condensed history (a would-be dangling link fixed in the ratified register). |
+| Changelog + Status line | **STAMPED** — 2026-08-07 rebuild-EXECUTED entry; Status names the Slot Law as the running law and C2 v1 as the live wire. |
+
+Evidence: no broken markdown links to the deleted doc remain in `CHARTER.md`/`DECISIONS.md`/
+`ARCHITECTURE.md`; the residual dead-vocabulary in `CHARTER.md` sits only in §Condensed history,
+the Slot Law dead-concepts list, the dated changelog, and new-world sentences that name a retired
+concept precisely to say it is gone. `app.main` imports (docs-only change; suites untouched).

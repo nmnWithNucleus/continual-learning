@@ -20,10 +20,17 @@
 > Full posture + what changes at dev/prod: [ARCHITECTURE.md](../../ARCHITECTURE.md) §Stage.
 
 
-**Status:** chartered · **Last updated:** 2026-08-06 (§Slot Law ratified,
-[D23](../../DECISIONS.md); L5 emphasis nit; L8 heal clause corrected to the built truth) ·
-[D18](../../DECISIONS.md) / [D19](../../DECISIONS.md) / [D20](../../DECISIONS.md)
+**Status:** chartered · **Last updated:** 2026-08-07 (rebuild EXECUTED — Stages A–G on
+`main`; the Slot Law is the running law, C2 v1 the live wire, `record-emission-law.md`
+retired into §Condensed history; §On C2 / §Position / OQ10-14 flipped to the new world) ·
+[D23](../../DECISIONS.md) / [D24](../../DECISIONS.md) / [D18](../../DECISIONS.md) /
+[D19](../../DECISIONS.md) / [D20](../../DECISIONS.md)
 
+- **2026-08-07** — rebuild EXECUTED (Stage G). The Slot Law stopped being "the statement
+  of a law that becomes executable at Stage C" and became the law the running service
+  enforces; C2 v1 is the live wire after the Stage F cutover; `docs/record-emission-law.md`
+  is retired, its reasoning condensed into §Condensed history below; §On C2, §Position's
+  C2 row, and OQ10/12/13/14 flipped from the v0 world to the ratified one.
 - **2026-08-06** — §Slot Law L8's heal clause corrected at the Stage D close-out: the
   re-POST carries whatever the re-run produced; the ledger carries hole truth;
   convergence, not monotonicity, is the guarantee; non-green heals charge (was
@@ -108,7 +115,7 @@ referenced here by ID only, never redefined.
 | Contract | Direction | Our role |
 |---|---|---|
 | **C1** | recording → us | **v0 pinned (D11).** Our sole ingest: the pushed raw-stream envelope ([↓](#on-c1)) |
-| **C2** | us → storage | **v0 pinned (D10).** Our sole output for stream data: the processed record ([↓](#on-c2)) |
+| **C2** | us → storage | **v1 live (D24), the running wire since the Stage F cutover.** Our sole output for stream data: one slot-built processed record per chunk ([↓](#on-c2)) |
 | **C8** | input ↔ us | serve the pipeline as a synchronous API, so interactive requests are normalized by the same code |
 
 ##### On C1
@@ -120,17 +127,20 @@ belong to `recording`.
 
 ##### On C2
 
-`record_id` is deterministic on `(chunk_id, pipeline_version, within-chunk discriminator)` —
-matching the v0 schema
-([../../contracts/c2_processed_record.v0.json](../../contracts/c2_processed_record.v0.json)) and
-the retired law's identity line ([docs/record-emission-law.md](docs/record-emission-law.md)),
-which have both carried the discriminator since v0. The record also carries source
-provenance, `content{kind,text,segments}`, a present-but-empty `enrichments`, the raw ref,
-`pipeline_version` and `processed_at`.
+`record_id` is deterministic on `(chunk_id, pipeline_version)` — NUL-joined, hex, a blind
+`/context` upsert — matching the v1 schema
+([../../contracts/c2_processed_record.v1.json](../../contracts/c2_processed_record.v1.json)).
+There is exactly **one record per chunk** (Slot Law L2), and no discriminator: dropping it is
+safe precisely because one-record-per-chunk is structural. The record carries source
+provenance (verbatim from C1, minus modality), the C1 span `t_start`/`t_end`, `pipeline_version`,
+and `content.slots` — a map keyed by slot name, one producing stage per slot, each written once
+and never edited. Storage assigns `created_at`/`updated_at`; no wall-clock lives inside the
+record (D27). The v0 shape — `content{kind,text,segments}`, a present-but-empty `enrichments`,
+the within-chunk discriminator, `processed_at` — is gone; its reasoning is in §Condensed history.
 
 Indirect consumers (no direct contract with us): `continuum` reads /context + /sessions via
-**C10** (storage → continuum) — which changes nothing about our C2 obligations; `input` builds
-prompts from what C8 returns.
+**C10** (storage → continuum) — the day-log renderer walks `content.slots` (C10 v2) — which
+changes nothing about our C2 obligations; `input` builds prompts from what C8 returns.
 
 ---
 
@@ -156,12 +166,13 @@ reprocess is an upsert and not a duplicate.
 
 ## Slot Law (governance — the twelve laws of the rebuilt pipeline)
 
-> **Ratified 2026-08-06 as [D23](../../DECISIONS.md).** It replaces §Record-vs-mutation law,
-> whose subject matter (multi-record fan-out, in-place mutation) the rebuild deletes; the
-> retired law's long-form reasoning stays in
-> [docs/record-emission-law.md](docs/record-emission-law.md) until Stage G condenses it into
-> the handoff. The law becomes executable at Stage C (test spine T-1…T-6); until then this
-> section is its statement. Design + migration plan:
+> **Ratified 2026-08-06 as [D23](../../DECISIONS.md); EXECUTED and running since the Stage F
+> cutover.** It replaced §Record-vs-mutation law, whose subject matter (multi-record fan-out,
+> in-place mutation) the rebuild deleted; that law's long-form reasoning is now condensed into
+> §Condensed history below, and `docs/record-emission-law.md` is retired. **This law is
+> executable, not aspirational:** the test spine T-1…T-6 (`tests/`) enforces it in CI, the
+> executor structurally emits one record per chunk, and the schema states it — a violation is
+> a red test, not a review note. Design + migration plan (now the historical record):
 > [docs/refactor_dp_service.md](docs/refactor_dp_service.md).
 
 - **L1 — Chunk purity.** A stage output is a pure function of this chunk's bytes plus code.
@@ -250,6 +261,56 @@ per-unit `assemble()`, the `enrichments` present-but-empty block, `ProcessedUnit
 
 ---
 
+## Condensed history — the v0 governance the Slot Law replaced
+
+> The rebuild deleted a whole vocabulary along with the capabilities that needed it. This is the
+> tombstone: one paragraph per retired concept — why it existed, and what killed it. The full
+> retired text lived in `docs/record-emission-law.md` (Stage A → F); it is retired here at Stage G.
+> This is the six-paragraph fold [refactor_dp_service.md](refactor_dp_service.md) §10 promised.
+
+- **The record-emission law** (five ordered tests, five riders) existed to *govern* a model where
+  one chunk could become many records and a record could be mutated in place. Governance is what
+  you need when the shape permits abuse: the tests decided when a signal earned its own record and
+  the riders policed forks, independence and honesty. The rebuild deleted both capabilities —
+  one record per chunk (L2), slots written once and never edited (L5) — so there is nothing left
+  to govern. The invariants the law argued for now hold by construction; the law is a tombstone.
+
+- **Discriminators** existed to give sibling identity under fan-out: when one chunk emitted several
+  records (video keyframes; an `ocr` beside a `caption`), `record_id = sha256(chunk_id ␀
+  pipeline_version ␀ discriminator)` told them apart. With exactly one record per `(chunk_id,
+  pipeline_version)` (L2/L3) there are no siblings to distinguish, so the third hash component is
+  dropped — safely, because one-record-per-chunk is *why* it is safe. A caption and its OCR are
+  now two slots in one record, not two records.
+
+- **SlotView** existed for mutation-by-reference: when models ran *in-process* and stages shared
+  Python memory, a later stage could edit an earlier stage's structure through a capability-proxy
+  view. Once models became long-lived server processes (L9) and stages became thin clients
+  passing JSON slots, there is no shared mutable object to proxy — each slot is written once by
+  one stage and assembled into the record. SlotView, `writes`/`mutable_slots` and the mutate chain
+  edges died with in-process mutation.
+
+- **`INGEST_ISOLATION`** existed because models lived *inside* the DP process: a poison chunk that
+  crashed a model took the service down, so an opt-in ran each chunk in a killable subprocess to
+  bound the blast radius. When the machinery/bureaucracy split moved every model out to a supervised
+  server (L9), the DP process holds no model to crash — a bad input fails one stage client, the
+  supervisor restarts a dead replica, and `isolation.py` had nothing left to contain. Deleted (D26).
+
+- **`DP_DIALECT_FREEZE`** existed because dialects were once env-flippable: an operator could change
+  what a stage emitted through configuration, so a freeze flag was needed to pin the dialect across
+  a cutover window. The no-output-affecting-knobs law (L4/D25) removed the premise — identity is
+  composed from code (`<stage>.v<S>-<backend>.v<B>`), a behavior change is a version bump, and no
+  env var moves a byte of a record. With nothing to flip, there is nothing to freeze. Deleted (D26).
+
+- **The two-record video shape** was the D8 weave: a screen chunk produced a caption record and a
+  separate OCR record, the OCR text also injected into the caption prompt for grounding. It was the
+  most defensible fan-out (each record independently placeable and losable), which is exactly why it
+  drove the discriminator and independence riders. The clip redesign (WS-VC) then the rebuild folded
+  it into one record with a `caption` slot and an `ocr` slot (L5), keeping the D-09 grounding weave
+  as the L11 provenance corollary (one witness on two channels) — the shape survives as slots, the
+  second record does not.
+
+---
+
 ## Open questions
 
 **Engineering**
@@ -286,9 +347,10 @@ per-unit `assemble()`, the `enrichments` present-but-empty block, `ProcessedUnit
    - Skew stays *detectable* rather than *corrected*: `device_clock` flags an undisciplined stamp,
      `device_utc_offset_minutes` witnesses what the device believed, and storage's `ingest_time` is
      an independent clock.
-   - **Consequence for the record-emission law:** these fields are envelope *provenance we
-     forward*, not signals we produce, so T2's "does it reach a consumer today" test does not gate
-     them — the same way `device_id` and `blob_ref` are not gated.
+   - **Consequence for the Slot Law:** these fields are envelope *provenance we forward*, not
+     signals we produce, so the L10 consumer-today rule does not gate them — the same way
+     `device_id` and `blob_ref` are not gated. (Under v0 this was the emission law's T2 test; the
+     rule survived the rebuild as L10.)
    - M4 skew *estimation* remains available if a real unsynced-fleet problem appears, and would
      land as an additive corrected field beside the raw stamp, never overwriting it.
 5. Reprocessing policy on `pipeline_version` bumps: reprocess history (cost) vs version-forward only — interacts with `continuum`'s training windows.
@@ -322,14 +384,16 @@ per-unit `assemble()`, the `enrichments` present-but-empty block, `ProcessedUnit
 
     **Rules**
 
-    - A dedicated OCR-strong VLM transcribes legible text plus its frame location as a pipeline
-      pass; that text is woven into the description we write to /context, and returned via C8 for
-      interactive turns → /sessions.
-    - For screen video: a **dedicated CPU OCR sidecar** (`sidecars/ocr/`, PP-OCR-class det+rec, own
-      venv, HTTP seam) reads text at native `VIDEO_OCR_FRAME_WIDTH=1728`.
-    - The captioner reads layout at 768 px and never reads text.
-    - **OCR is both injected into the caption prompt** (grounding, D-09) *and emitted as its own
-      `kind='ocr'` record*, separable downstream — continuum renders a `World text (OCR):` line.
+    - A dedicated OCR-strong pass transcribes legible text plus its frame location; that text is
+      woven into the description we write to /context, and returned via C8 for interactive turns
+      → /sessions.
+    - For screen video: a **CPU OCR model server** (`servers/ocr/`, PP-OCR-class det+rec, its own
+      venv, under the supervised model-server fleet — L9) reads text; the frame width is a code
+      pin in `clipprep`, not an env knob (L4). This is the `screentext` stage.
+    - The captioner (`clipcap`) reads layout and never reads text.
+    - **OCR is both injected into the caption prompt** (grounding, D-09, the L11 provenance
+      corollary — one witness on two channels) *and emitted as its own `ocr` slot*, separable
+      downstream — continuum renders a `World text (OCR):` line.
     - Cadence is **event-driven**, a binarized-change delta gate rather than a fixed clock;
       static-text dedup is within-chunk.
 
@@ -340,13 +404,13 @@ per-unit `assemble()`, the `enrichments` present-but-empty block, `ProcessedUnit
 
     **Watch out for**
 
-    - Cost and frame-rate gates: **O-2**, the real-macOS-frame OCR bar, comes before `ppocr` is the
-      default; it ships `mock`. The captioning window equals the C1 chunk, span-parametric, and
-      60 s is escalation E-1.
+    - Cost and frame-rate gates: **O-2**, the real-macOS-frame OCR bar, still governs the pilot's
+      quality budget; `servers/ocr` now serves the real PP-OCRv4 det+rec (identity-checked), not
+      a mock. The captioning window equals the C1 chunk, span-parametric, and 60 s is escalation E-1.
     - **Not screen:** which OCR model for body-cam or browser is a later per-scenario call. The
-      prompt pack plus the backend seam make it a config swap.
-    - Residual engineering choices elsewhere: which OCR model, keyframe cadence for video, cost per
-      screen-hour, and dedup of static text across frames.
+      prompt pack plus a new backend version (a `vB` bump — no env knob) make it a code change.
+    - Residual engineering choices elsewhere: keyframe cadence for video, cost per screen-hour, and
+      dedup of static text across frames.
 11. Voice-to-person linking: diarization yields anonymous speaker labels; linking them to people-registry identities (known-vs-unknown speakers) rides the same registry, and the v0-vs-deferred call is ours ([ARCHITECTURE.md § Ownership splits](../../ARCHITECTURE.md#ownership-splits-pinned--cross-referenced-from-the-charters)). **Recorded: deferred — not in the M5 exit gate**; revisit if speaker embeddings already produced by the diarizer make matching cheap.
 12. Non-speech and silence audio. ASR transcribes **speech only**, and Whisper hallucinates on
     non-speech or silence, so a chunk of pure ambient sound — a dishwasher, a car, a dog, yields
@@ -357,24 +421,28 @@ per-unit `assemble()`, the `enrichments` present-but-empty block, `ProcessedUnit
     - A **VAD gate runs before ASR**: run ASR only on speech regions, and mark a no-speech chunk
       explicitly as *present-but-quiet*.
     - That is **not** a transport gap or a lost chunk — the raw bytes are safely in `/raw`.
-    - Non-speech audio that carries context is **captioned or tagged by an acoustic-event model**,
-      the audio analogue of dense video captioning: "doing dishes", "driving", "dog nearby".
-    - It lands in C2 **additively**: `content.kind` gains an audio `sound`/caption value.
+    - Non-speech audio that carries context is **captioned or tagged by an acoustic-event model**
+      (`servers/ast`, the `acoustic` stage), the audio analogue of dense video captioning:
+      "doing dishes", "driving", "dog nearby".
+    - It lands in the record as its own **`acoustic` slot** beside `asr`/`transcript` (Slot Law
+      L5), not as a second record.
 
     **Why it's this way**
 
     - Ambient sound is life-context signal, not noise to drop.
-    - A chunk with both speech and ambient sound may yield **two records**, via the `record_id`
-      within-chunk discriminator, or carry ambient tags in `enrichments`. Either way there is *no
-      C2 break*.
+    - A chunk with both speech and ambient sound is still **one record**: `asr`/`transcript` and
+      `acoustic` are separate slots in the same C2, each written by one stage. The v0 answer —
+      two records told apart by a within-chunk discriminator, or ambient tags in `enrichments` —
+      is gone with those concepts (§Condensed history); slots make the multi-signal chunk trivial.
 
     **Watch out for**
 
     - Residual: which VAD, which audio-tagging or captioning model, and cost per audio-hour.
-13. Ingest processing mode. M0 `/ingest` processes **inline** — pull → ASR → C2 → store inside the
-    request handler, returning `record_ids`, so recording's push blocks on ASR latency. *Resolved
-    (2026-07-19, M7-early):* built behind `INGEST_ASYNC`, default off, so inline stays
-    byte-identical. See [handoff/ws-async-observability.md](handoff/ws-async-observability.md).
+13. Ingest processing mode. M0 `/ingest` processed **inline** — pull → run → C2 → store inside the
+    request handler. *Resolved (2026-07-19, M7-early) and then made the operating default at the
+    rebuild's Stage F:* async (`INGEST_ASYNC=1`) is the live mode after drill 1 paid the
+    standing D16 async-default gate. Inline stays available and byte-identical (it is C8's
+    skeleton). See [handoff/ws-async-observability.md](handoff/ws-async-observability.md).
 
     **Rules**
 
@@ -382,57 +450,59 @@ per-unit `assemble()`, the `enrichments` present-but-empty block, `ProcessedUnit
       from capture cadence.
     - A redelivery of a done chunk still returns `record_ids` with a 200; an in-flight redelivery
       re-ACKs 202; a full queue is 503 backpressure.
-    - Retry safety rides `chunk_id` dedup plus `record_id` upserts; transient failures
-      retry-then-dead-letter in the worker.
+    - Retry safety rides `chunk_id` dedup plus the deterministic `record_id` upsert; transient
+      failures retry-then-dead-letter in the worker; a durable journal re-drives the pending set
+      on restart (the in-flight-kill recovery witnessed at the Stage F soak).
     - The reply shape is an **inter-service wire decided jointly with recording** and recorded in
       *both* canvases, on the OQ4 precedent.
 
     **Why it's this way**
 
-    - The modality seam already returns `{ok, record_ids:[…]}`, because one C1 chunk may fan out to
-      many C2 records — video keyframes, for instance.
+    - The `/ingest` reply still carries `record_ids:[…]` (a list), but under C2 v1 it is exactly
+      **one id per chunk** (Slot Law L2) — the list shape is kept for the wire's stability, not
+      because a chunk fans out. The v0 fan-out (many records per chunk — video keyframes) is gone.
     - The **"zero silent loss" invariant is preserved by a surgical recording change**: DP
-      `/continuity` now additively reports `processed` and `dead_lettered` per stream, and recording
+      `/continuity` additively reports `processed` and `dead_lettered` per stream, and recording
       confirms `dp_acked=1` only on `processed`.
     - So an accepted-then-lost chunk reads `recording` or `gaps`, never a silent `clean`.
 
     **Watch out for**
 
-    - **This slice guarantees never-falsely-`clean`, meaning all loss is visible. Full durability is
-      not done** — the durable pending-journal plus backfill, and auto-recovery past a kill or
-      drain-timeout, remain the M7 exit gate.
-    - Backpressure and dead-letter land with M7.
+    - The durable pending-journal + boot re-drive close the kill/drain-recovery half of M7 (proven
+      at the Stage F cutover drills and the soak's in-flight kill). Backpressure + dead-letter are
+      built; a `/raw`-replay backfill-by-version tool is the remaining owed piece (plan OD-2).
 14. C2-additive gaps surfaced by the modality-seam pressure-test (2026-07-10). Both were
     **deferred, non-blocking, no version bump**, each owned by the modality that needs it. Both are
     now closed by WS-VC (2026-07-25).
 
-    **(a) Video per-keyframe/sub-span timing — shipped.**
+    **(a) Video per-keyframe/sub-span timing — dissolved by the rebuild.**
 
     - **Was** — N keyframe records from one chunk shared the chunk `t_start`/`t_end`, so they
       collided on storage's `(user_id, t_start)` index.
-    - **Changed** — an internal seam hook: an optional per-`ProcessedUnit` `t_start`/`t_end`, since
-      C2 already carries per-record timestamps. No schema change, owned in the *video* build.
-    - **Now** — the hook is honored in `build_c2`, and the clip records carry the C1 span verbatim.
-    - **Payoff** — no collision, and no schema change was needed.
+    - **Changed** — the v0 fix was a per-`ProcessedUnit` timestamp hook in `build_c2`; the rebuild
+      removed the problem at the root — a video chunk is now **one record** with a `caption` and an
+      `ocr` slot (Slot Law L2), carrying the C1 span verbatim, so there are no sibling keyframe
+      records to collide.
+    - **Now** — one record per chunk, span verbatim; the collision cannot arise.
+    - **Payoff** — the seam hook and the whole keyframe-fan-out shape are deleted, not maintained.
 
     **(b) Image and keyframe OCR frame-location (bbox) — deliberately not emitted.**
 
     - **Was** — `content` had no home for structured region geometry.
-    - OCR *text* survived, woven into the caption or as a `kind:'ocr'` record via the
-      discriminator; only the bbox was lost.
-    - The planned fix was an additive optional field, `content.regions:[{text,bbox,confidence?}]`
-      or `enrichments.text_regions`, schema-additive when a real OCR pass landed, owned in the
-      *image* build.
-    - **Changed** — a real OCR pass landed, and the decision was to *not* emit bbox to C2. The OCR
-      sidecar uses region geometry internally — reading order plus a coarse region *role* woven
-      into the text, then discards it.
-    - **Now** — the additive edit (`enrichments.text_regions[]` plus a root `quality{}`) is written
+    - OCR *text* survives in the `ocr` slot; only the bbox was ever in question.
+    - The planned fix was an additive optional field (`enrichments.text_regions` in the v0
+      framing), schema-additive when a real OCR pass landed — parked as escalation **E-5**.
+    - **Changed** — a real OCR pass landed (`servers/ocr`), and the decision was to *not* emit
+      bbox to C2. The OCR stage uses region geometry internally — reading order plus a coarse
+      region *role* woven into the text, then discards it.
+    - **Now** — the additive edit (a `text_regions[]` field plus a root `quality{}`) is written up
       and parked as escalation *E-5*, to be taken in one additive commit when the first geometry
-      or quality consumer exists.
-    - **Payoff** — `enrichments` has *zero readers* in continuum today, which is exactly what the
-      record-law's T2 test refuses to store for.
-    - The originally-planned fix, an additive optional field, is preserved rather than performed,
-      and it stays schema-additive so old records still validate whenever it lands.
+      or quality consumer exists. Under C2 v1 it would land as an additive slot/field, not an
+      `enrichments` block (that block is gone).
+    - **Payoff** — the bbox has *zero readers* in continuum today, which is exactly what Slot Law
+      L10 (named-consumer-today or an explicit `speculative` marker) declines to store for.
+    - The originally-planned fix is preserved rather than performed, and it stays schema-additive
+      so records still validate whenever it lands.
 
 ---
 
