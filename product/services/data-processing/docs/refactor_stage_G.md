@@ -189,3 +189,20 @@ stage that demolished the v0 code, IS that correction, owed since Stage A.
 
 Residual dead-vocabulary in the guide sits only where it names a retired concept precisely to say
 it is gone and point at the charter §Condensed history — the honest transition a teaching view owes.
+
+## WP-G7 — the boards: today-state = the live v1 world, the rebuild moved to history
+
+Boards are rewritten in place to describe *today* (ORG §Documentation protocol). All four
+learn-loop service boards plus the founders' board still described a pre-cutover world with the
+rebuild pending on a branch; each is flipped to the live v1 world with the next phase seeded.
+
+| Board | Flip |
+|---|---|
+| `services/data-processing/HANDOFF.md` | Rewritten to the v1 board: Status "v1 live"; "Where we are" = one record per chunk from slots + supervised model servers + async journal; a **§The rebuild is history** section pointing at the plan + stage worklogs + §Condensed history (the v0 workstream detail retired to `handoff/worklog.md`); §Next led by **client live-stream testing** plus the owed follow-ups (backfill-by-version, modality fairness, the pending `vlm.v1→v2` deploy). Suite figure 569+4. |
+| `services/storage/HANDOFF.md` | D27/D28 flipped from "BUILT on branch, nothing running changes" to **LIVE since the Stage F cutover** (created/updated_at + C10 v2 served to the fleet; `/context` wiped fresh-forward, `/raw` kept); E-2 row from "branch primitive" to "built and live"; a client-testing next-phase row seeded. |
+| `services/continuum/HANDOFF.md` | Status = training under the C10 v2 day-log; **`consolidation-v2.0` is what runs** (was v1.1); the DP-rebuild cross-service flag from "cut on branch" to "EXECUTED, live, and a real night trained a v2 window to `published` at the Stage F train leg"; next-phase seeded. |
+| `services/recording/HANDOFF.md` | `INGEST_ASYNC=1` from "open founders' call" to **the live default** (D16 gate paid at the cutover); E-6 given its live witness (the soak's 25 transport-failed segments); client-testing next-phase seeded. |
+| `product/HANDOFF.md` | Founders' board: "Where we are today" = rebuild EXECUTED, fleet on v1, storage on C10 v2; service-status rows for DP/storage/continuum updated; DP detail card rewritten to the Slot-Law world; suites re-stated (storage 354 · continuum 264+7 · DP 569+4); the DP-A note flipped to EXECUTED; §Next led by the client-live-stream-testing phase and the E-2-is-live correction. |
+
+The rebuild is now history on every board; the next phase (client live-stream testing) is seeded as
+the forward-looking item on all five.

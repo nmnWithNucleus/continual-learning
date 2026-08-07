@@ -13,8 +13,8 @@
 > Read this first in any founders' session, then the aspect file you're working. Service-level state
 > lives in each service's own `HANDOFF.md` — this board links, it does not restate.
 
-**Stage: PROTOTYPE** (D19) · **Last updated:** 2026-08-06 (DP-A resolved — the DP rebuild's
-Stage A ratified as D23–D28)
+**Stage: PROTOTYPE** (D19) · **Last updated:** 2026-08-07 (the DP rebuild is EXECUTED — Stages
+A–G on `main`, D23–D28; the fleet runs the v1 service and storage serves C10 v2)
 
 ---
 
@@ -27,14 +27,20 @@ Stage A ratified as D23–D28)
 - **Proven on the real fleet, not in tests:** real capture → faster-whisper → `/context`; a C12
   profile set and a missing one 404'd; a nightly to `published` over HTTP; the watermark advancing
   only on `published`; exactly one active C5 row.
-- **Suites:** storage 310 · continuum 262 · recording 144 · data-processing 788 (+21 skipped).
-- **All eleven accuracy-review items are closed** and the review file is retired.
+- **The DP rebuild is EXECUTED.** The beside-build (Stages A–G, D23–D28) merged and cut over: the
+  fleet runs the v1 service — one C2 record per chunk built from slots, models as supervised
+  servers, async ingest with a durable journal — and storage serves the C10 v2 slot-walk day-log.
+  The v0 `/context` was wiped fresh-forward at the cutover (OD-2); `/raw` was kept.
+- **Suites:** storage 354 · continuum 264 (+7 skipped) · recording 144 · data-processing 569
+  (+4 skipped, post-Stage-G demolition).
 - **Down by choice:** the serve loop (vLLM + app services). Relaunch `run_all.sh` +
   `services/inference/serve_vllm.sh` when needed.
-- **Learn fleet is up on node-7** (storage 8083 · recording 8084 · data-processing 8085);
-  `INGEST_ASYNC` and `INGEST_ISOLATION` stay off by default.
-- **Nothing is blocking.** The DP rebuild's Stage A is ratified (D23–D28, 2026-08-06); its next
-  act is Stage B (machinery), not started. Every open §Next item is a follow-up, not a gate.
+- **Learn fleet is up on node-7** (storage 8083 · recording 8084 · data-processing 8085 · captioner
+  8161 · the eight model servers 8121–8152); `INGEST_ASYNC=1` is now the operating default (the D16
+  gate paid at the cutover).
+- **Nothing is blocking.** The rebuild is history; the next phase is **client live-stream testing**
+  — a real captured day end to end on real hardware (the live pilot-day shape the Stage F soak
+  proved synthetically). Every open §Next item is a follow-up, not a gate.
 
 ---
 
@@ -43,12 +49,12 @@ Stage A ratified as D23–D28)
 | Service | Status | Lead session | Canvas |
 |---|---|---|---|
 | Recording | `built` — capture M1 + computer surfaces, alpha-complete | computer-capture → M6 emission merged 2026-07-19 | [↓](#recording) · [canvas](services/recording/HANDOFF.md) |
-| Data Processing | `built` — v1, hardening and the screen-video clip path all merged | DP deep session · screen-video WS-VC | [↓](#data-processing) · [canvas](services/data-processing/HANDOFF.md) |
-| Storage | `built` — the D18 expansion is live and owns the day-log | serve + learn; build slice next | [↓](#storage) · [canvas](services/storage/HANDOFF.md) |
+| Data Processing | `built` — the v1 rebuild (Stages A–G) is live: one record per chunk from slots, supervised model servers, async ingest | DP rebuild session | [↓](#data-processing) · [canvas](services/data-processing/HANDOFF.md) |
+| Storage | `built` — D18 expansion + the D27/D28 rebuild rows live (created/updated_at, C10 v2 day-log) | serve + learn; build slice next | [↓](#storage) · [canvas](services/storage/HANDOFF.md) |
 | Input | `built` — v0.0 plus the mock loop, integrated E2E 2026-07-09 | serve-loop WS-A | [canvas](services/input/HANDOFF.md) |
 | Inference | `built` — v0.0 live on real Qwen3-VL-32B, vLLM TP=8 on node-7 | serve-loop WS-B | [canvas](services/inference/HANDOFF.md) |
 | Output | `built` — v0.0 plus the mock loop, integrated E2E 2026-07-09 | serve-loop WS-C | [canvas](services/output/HANDOFF.md) |
-| Continuum | `built` — the learn loop is closed and cut over to storage | Morpheus + Phase-3 sessions | [↓](#continuum) · [canvas](services/continuum/HANDOFF.md) |
+| Continuum | `built` — the learn loop is closed, on storage, now training under the C10 v2 day-log (`consolidation-v2.0`) | Morpheus + Phase-3 sessions | [↓](#continuum) · [canvas](services/continuum/HANDOFF.md) |
 | Platform | `built` — serve and learn bring-up; the D9 backbone is `designed` | serve + learn | [↓](#platform) · [canvas](services/platform/HANDOFF.md) |
 
 ### Recording
@@ -70,21 +76,26 @@ Stage A ratified as D23–D28)
 
 ### Data Processing
 
-> `built` · 788 tests (+21 skipped) · [canvas](services/data-processing/HANDOFF.md)
+> `built` · 569 tests (+4 skipped) · [canvas](services/data-processing/HANDOFF.md)
 
-**In one line.** v1, the hardening pass and the screen-video clip path are all merged.
+**In one line.** The v1 rebuild is live: one C2 record per chunk, built from slots, on a
+machinery/bureaucracy split.
 
 **What shipped**
 
-- A durable ingest journal, and a stage-graph pipeline where every step is a drop-in file.
-- Opt-in subprocess isolation.
-- Clip-level captioning behind `VIDEO_PIPELINE=clip`; the default `keyframe` is the shipped legacy
-  path and is byte-identical.
+- The Slot Law (D23) in running code: one record per `(chunk_id, pipeline_version)`, `content.slots`
+  with one producer per slot, identity from two components, no output-affecting env knobs (L4).
+- Models as supervised long-lived servers (`servers/whisper|pyannote|ast|ocr` + the Qwen3-VL
+  captioner on `:8161`); DP is the thin async orchestrator. `isolation.py` and the v0 governance
+  are deleted.
+- Async ingest with a durable journal (kill/restart re-drive), heal-on-redrive, and the
+  zero-silent-loss `/continuity` accounting — all drilled live at the cutover and the Stage F soak.
 
 **Watch out for**
 
-- Cutover gates for the clip path remain: O-2 · O-8. None of them blocks.
-  [E-3(b)](#e-3b--a-captioner-vl-endpoint) left this list *resolved* 2026-08-07 (`:8161`).
+- **Client live-stream testing is the next phase** — the live pilot-day the Stage F soak proved
+  synthetically (founder R2). Follow-ups, none blocking: the `/raw`-replay backfill tool (owed),
+  per-modality ingest fairness (unset), and the pending captioner `vlm.v1→v2` deploy (next restart).
 
 ### Storage
 
@@ -157,11 +168,12 @@ Full write-ups, with the measured numbers behind each, in
 | **E-2** | A kind-aware retraction primitive; demoted by D18 | storage | nothing | service-level [↓](#e-2--the-retraction-primitive) |
 | **E-1 · E-4 · E-6** | Sibling-service asks with no contract surface | recording · continuum | cost figure · RWT granularity | no [↓](#e-1--e-4--e-6--sibling-service-asks) |
 
-**Resolved 2026-08-06: DP-A** — the DP rebuild's Stage A sign-off. The founder ratified the
-Stage A paper as amended by the cleanup round; the six drafted rows entered the register as
-**D23–D28**, E-2's whole-record redesign is ratified with D28 (the E-2 row below keeps its
-priority), and Stage A is complete on branch `dp-rebuild-v1`. Stage B (machinery) is the
-rebuild's next act and has not started.
+**Resolved 2026-08-06 → EXECUTED 2026-08-07: DP-A and the whole rebuild.** The founder ratified
+the Stage A paper (the six rows entered the register as **D23–D28**, E-2's whole-record redesign
+ratified with D28). The rebuild then executed on the branch and cut over to `main`: Stages
+A–G are complete, the v1 service is live, and the record of it is
+[services/data-processing/docs/refactor_dp_service.md](services/data-processing/docs/refactor_dp_service.md)
+(Status: EXECUTED) plus the per-stage worklogs. The next phase is client live-stream testing.
 
 **Resolved during the build: E-3(a)** — the `--limit-mm-per-prompt` serving-flag ask. WS-A's probe
 verified vLLM 0.24.0 defaults the image cap to 999 and clamps nothing at 768×480, so the
@@ -293,7 +305,8 @@ Open items only. Anything finished moves to [handoff/engineering.md](handoff/eng
 
 | # | Item | Owner | Why it's open |
 |---|---|---|---|
-| 1 | **E-2 — the retraction primitive**, cascading to the day-log and the reservoir | storage | A re-wipe is currently the only way to retract rows [↓](#e-2--the-retraction-primitive) |
+| 0 | **Client live-stream testing — the next phase.** A real captured day flowing recording → DP → storage → continuum end to end on real hardware: the live pilot-day shape the Stage F soak proved synthetically (founder R2 transferred it here after the rebuild). | recording + DP + storage + continuum | opens now that the rebuild is history; gated on real capture beginning (lifestyle), not on engineering |
+| 1 | **E-2 — the retraction primitive is BUILT and live** (whole-record, cut over at Stage F); remaining: Platform M2 orchestration + the reservoir cascade leg | storage + platform | The live store now has whole-record retraction; the orchestration + cascade legs remain [↓](#e-2--the-retraction-primitive) |
 | 2 | **D9 observability backbone** — the shared Prometheus + Grafana | platform | Emission shipped; the backbone never got built, so no founder has a Grafana URL |
 | 3 | **E-3(b)** — a captioner VL endpoint distinct from `:8000` | platform + inference | *resolved 2026-08-07* — ruled at the Stage F gate, serving on `:8161`; the OQ3 charter edit lands with the Stage G paper sweep [↓](#e-3b--a-captioner-vl-endpoint) |
 | 4 | **C5 shape pin** — a three-value status enum, nullable `adapter_dir` + `base_model_hash`, C6 eligibility as a log replay | storage + continuum + inference | `model_directory` is still the trivial C6 row, so hosting C5 is a build, not a transport swap |

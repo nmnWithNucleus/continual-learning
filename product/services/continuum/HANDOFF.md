@@ -13,9 +13,11 @@
 > | *What did the founders decide?* | [../../DECISIONS.md](../../DECISIONS.md) — the `D-n` register |
 > | *Per-workstream detail* | the `ws-*.md` files in [handoff/](handoff/) |
 
-**Stage: PROTOTYPE** ([D19](../../DECISIONS.md)) · **Status:** ✅ *learn loop closed and cut over to
-storage* · *Last updated:* 2026-08-06 (C10 v2 ratified by the DP rebuild, D28; nothing running
-here changed)
+**Stage: PROTOTYPE** ([D19](../../DECISIONS.md)) · **Status:** ✅ *learn loop closed, on storage,
+now training under the C10 v2 day-log* · *Last updated:* 2026-08-07 (the DP rebuild cut over at
+Stage F: we were taught the v2 stamps at WP-F0b and re-pinned to `consolidation-v2.0`; a real
+night consumed a v2 window to `published` at the Stage F train leg — the one licensed continuum
+change and its live proof)
 
 ---
 
@@ -42,11 +44,14 @@ here changed)
 - **The local day-log path is retained deliberately** as the parity reference storage's M9 diff is
   measured against. It refuses to *source* records for a training window (that is an ingest-time
   question and the local path filters event time).
-- **Recipe `consolidation-v1.1` is what runs**, forking v1.0 on one knob (`replay.source` `amp` →
-  `rawlog`).
-- `replay.source="amp"` has *no HTTP implementation* by design — C14 serves a ledger, not corpora,
-  so a v1.0 night over HTTP with history fails loudly. v1.0 is retained as the recipe the
-  Phase-1/Phase-3 numbers were produced under.
+- **Recipe `consolidation-v2.0` is what runs** as of the Stage F cutover — the D28 fork of v1.1
+  that bumps `recipe_id` alongside `daylog_format_version` when the day-log renderer moved to the
+  C2 v1 slot walk. Every training/corpus knob is byte-identical to v1.1 (48× amplification, 15%
+  deny-then-correct, LoRA r128/α256, 0.30 rawlog replay); nothing about *how* a night trains
+  changed. v1.1 and v1.0 are retained (immutable under id) as the recipes their numbers were
+  produced under.
+- `replay.source="amp"` still has *no HTTP implementation* by design — C14 serves a ledger, not
+  corpora — but v2.0 (like v1.1) pins `rawlog`, so a night over HTTP with history runs correctly.
 - **D9 observability obligation is unchanged and not started** (metrics + dashboard, off the request
   path).
 
@@ -72,13 +77,17 @@ here changed)
 
 ## Cross-service flags
 
-- **the DP rebuild (ratified 2026-08-06, D23–D28)** — C2 v1 (slots) and C10 day-log
-  v2 (slot-walk renderer, `(chunk_id)`/`updated_at` dedup) are cut on branch `dp-rebuild-v1`
+- **the DP rebuild is EXECUTED (D23–D28, 2026-08-07)** — C2 v1 (slots) and the C10 day-log
+  v2 (slot-walk renderer, `(chunk_id)`/`updated_at` dedup) are **live** since the Stage F cutover
   ([../../contracts/c10_daylog.v2.json](../../contracts/c10_daylog.v2.json); D27/D28 in
-  [../../DECISIONS.md](../../DECISIONS.md)).
-- Nothing to build here yet: at the cutover (rebuild Stage F) `daylog_format_version`/`recipe_id`
-  bump and our already-built stamp-refusal is the transition safety net. Healed records land in
-  the *next* window (accepted double-training, same class as a version bump).
+  [../../DECISIONS.md](../../DECISIONS.md)). Our one licensed change — being taught the v2 stamps
+  (WP-F0b) — shipped, and a real night trained on a v2 window to `published` at the Stage F train
+  leg. Our stamp-refusal remains the safety net against a rolled-back renderer; healed records
+  land in the *next* window (accepted double-training, same class as a version bump).
+- **Next phase (seeded): client live-stream testing.** With the rebuild done, the loop is pointed
+  at a real captured day flowing recording → DP → storage → us on real hardware — the live
+  pilot-day shape the Stage F soak proved synthetically. Nothing to build here for it; our night
+  is the same night, now over v2 windows.
 - **storage** — the day-log, the training-window ledger, the `window_id` minter and C12/C13/C14 are
   *theirs and built* ([D18](../../DECISIONS.md)). Open on their side: *E-2*, the kind-aware
   retraction primitive, which must cascade to the day-log and the reservoir — redesigned

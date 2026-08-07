@@ -5,7 +5,9 @@
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
 **Status:** built · recording suite **144 tests** (110 + 7 async-seam/redrive/migration +
-3 metrics) · *Last updated:* 2026-07-30 (E-6 refined into the two-phase rejected-path design)
+3 metrics) · *Last updated:* 2026-08-07 (the DP rebuild cut over: DP now runs async by default and
+the durable-journal + in-flight-kill recovery were witnessed against our capture ledger at the
+Stage F soak; the E-6 retry-window is the one live gap that soak surfaced)
 
 **Where we are.** The client wire speaks `capture_id` + `segment_num` as of 2026-07-29 (were `session_id` + `seq`; routes `/capture/sessions/*` → `/capture/captures/*` — reasoning in [CHARTER.md](CHARTER.md) §Glossary, record in [handoff/worklog.md](handoff/worklog.md)). The computer-capture-surfaces slice is alpha-complete: all three surfaces were
 verified `clean` end to end on real devices on 2026-07-19. Each ran a real capture that landed
@@ -177,9 +179,19 @@ session — it does not stay here struck through.
   before fleet scale (M5 telemetry work).
 - Consent gate (M2) stays **back-burner (D13)** — the spool+ledger is the designed holdback
   point; nothing here forecloses it.
-- **`INGEST_ASYNC=1` on the fleet** — still the open [D16](../../DECISIONS.md) re-drive-drill decision. DP's durable journal has since made the guarantee durable on both legs; flipping the production default stays a founders' call.
+- **Client live-stream testing (the next phase, seeded).** With the DP rebuild cut over, the fleet
+  is pointed at a real captured day flowing recording → DP → storage → continuum on real hardware —
+  the live pilot-day shape the Stage F soak proved synthetically. Our capture clients are the front
+  door for it; nothing new to build, but this is what the fleet is next pointed at.
+- **`INGEST_ASYNC=1` is now the fleet default** — resolved at the DP-rebuild Stage F cutover: drill 1
+  paid the [D16](../../DECISIONS.md) re-drive gate and async is the operating mode. Our
+  confirm-on-processed reconciliation held through the soak's in-flight kill (DP hard-killed with a
+  non-empty journal, 27/27 chunks recovered; our 25 transport-failed segments retried clean).
+- **E-6 — auto-retry of downstream-declined segments** got its live witness at that soak: the ~66 s
+  DP downtime outran our bounded 4-attempt retry, so 25 segments went `failed` and needed a manual
+  `/retry` — exactly the recoverable-becomes-terminal-in-1.5 s gap this escalation is about. The
+  two-phase design below is the fix ([↓](#e-6--the-rejected-path-two-phase-design)).
 - **E-1 — `--segment-seconds 10 → 60`** ([../../HANDOFF.md](../../HANDOFF.md) §Escalations): the single largest cost lever (5.8×). It moves the audio leg too, so it is a joint call with DP-audio.
-- **E-6 — auto-retry of downstream-declined segments**, refined 2026-07-30 into a two-phase design ([↓](#e-6--the-rejected-path-two-phase-design)).
 
 ### E-6 — the rejected path, two-phase design
 > refined 2026-07-30 (CTO × recording session) · supersedes the one-line ask · escalation row:
