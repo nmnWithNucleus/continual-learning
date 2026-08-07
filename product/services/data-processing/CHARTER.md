@@ -24,11 +24,10 @@
 [D23](../../DECISIONS.md); L5 emphasis nit; L8 heal clause corrected to the built truth) ·
 [D18](../../DECISIONS.md) / [D19](../../DECISIONS.md) / [D20](../../DECISIONS.md)
 
-- **2026-08-06** — §Slot Law L8's heal clause corrected to the built Stage D truth (close-out
-  ruling): the re-POST carries whatever the re-run produced; the ledger, not the record,
-  carries hole truth; convergence, not monotonicity, is the guarantee; any non-green
-  completed heal charges the budget (was "replaces holey with fuller" / "same stage fails
-  again").
+- **2026-08-06** — §Slot Law L8's heal clause corrected at the Stage D close-out: the
+  re-POST carries whatever the re-run produced; the ledger carries hole truth;
+  convergence, not monotonicity, is the guarantee; non-green heals charge (was
+  "replaces holey with fuller").
 - **2026-08-06** — §Slot Law L5's as-emitted budget clause: the all-caps emphasis replaced
   with STYLE-rule-5-compliant italics (rebuild Stage D WP-D0 nit; wording only, no rule
   change).

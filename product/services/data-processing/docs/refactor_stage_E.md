@@ -209,8 +209,7 @@ kind loop; the 18 that pass are grid/zone/HTTP-failure tests with no slot conten
 stake) — then `58 passed` restored. Full suite at this commit: `334 passed, 4 failed`
 (the four = the old parity proof, disclosed above).
 
-## WP-E4 — the D20 parity re-baseline (run out of order, before WP-E3, to close the
-## one-commit red window WP-E2 disclosed)
+## WP-E4 — the D20 parity re-baseline (run before WP-E3, closing WP-E2's red window)
 
 | File | Action | Why |
 |---|---|---|
@@ -331,6 +330,23 @@ models that and adds the fails-closed cross-user assertion. Full storage suite �
   clears `/context` rows, not the DB file; `_migrate_context_v2` no-ops on an
   already-migrated table, migrates a pre-E one, and (review round) is re-entrant under
   kill-9 at any ladder step — so the cutover order cannot strand a DB shape.
+- **Stage F (added 2026-08-07) — bound the dry-run retraction's SQL variables:** the
+  blast-radius predictor binds two variables per distinct `updated_at` stamp in one
+  OR-clause, so a selector matching more than ~16k distinct stamps 500s on dry-run
+  while the wet path (one DELETE per stamp) succeeds. Unreachable at pilot scale;
+  bound it (chunk the ranges, or stage the stamps in a temp table) before Platform M2
+  starts calling the endpoint.
+- **Stage F (added 2026-08-07) — the `/context` ack echoes the body's `record_id`:**
+  `put_context` returns `record["record_id"]` — the schema-gated 64-hex id from the
+  posted body, never a value re-read from the row. Fine under the v1 gate; a consumer
+  reconciling acks against rows should know the echo is the caller's own id.
+- **Stage F checklist (added 2026-08-07; promoted from the repoint inventory) — the
+  recipes/policies live↔branch coupling:** the live worktree service reads
+  `recipes/` + `policies/` from *this* tree per request while its code runs from the
+  worktree, so until cutover every branch edit there must stay additive (the v2 recipe
+  was). The coupling dissolves at cutover when everything is one tree again — the F
+  checklist should then retire the five `STORAGE_*` `learn.env` pins and the worktree
+  `.venv` symlink alongside the repoint itself.
 
 ## 2026-08-06 — Adversarial review round (six lenses, skeptic-verified; fixes applied)
 
@@ -436,3 +452,61 @@ for the founder arose: every ambiguity resolved inside the ratified rows and the
 session's rulings, and each resolution is recorded in its WP's decision list.
 
 **Status: DONE.**
+
+## 2026-08-07 — Paper close-out round (independent verification; paper-only)
+
+> cleanup · applied on `dp-rebuild-v1`, one commit · triggered by an independent
+> verification that confirmed Stage E with zero code defects and directed exactly the
+> items below. Everything above stands as written; corrections amend, never rewrite.
+> Stage F not started.
+
+**Style fixes — the findings this stage's own M5/board edits introduced:**
+
+- storage `CHARTER.md`: the M5 card's two ALL-CAPS tokens (whole, skips) → italics.
+- storage `HANDOFF.md`: the five ALL-CAPS tokens (running ×2, live ×2, taught) →
+  italics; the §Incoming D28 bullet (43w) and C2-v1-only bullet (45w) trimmed under
+  the cap; §Next item 1's 41-word cell cut to 20 (the dropped reservoir-leg reasoning
+  lives in WP-E3's decision list and the M5 card). The D27 bullet was also tightened,
+  though it had not flagged — the 43w target was the D28 bullet, found by measuring.
+- Old-vs-new on the two files, measured with `style_check.py` at `139b1ce^` vs this
+  round: CHARTER 0 → 0, HANDOFF 7 → **6** (all eight stage-introduced findings
+  removed; the rewritten §Next row also retired one pre-existing cell finding).
+  Net −1 ≤ 0.
+
+**Worklog corrections (quote-and-correct):**
+
+- The review round's "repo-wide 816 → 811 = −5" was false at the stage tip: measured
+  at `f21e09c` with the same script, the repo-wide count is 816 → **909** (+93),
+  dominated by this worklog's own 90 findings — worklog files count toward the ratchet
+  like every other `product/*.md`. The −5 was a measurement that predated this
+  worklog's growth, quoted as if current; the per-file half of that correction (the
+  six WP-E0b-edited files went −6) was verified and stands. The scoping lesson: a
+  net-findings claim must name its file set *and* its commit, or it silently narrows
+  to the flattering scope.
+- The WP-E4 heading was split across two `##` lines (rendering as two headings);
+  re-joined as one, wording condensed — formatting only.
+- The DP `CHARTER.md` 2026-08-06 L8 changelog bullet, left at 55 checker-words in
+  WP-E0b after its em-dash fix, is now under the 42-word cap; the trimmed half of its
+  "was" quote ("same stage fails again") survives verbatim in the Stage D close-out
+  section and on the D27 card, so no provenance is lost.
+
+**Noticed for Stage F — three additions** (appended, dated, in the list above): the
+dry-run SQL-variable bound, the ack-echoes-the-body's-`record_id` note, and the
+recipes/policies live↔branch coupling promoted to the F checklist explicitly.
+
+**Verification re-run (2026-08-07, after all edits):**
+
+```
+$ python3 product/scripts/style_check.py --all | grep -E 'storage/(CHARTER|HANDOFF)'
+product/services/storage/HANDOFF.md:112: rule1-cell: 42 words      # pre-existing ×4
+product/services/storage/HANDOFF.md:112: rule1-cell: 27 words
+product/services/storage/HANDOFF.md:114: rule1-cell: 31 words
+product/services/storage/HANDOFF.md:116: rule1-cell: 25 words
+product/services/storage/HANDOFF.md:45:  rule6-bullet: 46w > 42    # pre-existing ×2
+product/services/storage/HANDOFF.md:53:  rule6-bullet: 56w > 42
+# CHARTER 0 (was 0) · HANDOFF 6 (was 7); data-processing/CHARTER.md:27 no longer flags
+$ storage ./.venv/bin/python -m pytest -q
+354 passed, 1 warning in 15.88s
+```
+
+Status stays **DONE**; Stage F not started.

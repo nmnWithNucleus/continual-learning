@@ -402,7 +402,7 @@ pipeline.
 - `DELETE /context/records?user_id=&record_id=&chunk_id=&pipeline_version=`, `user_id`
   required; selectors AND together and at least one is required (a selectorless call is
   refused — the full-user wipe is a different primitive).
-- WHOLE records, never kinds or slots: one record per chunk (D24) leaves nothing
+- *Whole* records, never kinds or slots: one record per chunk (D24) leaves nothing
   kind-granular to name.
 - It returns an **auditable manifest** of counts by `pipeline_version`, and
   `dry_run=true` returns the manifest without deleting.
@@ -410,7 +410,7 @@ pipeline.
   rebuilt on next fetch, the corrected-`home_tz` mechanism).
 - The time-slice delete ("delete last Tuesday", event-time bounds) is NOT E-2's job and
   remains M5's own unbuilt primitive.
-- E-2 never touches DP's done-ledger: a retracted chunk's redelivery still SKIPS
+- E-2 never touches DP's done-ledger: a retracted chunk's redelivery still *skips*
   upstream (200 + a record_id storage no longer holds) — designed; rebuild after a
   retraction is the OD-2 `/raw` replay tool or a version bump.
 
