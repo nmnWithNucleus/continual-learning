@@ -26,9 +26,10 @@ That is expected, and this register is built for it:
 
 - **A decision is never silently rewritten to say something different.** It is superseded by a new
   numbered row, so the record shows what changed our minds.
-- D17 supersedes its own same-day first draft; D19 overturned two clauses of D18. Both stay visible
-  above rather than edited away — except under **D29**'s stage license (below), when a spent row
-  may leave the tree whole and git history keeps the archive.
+- D17 supersedes its own same-day first draft; D19 overturned two clauses of D18. Both stay
+  visible above rather than edited away.
+- **D29**'s stage license is the one exception: a spent row may leave the tree whole, and git
+  history keeps the archive.
 - **A D-number never changes**, not for a revision and not for a retirement. No `D18-v1`, no
   `D18-RETIRED`. Numbers are never reused; a hole is a removed row, not an error.
 - An id that encodes meaning must change when the meaning does, and every consumer that parsed it
@@ -109,7 +110,7 @@ bloat, not history — the founders may remove them wholesale; git is the archiv
 
 **What was decided**
 
-- The append-only laws (roll-never-prune; never-edited-away) are **not overruled**. They are
+- The append-only laws (roll-never-prune; never-edited-away) are not overruled. They are
   **suspended for this stage**.
 - While the product is at stage PROTOTYPE (**D19**) and the learn and serve loops are not yet
   stable end to end, the founders may remove any document, register row, or open question
@@ -196,7 +197,7 @@ the DP service is a thin async orchestrator whose stages are clients.
 
 **What was decided**
 
-- All four models moved behind the server seam in one step — whisper, pyannote, ast and ocr —
+- All four models moved behind the server seam in one step: whisper, pyannote, ast and ocr,
   with no half-migrated calling conventions.
 - The DP process stops hosting models altogether: stages become thin clients over the server
   seam; ffmpeg stays a subprocess.
@@ -530,7 +531,7 @@ can actually be met.
 **Watch out for**
 
 - Storage's `GET /context/records?user_id=&from=&to=` range read is the beta training-window
-  feed; **C10** — now landed — is that contract.
+  feed; **C10**, now landed, is that contract.
 
 ### D11 — C1 is two legs
 

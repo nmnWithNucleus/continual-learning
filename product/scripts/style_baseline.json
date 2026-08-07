@@ -2,7 +2,7 @@
   "note": "Ratchet for style_check.py. Shrink it, never grow it.",
   "counts": {
     "product/ARCHITECTURE.md": 5,
-    "product/DECISIONS.md": 5,
+    "product/DECISIONS.md": 1,
     "product/HANDOFF.md": 11,
     "product/ORG.md": 1,
     "product/PROMPTS.md": 1,
@@ -56,7 +56,7 @@
     "product/services/recording/handoff/ws-d-vad-carve.md": 6,
     "product/services/recording/handoff/ws-e-extension.md": 21,
     "product/services/recording/handoff/ws-f-mac-cli.md": 10,
-    "product/services/storage/HANDOFF.md": 15,
+    "product/services/storage/HANDOFF.md": 12,
     "product/services/storage/handoff/worklog.md": 3,
     "product/services/storage/handoff/ws-storage-mvp.md": 1
   }
