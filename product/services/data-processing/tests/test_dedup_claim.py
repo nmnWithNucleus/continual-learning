@@ -1,4 +1,4 @@
-"""DedupStore — the L8 claim tree (Stage D) + the async claim lifecycle.
+"""DedupStore — the L8 claim tree + the async claim lifecycle.
 
 The five verdicts, decided ONLY from DP's own ledger (the row_lookup callback
 over the journal's done-row — never a storage read), under the existing one-lock

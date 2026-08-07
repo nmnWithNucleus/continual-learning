@@ -1,11 +1,11 @@
-"""WP-C6 — the REAL-backend e2e: fleet up via the supervisor, one audio chunk
+"""The REAL-backend e2e: fleet up via the supervisor, one audio chunk
 (and one video chunk) end-to-end, records validated against C2 v1 and POSTed to
-a LOCAL STUB /context sink only. NEVER the live storage on :8083 — storage
-accepts v1 at Stage E, not before (the stub here is the MockTransport fake:
-in-process, no socket, structurally incapable of reaching a real service).
+a LOCAL STUB /context sink only. NEVER the live storage on :8083 — the stub here
+is the MockTransport fake: in-process, no socket, structurally incapable of
+reaching a real service.
 
 Gated on DP_E2E=1: this spins real model servers on GPUs 2-7 (manifest ports
-8121-8152) and takes minutes. Drill discipline: v0 :8085 healthy before and
+8121-8152) and takes minutes. Drill discipline: the live DP on :8085 healthy before and
 after, nothing left listening, and fleet GPU usage RELEASED — measured as
 per-GPU before/after deltas (post-teardown usage must return to within a small
 tolerance of the pre-drill snapshot per GPU), never as absolute zero: foreign
@@ -172,7 +172,7 @@ def _c1_for(fs: FakeStorage, path: Path, template: dict, **overrides) -> dict:
 
 def test_audio_chunk_end_to_end(fleet, real_app):
     fs = real_app.fake_storage
-    # The Stage B real-speech fixture, under the SAME C1 the golden-fed pins
+    # The real-speech fixture, under the SAME C1 the golden-fed pins
     # used (same t_start/t_end -> identical absolute split times).
     c1 = _c1_for(fs, _AUDIO_FIXTURE, C1_REAL, chunk_id="e2e-audio-1",
                  blob_ref="raw/e2e/audio-1")

@@ -9,8 +9,8 @@ surviving operational knobs (VERIFY_BLOB_SHA256, METRICS_ENABLED, INGEST_ASYNC,
 worker counts): operational-only means output-inert.
 
 Runs on MOCK dialects (client-level fakes named in the version string), fixtures
-distinct from the real backends' goldens. WP-C6 extends the same matrix over the
-real stage classes with fake clients injected.
+distinct from the real backends' goldens. The real-backend e2e extends the same
+matrix over the real stage classes with fake clients injected.
 """
 from __future__ import annotations
 
@@ -353,8 +353,7 @@ def test_matrix_goes_red_on_a_deliberate_violator(monkeypatch, tmp_path):
 # it lands HERE with its disposition, or the suite is red.
 # ---------------------------------------------------------------------------
 
-# The documented operational surface (each has a disposition in
-# docs/refactor_stage_C.md):
+# The documented operational surface:
 OPERATIONAL_ENV_ALLOWLIST = {
     # config.py — the Settings survivors
     "STORAGE_URL", "DP_HTTP_TIMEOUT", "VERIFY_BLOB_SHA256",
@@ -402,8 +401,8 @@ def test_env_reads_in_app_are_exactly_the_operational_allowlist():
     unknown = {n: sorted(sites) for n, sites in found.items()
                if n not in OPERATIONAL_ENV_ALLOWLIST}
     assert not unknown, (
-        f"undocumented env reads in app/: {unknown} — a new knob must be "
-        "operational-only, added to this allowlist WITH a worklog disposition "
+        f"undocumented env reads in app/: {unknown} — a new setting must be "
+        "operational-only and added to this allowlist, which is the disposition "
         "(L4: no output-affecting env knob exists)"
     )
     # Bare `os.environ` (whole-mapping) use: only the supervisor's child-env

@@ -1,4 +1,4 @@
-"""WP-C1 — the uniform Stage + registration checks (Slot Law L4/L5 surface).
+"""The uniform Stage + registration checks (Slot Law L4/L5 surface).
 
 A stage is one file under ``app/stages/<modality>/`` declaring exactly:
 name, modality, stage_version (vS), backend (name + vB, resolved in code), needs,

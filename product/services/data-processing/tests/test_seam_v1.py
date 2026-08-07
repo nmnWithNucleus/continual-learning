@@ -1,10 +1,10 @@
-"""WP-C3 — the rebuilt seam end-to-end: /ingest -> stage graph -> ONE C2 v1 POST.
+"""The seam end-to-end: /ingest -> stage graph -> ONE C2 v1 POST.
 
 Drives the real HTTP surface with a mock-dialect audio stage set (client-level
 fakes registered in code — the dialect names them) against the MockTransport
 fake storage: proves the one-record/one-POST path (L2/L6), the v1 record shape
 on the wire, and the dedup fast path answering a redelivery without a second
-POST. The full spine (T-1…T-6) lands at WP-C6; this is the seam's own smoke.
+POST. The full spine is T-1…T-6; this is the seam's own smoke.
 """
 from __future__ import annotations
 

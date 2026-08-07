@@ -4,7 +4,7 @@ Copied-from (not moved): app/audio/acoustic/ast.py. Semantics preserved: the tra
 ``audio-classification`` pipeline consumes RAW container bytes — its ``ffmpeg_read`` shells
 out to the system ffmpeg, so it demuxes whatever the capture surfaces emit (webm/opus,
 mp4/aac, wav) and resamples to the model's 16 kHz. The server returns RAW tags; caption
-folding (``caption_from_tags``) is pure post-processing and stays CLIENT-side (Stage C).
+folding (``caption_from_tags``) is pure post-processing and stays CLIENT-side.
 
 Version law (L4): model id, revision, and device are pinned IN CODE below. No
 output-affecting env vars; the runner reads only operational env (host/port/log level).

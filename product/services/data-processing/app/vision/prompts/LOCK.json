@@ -1,5 +1,5 @@
 {
-  "note": "pack_version is the hand-bumped human token in the dialect (@pN.DIGEST); pack_digest is recomputed live at import, so editing a .prompt.md forks the dialect automatically. Written by `python -m app.vision.prompts relock`. 2026-08-07 (Stage G): legacy per-frame-v0 removed; the aggregate digest moved 565066a0 -> 80efa39f and clipcap bumped vlm.v1 -> vlm.v2. pack_version stays 1 (the human token was not relocked; the dialect fork rides the digest + vB, per this file's own rule).",
+  "note": "pack_version is the hand-bumped human token in the dialect (@pN.DIGEST); pack_digest is recomputed live at import, so editing a .prompt.md forks the dialect automatically. Written by `python -m app.vision.prompts relock`. 2026-08-07: the aggregate digest moved 565066a0 -> 80efa39f and clipcap bumped vlm.v1 -> vlm.v2. pack_version stays 1 (the human token was not relocked; the dialect fork rides the digest + vB, per this file's own rule).",
   "pack_digest": "80efa39f",
   "pack_version": "1",
   "packs": {

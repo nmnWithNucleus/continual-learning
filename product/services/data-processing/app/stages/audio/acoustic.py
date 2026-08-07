@@ -19,7 +19,7 @@ DELIBERATELY DROPPED with the caption rendering: the sentence join ("a, b, and
 c.") and the "Ambient background noise." fallback — the slot's ``values: []``
 IS the ran-nothing-detected honest empty claim (L11), so a fallback string
 would be a false positive claim. The server-side ``top_k=20`` retrieval width
-is the v0 pipeline-construction value (the Stage B golden's params).
+is the value the goldens are pinned to.
 
 Slot value (C2 v1 ``acoustic`` sub-schema): ``{"values": [...], "confidence":
 <top selected score>}``; ``confidence`` omitted when nothing survived.
@@ -72,7 +72,7 @@ class AcousticStage(Stage):
     byte_budget = 2048      # <= 3 short labels + a float; goldens emit 44 B
     server = "ast"
     # L10: no C10 v2 route exists for the acoustic slot yet — an honest
-    # speculative marker, not a fabricated consumer (Stage E owns the ruling).
+    # speculative marker, not a fabricated consumer (the route is unruled).
     consumer = "speculative:c10_ambient_route_unruled"
 
     async def run_async(self, ctx: StageContext) -> StageOutput:

@@ -1,4 +1,4 @@
-"""Model-server supervisor (Stage B, L9 machinery side).
+"""Model-server supervisor (L9 machinery side).
 
 Reads the manifest (servers/manifest.json: server -> dir, entry, replicas with
 port + GPU pin), spawns each replica in its OWN venv as a long-lived process,
@@ -7,8 +7,22 @@ capped backoff ladder. GPU pinning is CUDA_VISIBLE_DEVICES per replica (gpu: nul
 pins to CPU by hiding every device) — which physical GPU a replica lands on is
 operational, never output-affecting (L4).
 
-The supervisor lives in DP (plan §3) but is imported by nothing in v0 — main.py
-wiring is Stage C's. Stage B drives it standalone:
+THE SUPERVISOR IS NOT A SEPARATE PROCESS. It is a task inside the DP service, started
+by ``main.py``'s lifespan when ``DP_SUPERVISOR`` is set, so the DP process is the direct
+PARENT of every replica it spawns and the pid that owns a replica is DP's.
+
+How DP's death reaches the fleet depends entirely on HOW it dies, because replicas are
+spawned with ``start_new_session=True`` and do not die with their parent:
+
+  * **Graceful stop** (SIGTERM, or any shutdown that runs the lifespan) — ``stop()``
+    kills each replica, so the fleet goes down with DP.
+  * **``kill -9`` on DP** — the lifespan never runs, so all eight replicas SURVIVE as
+    orphans, still holding their ports and GPU memory. They must be reaped by hand, and
+    a restarted DP will fail to bind their ports until they are.
+
+Without the opt-in, a plain DP process runs against an already-running fleet instead.
+The module can also be driven standalone for local work, which is the only case where a
+supervisor pid is not DP's:
 
     .venv/bin/python -m app.supervisor --manifest servers/manifest.json
 
@@ -307,7 +321,7 @@ class Supervisor:
 
 async def _main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
-        description="DP model-server supervisor (Stage B standalone runner)")
+        description="DP model-server supervisor (standalone runner)")
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--base-dir", default=None,
                         help="service root; default: manifest's grandparent")

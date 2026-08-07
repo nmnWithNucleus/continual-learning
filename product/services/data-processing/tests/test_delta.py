@@ -1,8 +1,8 @@
 """The delta gate: the floor, the six D-04 calibration vectors, classification, the OCR
 selector (floor convention + rank-free cap + anchor), and determinism.
 
-Drives ``app/vision/delta.py`` and ``app/vision/clip.py``'s Pass A directly (WS-B ships no
-full clip-mode E2E — that is an integration deliverable). Fixtures are built at test time by
+Drives ``app/vision/delta.py`` and ``app/vision/clip.py``'s Pass A directly (no full
+clip-mode E2E lives here — that is an integration deliverable). Fixtures are built at test time by
 ``ffmpeg lavfi``; NO binaries, NO GPU, NO network.
 """
 from __future__ import annotations
@@ -52,9 +52,9 @@ def test_floor_is_exactly_two_on_flat(color, tmp_path):
     for m in maps:
         cell = delta.summarize_map(m)
         # The floor is a deterministic artefact of ffmpeg's area scaler at this resolution.
-        # A value other than 2 here is an ffmpeg-BUILD difference (the design pins ffmpeg,
-        # §8 A-2 VIDEO_FFMPEG_PIN), NOT a WS-B code regression — clipprep never post-processes
-        # this value, it comes straight out of the pinned Pass-A filter chain.
+        # A value other than 2 here is an ffmpeg-BUILD difference (the ffmpeg version is
+        # pinned), NOT a code regression — clipprep never post-processes this value, it
+        # comes straight out of the pinned Pass-A filter chain.
         assert cell.peak == 2, (
             f"{color}: floor peak must be exactly 2, got {cell.peak} — check the ffmpeg build "
             f"matches the pinned version (area-scaler rounding is build-specific)")

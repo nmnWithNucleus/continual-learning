@@ -184,7 +184,7 @@ def test_processed_record_ids_pipeline_version_check(tmp_path):
     assert j.processed_record_ids("j-pv", lambda m: None) == ["old-id"]    # can't judge
 
 
-# ---- Ledger v2 (Stage D, L8/D27): done-row extension + heal bookkeeping --------
+# ---- Ledger v2 (L8/D27): done-row extension + heal bookkeeping ----------------
 
 def test_done_row_returns_ledger_v2_fields(tmp_path):
     """The extended done-row: statuses verbatim (failed vs cancelled DISTINCT),
@@ -363,9 +363,10 @@ def test_version_forward_records_superseded_pv_and_resets_budget(tmp_path):
 
 
 def test_pre_stage_d_journal_migrates_in_place(tmp_path):
-    """Schema evolution ruling: pre-D rows MIGRATE (ALTER TABLE, additive) rather
-    than recreate — var/ is disposable pre-cutover, but dropping processed rows
-    would un-SEE intact history at rehydration and fabricate gaps."""
+    """Schema evolution ruling: a journal written before the ledger-v2 columns
+    existed MIGRATES (ALTER TABLE, additive) rather than recreate — var/ is
+    disposable, but dropping processed rows would un-SEE intact history at
+    rehydration and fabricate gaps."""
     import sqlite3
 
     db = tmp_path / "dp.db"

@@ -1,4 +1,4 @@
-"""WP-C4 — the four REGISTERED audio stages as thin clients under the new API.
+"""The four REGISTERED audio stages as thin clients over the model fleet.
 
 Golden-driven: the fake model clients replay the REAL server golden payloads
 (servers/*/tests/fixtures/golden_*.json — both the synthetic 6.496 s fixture and
@@ -224,7 +224,7 @@ def test_asr_pins_the_synthetic_golden_slot_and_the_wire_envelope():
     _, result = execute([AsrStage()], {"whisper": fake})
     assert result.slots["asr"] == ASR_SLOT_SYN
     assert result.statuses == {"asr": "ok"}
-    # The exact envelope + Stage B golden params, pinned in code (L4).
+    # The exact envelope + whisper golden params, pinned in code (L4).
     assert fake.calls == [{
         "input_b64": B64,
         "codec": "audio/webm",

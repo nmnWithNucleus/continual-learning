@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """servers/ocr -- PP-OCR det+rec ONNX on CPU, inside the model-server framework.
 
-The PPOCREngine from the v0 OCR service (retired at Stage G), ported faithfully
+The PPOCREngine from the prior OCR service, ported faithfully
 onto dp_servers_common: same engine construction, same model discovery, same
 region shape -- but the framework wire (/health identity + /infer envelope)
 instead of v0's bespoke /ocr, and NO OCR_* env knobs (L4: engine

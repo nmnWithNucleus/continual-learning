@@ -2,27 +2,26 @@
 
 Pure functions (no I/O). The stage graph has already produced the slots map
 (each value stamped with its producer's dialect segment by the executor); here
-we only assemble the C2 v1 envelope around it (plan §2, D24).
+we only assemble the C2 v1 envelope around it (D24).
 
-``record_id`` = sha256(chunk_id NUL pipeline_version) — NUL-joined, lowercase
-hex, EXACTLY TWO components (L3). One record per (chunk_id, pipeline_version)
-(L2) is why dropping the v0 discriminator is safe: same pair -> byte-identical
-id, so a redelivery/reprocess/heal re-POST is an idempotent /context upsert; a
-``pipeline_version`` bump forks a new record BESIDE the old (version-forward,
-L8 case 2).
+``record_id`` = sha256(chunk_id NUL pipeline_version) — NUL-joined, lowercase hex,
+EXACTLY TWO components (L3). One record per (chunk_id, pipeline_version) (L2) is why
+two components are enough: same pair -> byte-identical id, so a
+redelivery/reprocess/heal re-POST is an idempotent /context upsert; a
+``pipeline_version`` bump forks a new record BESIDE the old (version-forward, L8
+case 2).
 
-``t_start``/``t_end`` are the C1 span strings carried VERBATIM (the D-05 rule,
-ported from the retired vision/emit.py): never reparsed, reformatted or
-normalized — a re-rendered timestamp is how a record silently moves out of its
-day-log window. ``source{}`` is provenance verbatim from C1 minus ``modality``
-(lifted to the record root — a C1 chunk is strictly single-modality) and minus
-the transport-only fields (sequence, codec, blob_sha256, blob_bytes), exactly
-as in v0. The D17 civil-time trio (device_tz, device_utc_offset_minutes,
-device_clock) + device_location ride verbatim when present, omitted when absent
-— we derive nothing, validate nothing, infer nothing.
+``t_start``/``t_end`` are the C1 span strings carried VERBATIM (the D-05 rule): never
+reparsed, reformatted or normalized — a re-rendered timestamp is how a record silently
+moves out of its day-log window. ``source{}`` is provenance verbatim from C1 minus
+``modality`` (lifted to the record root — a C1 chunk is strictly single-modality) and
+minus the transport-only fields (sequence, codec, blob_sha256, blob_bytes). The D17
+civil-time trio (device_tz, device_utc_offset_minutes, device_clock) + device_location
+ride verbatim when present, omitted when absent — we derive nothing, validate nothing,
+infer nothing.
 
 No wall-clock field exists inside the record (``processed_at`` dropped, ruled
-2026-08-06): a full reprocess under fixed versions is byte-identical (§4, T-1).
+2026-08-06): a full reprocess under fixed versions is byte-identical (T-1).
 """
 from __future__ import annotations
 
@@ -41,7 +40,7 @@ _SOURCE_OPTIONAL = ("device_tz", "device_utc_offset_minutes", "device_clock",
 
 def compute_record_id(chunk_id: str, pipeline_version: str) -> str:
     """Deterministic, URL-safe (hex) record id for (chunk_id, pipeline_version) —
-    the L3 two-component identity. Blind upsert key; no discriminator."""
+    the L3 two-component identity. Blind upsert key."""
     digest = hashlib.sha256()
     digest.update(chunk_id.encode("utf-8"))
     digest.update(_ID_SEP)

@@ -1,4 +1,4 @@
-"""Audio stage files (WP-C4) — one drop-in file per stage.
+"""Audio stage files — one drop-in file per stage.
 
 REGISTERED (the v1 audio dialect): ``asr`` (whisper client, required) ·
 ``diarize`` -> ``diarization`` (pyannote client) · ``acoustic`` (ast client) ·

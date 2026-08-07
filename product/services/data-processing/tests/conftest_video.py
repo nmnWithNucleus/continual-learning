@@ -1,4 +1,4 @@
-"""ffmpeg-lavfi fixture builders for the clip video path (WS-B).
+"""ffmpeg-lavfi fixture builders for the clip video path.
 
 NOT named ``conftest.py`` on purpose — pytest auto-loads only ``conftest.py``, so nothing
 here runs unless a test imports it. Every fixture is generated at test time by

@@ -15,7 +15,8 @@
 expansion live*, and the *D27/D28 joint rows now LIVE* · *Last updated:* 2026-08-07 (the DP
 rebuild cut over at Stage F: `:8083` now serves `created_at`/`updated_at` and the C10 v2
 slot-walk day-log to the live fleet; the `dp-v0-live` worktree retired at the cutover and the
-`/context` store was wiped fresh-forward, OD-2, `/raw` kept)
+`/context` store was wiped fresh-forward, OD-2, `/raw` kept. Later that day: §Next row 7 became a
+card, the joint-rows heading was renamed, and the §Day-log cross-reference was repointed at it.)
 
 ---
 
@@ -55,7 +56,7 @@ below):
   discriminator)`* — on `ingest_time` because `pipeline_version` is a composed string and not
   orderable, on `kind` because captions and transcripts can share one `pipeline_version`. *(That
   was the D18 rule; since [D27/D28](../../DECISIONS.md) the live renderer dedups latest
-  `updated_at` per `(chunk_id)` — §The DP rebuild's joint rows, below.)* Every
+  `updated_at` per `(chunk_id)` — [§The joint rows with data-processing](#the-joint-rows-with-data-processing-d27d28), below.)* Every
   body is stamped with its `recipe_id` *and* `daylog_format_version`, and continuum *refuses* a
   body whose stamps are not the ones it trains under.
 - **C13 recipe registry** (`GET /recipes/{recipe_id}`, `GET /policies/{policy_id}`) and
@@ -83,13 +84,10 @@ below):
   may move alone** ([D20](../../DECISIONS.md)) — *if the trainer can see it, it is contract; if only
   storage can see it, it is ours.*
 
-## The DP rebuild's joint rows are LIVE (D27/D28, cut over at Stage F, 2026-08-07)
+## The joint rows with data-processing (D27/D28)
 
-Two of the rebuild's six rows are joint with us — **D27** and **D28**
-([../../DECISIONS.md](../../DECISIONS.md)). Built on `dp-rebuild-v1` at Stage E, they went
-**live at the Stage F cutover** (worklog:
-[../data-processing/docs/refactor_stage_F.md](../data-processing/docs/refactor_stage_F.md)).
-The `:8083` service now serves them to the live fleet:
+Two joint rows with data-processing — **D27** and **D28**
+([../../DECISIONS.md](../../DECISIONS.md)) — are live on `:8083`:
 
 - **D27** — `ingest_time` split into `created_at` + `updated_at` (the byte-compare is the
   upsert; a no-op re-POST leaves the row untouched); the training-window axis and the
@@ -116,6 +114,21 @@ The `:8083` service now serves them to the live fleet:
 | 4 | **Retention mechanism** ([D19](../../DECISIONS.md)) — a versioned per-store retention document, every store `keep_forever`, read and surfaced on `/metrics`, *no sweeper*. Rules mark *eligibility*; a separate explicit sweep acts and writes a manifest. | So a bad config edit can produce a wrong report, never silent data loss |
 | 5 | **Encryption at rest + per-user isolation tests** (M4). | Not started |
 | 6 | **Postgres + GCS migration** — metadata in Postgres, day-logs/corpora in GCS ([D19](../../DECISIONS.md) option (c)). | Kept cheap by a rule, not foresight: every new store goes behind a **narrow interface** from day one, so the swap is a backend change |
+| 7 | **Retire the v0 parity apparatus in one later act** — [the card below](#retiring-the-v0-parity-apparatus) holds the steps and the reason. | not purge work; founders' follow-up |
+
+### Retiring the v0 parity apparatus
+
+> `designed` 2026-08-07 · founders' follow-up
+
+**In one line.** The v0 parity apparatus retires in one deliberate act, never a trickle.
+
+**Rules** — modernize continuum's synthetic and replay paths off v0 shapes; replace the
+differential with a pinned v2 golden; then delete the v0 schema.
+
+**Why it's this way** — the parity proof's P1 precondition loads
+[`c2_processed_record.v0.json`](../../contracts/c2_processed_record.v0.json) by `$id`, and a
+green storage test runs that proof in-process. The schema is held by exemption rather than
+left behind, and a contract nobody serves should not live in the tree forever.
 
 ## Gotchas
 - **Contracts are the source of truth.** Schema validation uses a `referencing` registry so

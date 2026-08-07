@@ -1,6 +1,6 @@
-"""WP-D3 — the server-call observability family in ModelClient (Stage C cleanup
-§C assigned it here): one counter per call outcome, a transient-retry counter, an
-identity-failure counter, and a per-server latency histogram. Declared in
+"""The server-call observability family in ModelClient: one counter per call
+outcome, a transient-retry counter, an identity-failure counter, and a
+per-server latency histogram. Declared in
 main._setup_metrics; ModelClient records against whatever registry it is handed
 (duck-typed — the servers/common suite keeps constructing it metrics-less).
 

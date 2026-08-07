@@ -1,4 +1,4 @@
-"""Tests for app/supervisor.py (WP-B1): manifest -> spawn, health-check,
+"""Tests for app/supervisor.py: manifest -> spawn, health-check,
 restart-on-crash, GPU pinning env, clean stop.
 
 Replicas here are real framework servers (fake_server.py) spawned exactly the way

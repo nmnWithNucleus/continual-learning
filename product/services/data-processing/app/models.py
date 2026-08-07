@@ -8,7 +8,7 @@ schemas' ``additionalProperties: false``) used for parse-time sanity.
 Mirrors must move with the schema (the trap D17 hit): a contract edit is ONE
 change with four parts — the contract file, ``schemas.py``, this mirror, and the
 tests that hold them together. The C2 side mirrors
-``c2_processed_record.v1.json`` (D24, cut at rebuild Stage C): one record per
+``c2_processed_record.v1.json`` (D24): one record per
 chunk, a slots map, no enrichments / discriminator / content.kind. Adding a slot
 type is an additive edit to the schema file AND the slots model here, together.
 """

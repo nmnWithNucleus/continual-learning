@@ -12,7 +12,7 @@ worker in the fleet (§4 R4 / house rule 6). Every replacement is counted so the
 sees ``dp_ocr_redactions_total`` climb — a redaction that fires a lot is a signal, not a
 silent scrub.
 
-The six shapes the WS-C exit criteria pin, plus two the design names in D-07:
+The eight shapes this redactor pins:
 AWS access-key id · ``sk-`` / ``ghp_`` (& sibling GitHub/OpenAI tokens) · ``xox[baprs]-``
 Slack tokens · >=32-char base64 runs · PEM ``-----BEGIN … KEY-----`` headers ·
 Luhn-valid 13-19 digit card runs · all-bullet/asterisk masked fields.

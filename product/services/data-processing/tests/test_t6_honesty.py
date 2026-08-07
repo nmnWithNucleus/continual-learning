@@ -107,7 +107,7 @@ def test_empty_slots_map_is_honest_under_an_all_optional_failure():
 def test_cancelled_cone_reads_as_holes_too():
     """A cancelled downstream stage was attempted (its name is in the dialect —
     the dialect states the ATTEMPTED graph) and produced nothing: a hole, by the
-    same read. The statuses ledger (Stage D) will additionally record
+    same read. The statuses ledger additionally records
     failed-vs-cancelled; the record alone honestly says 'no slot'."""
     stages = [
         _stage("asr", value={"value": "w"}, required=True),

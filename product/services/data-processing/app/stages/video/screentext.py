@@ -1,9 +1,9 @@
 """``screentext`` — thin client over the ocr model server → the ``ocr`` slot.
 
-The DP-side half of D-06/D-07/D-08 under the rebuild. Consumes ``clipprep``'s
-transient ``ClipFrames``, sends each delta-gate-selected hi-res frame to the ocr
+The DP-side half of D-06/D-07/D-08. Consumes ``clipprep``'s transient
+``ClipFrames``, sends each delta-gate-selected hi-res frame to the ocr
 server (``ctx.clients["ocr"]``, the framework ``/infer`` envelope: one base64 JPEG
-per call), then runs the KEPT client-side pipeline — bbox normalization → assemble
+per call), then runs the client-side pipeline — bbox normalization → assemble
 (confidence gate, reading order + role, min-chars, deterministic redaction,
 within-chunk dedup, char budget) — down to ONE self-anchored line.
 
@@ -110,9 +110,9 @@ def _jpeg_dims(jpeg: bytes) -> tuple[int, int] | None:
 def _normalize_bbox(raw: list, frame_w: int, frame_h: int) -> tuple[float, float, float, float]:
     """Normalize a wire bbox ``[x0,y0,x1,y1]`` to [0,1]. The ocr server returns PIXEL
     coordinates of the submitted image (servers/ocr/server.py contract), which divide by
-    the frame dims; already-normalized coordinates (all <= 1.0) pass through. Ported
-    verbatim from the retired v0 client — the Stage B carry-over confirms the
-    pass-through stays valid."""
+    the frame dims; already-normalized coordinates (all <= 1.0) pass through. The
+    pass-through is the guard: a bbox that is already in [0,1] must never be divided
+    a second time."""
     try:
         x0, y0, x1, y1 = (float(v) for v in raw[:4])
     except (TypeError, ValueError, IndexError):

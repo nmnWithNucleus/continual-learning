@@ -91,7 +91,7 @@ def _supervisor_enabled() -> bool:
 
 
 async def _assert_vlm_identity() -> None:
-    """Boot-time VLM identity probe (Stage C carry, built at Stage F).
+    """Boot-time VLM identity probe.
 
     clipcap's endpoint sits OUTSIDE the manifest identity scheme — it speaks the
     OpenAI wire, not the fleet /infer envelope — so the pinned model NAME is the
@@ -133,10 +133,9 @@ async def _assert_vlm_identity() -> None:
 
 def _build_model_clients(manifest_path: Path, metrics=None) -> dict[str, ModelClient]:
     """One ModelClient per manifest server. ``client_timeout_s`` is wired from the
-    manifest (it was parsed by nothing before Stage C); remember client call
-    timeouts include queue wait — replicas serialize inference. ``metrics`` is
-    the app registry (server-call families, WP-D3) — declared before the clients
-    are built so each client can seed its zeros."""
+    manifest; remember client call timeouts include queue wait — replicas serialize
+    inference. ``metrics`` is the app registry (server-call families) — declared
+    before the clients are built so each client can seed its zeros."""
     if not manifest_path.exists():
         return {}
     manifest = json.loads(manifest_path.read_text())
@@ -199,7 +198,7 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
         ["modality", "stage", "reason"],
     )
 
-    # ---- Ledger v2 / heal observability (L8, WP-D3) ---------------------------------
+    # ---- Ledger v2 / heal observability (L8) -----------------------------------------
     metrics.declare_counter(
         "dp_heal_attempts_total",
         "Heal attempts: full-graph re-runs on redelivery of a holey chunk, success "
@@ -212,7 +211,7 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
         "stage — fires once per finalization per non-ok stage.",
         ["stage"],
     )
-    # ---- Server-call observability (model_client; Stage C cleanup §C assignment) ----
+    # ---- Server-call observability (model_client) ------------------------------------
     metrics.declare_counter(
         "dp_server_calls_total",
         "Model-server calls by outcome (ok | deterministic_error | unavailable | "
@@ -237,9 +236,9 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
         ["server"],
     )
 
-    # ---- WS-VC screen-video observability (§8) --------------------------------------
-    # The metric NAMES + label sets stay §8's; this is the single declaration
-    # site (as it already is for the graph-stage families above). Two tiers:
+    # ---- Screen-video observability --------------------------------------------------
+    # This is the single declaration site for the metric names + label sets (as it
+    # already is for the graph-stage families above). Two tiers:
     #   * PARENT-side — emitted by ingest_core's per-slot accounting on the one
     #     durably-written record. Seeded to zero below so rate() is well-defined
     #     from process start (no missing-series gap).
@@ -279,12 +278,11 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
         "dp_ocr_frame_errors_total",
         "Per-frame OCR errors absorbed (>50% of a chunk's frames erroring raises).",
     )
-    # (Cleanup round: the declared-but-producerless families are gone —
-    # dp_video_delta_peak, dp_video_ocr_events, dp_video_scenario_mismatch_total
-    # (their v0 producers died with the legacy graph / the VIDEO_SCENARIO knob)
-    # and dp_caption_ungrounded_quote_total (WS-H's scorer owns it; re-declare
-    # WITH the producer). A declared series with no producer is the same lying
-    # zero that killed dp_partial_write_total.)
+    # (Deliberately NOT declared, because nothing produces them: dp_video_delta_peak,
+    # dp_video_ocr_events, dp_video_scenario_mismatch_total and
+    # dp_caption_ungrounded_quote_total — the caption scorer owns that last one, so
+    # re-declare it WITH its producer. A declared series with no producer is the same
+    # lying zero that killed dp_partial_write_total.)
 
     # Seed the PARENT-side counters to zero for every registered stage's slot, so
     # a scrape before any traffic already shows the series (a missing series reads
@@ -408,7 +406,7 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
 
 
 def _assert_not_offline_eval() -> None:
-    """``DP_OFFLINE_EVAL=1`` ⇒ this process MUST NOT serve (WS-H, §11).
+    """``DP_OFFLINE_EVAL=1`` ⇒ this process MUST NOT serve.
 
     The offline A/B harness (``scripts/prompt_ab.py``) unlocks prompt-pack overrides —
     experimental packs, a fault-injected OCR arm — under this one flag, and it drives
@@ -582,8 +580,8 @@ def create_app() -> FastAPI:
     # transport AFTER create_app() but BEFORE the TestClient `with` block, and
     # process_chunk reads app.state.storage per call — so the fake transport is honored.
     app.state.storage = StorageClient(settings.storage_url, timeout=settings.http_timeout)
-    # Metrics BEFORE the model clients: the server-call families (WP-D3) must be
-    # declared when the clients construct and seed their zeros.
+    # Metrics BEFORE the model clients: the server-call families must be declared
+    # when the clients construct and seed their zeros.
     app.state.metrics = Metrics() if settings.metrics_enabled else None
     if app.state.metrics is not None:
         _setup_metrics(app, app.state.metrics)
@@ -594,7 +592,7 @@ def create_app() -> FastAPI:
                                                    metrics=app.state.metrics)
     # Journal is LAZY (no filesystem touch until first use) — safe at module import.
     app.state.journal = Journal(Path(settings.dp_var_dir) / "dp.db")
-    # The L8 claim tree (Stage D): every delivery is judged from the journal's
+    # The L8 claim tree: every delivery is judged from the journal's
     # done-row — fresh / version-forward / skip / heal / in-flight — with the
     # caller's freshly-resolved pipeline_version as the version-compare input.
     # The tree lives in dedup.classify; the row comes from HERE and only here

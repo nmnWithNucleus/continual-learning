@@ -1,9 +1,9 @@
-"""Tests for app/model_client.py (WP-B1): replica pick, identity verification,
+"""Tests for app/model_client.py: replica pick, identity verification,
 per-call timeout, bounded transient retry against other replicas.
 
 The fake fleet here is the real framework (build_app + uvicorn on loopback), so these
 tests also exercise the framework over actual HTTP — the same wire the DP stages will
-use in Stage C.
+use by DP stages.
 """
 from __future__ import annotations
 
@@ -346,7 +346,7 @@ def test_5xx_presentation_clears_verified_and_reverifies(status, body):
 
 
 def test_transport_error_still_clears_verified():
-    """The original Stage C hardening's presentation, pinned alongside."""
+    """The transport-error presentation of the same rule, pinned alongside the 5xx one."""
     calls = {"n": 0}
 
     def handler(request: httpx.Request) -> httpx.Response:

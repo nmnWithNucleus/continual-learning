@@ -1,10 +1,10 @@
-"""WP-C2 — graph resolution + the readiness executor under the Slot Law.
+"""Graph resolution + the readiness executor under the Slot Law.
 
-KEPT from the v0 executor: readiness TaskGroup (independent stages overlap),
+The execution machinery: readiness TaskGroup (independent stages overlap),
 commit-on-success, cancel-and-await-siblings on required failure, leaf re-raise
 (the exact exception, ProcessingError preferred), threadpooled run_sync.
 
-NEW: sorted '+'-joined version composition resolved pre-run; one-producer-per-slot
+The law it enforces: sorted '+'-joined version composition resolved pre-run; one-producer-per-slot
 and required-never-downstream-of-optional resolve checks; single-record assembly
 (slots map, each slot stamped with its stage's segment); byte-budget enforcement
 at slot emission (exceed = stage failure, never truncation); blackboard values as
@@ -277,7 +277,7 @@ def test_commit_on_success_only():
 
 
 # ---------------------------------------------------------------------------
-# Slot emission law: budgets, shape, version stamping (L5)
+# Slot emission (L5): budgets, shape, version stamping
 # ---------------------------------------------------------------------------
 
 def test_budget_breach_on_required_stage_fails_the_chunk():
@@ -405,9 +405,9 @@ def test_optional_stage_leaking_cancellederror_is_a_failed_hole():
 
 def test_wire_bytes_do_not_depend_on_completion_order():
     """Reproduced defect: slots/statuses were inserted in completion order, so
-    record bytes varied with replica latency — falsifying §4's reprocess →
-    byte-identical → upsert-no-op chain (and, at Stage E, causing spurious
-    updated_at re-windows). Adversarial completion order must not move a byte."""
+    record bytes varied with replica latency — falsifying the reprocess →
+    byte-identical → upsert-no-op chain (and causing spurious updated_at
+    re-windows downstream). Adversarial completion order must not move a byte."""
     import json as _json
     from app.pipeline import build_c2
 

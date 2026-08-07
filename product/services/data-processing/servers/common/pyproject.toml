@@ -1,7 +1,7 @@
 [project]
 name = "dp-servers-common"
 version = "0.1.0"
-description = "Shared model-server framework for the DP rebuild (Stage B): HTTP skeleton, /health identity, warmup, wire schemas."
+description = "Shared model-server framework for DP model servers: HTTP skeleton, /health identity, warmup, wire schemas."
 requires-python = ">=3.12"
 # Version pins live in each server's requirements.txt (each server owns its venv);
 # these are the abstract dependencies of the framework itself.

@@ -1,16 +1,16 @@
-"""The tolerant clip-caption parse ladder (WS-D, tab D2).
+"""The tolerant clip-caption parse ladder.
 
 Pure string handling, zero backend / config / network dependency — so these run
 headless with nothing but ``app/vision/parse.py`` + the frozen ``clip_types``. The
-ladder is the "contract of record" (§5.3): it must turn every shape a weak,
+ladder is the "contract of record": it must turn every shape a weak,
 Flash-class 32B emits — clean JSON, fenced, prose-wrapped, truncated mid-object,
 wrong keys, a refusal, a prompt echo — into a ``ClipDesc``, classify HOW degraded
 the reply was (so the caller can count ``dp_video_parse_fallback_total{pack,step}``),
 and RAISE on an empty reply so the chunk redelivers.
 
-The WS-D exit criterion: "the parse ladder over 12 malformed replies (fenced,
+The bar this suite holds: the parse ladder over 12 malformed replies (fenced,
 prose-prefixed, truncated mid-JSON, wrong-keys, refusal, prompt echo, empty) —
-every fallback counted; empty raises."
+every fallback counted; empty raises.
 """
 from __future__ import annotations
 

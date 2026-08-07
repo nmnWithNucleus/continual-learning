@@ -1,4 +1,4 @@
-"""The uniform Stage + per-modality registry (DP rebuild Stage C, Slot Law L4/L5).
+"""The uniform Stage + per-modality registry (Slot Law L4/L5).
 
 A stage is ONE disjoint file under ``app/stages/<modality>/`` decorated with
 ``@register_stage``. The declaration IS the contract surface:
@@ -26,7 +26,7 @@ A stage is ONE disjoint file under ``app/stages/<modality>/`` decorated with
     ``version`` key, i.e. exactly the bytes the record carries for the slot.
     Raising it is a stage-version bump; exceeding it is a stage failure, never
     truncation. Declared here, in the stage file, so review sees it.
-  * ``consumer`` (L10, ruled in at the Stage C cleanup round): every slot ships
+  * ``consumer`` (L10): every slot ships
     with a named consumer-today or an explicit speculative marker —
     ``"daylog:<line>"`` (a C10 renderer route), ``"stage:<name>"`` (a downstream
     stage consumes it in-run), or ``"speculative:<why>"``. Mandatory at

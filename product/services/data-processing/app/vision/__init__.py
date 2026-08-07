@@ -1,4 +1,4 @@
-"""Video-stage internals (DP rebuild, Stage C): the machinery the thin video stages
+"""Video-stage internals: the machinery the thin video stages
 under ``app/stages/video/`` call into.
 
   * ``clip`` / ``clip_types`` / ``delta`` — the two ffmpeg passes + the delta gate

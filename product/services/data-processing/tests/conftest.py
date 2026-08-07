@@ -32,7 +32,7 @@ from .fake_storage import FakeStorage
 SAMPLE_AUDIO = b"RIFF\x00\x00\x00\x00WAVEfmt mock-audio-chunk-bytes"
 
 # The default mock audio dialect (one stage). Mock fixtures are deliberately
-# DISTINCT from any real-backend golden (the Stage A carry-over).
+# DISTINCT from any real-backend golden.
 MOCK_AUDIO_PV = "asr.v1-mock.v1"
 
 

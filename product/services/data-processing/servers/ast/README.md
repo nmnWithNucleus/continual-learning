@@ -5,10 +5,11 @@ seam. Model id, revision, and device (cuda, no CPU fallback) are pinned in `serv
 (L4: no output-affecting env vars). Copied from `app/audio/acoustic/ast.py`; the caption
 folding (`caption_from_tags`) stays client-side — this server returns raw tags only.
 
-- **/infer input**: `input_b64` = raw audio container bytes (webm/opus, mp4/aac, wav —
-  the transformers pipeline's `ffmpeg_read` shells to system ffmpeg to demux + resample
-  to 16 kHz; `codec` is advisory and not consulted). Params: `top_k` (int, default 20).
-  Unknown params, bad base64, or undecodable audio → deterministic 422.
+- **/infer input**: `input_b64` = raw audio container bytes (webm/opus, mp4/aac, wav).
+- The transformers pipeline's `ffmpeg_read` shells to system ffmpeg to demux and
+  resample to 16 kHz; `codec` is advisory and not consulted.
+- Params: `top_k` (int, default 20). Unknown params, bad base64, or undecodable
+  audio → deterministic 422.
 - **result**: `{"tags": [{"label": str, "score": float}]}`, descending score.
 - **identity**: model_name, weights.revision, frameworks {transformers, torch, ffmpeg},
   device — checked against `servers/manifest.json` `expected_identity`.

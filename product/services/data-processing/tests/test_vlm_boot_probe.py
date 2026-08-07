@@ -1,7 +1,7 @@
-"""DP-boot VLM identity probe (the Stage C carry, built at Stage F).
+"""DP-boot VLM identity probe.
 
 clipcap's endpoint sits OUTSIDE servers/manifest.json identity verification — it
-speaks the OpenAI wire, not the fleet /infer envelope (Stage C ruling) — so the
+speaks the OpenAI wire, not the fleet /infer envelope — so the
 pinned model NAME is the only identity DP can assert about it. These tests pin
 that the assertion happens at boot, in the deploy configuration (DP_SUPERVISOR=1,
 the same opt-in that makes the service own the fleet), and loudly: a service

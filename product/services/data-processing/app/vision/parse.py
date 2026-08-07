@@ -1,6 +1,6 @@
 """The tolerant clip-caption parse ladder — a PURE function of the VLM reply.
 
-WS-D (tab D2) owns this. It is the **contract of record** (design §5.3): guided
+This ladder is the **contract of record** for what a reply may look like: guided
 decoding (``response_format: json_schema``) is the primary discipline lever, but a
 self-hosted 32B is Flash-class, and the POC measured the same rule block scoring
 4.10 on Pro / 3.00 on Flash — a weak model ignores instructions. So the served

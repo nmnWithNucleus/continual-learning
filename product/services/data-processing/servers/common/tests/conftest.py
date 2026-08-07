@@ -1,5 +1,5 @@
 """Test path setup: the supervisor and model client live in the DP service's app/
-package (imported by nothing in v0 — Stage C wires them). Their tests run here, in the
+package (wired by the DP service). Their tests run here, in the
 framework venv, so the DP suite stays byte-identical this stage. app/ is stdlib+httpx
 only on these modules, so the framework venv can import them."""
 from __future__ import annotations

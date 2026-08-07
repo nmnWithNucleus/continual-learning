@@ -1,11 +1,10 @@
-"""The prompt pack under the DP rebuild — digest, resolution, render, CLI.
+"""The prompt pack — digest, resolution, render, CLI.
 
-The kept subject (plan §6): the pack registry, its normalised content digest, the
-scenario resolution and the relock/show tooling. The v0 dialect half (cfg_tag,
-OUTPUT_AFFECTING classification, version_tag suffixes, VIDEO_CLIP_PROMPT /
-VIDEO_PROMPT_DIR env overrides) died with the no-knobs law (L4): identity is now the
-clipcap stage's ``Backend`` vB, welded to the pack by the ``PACK_DIGEST_PIN``
-registration gate (tested in tests/test_clipcap.py).
+The subject: the pack registry, its normalised content digest, the scenario
+resolution and the relock/show tooling. No env override selects a pack and no
+version tag composes itself (L4) — identity is the clipcap stage's ``Backend`` vB,
+welded to the pack by the ``PACK_DIGEST_PIN`` registration gate (tested in
+tests/test_clipcap.py).
 """
 from __future__ import annotations
 
@@ -36,9 +35,9 @@ _ALL = {
     "screen-clip-v1", "screen-clip-idle-v1", "screen-clip-single-v1",
     "screen-ocr-v1", "camera-clip-v1",
 }
-# The legacy per-frame-v0 pack was removed at Stage G demolition; the two tests that
-# used it as a schema-less / placeholder-free example now build inline fixtures, so the
-# parser coverage does not depend on a retired pack.
+# The schema-less / placeholder-free parser cases build their fixtures inline, below,
+# rather than pointing at a pack in _ALL: parser coverage must not depend on any pack
+# staying on disk in a particular shape.
 _SCHEMALESS_PROMPT = (
     "---\nid: legacy-x\nrole: legacy\nschema: none\n---\n"
     "[system]\nA static describer with no placeholders.\n\n"

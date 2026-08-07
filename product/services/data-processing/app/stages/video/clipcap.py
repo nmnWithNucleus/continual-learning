@@ -45,6 +45,7 @@ the same bytes; a timeout can only fail the call — a hole, never different byt
 """
 from __future__ import annotations
 
+import logging
 import os
 
 from ...stagegraph.stage import (
@@ -60,6 +61,8 @@ from ...vision.budget import caption_cap, truncate_sentence
 from ...vision.clip_types import ClipDesc, ClipFrames
 from ...vision.clipcap import vlm
 
+logger = logging.getLogger("data-processing.stages.video.clipcap")
+
 # ---- code pins (L4). Editing any of these is a vB bump. --------------------------
 MODEL = "Qwen/Qwen3-VL-32B-Instruct"   # served-model-name requested on the wire
 SCENARIO = "screen-mac"                # prompt route (routes.json) + [[scenario_label]]
@@ -68,12 +71,10 @@ CAPTION_RATE = 16                      # D-11: caption chars/second-of-life (of 
 # The aggregate prompt-pack digest this backend version was shipped against. Computed
 # by app/vision/prompts at import from the on-disk pack; `python -m app.vision.prompts`
 # prints the current value. EDITING A PACK => recompute, update this pin AND bump vB.
-# 2026-08-07 (Stage G demolition): the legacy per-frame-v0 pack was removed. The digest
-# covers the whole pack dir, so its removal moved the aggregate digest 565066a0 -> 80efa39f
-# even though screen-clip-v1's caption bytes are byte-identical — the guard is aggregate
-# by design (no pack file changes silently) and the price is a dialect fork on any dir
-# change. Recorded, planned demolition: re-pinned + vB bumped vlm.v1 -> vlm.v2 below, so
-# every video record now stamps clipcap.v1-vlm.v2 (the accepted expected consequence).
+# The digest covers the WHOLE pack dir, so any change there moves the aggregate even
+# when the caption bytes a stage actually reads are byte-identical. That is the guard
+# working as designed — no pack file changes silently — and its accepted price is a
+# dialect fork on any dir change, which is why the pin and vB always move together.
 PACK_DIGEST_PIN = "80efa39f"
 
 if prompts.PACK_DIGEST != PACK_DIGEST_PIN:
@@ -140,10 +141,8 @@ class ClipcapStage(Stage):
     modality = "video"
     slot = "caption"
     stage_version = 1
-    # vB bumped v1 -> v2 at Stage G when the legacy per-frame-v0 pack was removed and the
-    # aggregate PACK_DIGEST_PIN moved (see the pin comment above). The dialect fork is the
-    # recorded, accepted consequence of the aggregate-digest guard; caption bytes are
-    # otherwise unchanged.
+    # vB tracks the aggregate PACK_DIGEST_PIN (see the pin comment above): the pack dir
+    # and this number move together, so every video record stamps clipcap.v1-vlm.v2.
     backend = Backend("vlm", 2)
     needs = ("clipprep", "screentext")
     required = False          # L7: failure = caption hole; record ships; heal redrives

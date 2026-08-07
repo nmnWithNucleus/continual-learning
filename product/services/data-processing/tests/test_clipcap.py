@@ -319,8 +319,8 @@ def test_parse_fallback_increments_the_real_family(monkeypatch):
 
 
 def test_caption_truncation_increments_the_real_family(monkeypatch):
-    """Stage D WP-D0 (inherited nit): the {pass="caption"} series had no test —
-    dp_video_truncated_total was proven recording only for {pass="ocr"}. Drive
+    """The {pass="caption"} series needs its own test: dp_video_truncated_total
+    is otherwise proven recording only for {pass="ocr"}. Drive
     the REAL stage through a span small enough that the canned reply overflows
     the caption cap (16 chars/s -> 32 at span 2) and assert the series renders
     under main.py's exact declaration."""

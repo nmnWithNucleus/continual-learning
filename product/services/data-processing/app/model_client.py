@@ -1,4 +1,4 @@
-"""Thin async client for the model-server fleet (Stage B, L9 bureaucracy side).
+"""Thin async client for the model-server fleet (L9 bureaucracy side).
 
 One ModelClient per server kind (whisper, pyannote, ast, ocr): picks a replica
 round-robin, enforces a per-call timeout, and retries TRANSIENT failures on other
@@ -9,11 +9,11 @@ happens next.
 Identity verification (the L4 hook): before a replica serves its first call, its
 /health identity must subset-match the expected identity from the supervisor
 manifest. A mismatch is a loud IdentityMismatchError, never a silent skip — a
-stage must never talk to the wrong model. Wired into main.py at Stage C;
-imported by nothing in v0.
+stage must never talk to the wrong model. Wired into main.py, which builds one
+client per manifest server.
 
-Observability (Stage D WP-D3, per the Stage C cleanup's owner assignment): an
-optional duck-typed ``metrics`` registry records the server-call family —
+Observability: an optional duck-typed ``metrics`` registry records the
+server-call family —
 ``dp_server_calls_total{server,outcome}`` per completed call (outcome: ``ok`` |
 ``deterministic_error`` | ``unavailable`` | ``identity_mismatch``),
 ``dp_server_call_transient_retries_total{server}`` per transient presentation
@@ -219,7 +219,7 @@ class ModelClient:
                 # The replica may be mid-respawn under the supervisor: whatever
                 # comes back on that port next is a NEW process, so its identity
                 # must be re-verified before it serves again (L4 — never silently
-                # the wrong model). Stage B carried this as a hardening item.
+                # the wrong model).
                 replica.verified = False
                 self._inc("dp_server_call_transient_retries_total",
                           {"server": self.server})

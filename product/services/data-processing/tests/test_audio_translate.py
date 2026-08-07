@@ -1,12 +1,11 @@
-"""WP-C4 — TranslateStage: built + tested but NOT registered.
+"""TranslateStage: built + tested but NOT registered.
 
-The ratified §2 example dialect excludes translation, v0's beta fleet ran it
-off, and C2 v1 has no ``translation`` sub-schema yet — so the stage exists as
-code (semantics pinned by these tests) and joins a dialect only when its
-contract slot lands additively. Tests therefore drive it through EXPLICIT
-resolve() stage sets, never the registry.
+No registered dialect includes translation and C2 v1 has no ``translation``
+sub-schema yet — so the stage exists as code (semantics pinned by these tests)
+and joins a dialect only when its contract slot lands additively. Tests therefore
+drive it through EXPLICIT resolve() stage sets, never the registry.
 
-Semantics under test (v0 parity + plan): no server call when the ASR value is
+Semantics under test: no server call when the ASR value is
 empty or already English (a fake that raises-if-called proves it); otherwise
 whisper task=translate with the source auto-detected and the result language
 hardcoded "en" (the v0 design point — the server does this too).

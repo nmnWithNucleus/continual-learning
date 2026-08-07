@@ -1,4 +1,4 @@
-"""WP-C3 — the two-component record id (L3) + the C2 v1 assembler + the mirror.
+"""The two-component record id (L3) + the C2 v1 assembler + the mirror.
 
 record_id = sha256(chunk_id NUL pipeline_version), lowercase hex, exactly two
 components — the discriminator is gone with the multi-record model (L2/L3).
@@ -9,7 +9,7 @@ device_clock) riding source{} verbatim, t_start/t_end carried as VERBATIM C1
 strings (the D-05 rule), no processed_at (ruled 2026-08-06), no enrichments, no
 discriminator, no content.kind.
 
-The mirror moves as one change: contract file (Stage A) + schemas.py validator
+The mirror moves as one change: contract file + schemas.py validator
 + models.py pydantic mirror + these tests.
 """
 from __future__ import annotations

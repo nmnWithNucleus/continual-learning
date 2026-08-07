@@ -4,14 +4,11 @@ Loop-native (``run_async``): prepare the /infer envelope, await the whisper
 pool, post-process the result into the ``asr`` slot. No model code, no env
 reads — every output-affecting choice is a code pin below (L4).
 
-Params pinned to the Stage B golden (servers/whisper PROVENANCE.md):
-``task=transcribe, beam_size=1, language="en", vad=true``. DELIBERATE DIALECT
-CHANGE vs v0: fw.v1 means large-v3 / cuda / fp16 / beam 1 / language pinned en /
-VAD on — v0's env-DEFAULT was base / cpu / int8 with auto-detect language
-(ASR_MODEL/ASR_DEVICE/ASR_COMPUTE_TYPE/ASR_LANGUAGE knobs, all dead), while the
-beta fleet actually ran the en pin. The Stage B carry-over says vB=1 reflects
-this server-pinned identity; any future change to these params (or the server's
-pinned model) is a vB bump.
+Params pinned to the whisper server's golden (servers/whisper PROVENANCE.md):
+``task=transcribe, beam_size=1, language="en", vad=true``. The backend version
+``fw.v1`` names that identity — large-v3 / cuda / fp16 / beam 1 / language
+pinned en / VAD on — so any change to these params, or to the server's pinned
+model, is a vB bump.
 
 Slot value (C2 v1 ``asr`` sub-schema):
   * ``value`` — the full transcript text; ``""`` is the honest VAD-silence
@@ -19,9 +16,9 @@ Slot value (C2 v1 ``asr`` sub-schema):
   * ``language`` — the detected/pinned language; omitted ONLY when the server
     returned nothing truthy (the contract has it optional).
   * ``splits`` — chunk-relative segment times lifted to absolute RFC3339
-    (chunk t_start + offset, clamped into [0, span_seconds] — the exact v0
-    ``_absolute_segments`` mapping, minus the speaker field which now lives in
-    the ``transcript`` slot); omitted when the server returned no segments.
+    (chunk t_start + offset, clamped into [0, span_seconds]); carries no speaker
+    field, which belongs to the ``transcript`` slot; omitted when the server
+    returned no segments.
 """
 from __future__ import annotations
 
@@ -31,12 +28,12 @@ from typing import Any
 from ...timeutil import abs_time, parse_rfc3339
 from ...stagegraph.stage import Backend, Stage, StageContext, StageOutput, register_stage
 
-# The /infer params, pinned in code — exactly the Stage B golden's params.
+# The /infer params, pinned in code — exactly the whisper server's golden params.
 TRANSCRIBE_PARAMS: dict[str, Any] = {
     "task": "transcribe",
     "beam_size": 1,
     "language": "en",   # pinned, not auto-detect: faint ambient audio guesses
-                        # wrong scripts and hallucinates (v0 beta finding)
+                        # wrong scripts and hallucinates (a beta-fleet finding)
     "vad": True,        # Silero VAD gate: silence transcribes EMPTY, not invented
 }
 

@@ -1,4 +1,4 @@
-"""WP-D2 seam wiring — the four verdicts routed at both ingest paths (L8).
+"""Seam wiring — the four verdicts routed at both ingest paths (L8).
 
 Inline and async /ingest route fresh / version-forward / skip / heal from the
 claim tree; the async path heal-claims via the queue like any job. Heal

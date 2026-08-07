@@ -1,4 +1,4 @@
-"""WP-D3 — the DP_E2E heal drill (L8 case 4 against the REAL fleet).
+"""The DP_E2E heal drill (L8 case 4 against the REAL fleet).
 
 Audio chunk with the ast server DOWN → the record ships with an acoustic hole
 and the ledger shows `failed` (+ its cancelled cone — empty for acoustic, which

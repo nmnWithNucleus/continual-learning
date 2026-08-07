@@ -1,5 +1,8 @@
 logs/
 .venv/
+# Side-by-side venvs built next to the live one during a repair. Each is multi-GB;
+# without this pattern a `git add -A` stages the whole fleet's third-party packages.
+.venv-*/
 __pycache__/
 .pytest_cache/
 *.egg-info/

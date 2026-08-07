@@ -3,17 +3,17 @@
 OPERATIONAL-ONLY, by law (L4/D25): no output-affecting env knob exists anywhere
 in this service. Every setting below can change endpoints, capacity, timeouts,
 retries, durability locations or observability — never one byte of a record.
-The v0 knobs that did affect output are dead, each either baked into a backend
-version or killed outright (dispositions in docs/refactor_stage_C.md):
+Names a reader might expect to find here and will not — each is baked into a
+backend's version or absent by law:
 
   * ASR_BACKEND / ASR_MODEL / ASR_DEVICE / ASR_COMPUTE_TYPE — the model and its
     execution profile live in the whisper server's code + manifest identity;
     backend selection is in code, named in the dialect (mock included).
   * ASR_BEAM_SIZE / ASR_LANGUAGE / ASR_VAD — per-call params pinned in the asr
     stage file; changing them is a vB bump.
-  * INGEST_ISOLATION / INGEST_SUBPROC_START — died with isolation.py (D26):
-    models left the DP process, the subprocess shield has nothing left to
-    contain.
+  * INGEST_ISOLATION / INGEST_SUBPROC_START — no per-chunk subprocess shield
+    exists (D26): models run in the server fleet, not in the DP process, so
+    there is nothing left for it to contain.
 
 Reading env per request (rather than freezing at import) keeps the service
 trivially testable: a test can point STORAGE_URL at a stub without re-importing

@@ -1,14 +1,9 @@
-"""Frozen dataclasses shared by the clip video stages (WS-B / WS-C / WS-D).
+"""Frozen dataclasses shared by the clip video stages.
 
-FOUNDATION file for the screen-video (WS-VC) build. Its shapes are pinned by
-``handoff/ws-video-clip.md`` §11 (the frozen interface) and committed by the
-service lead BEFORE the fan-out, so every workstream imports one authoritative
-definition rather than each re-creating it on its own branch. Do not change
-these shapes without a lead-ratified edit to the design doc.
-
-(The legacy keyframe pipeline's ``result.py`` shapes — ``Keyframe`` /
-``KeyframeCaption`` — died with that pipeline in the DP rebuild; these are the only
-video shapes now.)
+FOUNDATION file for the screen-video path: these are the only video shapes, and every
+stage that touches a clip imports its definition from here rather than restating it.
+That single authoritative definition is the point — treat these shapes as a pinned
+interface and change them only deliberately, since every clip stage moves with them.
 """
 from __future__ import annotations
 

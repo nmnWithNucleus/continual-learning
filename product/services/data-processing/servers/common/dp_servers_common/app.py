@@ -54,7 +54,7 @@ def build_app(backend: ModelBackend) -> FastAPI:
 
     @app.get("/health")
     async def health() -> JSONResponse:
-        # async def, deliberately (Stage C hardening): a sync handler here would
+        # async def, deliberately: a sync handler here would
         # share the threadpool with queued sync /infer calls, so a busy replica's
         # backlog could starve its own liveness probe and the supervisor would
         # kill a merely-busy process. This handler only reads an Event + strings

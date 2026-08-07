@@ -12,7 +12,7 @@ that boundary:
     A dead-lettered chunk stays here as ``state='dead_letter'`` (durable, for ops), and a
     redelivery resets it to ``accepted`` for another attempt.
   * ``processed``  — one row per chunk whose C2 is durably written (BOTH modes). This is
-    L8's DONE-LEDGER (Stage D, D27): beside the receipt it carries ``stage_status`` (the
+    L8's DONE-LEDGER (D27): beside the receipt it carries ``stage_status`` (the
     executor's per-stage map, verbatim — ``failed`` vs ``cancelled`` stay distinct),
     ``heal_attempts`` / ``done_final`` (the heal budget), ``cached_slots`` (a specified,
     UNPOPULATED seat for run-only-the-failed-cone — schema only, no logic) and
@@ -34,7 +34,7 @@ Two safety mechanisms shape every write (from the design review):
     (``note_redrive_attempt``, charged at worker dispatch — never per restart);
     ``pending_for_redrive`` resolves over-cap rows in one transaction — record-less
     poison flips to ``dead_letter`` (visible loss), while a chunk WITH a durable
-    record is FINALIZED instead (heal containment, Stage D) — so a crash-looping
+    record is FINALIZED instead (heal containment, L8) — so a crash-looping
     chunk breaks the loop VISIBLY instead of forever. An external redelivery (a
     conscious re-push) resets the counter.
 
@@ -93,11 +93,11 @@ CREATE INDEX IF NOT EXISTS idx_processed_stream ON processed (stream_id, sequenc
 # declared permanent (done_final) and the chunk skips forever under that dialect.
 HEAL_MAX_ATTEMPTS = 3
 
-# Ledger-v2 columns (Stage D). Pre-D journals MIGRATE in place (additive ALTER
-# TABLE) rather than recreate: dropping processed rows would un-SEE intact history
-# at rehydration — the exact false-gap the journal exists to prevent. A NULL
-# stage_status marks a pre-D row: it carries no hole evidence, so the claim tree
-# reads it as green (skip) when the dialect matches.
+# Ledger-v2 columns (L8, D27). A journal written before these columns existed MIGRATES
+# in place (additive ALTER TABLE) rather than recreate: dropping processed rows would
+# un-SEE intact history at rehydration — the exact false-gap the journal exists to
+# prevent. A NULL stage_status marks such a row: it carries no hole evidence, so the
+# claim tree reads it as green (skip) when the dialect matches.
 _V2_COLUMNS = (
     ("stage_status", "TEXT"),
     ("heal_attempts", "INTEGER NOT NULL DEFAULT 0"),

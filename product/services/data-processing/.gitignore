@@ -1,4 +1,6 @@
 .venv/
+# Side-by-side venvs built next to the live one during a repair; each is multi-GB.
+.venv-*/
 __pycache__/
 .pytest_cache/
 *.pyc

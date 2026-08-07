@@ -1,4 +1,4 @@
-"""Graph resolution + the readiness executor (DP rebuild Stage C, Slot Law core).
+"""Graph resolution + the readiness executor (Slot Law core).
 
 RESOLUTION (cheap string work over a handful of stages, run BEFORE any stage) turns
 an explicit stage set into the executable DAG, enforcing the graph-shaped law

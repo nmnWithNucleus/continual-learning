@@ -1,8 +1,8 @@
 """T-3 — version composition (L4): pipeline_version is the sorted '+'-join of
 every enabled stage's segment; a stage-set change changes the string; the
 schema regex cannot express sortedness, so THIS suite owns it; each emitted
-slot's version equals its stage's segment of the dialect (the Stage A
-carry-over — the contract's deliberate redundancy can never drift).
+slot's version equals its stage's segment of the dialect (the contract's
+deliberate redundancy can never drift).
 
 The registration snapshot (a `needs`/slot/budget change without a vS bump = red)
 pins the REAL registered stage sets' contract surface at the bottom.
@@ -79,7 +79,7 @@ def test_composed_string_fullmatches_the_contract_grammar():
 
 
 def test_every_emitted_slot_version_equals_its_stages_dialect_segment():
-    """The Stage A carry-over, end-to-end: slot.version is not merely
+    """End-to-end: slot.version is not merely
     grammar-valid — it IS the producing stage's segment of pipeline_version."""
     stages = [
         _stage("asr", vS=2, backend=("fw", 3)),
@@ -142,7 +142,7 @@ EXPECTED_CONTRACTS: dict[str, dict[str, dict]] = {
 @pytest.mark.parametrize("modality", sorted(EXPECTED_CONTRACTS) or ["_pending_"])
 def test_registered_contract_surface_matches_snapshot(modality):
     if modality == "_pending_":
-        pytest.skip("snapshot lands with the real stage sets (WP-C6)")
+        pytest.skip("snapshot lands with the real stage sets")
     stages = stages_for(modality)
     surface = {
         s.name: {

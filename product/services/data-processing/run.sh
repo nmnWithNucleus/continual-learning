@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # data-processing service (:8085) — the learn-loop C1 -> stage graph -> C2 v1 spine.
 #
-# Rebuilt at Stage C (Slot Law, D23–D28): the pipeline dialect lives entirely in
+# Slot Law v1: the pipeline dialect lives entirely in
 # code — there is NO backend env knob (ASR_BACKEND is dead; mock dialects exist
 # only as code-constructed stage sets in tests). Env here is operational-only:
 # where storage is, where the journal lives, whether THIS process owns the

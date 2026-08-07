@@ -1,6 +1,6 @@
-"""The ``screentext`` stage — a thin client over the ocr model server (DP rebuild).
+"""The ``screentext`` stage — a thin client over the ocr model server.
 
-New-API client tests: the stage is driven directly with a StageContext whose
+The stage is driven directly with a StageContext whose
 ``clients["ocr"]`` is a client-level fake (plan §3 — no server spawned). The
 centerpiece is the GOLDEN test: the fake returns the REAL ocr server's measured
 ``/infer`` result (servers/ocr/tests/fixtures/golden_regions.json, bit-stable per its
@@ -197,7 +197,7 @@ def test_match_frame_tolerance():
 def test_normalize_bbox_divides_pixels_and_passes_through_normalized():
     # Pixel coords (the ocr server's contract) divide by the frame dims...
     assert _normalize_bbox([640, 400, 1280, 800], 1280, 800) == (0.5, 0.5, 1.0, 1.0)
-    # ...already-normalized coords pass through (the Stage B carry-over check).
+    # ...already-normalized coords pass through, never divided a second time.
     assert _normalize_bbox([0.1, 0.2, 0.3, 0.4], 1280, 800) == (0.1, 0.2, 0.3, 0.4)
     # Garbage degrades to the zero sentinel, never a crash.
     assert _normalize_bbox(["x"], 1280, 800) == (0.0, 0.0, 0.0, 0.0)

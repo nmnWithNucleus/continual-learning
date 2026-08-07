@@ -8,6 +8,9 @@
 >
 > Only the founders (CTO + AI co-founder) add rows here. Service owners **propose** via
 > [HANDOFF.md](HANDOFF.md) §Escalations; a founders' session ratifies and numbers it.
+>
+> History before 2026-08-07 lives in git history, not in this tree. A skipped number is a removed
+> row, not an error.
 
 **Newest first.** A new decision is *prepended*: a row at the top of the index, and its card
 directly under the index ([ORG.md](ORG.md) §Documentation protocol). Cards follow
@@ -23,20 +26,23 @@ That is expected, and this register is built for it:
 
 - **A decision is never silently rewritten to say something different.** It is superseded by a new
   numbered row, so the record shows what changed our minds.
-- D17 supersedes its own same-day first draft; D19 overturned two clauses of D18. Both are visible
-  above rather than edited away.
+- D17 supersedes its own same-day first draft; D19 overturned two clauses of D18. Both stay
+  visible above rather than edited away.
+- **D29**'s stage license is the one exception: a spent row may leave the tree whole, and git
+  history keeps the archive.
 - **A D-number never changes**, not for a revision and not for a retirement. No `D18-v1`, no
-  `D18-RETIRED`.
-- An id that encodes meaning has to change when the meaning does, and this repo has already paid
-  for that lesson once.
-- D18's `window_id` was `w<local-date>` until the window stopped having a local date; re-keying it
-  moved filesystem paths, the training seed and C5 lineage at once.
-- Ids are stable handles; meaning lives in the columns beside them. Roughly forty files cite a
-  D-number today, and none should ever need auditing.
+  `D18-RETIRED`. Numbers are never reused; a hole is a removed row, not an error.
+- An id that encodes meaning must change when the meaning does, and every consumer that parsed it
+  breaks with it. Ids are stable handles; meaning lives in the columns beside them — so a
+  decision's number never changes, only its status.
+- Roughly forty files cite a D-number today, and none should ever need auditing.
 - **Lineage is bidirectional**, in its own column: the new row records what it supersedes, the old
   row records what superseded it.
 - One direction alone lets you walk forward from history but never backward from the decision you
   are reading now, which is the question people actually have.
+- **Append-only / never-edited-away is suspended for this stage (D29).** The laws are not
+  overruled; the license lapses the day the learn and serve loops run end to end in production,
+  and they resume unamended that day.
 - **A row's *status* may change in place** — status is a fact about today, while the decision text is
   history and stays put:
 
@@ -63,6 +69,7 @@ That is expected, and this register is built for it:
 
 | # | Decision | Date | Status | Lineage | Card |
 |---|---|---|---|---|---|
+| **D29** | Purge license at PROTOTYPE: append-only suspended for this stage | 2026-08-07 | ratified | suspends roll-never-prune / never-edited-away *for this stage only* · does not overrule them | [↓](#d29--purge-license-at-prototype) |
 | **D28** | C10 v2 + whole-record retraction | 2026-08-06 | ratified | joint row with storage · re-baselines **D20**'s parity bar | [↓](#d28--c10-v2--whole-record-retraction) |
 | **D27** | The heal ledger, and `created_at`/`updated_at` in storage | 2026-08-06 | ratified | joint row with storage · moves **D18**'s watermark axis | [↓](#d27--the-heal-ledger-and-created_atupdated_at) |
 | **D26** | Machinery/bureaucracy split: models become servers | 2026-08-06 | ratified | retires `isolation.py` · `INGEST_ISOLATION` · `DP_DIALECT_FREEZE` | [↓](#d26--the-machinerybureaucracy-split) |
@@ -73,10 +80,10 @@ That is expected, and this register is built for it:
 | **D21** | STYLE.md is the SOP for every document edit in `product/` | 2026-07-28 | ratified | — | [↓](#d21--the-document-style-sop) |
 | **D20** | The exit bar for the storage↔continuum cutover, and a definition of "done" | 2026-07-27 | **BUILT** 2026-07-27 | parity bar re-baseline ruled by D28 | [↓](#d20--the-cutover-exit-bar) |
 | **D19** | Stage is PROTOTYPE: nothing is set in stone, contracts included | 2026-07-27 | ratified | supersedes **D18** (2 clauses) · discriminator clause retired by D24 | [↓](#d19--stage-prototype) |
-| **D18** | Storage owns the day-log; the window becomes an ingest-time watermark | 2026-07-26 | **BUILT** 2026-07-27 | 2 clauses superseded by **D19** · watermark axis moved to `updated_at` by D27 | [↓](#d18--storage-owns-the-day-log) |
+| **D18** | Storage owns the day-log and training-window custody | 2026-07-26 | **BUILT** 2026-07-27 | 2 clauses superseded by **D19** · watermark axis moved to `updated_at` by D27 | [↓](#d18--storage-owns-the-day-log) |
 | **D17** | Timezone: the device owns the fact, storage owns the policy | 2026-07-26 | **BUILT** 2026-07-26 · 2026-07-27 | supersedes its own first draft | [↓](#d17--timezone-custody) |
 | **D16** | The async `/ingest` reply shape | 2026-07-19 | ratified | fan-out clause restated by **D24** | [↓](#d16--the-async-ingest-reply-shape) |
-| **D15** | Post-deep-session build order: continuum kickoff is next | 2026-07-19 | ratified | — | [↓](#d15--post-deep-session-build-order) |
+| **D15** | DP image/text pipelines deferred until a producing surface exists | 2026-07-19 | ratified | — | [↓](#d15--post-deep-session-build-order) |
 | **D14** | Capture transport is segmented HTTP upload on every v0 surface | 2026-07-19 | ratified | — | [↓](#d14--capture-transport) |
 | **D13** | The consent gate is de-prioritized to the back burner | 2026-07-18 | ratified | — | [↓](#d13--consent-gate-de-prioritized) |
 | **D12** | Branching and beta model: a standing `dev` branch for testers | 2026-07-18 | ratified | — | [↓](#d12--branching-and-beta-model) |
@@ -88,40 +95,68 @@ That is expected, and this register is built for it:
 | **D6** | The base model is Qwen3-VL-32B | 2026-07-09 | ratified | OCR caveat retired by **D8** | [↓](#d6--the-base-model) |
 | **D5** | The mobile app ships in v0 | 2026-07-09 | ratified | — | [↓](#d5--the-mobile-app-ships-in-v0) |
 | **D4** | The wearable is camera and mic only, with no speaker | 2026-07-09 | ratified | — | [↓](#d4--the-wearable-has-no-speaker) |
-| **D3** | Serve-loop first | 2026-07-09 | ratified | — | [↓](#d3--serve-loop-first) |
 | **D2** | Single-markdown doc protocol | 2026-07-09 | ratified | — | [↓](#d2--single-markdown-doc-protocol) |
 | **D1** | Platform is a ratified service | 2026-07-09 | ratified | — | [↓](#d1--platform-is-a-service) |
 
+### D29 — purge license at PROTOTYPE
+
+> `ratified` 2026-08-07 · suspends [STYLE.md](STYLE.md) §Growing a worklog's roll-never-prune and
+> this register's never-edited-away rule *for this stage only* · does not overrule them
+> · recorded in [STYLE.md](STYLE.md) §Growing a worklog; [ORG.md](ORG.md) §Documentation protocol;
+> [storage CHARTER](services/storage/CHARTER.md) §Open questions; [README.md](README.md)
+
+**In one line.** While learn and serve are not yet stable end to end, designs we stepped over are
+bloat, not history — the founders may remove them wholesale; git is the archive.
+
+**What was decided**
+
+- The append-only laws (roll-never-prune; never-edited-away) are not overruled. They are
+  **suspended for this stage**.
+- While the product is at stage PROTOTYPE (**D19**) and the learn and serve loops are not yet
+  stable end to end, the founders may remove any document, register row, or open question
+  wholesale.
+- Git history is the archive. A skipped number is a removed row, not an error; numbers are never
+  reused.
+- **The license lapses** the day the loops run end to end in production. That day the
+  roll-never-prune and never-edited-away rules resume unamended.
+
+**Watch out for**
+
+- This is a founders-only license. It does not authorize an ordinary session to delete register
+  rows or charters.
+- Suspension is not a third status word and not a permanent posture. There is deliberately no
+  `frozen` for the same reason ([STYLE.md](STYLE.md) §Status vocabulary): at PROTOTYPE a word
+  that promises permanence misleads.
+
 ### D28 — C10 v2 + whole-record retraction
 
-> `ratified` 2026-08-06 · **joint row with storage** · re-baselines D20's parity bar (rebuild
-> Stage E, WP-E4) · **full reasoning:**
-> [rebuild plan](services/data-processing/docs/refactor_dp_service.md) §5.2–5.4
+> `ratified` 2026-08-06 · **joint row with storage** · re-baselines D20's parity bar
+> · Full session record: git history.
 > · recorded in [ARCHITECTURE.md](ARCHITECTURE.md) §Contracts C10 card;
 > [contracts/c10_daylog.v2.json](contracts/c10_daylog.v2.json)
 
 **In one line.** The day-log renderer walks `content.slots` instead of per-kind records, and
-E-2 retraction is redesigned as whole-record operations — simpler, and finally built (Stage E).
+E-2 retraction is whole-record operations — simpler, and built.
 
 **What was decided**
 
 - Renderer routing: `slots.caption` → Scene · `slots.ocr` → World text (OCR) ·
   `slots.transcript` → speaker-bucketed lines via its `splits[]`.
 - Speech lines render from `slots.transcript`; when that slot is absent they fall back to
-  `slots.asr`, speakers unlabeled (ruled 2026-08-06; Stage E builds it).
-- Dedup key: latest `updated_at` per `(chunk_id)`, rowid tiebreak — one record per chunk makes
-  the old `(chunk_id, kind, discriminator)` key collapse to this.
+  `slots.asr`, speakers unlabeled.
+- Dedup key: latest `updated_at`, rowid tiebreak — one record per chunk leaves `(chunk_id)` as
+  the whole key.
 - `recipe_id` / `daylog_format_version` bump; continuum's stamp-refusal is the transition
   safety net.
 - E-2 becomes whole-record operations: delete by `record_id` / `chunk_id` /
   `pipeline_version`; manifest by `pipeline_version`. The kind-granular design retires unbuilt.
-- The D20 parity bar is re-baselined against the v2 renderer (Stage E, WP-E4).
+- D20's parity bar re-baselined 2026-08-06: v2 slot-walk over C2 v1 records vs untouched v0
+  reference — 31 checks, both origins, tier A byte-identical.
 
 ### D27 — the heal ledger, and `created_at`/`updated_at`
 
 > `ratified` 2026-08-06 · **joint row with storage** · moves D18's watermark axis to
-> `updated_at` · **full reasoning:**
-> [rebuild plan](services/data-processing/docs/refactor_dp_service.md) §1 L8 + §5.1
+> `updated_at` · Full session record: git history.
 > · recorded in [ARCHITECTURE.md](ARCHITECTURE.md) §Contracts C10 card (axis change);
 > [data-processing CHARTER](services/data-processing/CHARTER.md) §Slot Law L7/L8
 
@@ -146,37 +181,36 @@ learns per-stage status and a heal budget, and storage splits `ingest_time` into
 - "Replaces holey with fuller" reads as monotone; the built truth is not — a heal re-POSTs
   whatever the full re-run produced, so a heal during another server's outage can regress a
   green slot until convergence. The ledger, not the record, carries hole truth; convergence
-  is the guarantee, not monotonicity (corrected in charter and plan, Stage D close-out
-  2026-08-06).
+  is the guarantee, not monotonicity.
 - Budget exhaustion is not the only route to permanent holes: the crash-loop re-drive cap
   force-finalizes a durable-record chunk (done-final without the heal budget reaching its
   cap) rather than dead-letter a chunk whose record exists.
 
 ### D26 — the machinery/bureaucracy split
 
-> `ratified` 2026-08-06 · retires `isolation.py` + `INGEST_ISOLATION` + `DP_DIALECT_FREEZE`
-> (condensed history at Stage G) · **full reasoning:**
-> [rebuild plan](services/data-processing/docs/refactor_dp_service.md) §1 L9 + §3
-> · recorded in [data-processing CHARTER](services/data-processing/CHARTER.md) §Slot Law L9
+> `ratified` 2026-08-06 · retires `isolation.py` · `INGEST_ISOLATION` · `DP_DIALECT_FREEZE`
+> · Full session record: git history.
+> · recorded in [data-processing CHARTER](services/data-processing/CHARTER.md) §Slot Law L9 + L4
 
 **In one line.** Every model runs as a long-lived, replicated, health-checked server process;
 the DP service is a thin async orchestrator whose stages are clients.
 
 **What was decided**
 
-- whisper, pyannote, ast and ocr all move behind the server seam at Stage B, at once (OD-3) —
-  no half-migrated calling conventions.
+- All four models moved behind the server seam in one step: whisper, pyannote, ast and ocr,
+  with no half-migrated calling conventions.
 - The DP process stops hosting models altogether: stages become thin clients over the server
-  seam, per the split stated in full at the DP charter §Slot Law L9; ffmpeg stays a subprocess.
-- `isolation.py`, `INGEST_ISOLATION` and `DP_DIALECT_FREEZE` retire, with condensed history
-  written at Stage G. Per-chunk child processes end with them.
+  seam; ffmpeg stays a subprocess.
+- `isolation.py` and `INGEST_ISOLATION` retire — L9 removed the per-chunk child-process
+  premise they existed to enforce.
+- `DP_DIALECT_FREEZE` retires — **D25**'s no-knobs law forbids output-affecting environment
+  knobs; identity is carried by `pipeline_version` in code, not a freeze flag.
 
 ### D25 — the version law
 
-> `ratified` 2026-08-06 · **full reasoning:**
-> [rebuild plan](services/data-processing/docs/refactor_dp_service.md) §1 L4
+> `ratified` 2026-08-06 · Full session record: git history.
 > · recorded in [data-processing CHARTER](services/data-processing/CHARTER.md) §Slot Law L4;
-> executable at rebuild Stage C (T-1 determinism matrix · T-3 composition test)
+> executable: T-1 determinism matrix and T-3 composition test enforce it in CI
 
 **In one line.** `pipeline_version` is the sorted join of every enabled stage's
 `<stage>.v<S>-<backend>.v<B>` string, and no environment knob may ever move output bytes.
@@ -194,8 +228,7 @@ the DP service is a thin async orchestrator whose stages are clients.
 
 > `ratified` 2026-08-06 · supersedes **D10**'s C2-shape clause, partially supersedes D8's
 > shipped two-record shape (its specialist-OCR-feeds-the-caption one-liner survives), retires
-> D19's discriminator clause, restates D16's fan-out clause · **full reasoning:**
-> [rebuild plan](services/data-processing/docs/refactor_dp_service.md) §2
+> D19's discriminator clause, restates D16's fan-out clause · Full session record: git history.
 > · recorded in [ARCHITECTURE.md](ARCHITECTURE.md) §Contracts C2 card;
 > [contracts/c2_processed_record.v1.json](contracts/c2_processed_record.v1.json)
 
@@ -210,21 +243,16 @@ slots each written by exactly one stage — no discriminator, no `enrichments` b
   never edited.
 - `modality` moves to the record root, because a C1 chunk is strictly single-modality.
 - `source{}` carries the D17 trio (`device_clock`, `device_tz`, `device_utc_offset_minutes`)
-  verbatim, exactly as the charter's D17 rules state; v0's schema omitted `device_clock`, a
-  drift v1 closes (ruled 2026-08-06: it stays).
-- No `processed_at` (ruled 2026-08-06): a wall-clock field inside the record breaks the §5.1
-  byte-compare (every reprocess would re-window) and makes T-1 unpassable. Processing latency
-  moves to DP `/metrics`.
+  verbatim; `device_clock` is required on the wire.
+- No `processed_at` in the record: wall-clock fields are timeless pollution — byte-compare on
+  reprocess would re-window and T-1 would fail; processing latency belongs in DP `/metrics`.
 - D16's fan-out clause is restated strengthened: exactly **one** derivable record id per chunk,
   where the async reply had licensed a `record_ids[]` list.
-- v0 stays the wire until the Stage F cutover; v1 records are emitted only by the rebuilt
-  service, beside-built on `dp-rebuild-v1`.
 
 ### D23 — the Slot Law replaces the record-emission law
 
 > `ratified` 2026-08-06 · retires the WS-VC record-vs-mutation law (charter edit, same
-> ceremony that ratified it) · **full reasoning:**
-> [rebuild plan](services/data-processing/docs/refactor_dp_service.md) §1
+> ceremony that ratified it) · Full session record: git history.
 > · recorded in [data-processing CHARTER](services/data-processing/CHARTER.md) §Slot Law
 
 **In one line.** Twelve laws whose invariants hold by construction replace the emission law's
@@ -236,17 +264,9 @@ five ordered tests and five riders — because the capabilities that needed gove
   cited from everywhere else and restated nowhere.
 - The WS-VC record-vs-mutation law and its riders retire by the same ceremony that ratified
   them — a charter edit.
-- Dead with their subject matter: primary/mutate/sidecar kinds, the discriminator,
-  `writes`/`mutable_slots`, SlotView, the R1 fork rider and its exemption, `best_effort`
-  policy machinery.
-- The law is executable at Stage C (test spine T-1…T-6); EXECUTED — the spine lands at Stage C
-  and enforces the law in CI on the running service (Stage F cutover, Stage G close).
-
-**Watch out for**
-
-- `services/data-processing/docs/record-emission-law.md` kept the retired law's long-form
-  reasoning through Stages A–F; at Stage G (2026-08-07) it was retired and its "why it existed"
-  record folded into the DP charter's §Condensed history, as this row's own plan required.
+- Retired with their subject matter: primary/mutate/sidecar kinds, the discriminator, SlotView,
+  and the `best_effort` policy machinery.
+- **EXECUTED** — test spine T-1…T-6 enforces it in CI.
 
 ### D22 — onboarding teaching views
 
@@ -367,7 +387,7 @@ can actually be met.
 
 > `ratified` 2026-07-26 · **BUILT** 2026-07-27 (`a5a48fb` · `1757efb` · `2698b63` · `38479df`)
 > · 2 clauses superseded by **D19** · watermark axis moved to `updated_at` by D27
-> · **full reasoning:** [handoff/engineering.md](handoff/engineering.md#2026-07-26-later--founders-storagec10-board-d18) §Worklog 2026-07-26
+> · Full session record: git history.
 > · recorded in [ARCHITECTURE.md](ARCHITECTURE.md) §Contracts C10/C12/C13/C14 cards + §Ownership
 > splits *Day-log + training-window custody*;
 > [contracts/c12_user_profile.v0.json](contracts/c12_user_profile.v0.json) +
@@ -375,15 +395,15 @@ can actually be met.
 > [storage CHARTER](services/storage/CHARTER.md) §Scope/§Time index/§OQ6-9/M5+M8+M9 ·
 > [continuum CHARTER](services/continuum/CHARTER.md) §Scope/§Contracts/§OQ9-10
 
-**In one line.** Storage owns the day-log, the training window becomes an ingest-time watermark,
-and `window_id` stops meaning anything.
+**In one line.** Storage owns the day-log and training-window custody; the window axis is
+`updated_at` (**D27**), not ingest time.
 
 **What was decided**
 
 - Day-log materialization moves continuum → storage. Replay would otherwise re-pull every prior day
   nightly, O(days²).
-- The window becomes `[last_trained_t, now−δ)` on `ingest_time`, which *dissolves* late data rather
-  than handling it.
+- At ratification the window was `[last_trained_t, now−δ)` on `ingest_time`; **D27** moved the
+  axis to `updated_at`.
 - `window_id` → opaque `w<YYYYMMDD>T<HHMMSS>Z`, minted once from the end instant, parsed by nobody.
 - C12, C13 and C14 minted; E-2 demoted from cutover blocker.
 
@@ -413,16 +433,18 @@ and `window_id` stops meaning anything.
 
 ### D16 — the async `/ingest` reply shape
 
-> `ratified` 2026-07-19 · inter-service wire, prose-pinned in the DP canvas at merge — not a
-> C-number; C1/C2 untouched · fan-out clause restated by **D24**
-> · recorded in [handoff/engineering.md](handoff/engineering.md) ratification block; DP canvas
-> (pinned prose at merge); recording canvas (verdict semantics)
+> `ratified` 2026-07-19 · inter-service wire — not a C-number; C1/C2 untouched · fan-out clause
+> restated by **D24** · Full session record: git history.
+> · recorded in [data-processing CHARTER](services/data-processing/CHARTER.md) OQ13;
+> recording charter (verdict semantics)
 
 **In one line.** How data-processing answers an ingest call once it stops answering inline.
 
 **What was decided**
 
-- `INGEST_ASYNC` is off by default; the inline path is byte-unchanged.
+- `INGEST_ASYNC` defaults to **off** (0) in code; the inline path is byte-unchanged.
+- The depot's **operating default is async** since 2026-08-07, after the re-drive drill paid the
+  ratification gate.
 - Async replies:
   - **202** `{ok,accepted,chunk_id}`, plus `duplicate:true` on an in-flight dedup hit.
   - **200 + record_ids** on a done-dedup hit.
@@ -440,28 +462,17 @@ and `window_id` stops meaning anything.
   in-slice.
 - **Accepted caveat:** `record_ids=[]` ledger provenance on 202-path chunks. The ids are derivable.
 
-### D15 — post-deep-session build order
+### D15 — DP image/text pipelines deferred
 
-> `ratified` 2026-07-19
-> · recorded in [handoff/engineering.md](handoff/engineering.md) §Post-capture-alpha sequencing;
-> continuum canvas; [HANDOFF.md](HANDOFF.md)
+> `ratified` 2026-07-19 · Full session record: git history.
+> · recorded in [HANDOFF.md](HANDOFF.md); data-processing charter / boards that cite the deferral
 
-**In one line.** Continuum kickoff is the next founders-led slice.
+**In one line.** DP image/text pipelines wait until a producing surface exists.
 
 **What was decided**
 
-- Continuum kickoff is gated on a **C10 v0 interface freeze** — storage × continuum propose,
-  founders ratify, frozen against the beta-proven `/context` range read.
-- **Platform's D9 backbone**, the one shared Prometheus + Grafana, runs as the small parallel slice.
 - **DP image/text pipelines (M2) are deferred until a producing surface exists.** No `image` or
   `text` C1 stream exists on the fleet today.
-- Screen text already flows via the video-keyframe OCR weave (D8), and the OQ14b bbox additive
-  waits with it.
-
-**Watch out for**
-
-- Mobile+C8 and a standalone C10 freeze were both considered and passed over. Rationale is in the
-  engineering thread.
 
 ### D14 — capture transport
 
@@ -519,8 +530,8 @@ and `window_id` stops meaning anything.
 
 **Watch out for**
 
-- Storage's `GET /context/records?user_id=&from=&to=` range read is his training-window feed until
-  C10 lands.
+- Storage's `GET /context/records?user_id=&from=&to=` range read is the beta training-window
+  feed; **C10**, now landed, is that contract.
 
 ### D11 — C1 is two legs
 
@@ -643,17 +654,6 @@ and `window_id` stops meaning anything.
 **What was decided**
 
 - The speaker requirement is dropped from the hardware pick, because market bodycams lack speakers.
-
-### D3 — serve-loop first
-
-> `ratified` 2026-07-09 · recorded in [handoff/engineering.md](handoff/engineering.md)
-
-**In one line.** Build the thin end-to-end backbone, then grow the rest around it.
-
-**What was decided**
-
-- Build input → QueryBuilder → inference on the base model → output first.
-- Grow capture, storage and continuum around it.
 
 ### D2 — single-markdown doc protocol
 

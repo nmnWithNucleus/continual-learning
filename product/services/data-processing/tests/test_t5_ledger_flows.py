@@ -1,13 +1,13 @@
-"""T-5 — ledger/heal flows: the FULL L7/L8 law (Stage D) + the §4 crash table.
+"""T-5 — ledger/heal flows: the FULL L7/L8 law + the crash table.
 
-The redelivery matrix: skip (case 3) / version-forward beside-ness (case 2) /
+The redelivery matrix: skip (case 3) / version-forward (case 2) /
 heal fills-the-hole byte-identically (case 4) / heal-exhaustion -> done_final +
 permanent-holes metric + skip thereafter / poison -> dead-letter, visible,
-redelivery re-arms. Plus the §4 crash rows this file owns directly:
+redelivery re-arms. Plus the crash rows this file owns directly:
 post-POST-pre-mark (redelivery reprocesses -> byte-identical upsert no-op ->
 converges) and the statuses round-trip (failed vs cancelled DISTINCT after a
-kill-9 of the journal). The remaining §4 rows are owned by named tests
-elsewhere — the worklog's crash-table checklist maps every row to its test:
+kill-9 of the journal). Every other crash row is owned by a named test
+elsewhere, and this map is the record of which:
 
   * before journal.accept        -> test_async_ingest.test_failed_journal_accept_releases_claim
   * after accept, before work    -> test_journal.test_kill_recovery_startup_redrive
@@ -52,9 +52,9 @@ def _wait(pred, timeout: float = 10.0, interval: float = 0.01) -> bool:
 
 def test_same_dialect_redelivery_skips(client, monkeypatch):
     """L8 case 3 demands ALL GREEN: with this module's always-failing optional
-    stage patched healthy, a same-dialect redelivery is a pure skip. (Since
-    Stage D, a HOLEY record's redelivery is a heal, not a skip — that flow is
-    pinned below and in test_heal_seam.py.)"""
+    stage patched healthy, a same-dialect redelivery is a pure skip. (A HOLEY
+    record's redelivery is a heal, not a skip — that flow is pinned below and in
+    test_heal_seam.py.)"""
     monkeypatch.setattr(
         _OptionalBoom, "run_sync",
         lambda self, ctx: StageOutput(value={"values": ["keyboard typing"],
@@ -158,7 +158,7 @@ def test_optional_failure_ships_holey_record(client):
     assert "asr" in record["content"]["slots"]           # the record still ships
 
 
-# ---- The full law (Stage D): heal byte-identity, exhaustion, crash rows --------
+# ---- The full law: heal byte-identity, exhaustion, crash rows -----------------
 
 def test_healed_record_byte_identical_to_never_holed_run(monkeypatch, tmp_path):
     """L8 case 4's strongest form: heal fills the hole and the healed record is
