@@ -5,10 +5,9 @@
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
 **Status:** built · recording suite **144 tests** (110 + 7 async-seam/redrive/migration +
-3 metrics) · *Last updated:* 2026-08-07 (the DP rebuild cut over: DP now runs async by default and
-the durable-journal + in-flight-kill recovery were witnessed against our capture ledger at the
-Stage F soak; the E-6 retry-window is the one live gap that soak surfaced. Later that day, the
-§Async-ingest seam pointer was repointed at the DP charter after its target was deleted.)
+3 metrics) · *Last updated:* 2026-08-07 (DP runs async by default, and its durable-journal and
+in-flight-kill recovery have been witnessed against our capture ledger; the E-6 retry window is
+the one live gap those drills surfaced)
 
 **Where we are.** The client wire speaks `capture_id` + `segment_num` as of 2026-07-29 (were `session_id` + `seq`; routes `/capture/sessions/*` → `/capture/captures/*` — reasoning in [CHARTER.md](CHARTER.md) §Glossary, record in [handoff/worklog.md](handoff/worklog.md)). The computer-capture-surfaces slice is alpha-complete: all three surfaces were
 verified `clean` end to end on real devices on 2026-07-19. Each ran a real capture that landed
@@ -36,10 +35,10 @@ transcripts in `/context`. Runbook: [handoff/alpha-runbook.md](handoff/alpha-run
 | B | **Phone web client** (camera+mic → segments → upload) | **real-phone verified** (M1 + again 2026-07-19 on the `/capture/*` wire, verdict `clean`) | [handoff/ws-b-phone-web-client.md](handoff/ws-b-phone-web-client.md) | recording M1 lead |
 | C | **Ingest server**: segment upload, A/V demux, continuity ledger, gap report | built + verified live (loss/dup drills) | [handoff/ws-c-ingest-demux-ledger.md](handoff/ws-c-ingest-demux-ledger.md) | recording M1 lead |
 | D | **VAD-cut chunking** (charter OQ4 → D-M1-2) | built + verified on real speech | [handoff/ws-d-vad-carve.md](handoff/ws-d-vad-carve.md) | recording M1 lead |
-| — | DP-side pair (continuity detector + real ASR + VAD gate) | built + verified | [../data-processing/handoff/ws-m1-continuity-asr.md](../data-processing/handoff/ws-m1-continuity-asr.md) | recording M1 lead |
+| — | DP-side pair (continuity detector + real ASR + VAD gate) | built + verified | [DP board](../data-processing/HANDOFF.md) | recording M1 lead |
 | E | **Browser extension** — MV3 passive direct tab capture (D-E7) | verified on a real browser (Comet, verdict `clean`, real transcripts) | [handoff/ws-e-extension.md](handoff/ws-e-extension.md) | computer-capture lead |
 | F | **Mac capture CLI** (ffmpeg avfoundation → segments → wire) | **live-verified** (real avfoundation + `--source test`, verdict `clean`) | [handoff/ws-f-mac-cli.md](handoff/ws-f-mac-cli.md) | computer-capture lead |
-| AO | **Async-ingest seam** (tolerate DP's 202-accept) plus D9 `/metrics` and dashboard (M6) ([↓](#the-async-ingest-seam)) | built + tested (120 green) | [../data-processing/handoff/ws-async-observability.md](../data-processing/handoff/ws-async-observability.md) | async-observability lead |
+| AO | **Async-ingest seam** (tolerate DP's 202-accept) plus D9 `/metrics` and dashboard (M6) ([↓](#the-async-ingest-seam)) | built + tested (120 green) | [DP charter](../data-processing/CHARTER.md) OQ13 | async-observability lead |
 
 ### The async-ingest seam
 > `built` 2026-07-19 · [D16](../../DECISIONS.md) · 120 tests green
@@ -181,16 +180,15 @@ session — it does not stay here struck through.
   before fleet scale (M5 telemetry work).
 - Consent gate (M2) stays **back-burner (D13)** — the spool+ledger is the designed holdback
   point; nothing here forecloses it.
-- **Client live-stream testing (the next phase, seeded).** With the DP rebuild cut over, the fleet
-  is pointed at a real captured day flowing recording → DP → storage → continuum on real hardware —
-  the live pilot-day shape the Stage F soak proved synthetically. Our capture clients are the front
-  door for it; nothing new to build, but this is what the fleet is next pointed at.
-- **`INGEST_ASYNC=1` is now the fleet default** — resolved at the DP-rebuild Stage F cutover: drill 1
-  paid the [D16](../../DECISIONS.md) re-drive gate and async is the operating mode. Our
-  confirm-on-processed reconciliation held through the soak's in-flight kill (DP hard-killed with a
-  non-empty journal, 27/27 chunks recovered; our 25 transport-failed segments retried clean).
-- **E-6 — auto-retry of downstream-declined segments** got its live witness at that soak: the ~66 s
-  DP downtime outran our bounded 4-attempt retry, so 25 segments went `failed` and needed a manual
+- **Client live-stream testing (the next phase, seeded).** A real captured day flowing recording
+  → DP → storage → continuum on real hardware. Our capture clients are the front door for it;
+  nothing new to build, but this is what the fleet is pointed at next.
+- **`INGEST_ASYNC=1` is the fleet default** — the re-drive drill paid the
+  [D16](../../DECISIONS.md) gate and async is the operating mode. Our confirm-on-processed
+  reconciliation held through an in-flight kill (DP hard-killed with a non-empty journal, 27/27
+  chunks recovered; our 25 transport-failed segments retried clean).
+- **E-6 — auto-retry of downstream-declined segments** got its live witness in that drill: the
+  ~66 s DP downtime outran our bounded 4-attempt retry, so 25 segments went `failed` and needed a manual
   `/retry` — exactly the recoverable-becomes-terminal-in-1.5 s gap this escalation is about. The
   two-phase design below is the fix ([↓](#e-6--the-rejected-path-two-phase-design)).
 - **E-1 — `--segment-seconds 10 → 60`** ([../../HANDOFF.md](../../HANDOFF.md) §Escalations): the single largest cost lever (5.8×). It moves the audio leg too, so it is a joint call with DP-audio.

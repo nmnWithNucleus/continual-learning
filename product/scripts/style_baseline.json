@@ -3,11 +3,10 @@
   "counts": {
     "product/ARCHITECTURE.md": 5,
     "product/DECISIONS.md": 1,
-    "product/HANDOFF.md": 11,
+    "product/HANDOFF.md": 3,
     "product/ORG.md": 1,
     "product/PROMPTS.md": 1,
     "product/contracts/README.md": 1,
-    "product/handoff/engineering.md": 21,
     "product/onboarding/LEARN_LOOP.md": 27,
     "product/services/continuum/CHARTER.md": 4,
     "product/services/continuum/DECISIONS.md": 10,
@@ -56,7 +55,7 @@
     "product/services/recording/handoff/ws-d-vad-carve.md": 6,
     "product/services/recording/handoff/ws-e-extension.md": 21,
     "product/services/recording/handoff/ws-f-mac-cli.md": 10,
-    "product/services/storage/HANDOFF.md": 12,
+    "product/services/storage/HANDOFF.md": 10,
     "product/services/storage/handoff/worklog.md": 3,
     "product/services/storage/handoff/ws-storage-mvp.md": 1
   }

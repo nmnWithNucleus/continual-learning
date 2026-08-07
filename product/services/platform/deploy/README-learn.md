@@ -24,9 +24,8 @@ storage (8083)  ──►  data-processing (8085, ASR_BACKEND=mock)  ──►  
 Default ASR backend is `mock` (canned transcript + fake segments spanning the
 chunk, **no GPU, no torch** — runs on any box). Contracts:
 [`../../../contracts/c1_raw_stream_envelope.v0.json`](../../../contracts/c1_raw_stream_envelope.v0.json)
-(C1) and [`../../../contracts/c2_processed_record.v0.json`](../../../contracts/c2_processed_record.v0.json)
-(C2). Slice + status: [`../../../handoff/engineering.md`](../../../handoff/engineering.md)
-§ "Learn-loop MVP slice".
+(C1) and [`../../../contracts/c2_processed_record.v1.json`](../../../contracts/c2_processed_record.v1.json)
+(C2). Status: [`../../../HANDOFF.md`](../../../HANDOFF.md) §Service status board.
 
 This is **separate** from the serve loop (`run_all.sh` + `.env` + `README.md`):
 different services, different env file (`learn.env`), different venv

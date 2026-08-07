@@ -13,8 +13,8 @@ input :8081  ──C3──►  inference :8010  ──C6 resolve / C4 write─�
 ```
 
 Default backend is `mock` (canned streamed answer, **no GPU** — runs on any box).
-Contracts: [`../contracts/*.json`](../contracts) (C3, C6, C9, C4). Status +
-integration notes: [`../handoff/engineering.md`](../handoff/engineering.md).
+Contracts: [`../contracts/*.json`](../contracts) (C3, C6, C9, C4). Status:
+[`../HANDOFF.md`](../HANDOFF.md) §Service status board.
 
 ## 1. Bring it up
 

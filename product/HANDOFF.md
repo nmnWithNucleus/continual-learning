@@ -13,34 +13,26 @@
 > Read this first in any founders' session, then the aspect file you're working. Service-level state
 > lives in each service's own `HANDOFF.md` — this board links, it does not restate.
 
-**Stage: PROTOTYPE** (D19) · **Last updated:** 2026-08-07 (the DP rebuild is EXECUTED — Stages
-A–G on `main`, D23–D28; the fleet runs the v1 service and storage serves C10 v2)
+**Stage: PROTOTYPE** (D19) · **Last updated:** 2026-08-07
 
 ---
 
 ## Where we are today
 
-- **Both loops run end to end on real infrastructure.** The storage↔continuum cutover shipped
-  2026-07-27.
-- **The fleet is live on the cutover code and healthy.** The D19 wipe is done; stores were backed
-  up and verified restorable first.
-- **Proven on the real fleet, not in tests:** real capture → faster-whisper → `/context`; a C12
-  profile set and a missing one 404'd; a nightly to `published` over HTTP; the watermark advancing
-  only on `published`; exactly one active C5 row.
-- **The DP rebuild is EXECUTED.** The beside-build (Stages A–G, D23–D28) merged and cut over: the
-  fleet runs the v1 service — one C2 record per chunk built from slots, models as supervised
-  servers, async ingest with a durable journal — and storage serves the C10 v2 slot-walk day-log.
-  The v0 `/context` was wiped fresh-forward at the cutover (OD-2); `/raw` was kept.
+- **Both loops run end to end on real infrastructure**, on real capture rather than in tests: real
+  audio → faster-whisper → `/context`; a C12 profile set and a missing one 404'd; a nightly to
+  `published` over HTTP; the watermark advancing only on `published`; exactly one active C5 row.
+- **The learn fleet is live on node-7** — storage `:8083` · recording `:8084` · data-processing
+  `:8085` · captioner `:8161` · eight model servers `:8121–8152`. `INGEST_ASYNC=1` is the operating
+  default ([D16](DECISIONS.md)).
+- **Data-processing writes one C2 record per chunk**, built from slots, with models running as
+  supervised servers and storage serving the C10 v2 day-log.
 - **Suites:** storage 354 · continuum 264 (+7 skipped) · recording 144 · data-processing 569
-  (+4 skipped, post-Stage-G demolition).
+  (+4 skipped) · the four model-server suites 50.
 - **Down by choice:** the serve loop (vLLM + app services). Relaunch `run_all.sh` +
   `services/inference/serve_vllm.sh` when needed.
-- **Learn fleet is up on node-7** (storage 8083 · recording 8084 · data-processing 8085 · captioner
-  8161 · the eight model servers 8121–8152); `INGEST_ASYNC=1` is now the operating default (the D16
-  gate paid at the cutover).
-- **Nothing is blocking.** The rebuild is history; the next phase is **client live-stream testing**
-  — a real captured day end to end on real hardware (the live pilot-day shape the Stage F soak
-  proved synthetically). Every open §Next item is a follow-up, not a gate.
+- **Nothing is blocking.** The next phase is **client live-stream testing** — a real captured day
+  end to end on real hardware. Every open §Next item is a follow-up, not a gate.
 
 ---
 
@@ -48,13 +40,13 @@ A–G on `main`, D23–D28; the fleet runs the v1 service and storage serves C10
 
 | Service | Status | Lead session | Canvas |
 |---|---|---|---|
-| Recording | `built` — capture M1 + computer surfaces, alpha-complete | computer-capture → M6 emission merged 2026-07-19 | [↓](#recording) · [canvas](services/recording/HANDOFF.md) |
-| Data Processing | `built` — the v1 rebuild (Stages A–G) is live: one record per chunk from slots, supervised model servers, async ingest | DP rebuild session | [↓](#data-processing) · [canvas](services/data-processing/HANDOFF.md) |
-| Storage | `built` — D18 expansion + the D27/D28 rebuild rows live (created/updated_at, C10 v2 day-log) | serve + learn; build slice next | [↓](#storage) · [canvas](services/storage/HANDOFF.md) |
-| Input | `built` — v0.0 plus the mock loop, integrated E2E 2026-07-09 | serve-loop WS-A | [canvas](services/input/HANDOFF.md) |
-| Inference | `built` — v0.0 live on real Qwen3-VL-32B, vLLM TP=8 on node-7 | serve-loop WS-B | [canvas](services/inference/HANDOFF.md) |
-| Output | `built` — v0.0 plus the mock loop, integrated E2E 2026-07-09 | serve-loop WS-C | [canvas](services/output/HANDOFF.md) |
-| Continuum | `built` — the learn loop is closed, on storage, now training under the C10 v2 day-log (`consolidation-v2.0`) | Morpheus + Phase-3 sessions | [↓](#continuum) · [canvas](services/continuum/HANDOFF.md) |
+| Recording | `built` — capture M1 + computer surfaces, alpha-complete | computer-capture → M6 | [↓](#recording) · [canvas](services/recording/HANDOFF.md) |
+| Data Processing | `built` — one record per chunk from slots, supervised model servers, async ingest | data-processing | [↓](#data-processing) · [canvas](services/data-processing/HANDOFF.md) |
+| Storage | `built` — day-log custody, `created_at`/`updated_at`, C10 v2 | serve + learn; build slice next | [↓](#storage) · [canvas](services/storage/HANDOFF.md) |
+| Input | `built` — v0.0 plus the mock loop, integrated E2E 2026-07-09 | serve-loop build | [canvas](services/input/HANDOFF.md) |
+| Inference | `built` — v0.0 live on real Qwen3-VL-32B, vLLM TP=8 on node-7 | serve-loop build | [canvas](services/inference/HANDOFF.md) |
+| Output | `built` — v0.0 plus the mock loop, integrated E2E 2026-07-09 | serve-loop build | [canvas](services/output/HANDOFF.md) |
+| Continuum | `built` — the learn loop is closed, training under `consolidation-v2.0` | Morpheus + Phase-3 sessions | [↓](#continuum) · [canvas](services/continuum/HANDOFF.md) |
 | Platform | `built` — serve and learn bring-up; the D9 backbone is `designed` | serve + learn | [↓](#platform) · [canvas](services/platform/HANDOFF.md) |
 
 ### Recording
@@ -68,7 +60,6 @@ A–G on `main`, D23–D28; the fleet runs the v1 service and storage serves C10
 - Gap-detection, VAD-cut chunking, and three capture clients — phone web, Chrome MV3 extension,
   mac CLI, all verified `clean` on real hardware.
 - The async ingest seam ([D16](DECISIONS.md)) and [D9](DECISIONS.md) `/metrics` emission.
-- M6 emission merged 2026-07-19.
 
 **Watch out for**
 
@@ -78,30 +69,30 @@ A–G on `main`, D23–D28; the fleet runs the v1 service and storage serves C10
 
 > `built` · 569 tests (+4 skipped) · [canvas](services/data-processing/HANDOFF.md)
 
-**In one line.** The v1 rebuild is live: one C2 record per chunk, built from slots, on a
-machinery/bureaucracy split.
+**In one line.** One C2 record per chunk, built from slots, on a machinery/bureaucracy split.
 
 **What shipped**
 
-- The Slot Law (D23) in running code: one record per `(chunk_id, pipeline_version)`, `content.slots`
-  with one producer per slot, identity from two components, no output-affecting env knobs (L4).
-- Models as supervised long-lived servers (`servers/whisper|pyannote|ast|ocr` + the Qwen3-VL
-  captioner on `:8161`); DP is the thin async orchestrator. `isolation.py` and the v0 governance
-  are deleted.
-- Async ingest with a durable journal (kill/restart re-drive), heal-on-redrive, and the
-  zero-silent-loss `/continuity` accounting — all drilled live at the cutover and the Stage F soak.
+- The Slot Law ([D23](DECISIONS.md)) in running code: one record per `(chunk_id,
+  pipeline_version)`, `content.slots` with one producer per slot, identity from two components,
+  no output-affecting env knobs (L4).
+- Models as supervised long-lived servers (`servers/whisper|pyannote|ast|ocr` plus the Qwen3-VL
+  captioner on `:8161`); DP is the thin async orchestrator.
+- Async ingest with a durable journal (kill/restart re-drive), heal-on-redrive, and
+  zero-silent-loss `/continuity` accounting — all drilled against the live fleet.
 
 **Watch out for**
 
-- **Client live-stream testing is the next phase** — the live pilot-day the Stage F soak proved
-  synthetically (founder R2). Follow-ups, none blocking: the `/raw`-replay backfill tool (owed),
-  per-modality ingest fairness (unset), and the pending captioner `vlm.v1→v2` deploy (next restart).
+- The supervisor runs **inside** the DP process, so DP is the parent of all eight replicas. A
+  graceful stop takes them with it; a `kill -9` leaves eight orphans holding ports and GPU memory.
+- Follow-ups, none blocking: the `/raw`-replay backfill tool (owed), per-modality ingest fairness
+  (unset), and the pending captioner `vlm.v1→v2` deploy (next restart).
 
 ### Storage
 
 > `built` · 354 tests · [canvas](services/storage/HANDOFF.md)
 
-**In one line.** The D18 expansion is built and live: storage owns the day-log.
+**In one line.** Storage owns the day-log ([D18](DECISIONS.md)).
 
 **What shipped**
 
@@ -119,10 +110,8 @@ machinery/bureaucracy split.
 **What shipped**
 
 - HTTP clients for C10, C12, C13 and C14.
-- `window_for()`, `closed_window_before()` and `Window.local_date` deleted; `--tz` retired in
-  favour of the C12 profile read.
+- The window comes from storage and the zone from the C12 profile read; continuum derives neither.
 - A crash now leaves the window open, so a retry resumes it.
-- `app/morpheus/` and `tests/parity/` are byte-unchanged.
 - The live two-process seam is green: 10 steps, 151 checks.
 
 ### Platform
@@ -146,7 +135,7 @@ Each thread carries its own reasoning and a newest-first worklog. The board does
 
 | Aspect | File | State |
 |---|---|---|
-| Engineering | [handoff/engineering.md](handoff/engineering.md) | **active** — D18/D19/D20 shipped; next acts are follow-ups (E-2 · D9 backbone · E-3(b)), not blockers |
+| Engineering | [handoff/engineering.md](handoff/engineering.md) | seeded — cross-service sequencing, integration, infra calls |
 | Research | [handoff/research.md](handoff/research.md) | seeded — first agenda: POC→continuum bridge, research agenda v1 |
 | Design / UX | [handoff/design.md](handoff/design.md) | seeded |
 | Hiring / Ops | [handoff/hiring-ops.md](handoff/hiring-ops.md) | seeded |
@@ -155,148 +144,91 @@ Each thread carries its own reasoning and a newest-first worklog. The board does
 
 ## Escalations (open items needing a founders' decision)
 
-Opened 2026-07-24 by the data-processing screen-video design session (WS-VC). The build is done
-and integrated (2026-07-25), so these are cutover gates and founders' calls, not build blockers.
-Full write-ups, with the measured numbers behind each, in
-[services/data-processing/handoff/ws-video-clip.md](services/data-processing/handoff/ws-video-clip.md)
-§10.
+Asks that cross a service boundary, or that need a founders' call before anyone builds.
 
 | # | Ask | Owner(s) | Blocks | Founders' call? |
 |---|---|---|---|---|
-| **E-3(b)** | A captioner VL endpoint distinct from the user-facing `:8000` | platform + inference | nothing — *resolved 2026-08-07*, `:8161` | ruled at the Stage F gate [↓](#e-3b--a-captioner-vl-endpoint) |
 | **E-5** | The parked additive C2 edit — the ask is to *not* take it yet | founders → storage + data-processing | nothing | when triggered [↓](#e-5--the-parked-additive-c2-edit) |
-| **E-2** | A kind-aware retraction primitive; demoted by D18 | storage | nothing | service-level [↓](#e-2--the-retraction-primitive) |
+| **E-2** | Retraction: the remaining orchestration and cascade legs | storage + platform | nothing | service-level [↓](#e-2--the-retraction-primitive) |
 | **E-1 · E-4 · E-6** | Sibling-service asks with no contract surface | recording · continuum | cost figure · RWT granularity | no [↓](#e-1--e-4--e-6--sibling-service-asks) |
-
-**Resolved 2026-08-06 → EXECUTED 2026-08-07: DP-A and the whole rebuild.** The founder ratified
-the Stage A paper (the six rows entered the register as **D23–D28**, E-2's whole-record redesign
-ratified with D28). The rebuild then executed on the branch and cut over to `main`: Stages
-A–G are complete, the v1 service is live, and the record of it is
-[services/data-processing/docs/refactor_dp_service.md](services/data-processing/docs/refactor_dp_service.md)
-(Status: EXECUTED) plus the per-stage worklogs. The next phase is client live-stream testing.
-
-**Resolved during the build: E-3(a)** — the `--limit-mm-per-prompt` serving-flag ask. WS-A's probe
-verified vLLM 0.24.0 defaults the image cap to 999 and clamps nothing at 768×480, so the
-multi-image call validates on the *unmodified* `serve_vllm.sh`; the flags are determinism pins, not
-a prerequisite.
-
-### E-3(b) — a captioner VL endpoint
-
-> *resolved 2026-08-07* · ratified at the DP-rebuild Stage F gate — the captioner serves on
-> `:8161` (`run_vllm.sh`: Qwen3-VL-32B pinned by name + revision, GPUs 0-1, TP2, loopback),
-> distinct from the user-facing `:8000` exactly as asked. Text below kept as the reasoning
-> of record.
-
-**In one line.** Give the captioner its own VL endpoint so its prefill bursts cannot land in the
-assistant's continuous batch.
-
-**The ask**
-
-- A captioner VL endpoint distinct from the user-facing `:8000`. A 7B-class VL on 1–2 GPUs carries
-  this load and isolates data-processing from both tenants.
-
-**Why it's this way**
-
-- Today DP's `VIDEO_VLM_URL` and inference's `VLLM_URL` both default to the *same* Qwen3-VL-32B
-  TP=8 instance on node-7 at `gpu_memory_utilization=0.90`.
-- DP's prefill bursts would share a continuous batch with the assistant's decode steps. The failure
-  mode is assistant TTFT, which no GPU-percent figure surfaces.
-- During a 4 h nightly training window DP would dead-letter ~240 chunks, **4 h of a user's screen
-  life**, after paying full ffmpeg prep on each.
-
-**Watch out for**
-
-- It closes DP CHARTER OQ3 (GPU placement and contention), which `platform/CHARTER.md:73,83` still
-  lists as an unresolved *proposal*.
 
 ### E-5 — the parked additive C2 edit
 
 > open · founders' session → storage + data-processing · **the ask is to not take it yet**
 
-**In one line.** The additive C2 fields are written up and deliberately not ratified, because
+**In one line.** Two additive C2 fields are written up and deliberately not ratified, because
 nothing would read them.
 
 **The ask**
 
-- `enrichments.text_regions[]` — OCR bbox geometry, CHARTER OQ14b.
-- A root `quality{}` — the CHARTER risk row.
+- An additive slot or field carrying OCR bbox geometry (DP charter OQ14b).
+- A root `quality{}` block — the CHARTER risk row.
 
 **Why it's this way**
 
-- `grep -rn enrichments continuum/app/` returns exactly one hit, the synthetic-record generator, so
-  both fields would have **zero readers** today.
-- The exact diff, its four edit sites, and the asymmetric-mirror footgun are already written up, so
-  the ratification session gets a decision rather than a project.
+- Neither field has a consumer today, so both would ship with zero readers.
+- The exact diff, its edit sites, and the asymmetric-mirror footgun are already written up, so the
+  ratification session gets a decision rather than a project.
 - Cash OQ14b and the quality risk together, in one additive commit, when the first real geometry or
   quality-gating consumer lands.
 
 **Watch out for**
 
-- When it is taken, edit [ARCHITECTURE.md](ARCHITECTURE.md) §Contracts first, per `ORG.md:44-45`.
+- When it is taken, edit [ARCHITECTURE.md](ARCHITECTURE.md) §Contracts first, per ORG's
+  contract-edit order.
 
 ### E-2 — the retraction primitive
 
-> demoted by [D18](DECISIONS.md) — no longer blocks the cutover · storage
+> whole-record retraction is **built and live** ([D28](DECISIONS.md)) · remaining legs: storage + platform
 
-**In one line.** A kind-aware delete for `/context` records, now a privacy and space primitive
-rather than a cutover gate.
+**In one line.** Deleting a record is a privacy and space primitive, and the whole-record shape of
+it is already running.
 
 **The ask**
 
-- Storage: `DELETE /context/records?user_id=&from=&to=&pipeline_version=&kind=`.
+- Remaining: Platform M2 orchestration, and the reservoir cascade leg.
 
 **Why it's this way**
 
-- D18 changed this row's premise. The WS-VC double-count was fixed by the **day-log
-  materialization rule**, not by a delete — at D18 that rule read latest `ingest_time` wins per
-  `(chunk_id, content.kind, discriminator)`; under the live v2 renderer it is latest `updated_at`
-  per `(chunk_id)` ([D27/D28](DECISIONS.md); `kind` and the discriminator retired with the v0
-  record model).
-- It also **grows**: once storage materializes day-logs and hosts the reservoir, every deletion must
+- Retraction is whole-record, not kind-granular: one record per chunk ([D24](DECISIONS.md)) means
+  there is no finer thing to delete. `DELETE /context/records` keys on `record_id` / `chunk_id` /
+  `pipeline_version`, with a dry-run manifest.
+- It **grows**: once storage materializes day-logs and hosts the reservoir, every deletion must
   cascade to both, because each is a second copy of user content.
 - Shape and the widened M5 are recorded in the [storage charter](services/storage/CHARTER.md).
 
 **Watch out for**
 
-- **It must key on `content.kind`.** The Phase-3 replay proved captions and transcripts can share
-  one `pipeline_version` (`injected_caption` declares no fragment), so a kind-blind delete would
-  remove transcripts in order to remove captions.
-- The original ask, for the record: `daylog.py` filters on neither `kind` nor `pipeline_version`,
-  so any day re-consolidated across a cutover renders both dialects and double-counts.
 - Right-to-be-forgotten and version-forward reprocess both already promise this primitive.
 
 ### E-1 · E-4 · E-6 — sibling-service asks
 
-> open · recording · continuum · no founders' call — routed service→service per `ORG.md`
+> open · recording · continuum · no founders' call — routed service→service per [ORG.md](ORG.md)
 
 **In one line.** Three asks with no contract surface, noted here for visibility only.
 
 **The ask**
 
-- **Recording:** `--segment-seconds 10→60`. The single largest cost lever at 5.8×; it moves the
-  audio leg too, so it is a joint call with DP-audio.
-- **Continuum:** per-fragment local timestamps in `_render_block`, OCR dedup, renderer ordering,
-  and a recipe fork.
-- **Recording:** auto-retry of `failed` segments — a 503 is recoverable but becomes terminal in
-  1.5 s.
+- **Recording (E-1):** `--segment-seconds 10→60`. The single largest cost lever at 5.8×; it moves
+  the audio leg too, so it is a joint call with DP-audio.
+- **Continuum (E-4):** per-fragment local timestamps in `_render_block`, OCR dedup, renderer
+  ordering, and a recipe fork.
+- **Recording (E-6):** auto-retry of `failed` segments — a 503 is recoverable but becomes terminal
+  in 1.5 s.
 
 **Why it's this way**
 
-- **E-4 is resolved in premise by [D17](DECISIONS.md)** (2026-07-26); the remainder is a small
-  continuum-only change.
-- E-4 read "DP cannot do it, C1 carries no timezone". The timezone was never the blocker, and C1
-  now carries one anyway.
-- Each ASR fragment's own UTC timestamp is **already in the day-log**: `daylog.py:110,116` write
-  `{"spk","text","t": sub["t_start"]}` per sub-span, and `_render_block` simply ignores `t`,
-  rendering only the block-level `group[0].t_start`/`group[-1].t_end` span.
-- The zone to render them in is now resolved per record (`_block_zone`), so per-fragment local
-  timestamps are a renderer change with no contract, no DP work and no scheduling dependency.
+- **E-4 is resolved in premise by [D17](DECISIONS.md)**: the timezone was never the blocker, and C1
+  carries one. The remainder is a small continuum-only change.
+- Each ASR fragment's own UTC timestamp is already in the day-log, per sub-span; the renderer
+  currently shows only the block-level span.
+- The zone is resolved per record, so per-fragment local timestamps are a renderer change with no
+  contract, no DP work and no scheduling dependency.
 
 **Watch out for**
 
-- `seg.ocr` and `seg.caption` are bare strings with no `t`, so per-fragment times cover **ASR
-  fragments only** until the day-log carries fragment times for the other kinds. Still
-  continuum-side, still no contract.
+- OCR and caption lines carry no per-fragment time, so this covers **ASR fragments only** until the
+  day-log carries fragment times for the others. Still continuum-side, still no contract.
 
 ---
 
@@ -307,11 +239,10 @@ Open items only. Anything finished moves to [handoff/engineering.md](handoff/eng
 
 | # | Item | Owner | Why it's open |
 |---|---|---|---|
-| 0 | **Client live-stream testing — the next phase.** A real captured day flowing recording → DP → storage → continuum end to end on real hardware: the live pilot-day shape the Stage F soak proved synthetically (founder R2 transferred it here after the rebuild). | recording + DP + storage + continuum | opens now that the rebuild is history; gated on real capture beginning (lifestyle), not on engineering |
-| 1 | **E-2 — the retraction primitive is BUILT and live** (whole-record, cut over at Stage F); remaining: Platform M2 orchestration + the reservoir cascade leg | storage + platform | The live store now has whole-record retraction; the orchestration + cascade legs remain [↓](#e-2--the-retraction-primitive) |
+| 0 | **Client live-stream testing — the next phase.** A real captured day flowing recording → DP → storage → continuum on real hardware. | recording + DP + storage + continuum | gated on real capture beginning, a lifestyle gate rather than an engineering one |
+| 1 | **E-2's remaining legs** — Platform M2 orchestration + the reservoir cascade | storage + platform | whole-record retraction is live; these two legs are not [↓](#e-2--the-retraction-primitive) |
 | 2 | **D9 observability backbone** — the shared Prometheus + Grafana | platform | Emission shipped; the backbone never got built, so no founder has a Grafana URL |
-| 3 | **E-3(b)** — a captioner VL endpoint distinct from `:8000` | platform + inference | *resolved 2026-08-07* — ruled at the Stage F gate, serving on `:8161`; the OQ3 charter edit lands with the Stage G paper sweep [↓](#e-3b--a-captioner-vl-endpoint) |
-| 4 | **C5 shape pin** — a three-value status enum, nullable `adapter_dir` + `base_model_hash`, C6 eligibility as a log replay | storage + continuum + inference | `model_directory` is still the trivial C6 row, so hosting C5 is a build, not a transport swap |
-| 5 | `min_block_chars` — D19's min-data floor, `designed` and not built | continuum | It appears nowhere in the repo. The design stands; the build does not exist |
-| 6 | **Beta hand-off ([D12](DECISIONS.md))** — standing `dev` branch, three capture clients | founders | Standing, not blocked. Tunnel URL rotates → `services/recording/var/tunnel_url.txt` |
-| 7 | **CTO to read the Platform charter internals** ([D1](DECISIONS.md)) | CTO | Accepted as-is at ratification; the read was deferred |
+| 3 | **C5 shape pin** — a three-value status enum, nullable `adapter_dir` + `base_model_hash`, C6 eligibility as a log replay | storage + continuum + inference | `model_directory` is still the trivial C6 row, so hosting C5 is a build, not a transport swap |
+| 4 | `min_block_chars` — D19's min-data floor, `designed` and not built | continuum | It appears nowhere in the repo. The design stands; the build does not exist |
+| 5 | **Beta hand-off ([D12](DECISIONS.md))** — standing `dev` branch, three capture clients | founders | Standing, not blocked. Tunnel URL rotates → `services/recording/var/tunnel_url.txt` |
+| 6 | **CTO to read the Platform charter internals** ([D1](DECISIONS.md)) | CTO | Accepted as-is at ratification; the read was deferred |

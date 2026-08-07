@@ -35,8 +35,7 @@
 
 ## Next
 - ~~Integrator: mount output's `c9_reader.js` into the surface + run the full loop.~~ **Done
-  2026-07-09** (see Current state + [../../handoff/engineering.md](../../handoff/engineering.md)
-  "Serve-loop MVP — v0.0 build result").
+  2026-07-09** (see Current state).
 - Later slices: mobile / extension / wearable surfaces; speech/image/video via C8; C11
   recent-context injection; clarification-answer C3 variant.
 - **D9 observability (2026-07-09) — now on this service's backlog:** expose `/metrics` on :8081

@@ -19,8 +19,8 @@ serving no one. It existed to de-risk a single link, that an adapter we trained 
 the server that will serve it. Written before D18, it minted `training_window` as `f"w-day{n}"`, a
 free-form literal that never went through a minter because there wasn't one yet.
 
-**Changed** — deleted. D18's build slice had listed moving it onto storage's minter
-(`../../../handoff/engineering.md` §Worklog 2026-07-26) and never did; board item 6 carried the
+**Changed** — deleted. D18's build slice had listed moving it onto storage's minter and never
+did; board item 6 carried the
 open question "should the smoke require storage?". Founders' answer, 2026-07-28: retire it instead.
 
 **Now** — the M0 question it existed to answer is answered, and `scripts/vllm_load_check.py` already
