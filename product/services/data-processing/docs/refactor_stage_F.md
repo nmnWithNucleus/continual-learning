@@ -301,6 +301,57 @@ recording ledger all 0, continuum research dirs 236/36/90/93. `/raw` bytes
 untouched by construction (never opened for write). Full transcript retained in
 the session log.
 
+**Worktree retired `05:51:01Z`** — `git worktree remove` clean (no force), pruned,
+directory gone; the storage `.venv` symlink and the wiped v0 journal husk died
+with it, dissolving the recipes/policies live↔branch coupling and the symlink
+carry in one act. **Merged `05:51:22Z`:** `git checkout main` (accepted — the
+worktree no longer held it) then `git merge --no-ff dp-rebuild-v1` → merge commit
+**`bf1e806`**, zero conflicts (merge-base was main's tip), the two onboarding
+strays riding through uncommitted exactly as designed.
+
+**Un-repoint applied `05:51:39Z`:** `learn.env` backed up to
+`learn.env.pre-stage-f.bak`, staged file copied over; active lines verified to be
+exactly five — `RECORDING_HTTP_TIMEOUT=120`, tree-local `SERVICES_ROOT` +
+`DP_VAR_DIR`, `DP_SUPERVISOR=1`, `VLM_URL=http://127.0.0.1:8161`.
+
+**Relaunch from merged main `05:51:58Z` → checklist printed `05:52:30Z`:** storage
+:8083 and DP :8085 started fresh under `.venv-learn`; recording :8084 ADOPTED
+healthy (never restarted — its buffer semantics were the whole reason). DP booted
+under `DP_SUPERVISOR=1`, which means the VLM identity probe ran and passed before
+serving. All eight model-server ports listening with 200s by **`05:53:52Z`** —
+under two minutes from merge to full fleet. GPU map as designed: vLLM ~70 GiB on
+0-1, pyannote on 2-3, whisper on 4-5, ast on 6-7, ocr on CPU.
+
+**The `:8097` orphan, executed `05:53:48Z`** (authorized here and only here): pid
+1595671, `python3 app.py` from a deleted worktree — TERM, port freed. With the
+freeze's `:8099` stop, the stray-process ledger from Stage B/E is finally clean.
+
+**Resume + redrive verification:** ingest resumed by construction (recording's
+`DP_URL` is :8085, now the v1 service). The capture ledger held ZERO buffered
+chunks at cutover (captures/segments/chunks all 0 — re-verified read-only
+post-relaunch), so the drain had nothing to drain: stated plainly rather than
+claimed. The one spool file
+(`spool/01KXW45FYZEN411SK5MNAJ26DC/0.f490bdd40bf6.mp4`) is the known Aug-3
+orphan with no ledger row — untouched (KEEP), owner decision unchanged. The
+redrive path gets its real exercise at drill 1.
+
+**`/health`, the new world's shapes (pasted):** storage `{"ok":true}` · recording
+`{"ok":true}` · DP —
+
+```
+{"ok": true, "ingest_mode": "inline",
+ "pipeline_versions": {
+   "audio": "acoustic.v1-ast.v1+asr.v1-fw.v1+diarize.v1-pyannote.v1+speaker_align.v1-builtin.v1",
+   "video": "clipcap.v1-vlm.v1+clipprep.v1-ffmpeg.v1+screentext.v1-ppocr.v1"},
+ "supervisor": true}
+```
+
+`ingest_mode: inline` is CORRECT at this instant: D16 pins `INGEST_ASYNC` off by
+default until the redrive drill pays the async-default gate — that is drill 1's
+whole point; the flip happens there, not here. **E-3(b) board rows annotated
+resolved** (product/HANDOFF.md ×3 sites, platform and DP boards) per the gate
+ratification; the OQ3 charter edit rides Stage G's paper sweep.
+
 ## 2026-08-07 — GATE 1 verification round (founder, 3 lenses; fixes applied)
 
 > verification · an independent 3-lens round over the first GATE 1 post, the wipe

@@ -83,8 +83,8 @@ Stage A ratified as D23–D28)
 
 **Watch out for**
 
-- Cutover gates for the clip path remain: O-2 · O-8 · [E-3(b)](#e-3b--a-captioner-vl-endpoint).
-  None of them blocks.
+- Cutover gates for the clip path remain: O-2 · O-8. None of them blocks.
+  [E-3(b)](#e-3b--a-captioner-vl-endpoint) left this list *resolved* 2026-08-07 (`:8161`).
 
 ### Storage
 
@@ -152,7 +152,7 @@ Full write-ups, with the measured numbers behind each, in
 
 | # | Ask | Owner(s) | Blocks | Founders' call? |
 |---|---|---|---|---|
-| **E-3(b)** | A captioner VL endpoint distinct from the user-facing `:8000` | platform + inference | scale-up, not the build | **yes** [↓](#e-3b--a-captioner-vl-endpoint) |
+| **E-3(b)** | A captioner VL endpoint distinct from the user-facing `:8000` | platform + inference | nothing — *resolved 2026-08-07*, `:8161` | ruled at the Stage F gate [↓](#e-3b--a-captioner-vl-endpoint) |
 | **E-5** | The parked additive C2 edit — the ask is to *not* take it yet | founders → storage + data-processing | nothing | when triggered [↓](#e-5--the-parked-additive-c2-edit) |
 | **E-2** | A kind-aware retraction primitive; demoted by D18 | storage | nothing | service-level [↓](#e-2--the-retraction-primitive) |
 | **E-1 · E-4 · E-6** | Sibling-service asks with no contract surface | recording · continuum | cost figure · RWT granularity | no [↓](#e-1--e-4--e-6--sibling-service-asks) |
@@ -170,7 +170,10 @@ a prerequisite.
 
 ### E-3(b) — a captioner VL endpoint
 
-> open · platform + inference · founders' call
+> *resolved 2026-08-07* · ratified at the DP-rebuild Stage F gate — the captioner serves on
+> `:8161` (`run_vllm.sh`: Qwen3-VL-32B pinned by name + revision, GPUs 0-1, TP2, loopback),
+> distinct from the user-facing `:8000` exactly as asked. Text below kept as the reasoning
+> of record.
 
 **In one line.** Give the captioner its own VL endpoint so its prefill bursts cannot land in the
 assistant's continuous batch.
@@ -292,7 +295,7 @@ Open items only. Anything finished moves to [handoff/engineering.md](handoff/eng
 |---|---|---|---|
 | 1 | **E-2 — the retraction primitive**, cascading to the day-log and the reservoir | storage | A re-wipe is currently the only way to retract rows [↓](#e-2--the-retraction-primitive) |
 | 2 | **D9 observability backbone** — the shared Prometheus + Grafana | platform | Emission shipped; the backbone never got built, so no founder has a Grafana URL |
-| 3 | **E-3(b)** — a captioner VL endpoint distinct from `:8000` | platform + inference | Founders' allocation call; closes DP CHARTER OQ3 [↓](#e-3b--a-captioner-vl-endpoint) |
+| 3 | **E-3(b)** — a captioner VL endpoint distinct from `:8000` | platform + inference | *resolved 2026-08-07* — ruled at the Stage F gate, serving on `:8161`; the OQ3 charter edit lands with the Stage G paper sweep [↓](#e-3b--a-captioner-vl-endpoint) |
 | 4 | **C5 shape pin** — a three-value status enum, nullable `adapter_dir` + `base_model_hash`, C6 eligibility as a log replay | storage + continuum + inference | `model_directory` is still the trivial C6 row, so hosting C5 is a build, not a transport swap |
 | 5 | `min_block_chars` — D19's min-data floor, `designed` and not built | continuum | It appears nowhere in the repo. The design stands; the build does not exist |
 | 6 | **Beta hand-off ([D12](DECISIONS.md))** — standing `dev` branch, three capture clients | founders | Standing, not blocked. Tunnel URL rotates → `services/recording/var/tunnel_url.txt` |

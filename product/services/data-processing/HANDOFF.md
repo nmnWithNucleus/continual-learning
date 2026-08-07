@@ -200,6 +200,8 @@ validate C1 → dedup on `chunk_id` (now caches `chunk_id → [record_id,…]`) 
   - **E-2** (storage retraction) *or* a fresh `user_id` — the dev store holds only mock-dialect
     records, so a fresh-user cutover is free once; after the pilot runs, E-2 is a hard prerequisite.
   - **E-3(b)** — a captioner endpoint off the user-facing `:8000` (founders' call, closes OQ3).
+    *Resolved 2026-08-07:* ruled at the Stage F gate — `:8161`, `run_vllm.sh`, pins in code;
+    the OQ3 charter edit rides the Stage G paper sweep.
 - **Escalations (in [handoff/ws-video-clip.md](handoff/ws-video-clip.md) §10; the two `cutover` ones
   are also on the founders' board):** *E-1* recording `--segment-seconds 10→60` (largest cost lever;
   joint with DP-audio); *E-2* storage kind-aware `DELETE /context/records` (*cutover*); *E-3(a)* —
