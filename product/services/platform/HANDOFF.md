@@ -44,22 +44,20 @@
   end to end.
 - Serve-loop self-test still 10/10 (no regression).
 
-## Incoming — assigned to platform but not yet started (recorded 2026-07-27, closing O-9)
+## Incoming — assigned to platform from elsewhere
 
-Neither item below is new work invented here; both were assigned elsewhere and this canvas simply
-never recorded them, which is exactly the cold-start failure [ORG.md](../../ORG.md) §Documentation
-protocol exists to prevent.
+Neither item below is work invented here; both were assigned by a decision this canvas does not own,
+and a cold start that missed them would miss work already committed to.
 
 | # | What | Source | State |
 |---|---|---|---|
 | **D9 backbone** | The **one shared Prometheus + Grafana** on node-7, scraping the `/metrics` every service now emits, provisioning each service's own dashboard JSON plus the standard node/dcgm/DB exporters. Both founders open one Grafana URL. | **D9** (2026-07-09) + *D15* (2026-07-19), which named it "the small parallel slice" | **not started.** The *emission* half shipped long ago (recording M6, DP M8), so this is the last hop before D9 closes end to end |
-| **E-3(b)** | A **captioner VL endpoint distinct from the user-facing `:8000`**. DP's `VIDEO_VLM_URL` and inference's `VLLM_URL` default to the *same* Qwen3-VL-32B TP=8 instance, so DP's prefill bursts land in the same continuous batch as the assistant's decode steps. The failure mode is assistant TTFT, which no GPU-percent figure surfaces. | Escalation **E-3(b)**, [board](../../HANDOFF.md) §Escalations — owners *platform + inference* | *resolved 2026-08-07* — ruled at the DP-rebuild Stage F gate: captioner on `:8161` (`run_vllm.sh`, GPUs 0-1, pins in code). The DP CHARTER OQ3 edit lands with the Stage G paper sweep |
+| **E-3(b)** | A **captioner VL endpoint distinct from the user-facing `:8000`**. DP's `VLM_URL` and inference's `VLLM_URL` both *default* to the same Qwen3-VL-32B instance, so DP's prefill bursts would land in the same continuous batch as the assistant's decode steps. The failure mode is assistant TTFT, which no GPU-percent figure surfaces. | Escalation **E-3(b)**, [board](../../HANDOFF.md) §Escalations — owners *platform + inference* | *resolved 2026-08-07* — the captioner has its own instance on `:8161` (`run_vllm.sh`, GPUs 0-1, pins in code, `learn.env` points DP there). The code defaults still collide, so the separation lives in the deployment |
 
-**Also true of this service today, and not previously written down:** the learn fleet runs under
-`deploy/run_learn.sh` on node-7 (storage 8083 · data-processing 8085 · recording 8084), and **who
-restarts a service is still an open ops question** — there is no supervisor config in-repo, which
-data-processing's M7 review flagged and routed here. The 2026-07-27 fleet cutover was driven by hand
-through `run_learn.sh --stop` / restart.
+**Also true of this service today:** the learn fleet runs under `deploy/run_learn.sh` on node-7
+(storage 8083 · data-processing 8085 · recording 8084), and **who restarts a service is still an
+open ops question** — there is no supervisor config in-repo, which data-processing routed here.
+Every fleet restart so far has been driven by hand through `run_learn.sh --stop` / restart.
 
 ## Next
 - Integrator: once the four sibling `run.sh` land, run `bash deploy/run_all.sh` for the real
