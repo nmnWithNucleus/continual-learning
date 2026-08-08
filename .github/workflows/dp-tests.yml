@@ -62,8 +62,18 @@ jobs:
       - name: Install service requirements
         run: pip install -r requirements.txt
 
+      # Every failure is re-emitted as a ::error:: workflow command. Those become
+      # check-run annotations, which are readable from the public API — the raw job
+      # log is not. Without this a red run says only "failure", which is barely
+      # better than no runner at all.
       - name: Run the suite — T-1…T-6 plus every unit and seam test
-        run: pytest -q
+        run: |
+          set -o pipefail
+          pytest -q -rf --tb=short 2>&1 | tee /tmp/dp-suite.log || {
+            grep -E '^(FAILED|ERROR) ' /tmp/dp-suite.log \
+              | while IFS= read -r line; do echo "::error::$line"; done
+            exit 1
+          }
 
       # A separate process from its own directory, on purpose. The framework tests
       # reach the DP app/ modules through their own conftest and reach
@@ -71,5 +81,12 @@ jobs:
       # so this is the one invocation that works without installing the package into
       # the suite's environment — which is how the DP suite stays byte-identical.
       - name: Run the model-server framework tests
+        if: always()
         working-directory: product/services/data-processing/servers/common
-        run: python -m pytest -q tests
+        run: |
+          set -o pipefail
+          python -m pytest -q -rf --tb=short 2>&1 | tee /tmp/dp-framework.log || {
+            grep -E '^(FAILED|ERROR) ' /tmp/dp-framework.log \
+              | while IFS= read -r line; do echo "::error::$line"; done
+            exit 1
+          }
