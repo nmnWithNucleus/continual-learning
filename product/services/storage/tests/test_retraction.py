@@ -12,7 +12,7 @@ DP's done-ledger, so a retracted chunk's redelivery still SKIPS — DP answers 2
 record_id storage no longer holds, and NO write reaches storage. That is the designed
 posture, not a bug: E-2 is a retention / right-to-be-forgotten primitive, never a
 correctness mechanism ("deletion is never the mechanism for correctness" stands).
-Rebuild-after-retraction is the OD-2 `/raw` replay tool (future) or a version bump.
+Recovering a retracted record means replaying it from `/raw` or forking the dialect.
 """
 from __future__ import annotations
 
@@ -305,8 +305,9 @@ def test_the_cascade_spans_windows_when_the_records_do(store):
 
 
 def test_retraction_leaves_raw_blobs_alone(client, store):
-    """E-2 retracts PROCESSED records; /raw bytes are sacred (OD-2) and have their own
-    M5 primitives. The blob a retracted record pointed at still serves."""
+    """E-2 retracts PROCESSED records. The raw store is the one thing nothing derives
+    from, so it is deleted only by its own M5 primitives — the blob a retracted record
+    pointed at still serves."""
     data = b"raw-bytes-of-the-chunk"
     import hashlib
     put = client.put("/raw/blobs",
@@ -328,8 +329,8 @@ def test_retraction_leaves_raw_blobs_alone(client, store):
 
 
 def test_retract_then_redeliver_skip_no_resurrection(client, store):
-    """The drill the brief names, with the skip reply SIMULATED at the wire boundary
-    (the cross-service replay drill is Stage F's): DP's done-ledger still holds the
+    """The retract-then-redeliver drill, with the skip reply SIMULATED at the wire
+    boundary (a live cross-service replay is not this suite's job): DP's ledger holds the
     green row after a retraction, so a redelivery is L8 case 3 — SKIP, answered from
     the ledger as `200 {ok, record_ids:[rid]}` with NO POST to storage. Storage
     therefore never sees a write, and the retracted record stays retracted."""
@@ -342,8 +343,8 @@ def test_retract_then_redeliver_skip_no_resurrection(client, store):
                               params={"user_id": "u1", "record_id": rid}).json()
     assert manifest["records"] == 1
 
-    # The redelivery: DP's claim tree reads its OWN ledger (never a storage read —
-    # a Stage D decision), finds version-match all-green, and skips. The reply below
+    # The redelivery: DP's claim tree reads its OWN ledger and never a storage read,
+    # finds version-match all-green, and skips. The reply below
     # is the D16 wire shape it answers with; storage receives NOTHING.
     simulated_skip_reply = {"ok": True, "record_ids": [rid]}
     assert simulated_skip_reply["record_ids"] == [rid]   # an id storage no longer holds

@@ -73,12 +73,12 @@ class ResolveResponse(_Strict):
     adapter_path: str | None
 
 
-# --- C2 v1 processed record (learn-loop /context; DP rebuild, D24) ---------------
+# --- C2 v1 processed record (learn-loop /context; D24) ---------------------------
 #
-# The branch mirrors C2 **v1** exclusively (founder ruling R1, 2026-08-06): one record
-# per chunk, content is a slots map, and the v0 concepts — content.kind/text,
-# enrichments, discriminator, source.modality, processed_at — do not exist here. The
-# frozen `c2_processed_record.v1.json` stays the authoritative gate; this mirror is the
+# This mirrors C2 **v1** exclusively: one record per chunk, content is a slots map, and
+# the names content.kind/text, enrichments, discriminator, source.modality and
+# processed_at do not exist here and must not be re-added. The
+# `c2_processed_record.v1.json` file stays the authoritative gate; this mirror is the
 # second, independent check, restated from the contract (services do not import each
 # other's code, so DP's own mirror is not imported — the ids.py precedent).
 

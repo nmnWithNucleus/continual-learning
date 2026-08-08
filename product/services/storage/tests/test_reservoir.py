@@ -97,7 +97,7 @@ def test_an_empty_corpus_is_admitted(client):
 def test_re_admitting_identical_content_is_a_no_op(client, store_root):
     """Byte-identical response, and — the stronger claim — NOTHING IS REWRITTEN.
     `admitted_at` records when the artifact landed, not when someone last asked about it,
-    exactly as /context preserves `ingest_time` across a reprocess."""
+    exactly as /context preserves `created_at` across a reprocess."""
     first = _admit(client, "u1", W1, "same text").json()
     meta = store_root.meta_path("u1", W1, RECIPE)
     corpus = store_root.corpus_path("u1", W1, RECIPE)

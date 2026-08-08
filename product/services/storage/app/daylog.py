@@ -1,14 +1,13 @@
 """Day-log materialization: C2 v1 records → segment rows → scene blocks (C10 v2, D28).
 
-LINEAGE: lifted at D18 from ``services/continuum/app/daylog.py`` — ``build_daylog`` +
-``_render_block`` + ``_block_zone``, the **product** renderer over C2 records (never
-``morpheus/profiles/*.py``'s recipe-coupled research-parity surface). Rebuilt at the DP
-rebuild's Stage E (D28) as the **v2 slot-walk**: C2 v1 carries exactly one record per
-chunk whose content is a slots map, and the renderer walks ``content.slots`` instead of
-per-kind records. Field names still match the day-log schema exactly (segment rows:
-seg_id / t_start / t_end / caption / asr / ocr / quality / tz; block rows: block_id /
-seg_ids / text / anchors / quality) and the BLOCK TEXT IS CONTRACT (D20): the labels
-and anchor line are unchanged from v1, re-proven by the WP-E4 parity re-baseline.
+LINEAGE: this is the **product** renderer over C2 records, the counterpart of
+continuum's own ``app/daylog.py`` and never ``morpheus/profiles/*.py``'s recipe-coupled
+research-parity surface. It is a SLOT WALK (D28): C2 v1 carries exactly one record per
+chunk whose content is a slots map, so the renderer reads ``content.slots``. Field names
+match the day-log schema exactly (segment rows: seg_id / t_start / t_end / caption / asr
+/ ocr / quality / tz; block rows: block_id / seg_ids / text / anchors / quality) and the
+BLOCK TEXT IS CONTRACT (D20) — the labels and the anchor line are what the parity bar
+proves both renderers agree on, byte for byte.
 
 THE RULES, v2 (D27/D28 over the D18 watermark philosophy):
 
@@ -72,9 +71,9 @@ if TYPE_CHECKING:  # pragma: no cover - typing only, avoids an import cycle with
 # the recipe id: it names the DAY-LOG FORMAT — bump it whenever the segment/block shape
 # or the rendered block text changes, and every cached day-log re-materializes on next
 # fetch (see materialize_daylog) instead of silently serving an old dialect. "2" is the
-# D28 slot-walk renderer (bumped with recipe_id at the v1 -> v2 transition; continuum
-# must be TAUGHT both stamps before the Stage F cutover or its correct stamp-refusal
-# blocks every window — a cutover gate, not a bug).
+# D28 slot-walk renderer. Bumping it is a two-service act: continuum refuses a body whose
+# stamps are not the ones it trains under, so it must be taught the new pair BEFORE this
+# value moves, or its correct refusal blocks every window.
 DAYLOG_FORMAT_VERSION = "2"
 
 # The `corpus` knobs of consolidation-v1.0 (recipes/consolidation-v1.0.json), as
@@ -256,11 +255,10 @@ def _bucket_index(t: datetime, segment_seconds: int) -> int:
 def dialect_key(record: dict[str, Any]) -> str:
     """The chunk a record is THE rendering of — ``(chunk_id)`` alone.
 
-    One record per chunk (Slot Law L2) collapses the v0 ``(chunk_id, kind,
-    discriminator)`` key: kinds died with the per-kind record model and the
-    discriminator is on the charter's dead-concepts list. What still needs deduping is
-    the version-forward reprocess — a new dialect lands BESIDE the old record under a
-    new ``record_id`` (L8 case 2), and the day-log must render exactly one of them.
+    One record per chunk (Slot Law L2) is what makes ``(chunk_id)`` the whole key: a
+    chunk has no siblings, so there is nothing finer to group on. What still needs
+    deduping is the version-forward reprocess — a new dialect lands BESIDE the old record
+    under a new ``record_id`` (L8 case 2), and the day-log must render exactly one.
 
     A record with no ``source.chunk_id`` cannot be grouped with anything, so it keys on
     its own ``record_id`` and always survives. Schema-valid C2 v1 always has a
@@ -375,8 +373,9 @@ def build_daylog(
         # Heard — slots.transcript.splits[] (the speaker-aligned view). Each split
         # lands in its OWN bucket by its OWN t_start, never the parent chunk's — a 30 s
         # chunk's speech is anchored where it was actually said. Both split spellings
-        # arrive (verbatim C1 root spans AND abs_time's +00:00-microsecond form, the
-        # Stage C carry); _parse_ts reads both. `speaker` may be null per split
+        # arrive: a split may carry the C1 span string verbatim, or the offset-derived
+        # form DP's `abs_time` produces (+00:00, microseconds). `_parse_ts` reads both,
+        # because normalizing either one here would move a record. `speaker` may be null
         # (alignment found no turn) and renders as an unlabeled line.
         #
         # FALLBACK, ruled 2026-08-06: when the transcript slot is ABSENT — a hole
@@ -603,10 +602,10 @@ def materialize_daylog(
     keep serving the wrong date forever after the profile was corrected.
 
     A window's content is stable once it is open: ``t_end`` is fixed at open time and sits
-    ``delta`` behind the wall clock precisely so that every write with an ``ingest_time``
+    ``delta`` behind the wall clock precisely so that every write with an ``updated_at``
     below it has committed. The one way a materialized day-log can go stale is a
     same-version reprocess, which rewrites a record's text in place while DELIBERATELY
-    preserving its ``ingest_time`` — and that is invalidated at the write, in
+    preserving its ``created_at`` — and that is invalidated at the write, in
     ``Store.put_context``, rather than hoped about here.
 
     The profile is required to BUILD and not to SERVE: a cached day-log already records

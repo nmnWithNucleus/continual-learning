@@ -2,11 +2,10 @@
 time-range read ordering, per-user isolation, 404s, invalid-C2 -> 422.
 
 The write path speaks C2 **v1** exclusively (founder ruling R1, 2026-08-06): the branch
-validates against `c2_processed_record.v1.json` and its pydantic mirror. The v0 shape —
-`content.kind`/`content.text`, `enrichments`, `discriminator`, `source.modality`,
-`processed_at` — is rejected wholesale; the live worktree service keeps serving v0
-until the Stage F cutover, and the OD-2 wipe means no stored v0 record survives into
-this code's world.
+validates against `c2_processed_record.v1.json` and its pydantic mirror. The names
+`content.kind`/`content.text`, `enrichments`, `discriminator`, `source.modality` and
+`processed_at` are rejected wholesale — `additionalProperties: false` at every level is
+what makes each of them fail closed rather than ride along unnoticed.
 """
 from __future__ import annotations
 
@@ -119,7 +118,7 @@ def test_list_requires_user_id(client):
 
 def test_an_empty_slots_map_is_legal(client):
     """All-optional-failure under L7 ships a record whose dialect states what was
-    attempted; forbidding {} would force a fabricated slot (Stage A ruling, endorsed)."""
+    attempted; forbidding {} would force a stage to fabricate a slot to stay legal."""
     record = make_c2(slots={})
     assert schemas.validate_c2(record) == []
     assert client.post("/context/records", json=record).status_code == 200
@@ -287,8 +286,8 @@ def test_mirror_and_schema_agree_on_rejections():
 
 
 def test_the_d17_trio_rides_source_verbatim(client):
-    """device_tz + device_utc_offset_minutes + device_clock (the v0 schema omitted the
-    third; v1 closes the gap — Stage A ruling `device_clock` stays)."""
+    """device_tz + device_utc_offset_minutes + device_clock ride source{} verbatim.
+    `device_clock` is what makes skew detectable after the fact, so it stays."""
     record = make_c2()
     record["source"]["device_tz"] = "Asia/Tokyo"
     record["source"]["device_utc_offset_minutes"] = 540
