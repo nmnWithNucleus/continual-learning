@@ -26,7 +26,7 @@ Engine pins (the v0 service's measured operating point, now code constants):
   result    -- {"regions": [{"text", "bbox": [x0,y0,x1,y1], "conf"}, ...]}
                bbox in pixels of the submitted image, origin top-left; text
                VERBATIM and unfiltered -- no thresholding, no dedup, no
-               redaction; that is DP-side post-processing (D-07). regions may
+               redaction; that is DP-side post-processing. regions may
                be [] (ran-and-empty honesty).
 
 Concurrency: v0 guarded self._ocr with a per-call lock; here the

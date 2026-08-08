@@ -1,4 +1,4 @@
-"""Real clip captioner — ONE multi-image VLM call per chunk (D-02 / D-09).
+"""Real clip captioner — ONE multi-image VLM call per chunk.
 
 Plain ``httpx.AsyncClient`` against an OpenAI-compatible ``/v1/chat/completions`` —
 the wire the Qwen3-VL served on the GPU node speaks. No heavy dependency (httpx is a
@@ -8,14 +8,14 @@ passes every output-affecting parameter EXPLICITLY (model name, scenario, captio
 rate — all code pins under its backend version, L4); only the endpoint wire (url /
 api key / timeout) is operational input.
 
-**The payload is the design's headline (D-02): K stills in ONE call, NOT
+**The payload is the design's headline: K stills in ONE call, NOT
 ``video_url``.** Message shape: ``[{system}, {user: [head_text, Frame-label, image,
 Frame-label, image, …, task_text]}]`` — the frame time labels ``Frame k (+t.s):``
 interleaved before each image, and the task + JSON contract LAST. Frame selection
 stays on DP's pinned ffmpeg rather than the serving box's decoder (the determinism
 argument).
 
-**OCR is injected, not read (D-09).** The specialist pass's text arrives as
+**OCR is injected, not read.** The specialist pass's text arrives as
 ``ocr_text`` and is rendered into the pack's ``## On-screen text … (INPUT, not
 target)`` block; the system prompt forbids copying it out.
 
@@ -42,14 +42,14 @@ from ..parse import ParseOutcome, parse_clip
 
 logger = logging.getLogger("data-processing.vision.clipcap.vlm")
 
-# Runtime pack variants (D-03): the 1-image fallback and the idle-screen profile.
+# Runtime pack variants: the 1-image fallback and the idle-screen profile.
 # Both are inside the aggregate PACK_DIGEST the clipcap stage pins, so a change to
 # either is caught by the registration digest gate.
 _SINGLE_PACK = "screen-clip-single-v1"
 _IDLE_PACK = "screen-clip-idle-v1"
 
 # The pack templates put the task + JSON contract after the OCR block; we split there so
-# the images land BETWEEN the OCR block and the task, keeping the task text LAST (D-02).
+# the images land BETWEEN the OCR block and the task, keeping the task text LAST.
 # Absent (a reworded pack) -> the whole user text goes after the images (task still last).
 _TASK_MARKER = "Reply with ONE JSON"
 
@@ -86,7 +86,7 @@ def _build_messages(
     scenario: str,
     caption_rate: int,
 ) -> list[dict[str, Any]]:
-    """Render the pack and assemble the multi-image user message (D-02)."""
+    """Render the pack and assemble the multi-image user message."""
     lo, hi = caption_word_bounds(span_s, caption_rate)
     context = {
         "span_s": f"{span_s:.0f}",

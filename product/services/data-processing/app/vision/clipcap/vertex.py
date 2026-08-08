@@ -1,4 +1,4 @@
-"""Vertex / Gemini clip captioner — a DOCUMENTED STUB, not a serving path (D-15).
+"""Vertex / Gemini clip captioner — a DOCUMENTED STUB, not a serving path.
 
 Ship self-hosted. Vertex/Gemini is an eval ORACLE (a one-off quality ceiling — 200 windows
 at HIGH ≈ $70), never continuous capture: the POC measured HIGH@2fps at 527.5 prompt tok
@@ -12,7 +12,7 @@ separately-budgeted decision made in code — build a one-off harness (or an ``.
 dialect stage) that calls this module; there is no env switch to flip (L4).
 
 The verified `google-genai` call shape (distinct from the OpenAI wire ``vlm.py`` speaks —
-these fields do NOT exist on an OpenAI-compatible endpoint, which is exactly why D-02
+these fields do NOT exist on an OpenAI-compatible endpoint, which is exactly why the
 rejects `video_url` for the serving path):
 
     from google import genai
@@ -39,7 +39,7 @@ from ..clip_types import ClipFrames
 
 async def describe(clip: ClipFrames, ocr_text: str, chunk_id: str, **_pins: Any):
     raise NotImplementedError(
-        "the vertex/gemini clip captioner is an eval ORACLE, not a serving path (D-15) — "
+        "the vertex/gemini clip captioner is an eval ORACLE, not a serving path — "
         "≈$30/user-day for continuous capture. It is deliberately unregistered; run it "
         "only from a one-off, separately-budgeted eval harness."
     )

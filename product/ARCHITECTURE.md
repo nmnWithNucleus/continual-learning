@@ -54,14 +54,14 @@ flowchart TD
   U((Users))
 
   subgraph capture [Life capture — learn loop]
-    RS["Recording Service<br/>(computer + wearable capture; mobile screen capture deferred)"]
-    DPS["Data Processing Service<br/>audio: denoise→diarize→ASR→translate<br/>image/video: proc→dense caption→world data<br/>+ timestamp injection (all modalities)"]
+    RS["Recording Service<br/>(computer capture; wearable capture*;<br/>mobile screen capture*)"]
+    DPS["Data Processing Service<br/>audio: denoise*→diarize→ASR→translate*<br/>image*/video: proc→dense caption→world data*<br/>+ timestamp injection (all modalities)"]
   end
 
   subgraph interact [Interaction — serve loop]
-    IS["Input Service<br/>(computer / extension / mobile app / wearable voice)"]
+    IS["Input Service<br/>(computer / extension / mobile app* / wearable voice*)"]
     QB[QueryBuilder]
-    INF["Inference Service<br/>UserPrompt + SystemPrompt<br/>+ agentic harness (tools, sandbox)"]
+    INF["Inference Service<br/>UserPrompt + SystemPrompt<br/>+ agentic harness* (tools, sandbox)"]
     MEN["Mentors<br/>Claude · GPT · Gemini"]
     OS["Output Service<br/>(text to computer · speech to mobile→BT audio)"]
   end
@@ -86,10 +86,14 @@ flowchart TD
   INF <-. "C7: assistance prompt / traces + clarifications" .-> MEN
   INF -- C9: response stream --> OS --> U
   CTX -- C10 --> FT
-  SES -- C10 --> FT
+  SES -. "C10: mentor traces" .-> FT
   FT -- C5: publish adapter --> MD
-  MD -- C6: resolve + hot-swap --> INF
+  MD -- "C6: resolve + hot-swap*" --> INF
 ```
+
+**A solid arrow is built and running; a dotted arrow is designed and not built.** Inside a
+service, `*` marks a stage that is designed and not yet running. The distinction is the point:
+this repo has already shipped documents that asserted an intent in the voice of a build.
 
 ## Components
 

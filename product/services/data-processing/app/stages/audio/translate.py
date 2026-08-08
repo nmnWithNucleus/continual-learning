@@ -1,6 +1,6 @@
 """translate — speech translation to English: built + tested, NOT REGISTERED.
 
-NO ``@register_stage`` on purpose: the ratified plan-§2 example dialect
+NO ``@register_stage`` on purpose: the ratified dialect
 excludes translation, v0's beta fleet ran TRANSLATE_BACKEND=off, and C2 v1 has
 no ``translation`` slot — its sub-schema lands ADDITIVELY when this producer
 ships into a dialect (an emitted translation slot fails today's contract gate,

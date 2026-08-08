@@ -2,7 +2,7 @@
 
 Replaces the six-subprocess ``app/vision/frames.py`` (a container-duration probe + a
 cut-detection pass + N output-seek extracts) with **exactly two ffmpeg subprocesses, one
-decode each** (D-04):
+decode each**:
 
   * **Pass A (analysis)** — one decode, ~4 KB out: sample the stream every
     ``analysis_period_s`` via ``select`` on TRUE PTS, ``format=gray`` →
@@ -15,9 +15,9 @@ decode each** (D-04):
     ``select`` the caption frames at ``frame_width`` (lo, for the VLM) and the OCR events
     at ``ocr_frame_width`` (hi, native, for the CPU OCR pass). ``-frame_pts 1`` names each
     file, the per-chain count is asserted, and outputs map to targets in time order — so a
-    silently-dropped frame RAISES instead of mis-assigning pixels/timestamps (defect #24).
+    silently-dropped frame RAISES instead of mis-assigning pixels/timestamps.
 
-The span comes from the C1 envelope, NOT a container-duration probe (D-04 deleted that
+The span comes from the C1 envelope, NOT a container-duration probe (we deleted that
 whole legacy subprocess), so record identity can never be decoder-dependent; and there is
 NO cut-detection pass (the legacy metric was inert on screens — measured 0 cuts on
 scrolling code whose SSIM fell to 0.47).
@@ -75,7 +75,7 @@ class ClipDecodeError(RuntimeError):
 
 class FrameCountError(RuntimeError):
     """Pass B produced fewer frames than requested — a requested frame index the stream
-    does not contain (measured ``-frame_pts`` guard, defect #24). ALWAYS raised (any
+    does not contain (the measured ``-frame_pts`` guard). ALWAYS raised (any
     backend): a silent drop mis-assigns pixels and frame timestamps. Distinct
     from ``ClipDecodeError`` so the stage never masks it with the synthetic fallback."""
 
@@ -93,20 +93,20 @@ class ClipSettings:
     frame_width: int           # caption (lo) JPEG width; 768 = 360 Qwen3-VL tokens/frame
     ocr_frame_width: int       # OCR (hi) JPEG width; 1728 = the mac capture cap, no resample
     analysis_period_s: float   # Pass-A delta probe period (2.0 s: sensitivity beats precision)
-    ocr_idle_peak: int         # class=IDLE at accumulated peak <= this (D-07)
-    ocr_layout_peak: int       # class=LAYOUT above this peak (D-07)
+    ocr_idle_peak: int         # class=IDLE at accumulated peak <= this
+    ocr_layout_peak: int       # class=LAYOUT above this peak
     ocr_max_events: int        # rank-free even-spaced cap on OCR reads/chunk (3->8 is ~2.7x CPU)
     ocr_floor_s: float         # a static screen still reads once per this many wall-clock s
 
 
 def ffmpeg_available() -> bool:
     """ffmpeg only — the clip path needs no container-duration probe (the span is a C1
-    field, D-04), so a box with only ffmpeg is fully capable."""
+    field), so a box with only ffmpeg is fully capable."""
     return shutil.which("ffmpeg") is not None
 
 
 # ---------------------------------------------------------------------------------------
-# The deterministic caption grid (content-independent; D-03).
+# The deterministic caption grid (content-independent).
 # ---------------------------------------------------------------------------------------
 def caption_frame_count(span_seconds: float, cs: ClipSettings) -> int:
     """``K = clamp(ceil(span/seconds_per_frame), min_frames, max_frames)`` — a pure function
@@ -180,7 +180,7 @@ def _pass_b(
     ``_OPENING`` (select frame ``n=0``) or an integer PTS (select ``eq(pts,P)``). Outputs are
     named by ``-frame_pts`` (monotone in time) and mapped to targets in TIME order; the
     per-chain count is asserted, so a dropped frame RAISES (``FrameCountError``) rather than
-    mis-assigning pixels/timestamps (defect #24). Returns ``({t_offset: lo_bytes}, {t_offset:
+    mis-assigning pixels/timestamps. Returns ``({t_offset: lo_bytes}, {t_offset:
     hi_bytes})``."""
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:

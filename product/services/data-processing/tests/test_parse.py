@@ -123,7 +123,7 @@ def test_raw_newline_inside_string_is_repaired_and_collapsed():
     out = parse_clip(reply)
     assert out.step == "repair"
     assert out.desc.app == "VS Code"
-    # D-12: the recovered field carries no newline (whitespace collapsed to spaces).
+    # the recovered field carries no newline (whitespace collapsed to spaces).
     assert "\n" not in out.desc.description
     assert out.desc.description == "The person edits a Python file, adding a new function."
 
@@ -252,7 +252,7 @@ def test_first_real_object_wins_over_a_leading_placeholder_object():
     assert out.desc.description.startswith("The person is writing")
 
 
-# ---- D-12 cleaning invariants ------------------------------------------------
+# ---- cleaning invariants: one line, no newline ever ---------------------------
 
 def test_no_field_ever_carries_a_newline():
     reply = (

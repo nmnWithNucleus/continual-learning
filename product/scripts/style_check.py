@@ -172,7 +172,7 @@ SKIP_DIRS = {".review", ".venv", "venv", "node_modules", "site-packages",
              ".git", "__pycache__", ".pytest_cache", "dist-info"}
 
 # *.prompt.md is the versioned prompt pack: model-facing bytes whose sha256 IS
-# `pipeline_version` (D-13). Restyling one forks the dialect and re-keys every
+# `pipeline_version`. Restyling one forks the dialect and re-keys every
 # record it produced, so it is a code change, not a documentation edit. The
 # pack has its own discipline in `app/vision/prompts/` and its own tests.
 SKIP_SUFFIXES = (".prompt.md",)

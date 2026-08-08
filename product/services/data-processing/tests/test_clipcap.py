@@ -2,7 +2,7 @@
 
 New-API client tests, headless: the OpenAI-compatible endpoint is a fake
 (``httpx.MockTransport`` injected through the ``vlm.make_async_client`` factory — the
-client-level-fake rule, plan §3), so the production wire (D-02 payload, D-09 OCR
+client-level-fake rule), so the production wire (the one-call payload, the injected OCR
 injection) is exercised with no model, and the caption slot value is PINNED.
 """
 from __future__ import annotations
@@ -126,7 +126,7 @@ def test_pack_edit_without_vb_bump_fails_registration(monkeypatch):
     # registered stage (and this module's imports) remain intact.
 
 
-# ------------------------------------------------------------------ the wire (D-02/D-09)
+# ------------------------------------------------------------------ the wire
 
 def test_call_produces_the_pinned_caption_slot():
     captured: list[httpx.Request] = []
@@ -141,7 +141,7 @@ def test_call_produces_the_pinned_caption_slot():
     finally:
         mp.undo()
     # The PINNED caption: render_caption over the canned reply at span 60/rate 16
-    # (cap 960 — no truncation), D-10 lead + description.
+    # (cap 960 — no truncation), the app/activity lead + description.
     assert out.value == {"value":
         "Xcode — editing Swift code. The person edits a Swift file in Xcode, "
         "scrolling through a view controller."}
@@ -155,7 +155,7 @@ def test_payload_shape_is_one_multi_image_call(monkeypatch):
     ocr_text = "+0s titlebar: Xcode — ViewController.swift"
     _run(_ctx(_clip(n=3), ocr_text=ocr_text))
 
-    assert len(captured) == 1                       # ONE call (D-02), never per-frame
+    assert len(captured) == 1                       # ONE call, never per-frame
     req = captured[0]
     assert req.url.path == "/v1/chat/completions"
     body = json.loads(req.content)
@@ -170,12 +170,12 @@ def test_payload_shape_is_one_multi_image_call(monkeypatch):
     system, user = body["messages"]
     assert system["role"] == "system" and isinstance(system["content"], str)
     parts = user["content"]
-    # Frame labels interleave before each image; the task text is LAST (D-02).
+    # Frame labels interleave before each image; the task text is LAST.
     images = [p for p in parts if p["type"] == "image_url"]
     labels = [p for p in parts if p["type"] == "text" and p["text"].startswith("Frame ")]
     assert len(images) == 3 and len(labels) == 3
     assert parts[-1]["type"] == "text" and "Reply with ONE JSON" in parts[-1]["text"]
-    # D-09: the OCR text is injected INTO the prompt text, before the task.
+    # the OCR text is injected INTO the prompt text, before the task.
     head = parts[0]
     assert head["type"] == "text" and ocr_text in head["text"]
 
@@ -258,7 +258,7 @@ def test_render_lead_and_description():
 
 
 def test_render_degrades_without_dangling_separators():
-    # D-10: no dangling " — ", no leading ". " when fields are empty.
+    # no dangling " — ", no leading ". " when fields are empty.
     assert render_caption(_desc(app="", activity=""), 60.0)[0] == "A thread is open."
     assert render_caption(_desc(activity=""), 60.0)[0] == "Mail. A thread is open."
     assert render_caption(_desc(app=""), 60.0)[0] == "reading an email. A thread is open."
@@ -267,7 +267,7 @@ def test_render_degrades_without_dangling_separators():
 def test_render_is_single_line(monkeypatch):
     d = _desc(description="line one\nline two\n\nline three")
     out, _ = render_caption(d, 60.0)
-    assert "\n" not in out and "  " not in out      # D-12
+    assert "\n" not in out and "  " not in out      # single line, always
 
 
 def test_render_truncates_at_the_span_budget_on_a_sentence():

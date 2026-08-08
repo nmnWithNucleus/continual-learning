@@ -1,4 +1,4 @@
-"""Deterministic secret redaction for OCR strings (D-07 step 4).
+"""Deterministic secret redaction for OCR strings (step 4 of the assemble order).
 
 A prompt rule ("never transcribe a password") is not an access control — a CTC engine
 has no notion of a rule. This is the access control: a pure, regex-driven pass that
@@ -8,7 +8,7 @@ DP-side on the returned strings, so it holds identically for every backend (ppoc
 even a future model that ignores its instructions).
 
 Deterministic by construction: same input string -> same output + same count, on any
-worker in the fleet (§4 R4 / house rule 6). Every replacement is counted so the operator
+worker in the fleet — the determinism rule. Every replacement is counted so the operator
 sees ``dp_ocr_redactions_total`` climb — a redaction that fires a lot is a signal, not a
 silent scrub.
 

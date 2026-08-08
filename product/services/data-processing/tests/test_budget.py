@@ -1,4 +1,4 @@
-"""The character budget (D-11): span-parametric caps + deterministic truncation.
+"""The character budget: span-parametric caps + deterministic truncation.
 
 The rates are explicit arguments (L4): the live values are code pins in the stage
 files (clipcap 16, screentext 6, splitting 22 total), never env knobs. These tests
@@ -31,8 +31,8 @@ def test_ocr_cap_is_rate_times_span():
 
 
 def test_dose_is_span_invariant_at_a_fixed_rate():
-    """The whole point of D-11: chars/second-of-life is constant, so the training dose is
-    identical at any chunk length — that is what makes the design span-parametric (D-01)."""
+    """The whole point of the budget: chars/second-of-life is constant, so the dose is
+    identical at any chunk length — that is what makes the design span-parametric."""
     assert caption_cap(60, CAPTION_RATE) / 60 == caption_cap(10, CAPTION_RATE) / 10
     assert ocr_cap(60, OCR_RATE) / 60 == ocr_cap(10, OCR_RATE) / 10
 

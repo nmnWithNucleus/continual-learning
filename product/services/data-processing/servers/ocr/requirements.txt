@@ -3,7 +3,7 @@
 #
 # Installs into THIS server's own venv (servers/ocr/.venv) and never into the
 # shared DP venv: the PP-OCR stack (onnxruntime, opencv, shapely, pyclipper)
-# stays quarantined behind the server boundary (D-06).
+# stays quarantined behind the server boundary.
 #
 # Engine pins are exact and validated together
 # (CPU, Python 3.12). onnxruntime is pinned because its version is reported in

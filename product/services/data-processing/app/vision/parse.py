@@ -10,13 +10,13 @@ prompt template, or nothing at all — and this ladder turns any of it into a
 ``ClipDesc`` (or RAISES on an empty reply), classifying HOW degraded the reply was
 so the caller can count it.
 
-**Purity is the design** (§5.3: "a pure function of the reply"). No metrics side
+**Purity is the design**: this module is a pure function of the reply. No metrics side
 effect here, no network, no config, no clock. The caller (the ``clipcap`` backend)
 reads the returned ``ParseOutcome.step`` and increments
 ``dp_video_parse_fallback_total{pack,step}`` itself — it holds the ``pack`` label
 and the metrics handle; the ladder holds only the string. This keeps the ladder
 trivially testable and keeps "which rung fired" a value, not a side effect. There
-is deliberately **NO repair call** (§5.3): a retry costs a whole inference; a 0.5 %
+is deliberately **NO repair call**: a retry costs a whole inference; a 0.5 %
 fallback rate costs nothing and a 10 % rate is a prompt bug the offline harness
 must catch.
 
@@ -38,13 +38,13 @@ The rungs — first that yields a usable ``description`` wins:
 Only ``clean`` is NOT a fallback. An empty (or whitespace-only) reply RAISES
 ``EmptyReplyError`` — a ``ValueError`` subclass, matching ``vlm.py``'s no-choices
 contract — so the chunk is not marked done and at-least-once redelivery reprocesses
-it, rather than a hollow record landing in ``/context`` (§5.3, D-05).
+it, rather than a hollow record landing in ``/context``.
 
 Budget truncation and the final single-line render (``{app} — {activity}.
 {description}``) are NOT here — they live in ``emit.py`` with ``caption_cap`` — so
 this module has ZERO dependency on the D1 config / budget / version modules and is
 a pure function of the reply string alone. Every field it emits is already
-newline-free and whitespace-collapsed (D-12), so a downstream ``\\n`` is impossible
+newline-free and whitespace-collapsed, so a downstream ``\\n`` is impossible
 at the source.
 """
 from __future__ import annotations
@@ -77,7 +77,7 @@ _CANONICAL_DESCRIPTION = "description"
 # in the slot before that truncation runs.
 WHOLE_REPLY_CHAR_CAP = 4000
 
-# One syntactic-repair pass (§5.3 step 3): smart quotes -> straight, a raw control
+# One syntactic-repair pass (ladder step 3): smart quotes -> straight, a raw control
 # char inside a string -> its escape, a trailing comma before } or ] removed.
 _SMART_QUOTES = {
     "“": '"', "”": '"', "„": '"', "‟": '"',
@@ -102,7 +102,7 @@ _FIELD_RE = re.compile(
 )
 _SENSITIVE_RE = re.compile(r'"sensitive"\s*:\s*(true|false)', re.IGNORECASE)
 
-# Line mode (§5.3 step 4): ``App:`` / ``Activity:`` / ``Description:`` (or a dash).
+# Line mode (ladder step 4): ``App:`` / ``Activity:`` / ``Description:`` (or a dash).
 _LINE_RE = re.compile(
     r"^\s*(app|application|activity|action|description|caption)\s*[:\-]\s*(.*)$",
     re.IGNORECASE,
@@ -114,7 +114,7 @@ class EmptyReplyError(ValueError):
 
     Subclasses ``ValueError`` so the existing ``vlm.py`` contract (raise -> the
     chunk is not marked done -> at-least-once redelivery) is preserved and any
-    caller catching ``ValueError`` still catches it (§5.3, matching
+    caller catching ``ValueError`` still catches it (matching
     ``vlm.py:119-121``).
     """
 
@@ -136,7 +136,7 @@ class ParseOutcome:
 
 def _clean(value: object) -> str:
     """Coerce to ``str`` and collapse EVERY whitespace run (spaces, tabs, and —
-    crucially for D-12 — newlines) to a single space, stripping the ends. A field
+    crucially newlines) to a single space, stripping the ends. A field
     that leaves this function can never carry a ``\\n`` into ``content.text``."""
     if value is None:
         return ""
@@ -198,7 +198,7 @@ def _iter_objects(text: str):
     """Yield each top-level balanced ``{...}`` substring in order, **string-aware**:
     a brace inside a JSON string never opens/closes structure and ``\\`` escapes the
     next character — so a ``description`` containing ``}`` (or ``{``) cannot
-    prematurely close the object (§5.3 step 2). A ``{`` that never closes before
+    prematurely close the object (ladder step 2). A ``{`` that never closes before
     end-of-text (a mid-object truncation) yields nothing for that run, which routes
     the reply to the ``partial`` salvage rung."""
     i, n = 0, len(text)
@@ -242,7 +242,7 @@ def _loads(src: str) -> dict | None:
     yielded whole by the string-aware scanner, and CPython's recursive JSON decoder then
     raises ``RecursionError`` (a ``RuntimeError``, NOT a ``ValueError``) before it finishes.
     An adversarial ~40 KB reply is enough. The ladder's contract is that a non-empty reply
-    NEVER raises and never blows up on adversarial input (§5.3), so *any* decode failure
+    NEVER raises and never blows up on adversarial input, so *any* decode failure
     here means "not a usable object at this rung" → ``None`` → fall through to the partial /
     line / whole rungs. ``BaseException`` (KeyboardInterrupt / SystemExit) still propagates.
     A caught ``RecursionError`` unwinds the stack fully, so the ladder continues at normal
@@ -294,7 +294,7 @@ def _escape_raw_controls_in_strings(src: str) -> str:
 
 
 def _repair(src: str) -> str:
-    """The single tolerated syntactic-repair pass (§5.3 step 3)."""
+    """The single tolerated syntactic-repair pass (ladder step 3)."""
     fixed = src.translate(_SMART_QUOTE_TABLE)
     fixed = _escape_raw_controls_in_strings(fixed)
     fixed = _TRAILING_COMMA_RE.sub(r"\1", fixed)
@@ -362,7 +362,7 @@ def _salvage_partial(text: str, raw: str) -> ClipDesc | None:
 
 
 def _line_mode(text: str, raw: str) -> ClipDesc | None:
-    """``App:`` / ``Activity:`` / ``Description:`` lines (§5.3 step 4). ``None`` when
+    """``App:`` / ``Activity:`` / ``Description:`` lines (ladder step 4). ``None`` when
     no description line is present."""
     fields: dict[str, str] = {}
     for line in text.splitlines():
@@ -383,7 +383,7 @@ def _line_mode(text: str, raw: str) -> ClipDesc | None:
 
 
 def _whole_mode(text: str, raw: str) -> ClipDesc:
-    """The last rung (§5.3 step 5): the whole reply IS the description, ``app`` /
+    """The last rung (ladder step 5): the whole reply IS the description, ``app`` /
     ``activity`` empty. Bounded defensively; ``emit.py`` applies the real budget."""
     return ClipDesc(
         app="",

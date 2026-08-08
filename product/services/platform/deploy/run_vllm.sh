@@ -4,7 +4,7 @@
 #
 # Serves Qwen/Qwen3-VL-32B-Instruct behind an OpenAI-compatible endpoint for
 # data-processing's clipcap stage (POST /v1/chat/completions with K stills per
-# clip, D-02). One vLLM process, tensor-parallel across two GPUs, loopback only.
+# clip). One vLLM process, tensor-parallel across two GPUs, loopback only.
 #
 # THE PINS ARE CODE, NOT KNOBS. Model name and weights revision are constants
 # here for the same reason clipcap pins the model name and the servers/ manifest

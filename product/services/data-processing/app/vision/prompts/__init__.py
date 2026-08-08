@@ -1,4 +1,4 @@
-"""The prompt pack — a git-tree registry whose content digest IS the dialect (D-13).
+"""The prompt pack — a git-tree registry whose content digest IS the dialect.
 
 One ``.prompt.md`` file per prompt (front-matter + ``[system]`` / ``[user]``), plus
 ``routes.json`` (scenario → pack id, family defaults, scenario labels), ``schemas.json``
@@ -15,7 +15,7 @@ backend-version (vB) bump is impossible to ship silently. There is no self-compo
 version tag: identity is the stage's ``<stage>.v<S>-<backend>.v<B>`` segment, and a
 prompt change is a vB bump, enforced by the digest pin.
 
-**Loading discipline (D-13 TOCTOU note).** Packs are read ONCE per process at import and
+**Loading discipline, and the TOCTOU it closes.** Packs are read ONCE per process at import and
 never re-stat'd. Prompts are baked into the image; the v0 ``VIDEO_PROMPT_DIR`` override
 and the ``VIDEO_CLIP_PROMPT`` pack override are DEAD (output-affecting env knobs, L4) —
 the registry loads from this package directory, full stop. Experiments construct an
@@ -217,7 +217,8 @@ def _load_lock_version(source_dir: Path) -> str:
 
 
 # --------------------------------------------------------------------------------------
-# Load ONCE at import (never re-stat'd — the D-13 TOCTOU discipline). Packaged dir ONLY:
+# Load ONCE at import, never re-stat'd: a pack re-read mid-process could disagree with
+# the digest already stamped into a record. Packaged dir ONLY:
 # the v0 VIDEO_PROMPT_DIR override was an output-affecting env knob and is dead (L4).
 # --------------------------------------------------------------------------------------
 _SOURCE_DIR = _PACKAGE_DIR

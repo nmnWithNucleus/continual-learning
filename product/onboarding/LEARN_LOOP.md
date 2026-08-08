@@ -587,7 +587,7 @@ pinned-schema rule — `continuum/app/daylog.py:1-8`). How `/context` records be
 
 This rendered text is what the amplifier retells 48× and the adapter trains on. Two consequences a
 co-founder should hold: **block characters are the training currency** (Phase-3 measured acquisition
-falling 3.2× for a 3.7× rise in chars/block — the reason DP's chars-per-second budget D-11 is a
+falling 3.2× for a 3.7× rise in chars/block — the reason DP's chars-per-second budget is a
 *correctness* knob), and **ordinal truncation is a real hazard** (the amplifier reads
 `block.text[:6000]`; OCR renders last; at high caption volumes 100 % of the OCR channel was
 silently truncated away, the clip budget keeps blocks at ~3.3 k chars; renderer reorder is E-4(c)).
@@ -836,8 +836,7 @@ The handful of choices to internalize to reason about this system.
    are placement+label+loss units the day-log consumes; an unprincipled record set produces
    unstable identities (survivor ordinals, decoder-dependent counts) and unreadable blocks. The
    law is executable (CI + registration-time raises), not prose.
-7. **OCR decoupled from the BWM and from the captioner — CPU specialist, injected as input** (D8,
-   D-06…D-09).
+7. **OCR decoupled from the BWM and from the captioner — CPU specialist, injected as input** (D8).
    - Alternative: let the 32B read pixels (POC measured Qwen3-VL OCR at 0.143 vs 0.857/1.000 for
      alternatives — and 3.1×-to-73× the GPU cost), or keep OCR out of the captioner entirely (fuse
      at consolidation).
@@ -1033,7 +1032,7 @@ that costs, not as a list to tick off.
    text use `accepted`/`processed`; a fresh reader of the C1 schema alone won't find dp_state —
    it's an internal ledger column, not a contract field.
    - Documented here so nobody hunts for it in C1.
-9. **D-09's hallucination counter is declared but unwired in production.**
+9. **The caption-grounding counter is declared but unwired in production.**
    `dp_caption_ungrounded_quote_total` is registered and seeded to zero
    (`data-processing/app/main.py:180-184`) but incremented nowhere in production code — the
    (already-widened) grounding scorer lives only in the offline eval harness

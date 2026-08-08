@@ -16,7 +16,7 @@ semantics — different wire and different configuration posture:
 
 `/infer` result: `{"regions": [{"text", "bbox": [x0,y0,x1,y1], "conf"}, ...]}` —
 bbox in pixels of the submitted image, origin top-left; text **verbatim and
-unfiltered** (thresholds/dedup/redaction are DP-side, D-07); `regions: []` when
+unfiltered** (thresholds/dedup/redaction are DP-side); `regions: []` when
 nothing legible was found (ran-and-empty, not an error). `params` accepts
 nothing; unknown params fail deterministically.
 

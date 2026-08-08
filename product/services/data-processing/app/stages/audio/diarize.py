@@ -14,7 +14,7 @@ default IS the pin — no clustering hints are sent. Sending hints would be a
 vB bump.
 
 Label normalization: the slot speaks ``speaker-N`` in FIRST-ONSET order (the
-plan §2 vocabulary), tie-broken on the raw label — re-derived here from the
+the dialect's vocabulary), tie-broken on the raw label — re-derived here from the
 server's turns rather than trusting its vocabulary (today's server emits
 ``spk_N`` already first-onset-ordered, so the mapping is spk_N -> speaker-N;
 any server relabeling cannot silently change this slot). Chunk-local by L1: no

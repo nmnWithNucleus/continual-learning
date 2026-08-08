@@ -90,7 +90,7 @@ def test_record_bytes_identical_across_env_matrix(monkeypatch, tmp_path,
 
 
 def test_reprocess_is_byte_identical(monkeypatch, tmp_path):
-    """§4's crash-table claim: a full reprocess under fixed versions is
+    """The crash-table claim: a full reprocess under fixed versions is
     byte-identical (no wall-clock field exists inside the record)."""
     first = _wire_bytes_for(monkeypatch, tmp_path, {}, "a")
     time.sleep(0.05)  # any wall-clock leak would move the second run's bytes

@@ -2,7 +2,7 @@
 REGISTERED.
 
 NO ``@register_stage`` on purpose: dogfood-only (the Phase-3 replay drill needs
-real caption-shaped data on the audio time spine), the ratified §2 dialect
+real caption-shaped data on the audio time spine), the ratified dialect
 excludes it, and C2 v1 has no ``injected_caption`` slot. Enabling it is a
 CODE-LEVEL graph composition — construct the stage WITH ITS INDEX PATH and
 resolve an explicit stage set (plus the additive contract slot). The v0 env

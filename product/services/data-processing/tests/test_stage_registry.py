@@ -78,7 +78,7 @@ def test_segment_with_experiment_code():
 
 def test_backend_override_at_construction_names_mock_in_segment():
     """Mock backends are selected the same way real ones are — by name, in the
-    version string (plan §3): a test constructs the SAME stage class with a mock
+    version string: a test constructs the SAME stage class with a mock
     Backend and the dialect segment says so."""
     s = _stage_cls()(backend=Backend("mock", 1))
     assert s.segment == "asr.v1-mock.v1"

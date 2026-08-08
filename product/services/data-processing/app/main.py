@@ -261,7 +261,8 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
     )
     # (dp_partial_write_total is gone: ONE atomic POST per chunk (L6) makes a
     # partial write structurally impossible — the counter had nothing to count.)
-    # Stage-side families (label sets verbatim from §8; bare where §8 lists them bare).
+    # Stage-side families. Label sets are deliberately narrow: a label is a dimension an
+    # operator alerts on, and every extra one multiplies the series count.
     metrics.declare_counter(
         "dp_video_parse_fallback_total",
         "Clip / OCR reply parse-ladder fallbacks, by pack and ladder step.",
@@ -272,7 +273,7 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
         "Outputs truncated at the char/token budget, by pass (caption | ocr).", ["pass"],
     )
     metrics.declare_counter(
-        "dp_ocr_redactions_total", "OCR spans deterministically redacted as secrets (D-07).",
+        "dp_ocr_redactions_total", "OCR spans deterministically redacted as secrets.",
     )
     metrics.declare_counter(
         "dp_ocr_frame_errors_total",
@@ -379,12 +380,12 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
     #   ALERT (replica-count robust):
     #     count(count by (modality, pipeline_version) (dp_pipeline_dialect)) by (modality) > 1
     #
-    # This refines §8's shorthand `count by (modality) (dp_pipeline_dialect) > 1`, which
+    # This refines the shorthand `count by (modality) (dp_pipeline_dialect) > 1`, which
     # over-fires once there is >1 replica: Prometheus adds an `instance` label per target,
     # so N replicas AGREEING on one dialect already yield N series and would trip the bare
     # count. The inner `count by (modality, pipeline_version)` collapses replicas first, so
     # the alert fires strictly on >1 DISTINCT dialect per modality — the drain-and-replace
-    # (never rolling) signal, D-14. Per-modality resolution is guarded: a modality that
+    # (never rolling) signal. Per-modality resolution is guarded: a modality that
     # cannot resolve right now is simply absent, never hiding the others.
     def _pipeline_dialects():
         out = []
@@ -400,7 +401,7 @@ def _setup_metrics(app: FastAPI, metrics: Metrics) -> None:
         "dp_pipeline_dialect",
         "Active pipeline dialect per modality (=1). Alert (replica-robust): "
         "count(count by (modality,pipeline_version) (dp_pipeline_dialect)) by (modality) "
-        "> 1 — a rolling deploy mixing dialects in one training window (D-14).",
+        "> 1 — a rolling deploy mixing dialects in one training window.",
         _pipeline_dialects, labelnames=["modality", "pipeline_version"],
     )
 
