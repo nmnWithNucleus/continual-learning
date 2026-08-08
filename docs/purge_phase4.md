@@ -326,15 +326,41 @@ Opened the repo as a day-one engineer: `README.md` → `product/README.md` → `
    fleet that schema-gates v1. Now recorded on continuum's board §Next 6.
 3. **`servers/ast/requirements.txt` does not pin `huggingface-hub`.** Recorded on the DP board
    §Next 7 since phase 2. A deliberate act, because pins feed `/health` identity.
-4. **35 dangling `plan §N` references in data-processing code**, across 20 files. Phase 2 deleted
-   the plan they point at. Not purge work in this phase's scope; a newcomer hits them immediately.
-5. **Service-internal histories** — the dated worklogs and workstream files in storage, recording,
-   continuum and platform. The founder rules on these separately after client testing; they are 38
-   of the 168 surviving census hits and every one is inside a dated entry.
-6. **A staleness mechanism for quoted numbers.** Suite counts, check counts and test totals appear
-   in prose across the boards and the onboarding view, and nothing fails when one drifts. The
-   ratchet and the link checker exist because the same argument was made about style and links.
+4. **A staleness mechanism for quoted numbers.** Suite counts, check counts and test totals
+   appear in prose across the boards and the onboarding view, and nothing fails when one drifts —
+   six were stale when this session started. The ratchet and the link checker exist because the
+   same argument was made about style and links. **Deferred by the founder.**
 
 ---
 
-**Phase 4 complete. Not pushed.** The founder merges phases 3 and 4 to `main`.
+## Founder rulings, taken at the close of this session
+
+**The diagram states the target system, and marks what is not built yet.** `denoise`, `translate`,
+world-data enrichment and wearable capture go back into `ARCHITECTURE.md` — they are where the
+product is going, and an architecture canvas is entitled to say so. What does *not* go back is
+drawing them indistinguishably from what runs: a dotted arrow is a designed contract, `*` is a
+designed stage inside a running service, and a legend says which is which. One clause stayed
+corrected because it was wrong the other way — "no mobile capture" understated the truth, since the
+phone web client captures mic and camera today and [D5](../product/DECISIONS.md) defers only mobile
+*screen* capture.
+
+**Service-internal histories stay for now, and go when the prototype is live.** The dated worklogs
+and workstream files in storage, recording, continuum and platform — 38 of the 168 surviving census
+hits — keep their history through client testing. The standing intent is recorded here: once the
+prototype is out, the tree talks about the *then current* system and not the whole marathon behind
+it.
+
+**The parity apparatus retires after client testing.** Ruled, not scheduled. Real capture from a
+phone soft-client is next, and until a real day has flowed through recording → DP → storage →
+continuum, two independent renderers are the only thing that can catch a renderer defect.
+
+**Nothing stale remains: purge all.** Executed, and the scope was larger than the question implied.
+The 35 `plan §N` references were one half of a single disease — phase 2 deleted the rebuild plan
+*and* `ws-video-clip.md`, and 149 sites across 42 files still cited both, including the whole
+D-01…D-16 pinned-decision register with its A-numbers, house rules and defect numbers. Nothing in
+the tree defines any of them. All 149 are gone and every reason they carried is written out in
+place. Commit `0f45639`.
+
+---
+
+**Phase 4 complete.** Merged to `main` and `dev` at the founder's instruction.
