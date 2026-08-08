@@ -1,7 +1,6 @@
 """Shared fixtures: a TestClient bound to a throwaway SQLite DB + blob dir, and
-C3/C4/C2 builders. C2 builders speak **v1** (the DP-rebuild shape, D24): the branch's
-storage validates and renders v1 exclusively (founder ruling R1, 2026-08-06) — the v0
-wire keeps running on the LIVE worktree service until the Stage F cutover."""
+C3/C4/C2 builders. C2 builders speak **v1** (D24): one record per chunk whose content
+is a slots map. Storage validates and renders v1 exclusively."""
 from __future__ import annotations
 
 import hashlib

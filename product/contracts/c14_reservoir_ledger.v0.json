@@ -42,7 +42,7 @@
             "description": "SHA-256 of the corpus text (UTF-8). This is what makes admission idempotent — re-admitting identical content is a no-op that does not even move `admitted_at` — and it is what continuum hangs its replay-mix stage key off, so a corpus that changed must produce a different key rather than a silently reused cache entry."
           },
           "chars": { "type": "integer", "minimum": 0, "description": "Length of the corpus text in characters. Cheap size accounting without fetching bodies." },
-          "admitted_at": { "type": "string", "format": "date-time", "description": "RFC3339 UTC instant of FIRST admission, storage-minted. Preserved across idempotent re-admission, exactly as /context preserves ingest_time across a reprocess: it records when the artifact landed, not when someone last asked about it." }
+          "admitted_at": { "type": "string", "format": "date-time", "description": "RFC3339 UTC instant of FIRST admission, storage-minted. Preserved across idempotent re-admission, exactly as /context preserves created_at across a reprocess: it records when the artifact landed, not when someone last asked about it." }
         }
       }
     }

@@ -36,8 +36,8 @@
 #   * read HOST and PORT from the environment and bind uvicorn to them;
 #   * expose GET /health returning HTTP 200 when ready;
 #   * use the active venv on PATH (do not create a private venv);
-#   * data-processing additionally reads STORAGE_URL (the v1 rebuild pins its
-#     model dialect in code — the v0 ASR_BACKEND knob is gone, Stage F);
+#   * data-processing additionally reads STORAGE_URL — and nothing that affects
+#     its output, because its model dialect is pinned in code (Slot Law L4);
 #   * recording additionally reads STORAGE_URL + DP_URL.
 #
 set -u

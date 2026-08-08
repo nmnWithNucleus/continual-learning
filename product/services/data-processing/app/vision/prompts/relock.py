@@ -25,7 +25,7 @@ def _archive_payload(packs: dict, routes: dict, pack_version: str, digest: str) 
         "pack_digest": digest,
         "note": "Full text of every pack + routes.json at this locked version — the complete "
                 "set of digest inputs, so a historical pipeline_version and its exact wire "
-                "text are reconstructable from this file alone (D-13).",
+                "text are reconstructable from this file alone.",
         "routes": routes,
         "packs": {
             pid: {

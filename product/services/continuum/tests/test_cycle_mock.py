@@ -105,9 +105,9 @@ def test_rawlog_replay_uses_ledger_enumeration_not_the_reservoir_ledger(
     """The enumeration read is LOAD-BEARING: a prior window storage has not
     consolidated contributes no replay, even though the reservoir remembers it.
 
-    Before D18 the prior windows were rebuilt from the reservoir entries' parsed
-    ids; now the reservoir ledger keys the stage (content shas) and the window
-    ledger says which windows exist and what their bounds are."""
+    The two ledgers answer different questions and neither substitutes for the
+    other: the reservoir keys the stage (content shas), and the window ledger says
+    which windows exist and what their bounds are."""
     import dataclasses
 
     from app.clients import LocalDayLogClient

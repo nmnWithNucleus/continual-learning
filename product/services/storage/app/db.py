@@ -27,7 +27,7 @@ Metadata tables (SQLite):
     behaviour for this user (today: ``home_tz``). Written ONLY by an explicit profile write;
     storage never seeds or infers it. Absent row == 404 == this user is not schedulable.
   - ``training_windows``: the D18 training-window ledger. One row per window over the
-    ``[last_trained_t, now-delta)`` ingest-time watermark; bounds immutable once opened. The
+    ``[last_trained_t, now-delta)`` ``updated_at`` watermark; bounds immutable once opened. The
     watermark itself is NOT a column — it is derived from this table (see
     ``Store.last_trained_t``), which is what makes "advances iff published" true by
     construction rather than by bookkeeping.
@@ -141,7 +141,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     updated_at      TEXT NOT NULL
 );
 
--- D18: the training-window ledger. One row per window over the ingest-time watermark
+-- D18: the training-window ledger. One row per window over the `updated_at` watermark
 -- range `[last_trained_t, now-delta)`. Bounds are IMMUTABLE once opened — continuum
 -- replays its crash-safe journal by window_id, so a retry that re-minted an id would
 -- force a full re-train, a second C5 entry and a second reservoir admission.
@@ -252,7 +252,7 @@ def window_delta_seconds() -> int:
     """The watermark lag ``delta`` in ``[last_trained_t, now-delta)``, default 60 s.
 
     It exists for exactly one reason: an in-flight write racing the boundary could
-    otherwise be assigned an ``ingest_time`` below ``t_end`` yet commit *after*
+    otherwise be assigned an ``updated_at`` below ``t_end`` yet commit *after*
     materialization read the range. It is watermark lag, not slack — so it is service
     config (``STORAGE_WINDOW_DELTA_SECONDS``), never a per-request knob a caller could
     shrink to zero.
@@ -354,7 +354,7 @@ class Store:
         column is nullable on a migrated DB — ``ALTER ... ADD`` cannot carry NOT NULL
         without a constant default; ``put_context`` always writes it.) The old ingest
         index goes — no query orders by ``created_at`` — and ``_SCHEMA`` then builds
-        the ``updated_at`` one. The OD-2 cutover wipes ``/context`` anyway; this keeps
+        the ``updated_at`` one. Nothing here depends on stored rows surviving; this keeps
         every pre-E DB file openable without a special case.
 
         RE-ENTRANT UNDER kill-9 (review round): python-sqlite3 autocommits DDL, so the
@@ -569,7 +569,7 @@ class Store:
         """Persist a C2 processed record. Idempotent upsert on record_id; blind replace.
         Returns record_id (the reply contract is ``{ok, record_id}`` at the surface).
 
-        D27 (§5.1): ``created_at`` is set on the FIRST landing of a ``record_id`` and
+        D27: ``created_at`` is set on the FIRST landing of a ``record_id`` and
         preserved forever after (it inherits the old ingest_time's semantics);
         ``updated_at`` bumps ONLY when the incoming ``record_json`` byte-compares
         different from the stored row. A byte-identical re-POST — DP's post-POST crash
@@ -690,9 +690,9 @@ class Store:
         record_id this store no longer holds, and no write arrives here. That is the
         designed posture, not a bug: E-2 is a retention / right-to-be-forgotten
         primitive, never a correctness mechanism ("deletion is never the mechanism for
-        correctness" stands). Rebuild-after-retraction is the OD-2 ``/raw`` replay tool
-        (future) or a version bump. ``/raw`` bytes are untouched too — bytes are sacred
-        (OD-2), with their own M5 primitives.
+        correctness" stands). Recovering a retracted record means replaying it from ``/raw``
+        or forking the dialect. ``/raw`` bytes are untouched too: the raw store is the one
+        thing nothing derives from, so it is deleted only by its own M5 primitives.
         """
         if record_id is None and chunk_id is None and pipeline_version is None:
             raise ValueError("retraction requires at least one selector")

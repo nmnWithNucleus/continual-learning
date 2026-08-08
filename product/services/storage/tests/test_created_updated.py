@@ -1,6 +1,6 @@
-"""D27 — `ingest_time` splits into `created_at` + `updated_at` (the §5.1 byte-compare).
+"""D27 — the storage clock splits in two: `created_at` + `updated_at`.
 
-The rules under test, verbatim from the ratified row and the Stage D close-out:
+The rules under test, verbatim from the ratified row:
 
   * `created_at` = first landing of a `record_id` (it inherits ingest_time's
     preserved-across-reprocess semantics);
@@ -58,8 +58,8 @@ def test_first_landing_mints_created_equal_updated(store, monkeypatch):
 
 
 def test_byte_identical_repost_leaves_the_row_completely_untouched(store, monkeypatch):
-    """The heal no-op input (Stage D: a still-holey heal re-POSTs byte-identical bytes)
-    and the §4 crash-convergence input (post-POST-pre-mark replay). No re-window, no
+    """The heal no-op input (a still-holey heal re-POSTs byte-identical bytes) and the
+    crash-convergence input (a post-POST, pre-mark replay). No re-window, no
     rowid churn, no stamp movement — the row is untouched, not merely equivalent."""
     _clock(monkeypatch, "2026-08-06T10:00:00Z")
     record = make_c2(user_id="u1")
@@ -120,7 +120,7 @@ def test_a_slot_regressing_repost_replaces_unconditionally(store, monkeypatch):
 
 
 def test_a_hole_migrating_between_slots_is_a_byte_different_replace(store, monkeypatch):
-    """The third heal shape (Stage D close-out law): byte-different but NOT fuller —
+    """The third heal shape: byte-different but NOT fuller —
     one hole fills while another opens. A literal fuller-wins reading would refuse it;
     the byte-compare correctly treats it as change."""
     rid = record_id_for("chunk-X", "video.v1-mock.v1")
@@ -237,10 +237,10 @@ def test_migration_renames_ingest_time_and_adds_updated_at(tmp_path):
     `created_at` (same first-landing semantics, so the data is already correct),
     adds `updated_at` backfilled equal (the only honest value: the last known change
     is the landing itself), drops the ingest index and builds the updated_at one.
-    The OD-2 cutover wipes /context anyway; this keeps every other table's DB file
+    Nothing depends on stored rows surviving; this keeps every other table's DB file
     openable without a special case."""
     db = tmp_path / "legacy.db"
-    with sqlite3.connect(db) as conn:  # the pre-E shape, verbatim
+    with sqlite3.connect(db) as conn:  # the pre-D27 shape, verbatim
         conn.execute(
             "CREATE TABLE context_records ("
             " record_id TEXT PRIMARY KEY, user_id TEXT NOT NULL,"

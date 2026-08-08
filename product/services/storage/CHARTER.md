@@ -15,11 +15,10 @@
 > unrecorded, silent breakage, or calling a thing BUILT when it is only ratified.
 > Full posture + what changes at dev/prod: [ARCHITECTURE.md](../../ARCHITECTURE.md) §Stage.
 
-**Status:** chartered · **Last updated:** 2026-08-07 (the open-questions preamble carries the
-[D29](../../DECISIONS.md) removed-whole clause; the D27/D28 joint rows landed 2026-08-06 with
-E-2's whole-record shape on the M5 card and M9 re-baselined, and nothing running here changed)
-· the [D18](../../DECISIONS.md) scope
-expansion is `built` (`a5a48fb`, 310 tests). Lineage: [§How this charter got here](#how-this-charter-got-here).
+**Status:** chartered · **Last verified against code:** 2026-08-08 · the
+[D18](../../DECISIONS.md) scope expansion is `built`, and the D27/D28 joint rows with it: whole-
+record retraction on the M5 card, the `updated_at` axis through §The time index, and M9's parity
+bar re-baselined against the v2 slot-walk renderer.
 
 ## Mission
 
@@ -36,30 +35,25 @@ produce safe, ordered, and fast to read.
 
 ## Scope — v0
 
-> **Expansion RATIFIED 2026-07-26 (D18) — the "data jobs" for the learn loop. **BUILT 2026-07-27** (`a5a48fb` storage · `1757efb` continuum · `2698b63` DP).**
-> The continuum/Morpheus design settled that continuum stays a lean training engine and storage
-> owns the *data* work around it; the founders' storage/C10 board ratified it and minted the
-> contract IDs. Rows tagged **In+** below. The 2026-07-23 framing is kept verbatim because it is
-> still the rationale:
+> **The data jobs ([D18](../../DECISIONS.md), `built`).** Continuum is a lean training engine and
+> storage owns the *data* work around it. Rows tagged **In+** below, and the standing rationale is:
 > **(1) Day-log materialization** — a scheduled job renders a user-day's `/context` (C2) records
 > into the segment/block **day-log** (incl. `render_block` anchored text); continuum fetches it via
-> C10 (which evolves from "raw record range read" to "day-log fetch"). **(2) Recipe registry** —
-> host versioned consolidation/serving recipes; continuum *and* inference pull the pinned recipe.
-> **(3) Reservoir custody** — store the amplified corpora continuum writes (audit/provenance);
-> replay itself re-reads prior day-logs. This keeps "storage produces no *faithful* data, trains
-> no models" intact: the day-log is a derived VIEW over C2, the reservoir holds training artifacts
-> others produced, and the registry holds config — none of it is new sensor data or model weights.
+> C10. **(2) Recipe registry** — host versioned consolidation/serving recipes; continuum *and*
+> inference pull the pinned recipe. **(3) Reservoir custody** — store the amplified corpora
+> continuum writes (audit/provenance); replay itself re-reads prior day-logs. This keeps "storage
+> produces no *faithful* data, trains no models" intact: the day-log is a derived VIEW over C2, the
+> reservoir holds training artifacts others produced, and the registry holds config — none of it is
+> new sensor data or model weights.
 >
-> **What D18 added on top of that framing, and what it costs us.** (a) A **fourth** responsibility,
-> the per-user **profile** (`home_tz`, C12) — and it is a *prerequisite*, not a peer: if storage
-> renders the day-log then storage inherits D17's timezone resolution (`daylog._block_zone` — the
-> record's `device_tz` wins, the window's `home_tz` falls back), so **materialization reads the
-> profile**. (b) The **training-window ledger** and the sole `window_id` minter, which the watermark
-> window puts here because `[last_trained_t, now−δ)` is a fact about *our* ingest clock and nothing
-> else can own it. (c) An obligation that arrives with the day-log and is easy to miss: **the
-> day-log is a second copy of user content**, so **M5's deletion primitives must cascade to it** —
-> and to the reservoir. A retraction that clears `/context` and leaves a materialized day-log
-> standing has deleted nothing. That is a genuine widening of M5, recorded in its row below.
+> **Three consequences that are easy to miss.** (a) The per-user **profile** (`home_tz`, C12) is a
+> *prerequisite*, not a peer: rendering the day-log means inheriting D17's timezone resolution
+> (`daylog._block_zone` — the record's `device_tz` wins, the window's `home_tz` falls back), so
+> **materialization reads the profile**. (b) The **training-window ledger** and the sole `window_id`
+> minter live here because `[last_trained_t, now−δ)` is a fact about *our* write clock and nothing
+> else can own it. (c) **The day-log is a second copy of user content**, so **M5's deletion
+> primitives must cascade to it** — and to the reservoir. A retraction that clears `/context` and
+> leaves a materialized day-log standing has deleted nothing.
 
 | | Item | Notes / owning sibling | Card |
 |---|---|---|---|
@@ -101,23 +95,19 @@ segment/block day-log, a derived view over `/context` that continuum fetches via
 - Serve it random-access by `(user_id, window_id)`. The wire is
   [ARCHITECTURE §Contracts → C10](../../ARCHITECTURE.md), never restated here.
 - Stamp the body with `daylog_format_version` and `recipe_id`; the format is recipe-versioned.
-- Membership is by `ingest_time`, which is what the watermark window requires.
+- Membership is by `updated_at`, which is what the watermark window requires.
 - Segment buckets sit on a **global epoch grid** rather than window-relative (`daylog.py:74`).
-- Apply the **one-dialect-per-record** rule: latest `ingest_time` wins per
-  `(chunk_id, content.kind, discriminator)`.
+- Apply the **one-record-per-chunk** rule: latest `updated_at` per `(chunk_id)`, rowid tiebreak.
 
 **Why it's this way**
 
-- **We inherit `daylog.py`'s `build_daylog` + `_render_block`** — the *product* renderer over C2
-  records. We do *not* inherit continuum's parity-locked `Profile.render_block`, which is
-  recipe-coupled and stays with the amplifier.
-- The global epoch grid is required once membership sits on the ingest axis, and it also makes a
-  bucket stable across re-materialization.
-
-**Watch out for**
-
-- The one-dialect rule has a named sub-item the builder had to close first — see
-  [§Open questions](#open-questions) item 7, now resolved.
+- **We own `daylog.py`'s `build_daylog` + `_render_block`** — the *product* renderer over C2
+  records. It is not continuum's parity-locked `Profile.render_block`, which is recipe-coupled and
+  stays with the amplifier.
+- The global epoch grid is required once membership sits on a storage-clock axis, and it also
+  makes a bucket stable across re-materialization.
+- `(chunk_id)` is the whole dedup key because a chunk has exactly one record (Slot Law L2), so
+  there is no sibling to break a tie against and no kind to key on.
 
 ### The training-window ledger and the `window_id` minter
 > `built` 2026-07-27 · [D18](../../DECISIONS.md) · `a5a48fb` storage · `1757efb` continuum · `2698b63` data-processing
@@ -308,19 +298,22 @@ redefined.
 **On C10.** It evolved in place and is `built` ([D18](../../DECISIONS.md), 2026-07-27). Its shape,
 rules, reasoning and full evolution live in one home,
 [ARCHITECTURE §Contracts → C10](../../ARCHITECTURE.md). Two things worth knowing from here: the
-window is `[last_trained_t, now−δ)` on the `ingest_time` axis, and the raw range read
+window is `[last_trained_t, now−δ)` on the `updated_at` axis, and the raw range read
 `GET /context/records?user_id=&from=&to=` is **not** retired — it stays first-class as D12's beta
 training feed, the debugging path, and C11-adjacent. C10-evolved is additive.
 
 ### The time index (the load-bearing decision)
 
 **In one line.** Every record is placed on two clocks — the device's wall-clock and storage's own
-ingest clock, and which one answers a question is decided here, once.
+write clock, and which one answers a question is decided here, once.
 
 **Rules**
 
-- Every record carries device wall-clock `t_start`/`t_end` (from C2/C4) **and** a storage-assigned
-  `ingest_time`. Wall-clock is the query axis; ingest time is the audit axis.
+- Every record carries device wall-clock `t_start`/`t_end` (from C2/C4) **and** storage-assigned
+  `created_at`/`updated_at` ([D27](../../DECISIONS.md)). Wall-clock is the content axis; the
+  storage clock is the completeness axis.
+- `created_at` is the first landing of a `record_id` and never moves. `updated_at` bumps only when
+  the stored `record_json` byte-compares different, so a no-op redelivery re-windows nothing.
 - **All timestamps are stored UTC, with the capturing device's local timezone alongside**
   (`device_tz`, IANA + `device_utc_offset_minutes`, carried on C2 `source{}`).
 - **UTC is canonical and is the only query axis.** `t_start` orders the timeline and answers every
@@ -346,28 +339,30 @@ ingest clock, and which one answers a question is decided here, once.
   splits](../../ARCHITECTURE.md) → *User timezone*): the per-record `device_tz` is the *fact* —
   where the user was, owned by the device, correct under travel, while the per-user profile
   `home_tz` is the *policy*, when this user's night is, owned by us.
-- **`t_start` and `ingest_time` are two axes and D18 assigns each a job.** Conflating them is the
-  same class of error D17 fixed for timezones. Event time is the *content* axis: recall queries,
-  day-log bucketing, block anchors, and deletion ranges — "delete last Tuesday" is a claim about a
-  lived period.
-- **Ingest time is the completeness axis.** It is the only axis on which "everything I had" is a
-  guarantee, so it is what continuum's training window watermarks on.
-- Continuum's nightly window (C10) is `[last_trained_t, now−δ)` per user **on the `ingest_time`
-  axis** ([D18](../../DECISIONS.md)). A single index-range scan must satisfy it at v0 scale, a
-  handful of pilot users.
+- **`t_start` and the storage clock are two axes and D18 assigns each a job.** Conflating them is
+  the same class of error D17 fixed for timezones. Event time is the *content* axis: recall
+  queries, day-log bucketing, block anchors, and deletion ranges — "delete last Tuesday" is a
+  claim about a lived period.
+- **The storage clock is the completeness axis.** It is the only axis on which "everything I had"
+  is a guarantee, so it is what continuum's training window watermarks on.
+- Continuum's nightly window (C10) is `[last_trained_t, now−δ)` per user **on the `updated_at`
+  axis** ([D18](../../DECISIONS.md), moved there by [D27](../../DECISIONS.md)). A single
+  index-range scan must satisfy it at v0 scale, a handful of pilot users.
 - Three properties follow, and they are the reason for the choice: **storage needs no timezone to
   serve C10 at all**; a missed or gate-failed night is *absorbed* into the next window rather
-  than lost; and *late data cannot exist*, because `ingest_time` is assigned by us at write, so a
+  than lost; and *late data cannot exist*, because `updated_at` is assigned by us at write, so a
   record can never land below an already-closed boundary.
+- The axis is `updated_at` rather than `created_at` so that a heal landing a byte-different record
+  flows into the next window, while a redelivery that changes nothing does not re-window anything.
 
 **Watch out for**
 
 - `δ` (default 60 s) exists for exactly one reason: an in-flight write racing the boundary could
-  otherwise be assigned an `ingest_time` below `t_end` yet commit after materialization read the
+  otherwise be assigned an `updated_at` below `t_end` yet commit after materialization read the
   range. It is watermark lag, not slack.
-- **Note the deliberate asymmetry, and do not "fix" it.** Training windows are ingest-time,
-  retraction ranges are event-time. They answer different questions, and making them agree would
-  break one of them.
+- **Note the deliberate asymmetry, and do not "fix" it.** Training windows sit on the storage
+  clock, retraction ranges on event time. They answer different questions, and making them agree
+  would break one of them.
 
 ## v0 deliverables
 
@@ -385,9 +380,8 @@ ingest clock, and which one answers a question is decided here, once.
 | M9 | **C10 evolved: day-log materialization + the training-window ledger** ([D18](../../DECISIONS.md)) | see the card: [↓](#m9--the-day-log-parity-bar) |
 
 ### M5 — deletion primitives, and what D18 widened
-> `designed` · widened 2026-07-26 by [D18](../../DECISIONS.md) · E-2 redesigned
-> whole-record by [D28](../../DECISIONS.md) and built on `dp-rebuild-v1` 2026-08-06
-> (rebuild Stage E WP-E3; lands at the Stage F cutover)
+> `designed` · widened 2026-07-26 by [D18](../../DECISIONS.md) · E-2 is whole-record
+> per [D28](../../DECISIONS.md), `built` 2026-08-06
 
 **In one line.** Full-user delete and time-slice delete, plus the whole-record retraction (E-2) —
 and every one of them must reach the derived stores too.
@@ -397,8 +391,7 @@ adapter artifacts, and schedules backup expiry. The deletion manifest is auditab
 orchestration and proof-of-deletion (its M2) call these primitives; we do not own the end-to-end
 pipeline.
 
-**Rules — E-2's shape** (redesigned by D28; the board-reviewed kind-granular shape of
-2026-07-26 retired unbuilt)
+**Rules — E-2's shape** ([D28](../../DECISIONS.md))
 
 - `DELETE /context/records?user_id=&record_id=&chunk_id=&pipeline_version=`, `user_id`
   required; selectors AND together and at least one is required (a selectorless call is
@@ -412,8 +405,8 @@ pipeline.
 - The time-slice delete ("delete last Tuesday", event-time bounds) is NOT E-2's job and
   remains M5's own unbuilt primitive.
 - E-2 never touches DP's done-ledger: a retracted chunk's redelivery still *skips*
-  upstream (200 + a record_id storage no longer holds) — designed; rebuild after a
-  retraction is the OD-2 `/raw` replay tool or a version bump.
+  upstream (200 + a `record_id` storage no longer holds). Recovering it means replaying
+  from `/raw` or forking the dialect — retraction is not an undo button.
 
 **Why it's this way**
 
@@ -445,9 +438,9 @@ pipeline.
 
 ### M9 — the day-log parity bar
 > `built` 2026-07-27 · [D18](../../DECISIONS.md) · bar narrowed by [D20](../../DECISIONS.md), then widened by F4
-> · re-baselined 2026-08-06 against the v2 slot-walk renderer over C2 v1 records ([D28](../../DECISIONS.md), rebuild Stage E WP-E4)
+> · re-baselined 2026-08-06 against the v2 slot-walk renderer over C2 v1 records ([D28](../../DECISIONS.md))
 
-**In one line.** Storage mints windows idempotently over the `ingest_time` watermark, materializes
+**In one line.** Storage mints windows idempotently over the `updated_at` watermark, materializes
 day-logs, and serves fetch-by-`(user, window_id)` plus enumeration and close.
 
 **Exit criterion — a differential proof, not a claim.** `scripts/daylog_parity_diff.py`, committed
@@ -469,12 +462,12 @@ with its output. Continuum's local path is **not deleted until the narrowed diff
   first written contradicted D18's own materialization rule and no code could satisfy both.
 - Continuum's `seg_id` *was* `floor((t − window_start)/segment_seconds)` over an *event-time*
   window origin, while D18 deletes the window origin from storage's grid and puts storage's window
-  on the *ingest* axis, where a backlog record yields a *negative* index.
+  on the storage clock, where a backlog record yields a *negative* index.
 - `seg_id` is written to `segments.jsonl` and **read by nothing** — the trainer and amplifier
   consume `blocks.jsonl` via `load_blocks`. The only reader anywhere is `phase3_daylog.py:88`,
   counting `len(b.seg_ids)` for a histogram, which is invariant under relabelling.
 - `content_fingerprint` **should** change when the renderer changes; forcing it to match would make
-  the cache lie. It changes once at cutover, that night re-runs, and that is correct.
+  the cache lie. It changes once, that night re-runs, and that is correct.
 
 **Watch out for**
 
@@ -523,9 +516,10 @@ that ships even though the *policy* does not.
 - **Eligibility plus an explicit sweep is the important one.** A retention config that deletes
   *implicitly* means a typo in a config file destroys user data with no review step and no record.
   This way, the blast radius of a bad edit is a wrong number in a report.
-- D18 established the deletion-is-not-correctness rule in the specific case: the one-dialect
-  materialization rule fixes the WS-VC double-count, and E-2 does not. It generalises — if we ever
-  find ourselves deleting records to make training come out right, the bug is upstream.
+- D18 established the deletion-is-not-correctness rule in the specific case: a record counted
+  twice in a day-log is fixed by the materialization rule that picks one, never by deleting the
+  other. It generalises — if we find ourselves deleting records to make training come out right,
+  the bug is upstream.
 
 **Watch out for**
 
@@ -581,12 +575,12 @@ Engineering:
 
    **Why it's this way**
 
-   - Storage stores **exactly what C2 carries, verbatim, plus its own `ingest_time`**. It corrects
+   - Storage stores **exactly what C2 carries, verbatim, plus its own `created_at`**. It corrects
      nothing, and data-processing normalizes nothing — it is a pure passthrough for `device_tz`,
      `device_utc_offset_minutes` and `device_location`.
-   - What makes this safe rather than naive is that the envelope now carries its own audit trail:
+   - What makes this safe rather than naive is that the envelope carries its own audit trail:
      `device_clock` (`synced|unsynced`) says whether the stamp is NTP-disciplined,
-     `device_utc_offset_minutes` witnesses what the device believed, and `ingest_time` is an
+     `device_utc_offset_minutes` witnesses what the device believed, and `created_at` is an
      independent server-side clock.
    - So skew is **detectable after the fact from stored data**, instead of being silently baked in
      by an upstream correction.
@@ -602,11 +596,11 @@ Engineering:
 
    **Why it's this way**
 
-   - **The window watermarks on `ingest_time`, not event time.** This dissolves the question rather
-     than answering it: a record landing with a `t_start` inside an already-trained window is
-     simply a record whose `ingest_time` is *now*, so it joins the current window and trains,
+   - **The window watermarks on the storage clock, not event time.** This dissolves the question
+     rather than answering it: a record landing with a `t_start` inside an already-trained window
+     is simply a record whose `updated_at` is *now*, so it joins the current window and trains,
      rendered in a block anchored to its own real local date.
-   - **Late data cannot be lost, because on an ingest-time watermark late data does not exist.**
+   - **Late data cannot be lost, because on a storage-clock watermark late data does not exist.**
      Content stays event-time-correct because day-log blocks are formed by temporal adjacency and
      carry their own anchors, so a week-old backlog forms its own blocks rather than corrupting
      today's.
@@ -619,58 +613,30 @@ Engineering:
      accumulates until a run is worth it.
    - Named cost: an inactive user's open window grows and is re-scanned nightly, which is correct
      and cheap at v0 scale.
-   - **Reprocessed records: one dialect per record, latest `ingest_time` wins**, keyed
-     `(chunk_id, content.kind, within-chunk discriminator)`. Keyed on `ingest_time` because
-     `pipeline_version` is a *composed* string and therefore not orderable; keyed on `content.kind`
-     because Phase-3 proved captions and transcripts can share one `pipeline_version`, so a
-     kind-blind rule drops transcripts to drop captions.
-   - **This is what actually fixes the re-consolidation double-count** (`daylog.py` filters on
-     neither field today), and it is why *E-2 is no longer a correctness blocker for the WS-VC
-     cutover*.
+   - **Reprocessed records: latest `updated_at` per `(chunk_id)` wins**, rowid tiebreak
+     ([D28](../../DECISIONS.md)). Keyed on a storage timestamp because `pipeline_version` is a
+     *composed* string and therefore not orderable, and keyed on `(chunk_id)` alone because one
+     record per chunk (Slot Law L2) leaves a chunk no siblings to distinguish.
+   - **This is what fixes the re-consolidation double-count**, and it is why deletion is not the
+     remedy for a record rendered twice: the rule picks one, rather than destroying the other.
    - **A `pipeline_version` bump is a forward-only correction.** It improves future training; it
      does not repair past weights, which on an append-only weight chain is irreducible.
-   - The remedy for a dialect bad enough to need repair is a deliberate **rebuild from base over
+   - The remedy for a dialect bad enough to need repair is a deliberate **re-run from base over
      retained history** — named as the escape hatch, not built. Accepted, named cost: the same
      lived moment can train twice in two dialects (OQ8 below).
-7. ~~**The within-chunk discriminator is not readable from C2 — a blocking sub-item for the build
-   slice.**~~ *Resolved (2026-07-27), option (a) taken: it is surfaced.*
-
-   **Why it's this way**
-
-   - `discriminator` is an additive-optional top-level field on C2
-     (`contracts/c2_processed_record.v0.json`), emitted by DP only when non-empty — absence, not
-     `""`, is the 1:1 contract, the shape D17 used for the civil-time fields, with both
-     `extra="forbid"` pydantic mirrors moved alongside it.
-   - It adds no new promise: DP already rejected duplicate discriminators within a chunk
-     (`stagegraph/executor.py:396-401`), so this only makes an enforced invariant readable.
-   - `record_id` is unchanged and pinned by test. The value was always an id input, and an empty
-     discriminator reproduces the two-component v0 id byte-for-byte, so nothing re-keyed.
-   - The day-log's one-dialect rule keys on `(chunk_id, content.kind, discriminator)` and is
-     covered by unit tests plus the live seam check.
-   - **Chosen over the cheaper alternative** — proving `(chunk_id, kind, t_start)` unique per
-     dialect, because that is a proof that expires silently the day a stage emits two records at
-     one timestamp, and D19's prototype posture makes an additive contract edit cheap.
-   - *Original text:* the one-dialect rule needs to group by `(chunk_id, content.kind,
-     discriminator)`, but the discriminator is today folded into the `record_id` hash and exists
-     as no independent field (`../data-processing/app/pipeline.py:33-46`).
-   - The build must either **(a)** surface it as an additive-optional C2 field — a schema edit, so
-     ARCHITECTURE first, then the schema, then *both* pydantic mirrors, which are `extra="forbid"`
-     on DP *and* storage and will reject it otherwise (the exact trap D17 hit), or *(b)* prove
-     `(chunk_id, kind, t_start)` unique per dialect and key on that.
-   - Do not start the materializer before this is chosen.
+7. *Retired with the record shape it was about ([D24](../../DECISIONS.md)). The number is kept so
+   older references resolve; the dedup key it asked about is OQ6's.*
 8. **Double exposure across a dialect bump (accepted, tracked).** Because a reprocessed record
    re-enters a later window, the same lived moment can be trained twice.
    - Suppressing already-rendered chunks would stop the double exposure, but it would equally stop
      the *correction* from ever training, and we bump precisely because the old dialect was worse.
      So **training the correction wins**. Revisit only if measured over-weighting appears.
 9. **Day-log and reservoir deletion cascade** (opened by D18; still open, now concrete).
-   - Both are second copies of user content, and both now **exist** as real stores — `day_logs` and
-     the reservoir are tables and directories in a live database as of the 2026-07-27 cutover, not
-     future work. So a retraction that clears `/context` and leaves them standing has deleted
-     nothing.
-   - Sharpened by the cutover: **E-2's `DELETE /context/records` is still unbuilt**, which the
-     fleet bring-up hit directly — clearing verification rows required a full re-wipe, because no
-     retraction primitive exists.
+   - Both are second copies of user content, and both **exist** as real stores — `day_logs` and the
+     reservoir are tables and directories in the live database, not future work. So a retraction
+     that clears `/context` and leaves them standing has deleted nothing.
+   - `DELETE /context/records` (E-2) is built and cascades to the day-log. What is still owed is
+     the reservoir leg and the full-user primitive.
    - See M5, which this widens. Design owed: does a delete cascade synchronously, or mark day-logs
      stale for re-materialization — the mechanism `home_tz` correction already uses?
 
@@ -690,7 +656,7 @@ lives here; a full-user delete cascades `/raw`, because the blobs are our store 
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Breach of life-stream data | product-ending trust loss | encryption at rest everywhere; hard per-user isolation; fail-closed access tests (M4); least-privilege creds |
-| Time-index defects (skew, tz, ordering) | training windows and recall queries silently wrong | UTC-only storage; `ingest_time` audit column; C2 validation rejects non-monotonic/absurd timestamps; a cross-device ordering test in M1 |
+| Time-index defects (skew, tz, ordering) | training windows and recall queries silently wrong | UTC-only storage; an independent `created_at` server clock; C2 validation rejects non-monotonic/absurd timestamps; a cross-device ordering test in M1 |
 | C6 sits on the request path | adds latency to every user turn | cached resolution; an explicit budget agreed with inference; fallback to base model if unreachable |
 | Incomplete deletion (backups, raw blobs, adapters) | right-to-be-forgotten violated | the manifest enumerates every store; backup expiry policy; per-user LoRA keeps adapter delete clean |
 | Unbounded stream growth | cost blowup + degraded queries | metadata/bulk split (DB vs GCS) from M0; retention hooks from day one; per-user growth tracked |
@@ -722,37 +688,5 @@ Eventual sub-teams:
 - Outside: vLLM multi-LoRA serving loads adapter weights from local paths — informs OQ2 (artifact
   placement near the serving node).
 
-## How this charter got here
-
-- **2026-08-06 — the DP-rebuild joint rows (D27/D28) built on branch, Stage E.**
-  - **Was** — E-2's card described the board-reviewed kind-granular retraction, and the
-    parity bar's baseline predated the rebuild.
-  - **Changed** — rebuild Stage E built the storage-side set on `dp-rebuild-v1`:
-    `created_at`/`updated_at` (byte-compare upsert), the C10 v2 slot-walk renderer,
-    E-2 as whole-record operations, and the D20 parity re-baseline.
-  - **Now** — the M5 card states the built whole-record shape (kind-granular retired
-    unbuilt, D28); the M9 card carries the re-baseline stamp; the running service is
-    untouched until the Stage F cutover.
-  - **Payoff** — the charter's cards describe the primitives that will actually land,
-    and the deletion-is-not-correctness line survived the redesign intact.
-- **2026-07-27 — the D18 scope expansion is `built`.**
-  - **Was** — all four expansion rows were ratified and not built, and this charter's status line
-    said so.
-  - **Changed** — the build landed (`a5a48fb`; 310 tests), and day-log byte-identity against
-    continuum was proven over two window origins.
-  - **Now** — day-log materialization, the training-window ledger, the recipe registry, reservoir
-    custody and the per-user profile all run in code.
-  - **Payoff** — the charter stopped describing an intention in the voice of a build.
-- **2026-07-26 — D18 put four data jobs here.**
-  - **Was** — storage owned three stores, and continuum did its own data work around training.
-  - **Changed** — the founders' storage/C10 board ratified the expansion, minted C12, C13 and C14,
-    and evolved C10 to a day-log fetch over a `[last_trained_t, now−δ)` ingest-time watermark
-    window.
-  - **Now** — the In+ rows above, each with its own card.
-  - **Payoff** — continuum stays a lean training engine, and nothing here shipped until it was
-    built and the day-log's byte-equality was proven.
-- **2026-07-26 — D17 added the profile row and corrected §The time index.**
-  - **Was** — §The time index promised a per-record timezone this service never stored.
-  - **Changed** — D17 built the timezone split end to end and added the per-user profile row.
-  - **Now** — the promise and the schema agree.
-  - **Payoff** — the gap was closed rather than the promise withdrawn.
+*This charter's own history is in git. What it decided is in the cards above and in
+[DECISIONS.md](../../DECISIONS.md).*

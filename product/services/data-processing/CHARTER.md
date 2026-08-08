@@ -274,7 +274,7 @@ reprocess is an upsert and not a duplicate.
    - M4 skew *estimation* remains available if a real unsynced-fleet problem appears, and would
      land as an additive corrected field beside the raw stamp, never overwriting it.
 5. Reprocessing policy on `pipeline_version` bumps: reprocess history (cost) vs version-forward only — interacts with `continuum`'s training windows.
-6. Known-faces/people registry — split is pinned in [ARCHITECTURE.md § Ownership splits](../../ARCHITECTURE.md#ownership-splits-pinned--cross-referenced-from-the-charters): we own matching/enrichment, `storage` persists the registry, `input` owns curation + consent UX. Still open here: what we cache locally and how registry edits invalidate that cache.
+6. Known-faces/people registry — split is pinned in [ARCHITECTURE.md § Ownership splits](../../ARCHITECTURE.md#ownership-splits): we own matching/enrichment, `storage` persists the registry, `input` owns curation + consent UX. Still open here: what we cache locally and how registry edits invalidate that cache.
 
 **Research**
 7. Captioning granularity for continuous life streams: the POC ran 20/10/5/1-min targets at ≈$7.8k for 753 h — which operating point (granularities × model tier) fits a per-user-day budget?
@@ -329,7 +329,7 @@ reprocess is an upsert and not a duplicate.
       mock. The captioning window equals the C1 chunk, span-parametric, and 60 s is escalation E-1.
     - **Not screen:** which OCR model for body-cam or browser is a later per-scenario call. The
       prompt pack plus a new backend version (a `vB` bump — no env knob) make it a code change.
-11. Voice-to-person linking: diarization yields anonymous speaker labels; linking them to people-registry identities (known-vs-unknown speakers) rides the same registry, and the deferred call is ours ([ARCHITECTURE.md § Ownership splits](../../ARCHITECTURE.md#ownership-splits-pinned--cross-referenced-from-the-charters)). **Recorded: deferred — not in the M5 exit gate**; revisit if speaker embeddings already produced by the diarizer make matching cheap.
+11. Voice-to-person linking: diarization yields anonymous speaker labels; linking them to people-registry identities (known-vs-unknown speakers) rides the same registry, and the deferred call is ours ([ARCHITECTURE.md § Ownership splits](../../ARCHITECTURE.md#ownership-splits)). **Recorded: deferred — not in the M5 exit gate**; revisit if speaker embeddings already produced by the diarizer make matching cheap.
 12. Non-speech and silence audio. ASR transcribes **speech only**, and Whisper hallucinates on
     non-speech or silence, so a chunk of pure ambient sound — a dishwasher, a car, a dog, yields
     nothing or garbage from ASR. *Decided 2026-07-09.*

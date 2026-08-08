@@ -1,5 +1,4 @@
-"""The storage HTTP seams — the D18 cutover, exercised end to end over a mock
-transport.
+"""The storage HTTP seams (D18), exercised end to end over a mock transport.
 
 Every client is driven through `httpx.MockTransport`, so the assertions are about
 the WIRE: which path, which params, which body, and what continuum does with the
@@ -35,11 +34,11 @@ def _transport(handler):
 def _daylog_body(win: Window, *, segments=None, blocks=None,
                  fingerprint="fp-from-storage", format_version="2",
                  recipe_id=None, version="2") -> dict:
-    """A C10 v2 body as storage actually serves one (slot-walk renderer, Stage E).
+    """A C10 v2 body as storage actually serves one (the slot-walk renderer).
 
-    The two version stamps used to be invented here — `"daylog-v1"` and a recipe id
-    nobody was pinned to — which was harmless only for as long as continuum ignored
-    them. `daylog_format_version` is storage's `DAYLOG_FORMAT_VERSION`, the string
+    The two version stamps must be the REAL ones, not fixture inventions: a stamp
+    nobody is pinned to is harmless only for as long as continuum ignores it, and
+    continuum refuses on them. `daylog_format_version` is storage's `DAYLOG_FORMAT_VERSION`, the string
     `"2"`; `recipe_id` defaults to whatever THIS run is pinned to, so the happy path
     stays true when the pin moves and only the tests that mean to disagree do.
     """
@@ -181,10 +180,9 @@ def test_a_day_log_in_an_unknown_format_dialect_is_refused():
 
 
 def test_a_v1_stamped_body_is_refused_at_the_contract_gate():
-    """Stage F cutover teaching: the wipe is fresh-forward, so no v1 day-log can
-    legitimately exist post-cutover — a body still stamped C10 v1 is a stale or
-    rolled-back storage, and training on it would re-open the exact dialect drift
-    the stamps exist to announce. The net that once refused v2 now refuses v1."""
+    """A body stamped C10 v1 can only mean a stale or rolled-back storage, and
+    training on it would re-open the exact dialect drift the stamps exist to
+    announce. The net refuses in whichever direction the mismatch runs."""
     win = make_window("u-h", 20, "UTC")
     client = HttpDayLogClient(STORAGE, transport=_transport(
         lambda r: httpx.Response(200, json=_daylog_body(
@@ -194,10 +192,9 @@ def test_a_v1_stamped_body_is_refused_at_the_contract_gate():
 
 
 def test_a_v1_format_stamp_alone_is_refused_by_the_dialect_net():
-    """The format net, exercised on its own axis: even a body whose contract stamp
-    says v2, but whose `daylog_format_version` still says "1", is refused — "1" left
-    SUPPORTED_DAYLOG_FORMAT_VERSIONS at the cutover teaching, and the tuple (not the
-    contract check) is what guards the rendered BLOCK TEXT dialect."""
+    """The format net, exercised on its own axis: a body whose contract stamp says
+    v2 but whose `daylog_format_version` says "1" is still refused. The tuple, not
+    the contract check, is what guards the rendered BLOCK TEXT dialect."""
     win = make_window("u-h", 20, "UTC")
     client = HttpDayLogClient(STORAGE, transport=_transport(
         lambda r: httpx.Response(200, json=_daylog_body(win, format_version="1"))))
@@ -320,8 +317,8 @@ def test_window_open_posts_user_and_returns_the_ledger_row():
     assert seen["body"] == {"user_id": "u-w"}       # bounds are NOT settable
     assert opened.window_id == win.window_id
     assert opened.start_utc == win.start_utc and opened.end_utc == win.end_utc
-    # home_tz is stamped on by us; storage's ledger row carries no zone because the
-    # ingest-time window needs none.
+    # home_tz is stamped on by us; storage's ledger row carries no zone because a
+    # window on the storage clock needs none.
     assert opened.tz == "America/Los_Angeles"
     assert opened.state == "open"
 
@@ -667,12 +664,11 @@ def test_http_is_the_default_so_the_nightly_runs_over_the_seam(monkeypatch):
     This test previously asserted the opposite — `storage_clients == "local"`, on the
     grounds that the local day-log path is the M9 parity reference. That reasoning
     confuses "not deleted" with "default": the parity reference is driven by the diff
-    script and by tests that hand it records, never by a production night. The D18
-    slice IS continuum talking to storage over HTTP, `scripts/seam_check.py` proves
-    exactly that path against the real service, and the local default meanwhile
-    routed the nightly through an event-time range read over an ingest-time window
-    and trained on an EMPTY day-log. A default nobody exercises is wrong even when it
-    works; this one did not work.
+    script and by tests that hand it records, never by a production night. D18 makes
+    continuum talk to storage over HTTP and `scripts/seam_check.py` proves exactly
+    that path against the real service, whereas a local default routes the nightly
+    through an event-time range read over a storage-clock window and trains on an
+    EMPTY day-log. A default nobody exercises is wrong even when it works.
     """
     from app.clients import HttpDayLogClient as _Http
     from app.clients import day_log_client, recipe_registry, reservoir_client
@@ -716,9 +712,9 @@ def test_the_local_parity_reference_is_still_selectable(monkeypatch):
 
 
 def test_local_without_records_refuses_instead_of_returning_an_empty_day(monkeypatch):
-    """REGRESSION (F2b). `local` + no records in hand must REFUSE, loudly.
+    """REGRESSION. `local` + no records in hand must REFUSE, loudly.
 
-    The window is `[last_trained_t, now−δ)` on storage's INGEST axis;
+    The window is `[last_trained_t, now−δ)` on storage's `updated_at` axis;
     `GET /context/records?from=&to=` filters `t_start`, which is EVENT time. Wiring
     that read in as the local backend's default record provider produced an EMPTY
     day-log and a `skipped_no_data` night — a default configuration that trained on
@@ -740,7 +736,7 @@ def test_local_without_records_refuses_instead_of_returning_an_empty_day(monkeyp
         day_log_client(get_settings(), recipe)
     message = str(exc.value)
     # The message must name the axis mismatch and the way out, not just fail.
-    assert "INGEST" in message and "EVENT" in message
+    assert "updated_at" in message and "EVENT" in message
     assert "CONTINUUM_STORAGE_CLIENTS=http" in message
 
 
@@ -758,7 +754,7 @@ def test_the_nightly_default_never_reads_context_records(monkeypatch):
 
     def never(*a, **k):  # pragma: no cover - the assertion is that it is not reached
         raise AssertionError("the nightly path read /context/records — that is an "
-                             "EVENT-time query and the window is INGEST-time")
+                             "EVENT-time query and the window is on `updated_at`")
 
     monkeypatch.delenv("CONTINUUM_STORAGE_CLIENTS", raising=False)
     monkeypatch.setattr("app.context_reader.fetch_window_records", never)
@@ -804,9 +800,9 @@ def test_a_records_in_hand_provider_always_selects_the_local_backend(monkeypatch
 
 
 def test_no_window_id_parsing_survives_anywhere_in_app():
-    """Item 6 of the cutover, enforced mechanically over the AST (so prose about the
-    deletion does not trip it): nothing under `app/` may index a `window_id`, reach
-    for a `local_date`/`local_window_date`, or feed a window id to a date parser.
+    """The opacity rule, enforced mechanically over the AST (so prose about it does
+    not trip the check): nothing under `app/` may index a `window_id`, reach for a
+    `local_date`/`local_window_date`, or feed a window id to a date parser.
 
     `app/morpheus/` is included in the sweep and must stay clean — it is the
     research-parity kernel and has never known what a window is."""

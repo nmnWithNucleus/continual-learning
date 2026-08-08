@@ -71,7 +71,7 @@ what we preserve.
 
 ````markdown
 ### C10 · storage → continuum — the training-window read
-> `built` 2026-07-27 · [D18](DECISIONS.md) · [c10_daylog.v1.json](contracts/c10_daylog.v1.json)
+> `built` 2026-07-27 · [D18](DECISIONS.md) · [c10_daylog.v2.json](contracts/c10_daylog.v2.json)
 
 **In one line.** Continuum asks storage what to train on tonight; storage answers.
 

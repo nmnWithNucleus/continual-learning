@@ -5,7 +5,7 @@ returns, /health is 503 "warming" and /infer is 503 transient. If load() raises,
 /health flips to 500 "load_failed" (the runner turns that into a loud process
 exit; under TestClient the app object stays inspectable). Inference is serialized
 with a lock — model backends are not assumed thread-safe; replicas are the
-parallelism (plan §3).
+parallelism.
 """
 from __future__ import annotations
 

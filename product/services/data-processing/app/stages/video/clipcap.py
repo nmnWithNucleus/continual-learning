@@ -3,14 +3,13 @@
 Thin client over an OpenAI-compatible endpoint (the self-hosted Qwen3-VL — an
 external cloud-style endpoint, not a supervised model server, so ``server = ""`` and
 the wire lives in ``app/vision/clipcap/vlm.py``). Consumes ``clipprep``'s transient
-frames and ``screentext``'s digest, injects the OCR text into the prompt (D-09 — one
-witness on two channels, the L11 corollary), parses the reply through the tolerant
-ladder, and ABSORBS the retired ``vision/emit.py``'s render: the slot value is
-``render_caption`` — the D-10 one-paragraph ``"{app} — {activity}. {description}"``
-render, D-12 single-line collapse, and the D-11 char cap (a CORRECTNESS knob: the
-chars-per-second-of-life dose) applied on a sentence boundary. The rest of emit.py
-did NOT move here: the D-05 verbatim-span rule lives in ``pipeline.build_c2`` and the
-L12 grid rule lives in the law + its tests.
+frames and ``screentext``'s digest, and injects the OCR text into the prompt — one
+witness on two channels, so agreement between them is not corroboration (the L11
+corollary). It parses the reply through the tolerant ladder and renders the slot value
+with ``render_caption``: a one-paragraph ``"{app} — {activity}. {description}"``, every
+whitespace run collapsed so no newline can reach the record, truncated on a sentence
+boundary at the chars-per-second-of-life budget. That cap is a CORRECTNESS knob, not a
+tidiness one: it is the training dose per second of the user's life.
 
 OPTIONAL (L7): a captioner failure is a ``caption`` hole (record ships, healed by
 redrive) — v0's raise-and-redeliver posture, translated. ``needs = ("clipprep",
@@ -32,7 +31,7 @@ Code pins (L4) — the v0 env knobs they replace:
   =============================  ==================  ============================
   VIDEO_VLM_MODEL                MODEL               Qwen/Qwen3-VL-32B-Instruct
   VIDEO_SCENARIO                 SCENARIO            screen-mac
-  VIDEO_CAPTION_CHARS_SHARE      CAPTION_RATE        16  (of the 22 total, D-11)
+  VIDEO_CAPTION_CHARS_SHARE      CAPTION_RATE        16  (of the 22 total)
   VIDEO_CLIP_PROMPT              (dead)              routes.json + SCENARIO decide
   VIDEO_VLM_STRUCTURED           (dead)              guided decoding pinned OFF
   VIDEO_MAX_PROMPT_IMAGES_CHECK  (dead)              clipprep's max_frames=12 bounds K
@@ -66,7 +65,7 @@ logger = logging.getLogger("data-processing.stages.video.clipcap")
 # ---- code pins (L4). Editing any of these is a vB bump. --------------------------
 MODEL = "Qwen/Qwen3-VL-32B-Instruct"   # served-model-name requested on the wire
 SCENARIO = "screen-mac"                # prompt route (routes.json) + [[scenario_label]]
-CAPTION_RATE = 16                      # D-11: caption chars/second-of-life (of 22 total)
+CAPTION_RATE = 16                      # caption chars/second-of-life (of 22 total)
 
 # The aggregate prompt-pack digest this backend version was shipped against. Computed
 # by app/vision/prompts at import from the on-disk pack; `python -m app.vision.prompts`
@@ -105,15 +104,15 @@ def _vlm_timeout_s() -> float:
 
 
 def render_caption(desc: ClipDesc, span_seconds: float) -> tuple[str, bool]:
-    """The single-line, budgeted caption string (D-10 / D-11 / D-12), absorbed from the
-    retired vision/emit.py, plus whether the D-11 cap actually truncated it (the
+    """The single-line, budgeted caption string, absorbed from the
+    retired vision/emit.py, plus whether the char cap actually truncated it (the
     ``dp_video_truncated_total{pass="caption"}`` signal). Pure and deterministic:
     identical ``(desc, span)`` → identical result on every worker."""
     app = desc.app.strip()
     activity = desc.activity.strip()
     description = desc.description.strip()
 
-    # D-10: "app — activity." lead when present, degrading so a fallback (empty app /
+    # "app — activity." lead when present, degrading so a fallback (empty app /
     # activity) never renders a dangling " — " or a leading ". ".
     if app and activity:
         lead = f"{app} — {activity}."
@@ -125,11 +124,11 @@ def render_caption(desc: ClipDesc, span_seconds: float) -> tuple[str, bool]:
         lead = ""
     text = f"{lead} {description}".strip() if lead else description
 
-    # D-12: collapse every whitespace run (incl. any stray newline) to one space. The
+    # collapse every whitespace run (incl. any stray newline) to one space. The
     # parse ladder already cleaned each field; this guards the joined string.
     text = " ".join(text.split())
 
-    # D-11: truncate to the per-record char budget on a sentence boundary (word-boundary
+    # truncate to the per-record char budget on a sentence boundary (word-boundary
     # fallback inside truncate_sentence). cap == 0 → "" (a valid empty caption).
     capped = truncate_sentence(text, caption_cap(span_seconds, CAPTION_RATE))
     return capped, capped != text

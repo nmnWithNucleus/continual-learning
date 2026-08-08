@@ -1,6 +1,6 @@
 """Wire-contract tests for the servers/common framework.
 
-The contract every model server speaks (plan §3, L9):
+The contract every model server speaks (Slot Law L9):
 
   GET  /health   -> 200 {"ok": true,  "status": "ready", "server", "identity"} once warm
                  -> 503 {"ok": false, "status": "warming", "server"} while loading

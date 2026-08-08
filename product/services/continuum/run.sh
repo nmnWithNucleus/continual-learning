@@ -2,10 +2,10 @@
 # Headless demo of the nightly loop: venv bootstrap -> tests -> one real night on
 # the mock backend (no GPU).
 #
-# The night is no longer fully headless, and that is the D18 cutover rather than a
-# regression: the training WINDOW is opened by storage (`POST /training/windows`,
-# an idempotent get-or-create over the ingest-time watermark) and the timezone
-# comes from the user's C12 profile. Continuum mints neither, and there is no
+# The night is not fully headless, and that is D18 rather than a regression: the
+# training WINDOW is opened by storage (`POST /training/windows`, an idempotent
+# get-or-create over the `updated_at` watermark) and the timezone comes from the
+# user's C12 profile. Continuum mints neither, and there is no
 # default timezone anywhere. So the demo night needs a storage service; the test
 # suite does not, and still runs everywhere.
 #
@@ -13,7 +13,7 @@
 # It told you to write a profile and then run `--synthetic`, and that sequence ends
 # in `httpx.HTTPStatusError: Client error '409 Conflict' for url .../training/windows`
 # — because a training window starts at the user's `last_trained_t` or, for a
-# never-trained user, their EARLIEST INGEST TIME, and a user with no `/context`
+# never-trained user, their EARLIEST `updated_at`, and a user with no `/context`
 # records has neither. `--synthetic` does not substitute for that: it replaces the
 # DAY-LOG, not the WINDOW. So the demo needs THREE preconditions, not one, and this
 # script now establishes all three instead of naming one of them:
@@ -26,8 +26,8 @@
 #                            written seconds ago is empty and storage refuses it
 #
 # It also runs the REAL path rather than `--synthetic`: the seeded records are in
-# storage, so storage materializes the day-log and the demo exercises the C10 fetch
-# that the cutover is actually about.
+# storage, so storage materializes the day-log and the demo exercises the real C10
+# fetch rather than a rendering shortcut.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -83,8 +83,8 @@ STORAGE_URL="$STORAGE_URL" ./.venv/bin/python - \
 """Establish (1) the C12 profile and (2) an ingest history for the demo user.
 
 Seeds a synthetic day through the SAME generator `--synthetic` uses, but writes it
-to storage rather than rendering it in-process — which is the point of the cutover:
-storage materializes the day-log, continuum fetches it.
+to storage rather than rendering it in-process, which is the whole seam: storage
+materializes the day-log, continuum fetches it.
 """
 import sys
 from datetime import datetime, timedelta, timezone
@@ -108,7 +108,7 @@ else:
     now = datetime.now(timezone.utc).replace(microsecond=0)
     # A throwaway 24 h EVENT-time span, used only to give the generated records
     # plausible t_start values. It is not a training window and nothing mints one
-    # here: membership in the real window is by storage-assigned ingest_time.
+    # here: membership in the real window is by storage-assigned `updated_at`.
     span = Window(window_id="w20260101T000000Z", user_id=user, tz=tz,
                   start_utc=now - timedelta(hours=24), end_utc=now)
     records = [r for r in synth_records(span, seed=7, events=40)

@@ -1,4 +1,4 @@
-"""The delta gate: the floor, the six D-04 calibration vectors, classification, the OCR
+"""The delta gate: the floor, the six calibration vectors, classification, the OCR
 selector (floor convention + rank-free cap + anchor), and determinism.
 
 Drives ``app/vision/delta.py`` and ``app/vision/clip.py``'s Pass A directly (no full
@@ -44,7 +44,7 @@ def _spreads(maps):
 @requires_decoder
 @pytest.mark.parametrize("color", ["black", "white", "gray"])
 def test_floor_is_exactly_two_on_flat(color, tmp_path):
-    """CRITICAL exit criterion (D-04): the measured delta FLOOR is EXACTLY 2 on flat black,
+    """CRITICAL exit criterion: the measured delta FLOOR is EXACTLY 2 on flat black,
     flat white and flat 50 %-gray — a content-independent artefact of the area downscale
     (verified identical under lossless ffv1, so it is the scaler, not the codec). spread 0."""
     maps, times, _ = _analyze(fx.flat_clip(color), tmp_path)
@@ -61,12 +61,12 @@ def test_floor_is_exactly_two_on_flat(color, tmp_path):
         assert cell.spread == 0, f"{color}: floor spread must be 0, got {cell.spread}"
 
 
-# ==================== THE SIX D-04 CALIBRATION VECTORS reproduce ========================
+# ======================= THE SIX CALIBRATION VECTORS reproduce ==========================
 
 @requires_decoder
 def test_vector_app_switch_saturates_one_delta(tmp_path):
     """App switch: ONE delta saturates (peak 255, spread 1024 = full-frame change) and the
-    rest sit at the floor (peak 2). The record set is unaffected either way (D-05)."""
+    rest sit at the floor (peak 2). The record set is unaffected either way."""
     maps, times, _ = _analyze(fx.appswitch_clip(), tmp_path)
     peaks, spreads = _peaks(maps), _spreads(maps)
     saturated = [i for i, (p, s) in enumerate(zip(peaks, spreads)) if p == 255 and s == 1024]
@@ -132,7 +132,7 @@ def test_vector_fast_typing_is_wider_than_slow_typing(tmp_path):
 @requires_decoder
 @requires_font
 def test_mechanism_whole_frame_mean_is_blind_to_typing(tmp_path):
-    """The D-04 mechanism claim, made executable: a WHOLE-FRAME mean abs-difference is
+    """The mechanism claim, made executable: a WHOLE-FRAME mean abs-difference is
     ~blind to typing (the changed text is ~0.03 % of frame area, divided away), while the
     binarize-then-max metric recovers it well above the floor. This is why Pass A binarizes
     BEFORE the area downscale and takes the MAX over cells, not a frame mean."""
@@ -197,7 +197,7 @@ def test_floor_time_none_when_boundary_beyond_chunk():
 # =============================== THE RANK-FREE CAP =====================================
 
 def test_even_spaced_subset_is_rank_free():
-    """D-07: the cap keeps evenly-spaced items over the TIME-SORTED survivors, never a
+    """The cap keeps evenly-spaced items over the TIME-SORTED survivors, never a
     magnitude rank — so two ffmpeg builds ordering a tight cluster differently cannot emit
     different frames. The choice depends only on position."""
     assert delta.even_spaced_subset([2.0, 4.0, 6.0, 8.0], 3) == [2.0, 6.0, 8.0]
@@ -232,7 +232,7 @@ def test_selector_idle_flat_chunk_selects_nothing():
 
 
 def test_selector_anchor_accumulates_sub_threshold_change():
-    """The anchor property (D-04): a per-delta change BELOW IDLE_PEAK (peak 6 <= 8) never
+    """The anchor property: a per-delta change BELOW IDLE_PEAK (peak 6 <= 8) never
     fires on its own, but accumulated since the last read it crosses and fires — then the
     accumulator resets. So slow drift is caught without any single delta crossing."""
     times = [2.0, 4.0, 6.0, 8.0]

@@ -26,7 +26,7 @@ WHAT IS DELIBERATELY NON-DEFAULT ABOUT THE SERVER WE START, AND WHY
 -------------------------------------------------------------------
 `STORAGE_WINDOW_DELTA_SECONDS=0`. In production δ (default 60 s) covers in-flight writes
 racing the window boundary: a window ends at `now − δ` so that every record with an
-`ingest_time` below `t_end` has certainly committed. This harness is the one setting
+`updated_at` below `t_end` has certainly committed. This harness is the one setting
 where δ is provably unnecessary — there is exactly one writer, it is this script, and it
 has already received the 200 for every record before a window is opened. Left at 60 s the
 check could not exist at all: a never-trained user's window is `[earliest_ingest, now−60)`,
@@ -132,7 +132,7 @@ RFC3339 = "%Y-%m-%dT%H:%M:%SZ"
 # than trusting the note in the artifact.
 RECIPE_V10 = "consolidation-v1.0"
 RECIPE_V11 = "consolidation-v1.1"
-# The shipped default since the Stage F cutover teaching (2026-08-07): forks v1.1
+# The shipped default (D28): forks v1.1
 # with every knob byte-identical, so it inherits replay.source='rawlog' — the knob
 # the 7b blocker exists to check. 7b/7c still drive v1.0/v1.1 EXPLICITLY: the
 # night-one-stops fact and the two-night proof are properties of those recipes,
@@ -475,7 +475,7 @@ CLOCK_409 = "not strictly greater than the floor"
 """Storage's window-open collision guard.
 
 `t_end` must be strictly greater than the user's watermark AND every prior window end
-AND (for a never-trained user) their earliest ingest_time. Timestamps are second
+AND (for a never-trained user) their earliest `updated_at`. Timestamps are second
 granularity, so with δ=0 this guard is a real sub-second wall-clock wait: a window
 opened in the very second a record was ingested, or in the second a previous window
 ended, is legitimately refused. Everywhere this script opens a window it waits that
@@ -780,7 +780,7 @@ def step3(st: Storage) -> dict[str, Any]:
     # opened would sit exactly on t_end and be excluded. One tick of real time, waited
     # for honestly rather than papered over with a fixture clock.
     time.sleep(1.5)
-    R.note("slept 1.5 s so every record's ingest_time is strictly below the next "
+    R.note("slept 1.5 s so every record's `updated_at` is strictly below the next "
            "window's t_end (half-open [t_start, t_end), second granularity)")
     R.end()
     return {"home_t": home_t, "notz_t": notz_t, "trav_t": trav_t}
@@ -1439,7 +1439,7 @@ def step7c(st: Storage) -> None:
         # =========================== NIGHT ONE =====================================
         n1 = _post_night(st, USER_V11, "v11n1", base, MARK_N1)
         R.check("night 1's 6 C2 records land", n1 == 6, f"{n1}/6 accepted")
-        time.sleep(1.5)   # every ingest_time strictly below the next window's t_end
+        time.sleep(1.5)   # every `updated_at` strictly below the next window's t_end
 
         w1, _ = open_window_when_clock_allows(lambda: ledger.open(USER_V11, tz=HOME_TZ))
         R.check("night 1's window opened over HTTP", bool(w1.window_id),

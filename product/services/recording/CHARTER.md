@@ -155,20 +155,20 @@ founders' board + this note).
 recording service was wrapped to the alpha bar (detail: [HANDOFF.md](HANDOFF.md)). Delivered:
 the M0 ingest spine hardened into a **checked "zero silent loss" guarantee** (continuity
 ledger + DP break/dup detector + two-leg gap report), the *fuller ASR pipeline* (faster-whisper
-standing + VAD gate), *VAD-cut chunking* (OQ4 → D-M1-2), and *three capture clients* on one
+standing + VAD gate), *VAD-cut chunking* (OQ4, ratified with data-processing), and *three capture clients* on one
 `/capture/*` wire, each alpha-verified `clean` on real hardware:
 - **Phone web** (`clients/web/`) — mic + camera over HTTPS/tunnel; the bodycam stand-in + the
   beta press-record surface. (Not an M-milestone itself; M3 wearable hardware swaps in later.)
 - **Browser extension** (`clients/extension/`) — *M4 essentially met* (consent path deferred,
-  D13): passive active-tab capture (video+audio via `tabCapture`, D-E7), flows through the same
+  D13): passive active-tab capture (video+audio via `tabCapture`), flows through the same
   chunk/retry path, C1 carries the browser `device_id`/modality.
 - **Mac CLI** (`clients/mac/`) — *partial M1*: screen + mic capture (ffmpeg avfoundation) with the
   offline queue, real-avfoundation verified.
 - *Still open for full M1:* webcam, the pairing flow, and a full-workday soak (alpha was minutes,
   not a workday); a mac menu-bar/GUI app (ScreenCaptureKit, visible capture indicator) is a later
   surface — capability exists via the CLI.
-Client transport pinned **segmented-HTTP for all v0 surfaces** (D-M1-5; streaming ingest a
-deferred additive leg — recorded on the founders' board as D14).
+Client transport is pinned **segmented-HTTP for all v0 surfaces**, with streaming ingest a
+deferred additive leg ([D14](../../DECISIONS.md)).
 
 ---
 
@@ -192,8 +192,8 @@ deferred additive leg — recorded on the founders' board as D14).
      CRF 28) is readable but soft on fine text — `--max-width 2560+` is the current user lever;
      per-modality fidelity targets remain this open joint decision, not a per-client flag.
    - *Resolved per-modality (2026-07-19, joint recording × data-processing)*, with the real
-     pipelines standing: faster-whisper ASR, pyannote diarization, AST acoustic and Qwen3-VL
-     keyframe captioning plus OCR, all node-7-verified.
+     pipelines standing: faster-whisper ASR, pyannote diarization, AST acoustic tagging, and on
+     the video leg a Qwen3-VL clip caption plus a PP-OCR screen-text read, all node-7-verified.
 
    **Why it's this way**
 
@@ -204,14 +204,14 @@ deferred additive leg — recorded on the founders' board as D14).
      right, so **no audio bitrate ladder is needed**. Capture can use whatever codec the device
      prefers — webm/opus, m4a/aac, because the demux normalizes it.
    - **Video → resolution-bound, not bitrate-bound**, and data-processing wants container-copy at
-     capture quality. Keyframe VLM captioning downscales frames to `VIDEO_FRAME_MAX_WIDTH=768`
-     before the caption, so body-cam and webcam video is caption-bound and 768-px-sufficient.
-   - The **exception is OCR-heavy screen capture**: the OCR-strong VL pass reads on-screen text
-     from keyframes, and fine text needs enough *capture* resolution. The alpha's
-     `--max-width 1728` is soft on small text, so *`--max-width ~2560` for text-dense screens*.
+     capture quality. It extracts its own frames and scales them to 768 px for the caption, so
+     body-cam and webcam video is caption-bound and 768-px-sufficient.
+   - The **exception is OCR-heavy screen capture**: the screen-text read works at 1728 px, and
+     fine text needs enough *capture* resolution to survive that. The alpha's `--max-width 1728`
+     is soft on small text, so *`--max-width ~2560` for text-dense screens*.
    - So data-processing's ask is **no re-encode** — container-copy, avoiding generational loss,
-     *plus high capture resolution for screens*. The per-user-day cost dial is keyframe
-     *cadence* (`VIDEO_KEYFRAME_INTERVAL_S` / `VIDEO_MAX_KEYFRAMES`), not video bitrate.
+     *plus high capture resolution for screens*. The per-user-day cost dial is how often and how
+     many frames data-processing extracts, not video bitrate.
    - Net: no multi-rung "ladder", just one sensible per-modality target — 16 kHz mono audio,
      container-copy screen at ≥2560-px, body-cam at capture default.
 
@@ -219,7 +219,7 @@ deferred additive leg — recorded on the founders' board as D14).
 
    - Revisit only if a real OCR-quality-vs-cost measurement on pilot screen-hours moves the screen
      resolution target.
-4. ~~Chunk duration for C1~~ **Ratified 2026-07-18** (D-M1-2, recording × data-processing —
+4. ~~Chunk duration for C1~~ **Ratified 2026-07-18** (recording × data-processing —
    [handoff/ws-d-vad-carve.md](handoff/ws-d-vad-carve.md)). It is per client and source.
 
    **Rules**
@@ -271,7 +271,7 @@ deferred additive leg — recorded on the founders' board as D14).
      upload.
    - *Status (2026-07-19):* the *demux half is BUILT + proven* (`app/demux.py`, ffmpeg; exercised
      by all three alpha clients — muxed mp4/webm → separate audio + video C1 streams).
-   - The *transport is decided (D-M1-5 / founders' D14): segmented HTTP upload* for all v0
+   - The *transport is decided ([D14](../../DECISIONS.md)): segmented HTTP upload* for all v0
      surfaces (each client posts self-contained ~10 s segments to `/capture/segments`; the server
      spools → demuxes → emits).
    - *Still open:* the *direct-to-GCS signed-URL* upload path (M0 + all three clients still proxy

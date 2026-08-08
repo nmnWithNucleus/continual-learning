@@ -22,18 +22,16 @@ from referencing import Registry, Resource
 # product/services/storage/app/schemas.py -> parents[3] == product/
 _DEFAULT_CONTRACTS_DIR = Path(__file__).resolve().parents[3] / "contracts"
 
-# C2 is v1 (the DP rebuild, D24): the branch validates v1 EXCLUSIVELY (founder ruling
-# R1, 2026-08-06). The v0 file stays in contracts/ — it is the running wire on the live
-# worktree service until the Stage F cutover, and the OD-2 wipe means no stored v0
-# record survives into this code's world.
+# C2 is v1 (D24) and this service validates v1 EXCLUSIVELY. The v0 file stays in
+# contracts/ as the fixture format the day-log parity proof loads by $id; nothing on the
+# wire is v0 and no stored record is.
 C2_ID = "https://nucleus.ai/contracts/c2_processed_record.v1.json"
 C3_ID = "https://nucleus.ai/contracts/c3_userprompt.v0.json"
 C4_ID = "https://nucleus.ai/contracts/c4_turn_record.v0.json"
 C6_ID = "https://nucleus.ai/contracts/c6_resolve.v0.json"
-# C10's day-log body is v2 on this branch (D28: the slot-walk renderer over C2 v1; the
-# v1 file stays in contracts/ as the live worktree service's running read until the
-# Stage F cutover). It EVOLVED in place at D18 from a raw C2 range read, keeping its
-# number because its direction and peers are unchanged.
+# C10's day-log body is v2 (D28: the slot-walk renderer over C2 v1). It EVOLVED in place
+# at D18 from a raw C2 range read, keeping its number because its direction and peers are
+# unchanged.
 #
 # C10 is TWO schemas for the same reason C13 is: a contract is a family of OPERATIONS,
 # and the day-log body and the training-window ledger row are different bodies on

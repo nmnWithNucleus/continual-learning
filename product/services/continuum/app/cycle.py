@@ -236,12 +236,11 @@ def run_cycle(win: Window, *, daylog_client: DayLogClient | None = None,
         # store, rawlog re-reads prior day-logs via the day-log client.
         #
         # Prior windows come from storage's window ENUMERATION, which is the whole
-        # reason that read exists. They used to be REBUILT here, by parsing each
-        # reservoir entry's window id back into a local date and re-deriving its
-        # bounds under TONIGHT's timezone — wrong whenever the user had travelled,
-        # and impossible once a window stopped being a local day (it can span 23 h,
-        # 25 h or 47 h). A window id is now opaque and a window's bounds are a fact
-        # only its minter holds.
+        # reason that read exists. Deriving them here instead — parsing a reservoir
+        # entry's window id back into a local date and re-deriving its bounds under
+        # TONIGHT's timezone — would be wrong whenever the user had travelled, and is
+        # impossible for a window that can span 23 h, 25 h or 47 h. The id is opaque,
+        # and a window's bounds are a fact only its minter holds.
         prior_windows = None
         if recipe.replay_source == "rawlog":
             ledger = windows or build_window_ledger(settings)

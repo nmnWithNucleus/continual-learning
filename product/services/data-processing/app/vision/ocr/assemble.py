@@ -1,24 +1,24 @@
-"""OCR post-processing → one self-anchored single line (D-07 steps 2/3/5/6, D-08, D-12).
+"""OCR post-processing → one self-anchored single line.
 
 Given the raw ``OcrRead``s the OCR server returned for a chunk, produce the single
 ``str`` that ``screentext`` commits as its ``ocr`` slot value — the same string the
-caption injects (D-09): ONE rendered witness on two channels (the L11 provenance
+caption injects: ONE rendered witness on two channels (the L11 provenance
 corollary), never two independent claims.
 
-The D-07 post-processing order, applied verbatim (event selection — step 1's floor grid ∪
+The post-processing order, and it is an order rather than a set (event selection — the floor grid ∪
 change events, capped — is ``clipprep``'s delta gate; here we run everything AFTER the read):
 
   1. drop boxes with ``confidence < min_conf``;
   2. sort into reading order by bbox and assign a REGION ROLE from bbox position — the
      semantically useful 80% of "location" as a word, at zero contract cost; the pixel
-     geometry is then DISCARDED (never emitted to C2 — D-08);
+     geometry is then DISCARDED (never emitted to C2);
   3. drop lines shorter than ``min_chars``;
   4. deterministic secret redaction (``redact.py``) — ALWAYS on (an access control, not
      a knob; the v0 ``VIDEO_PRIVACY_FILTER`` env flag was never read and is dead);
   5. drop a line >= ``dedup_ratio`` similar to the previous kept line, WITHIN this chunk
      (cross-chunk state is forbidden — it would break fleet determinism, L1);
-  6. render to ONE line (no ``\n`` ever — D-12; separator ``" · "``), truncated at the
-     chars-per-second-of-life budget (D-11) on a WORD boundary.
+  6. render to ONE line (no ``\n`` ever; separator ``" · "``), truncated at the
+     chars-per-second-of-life budget on a WORD boundary.
 
 NO CONFIG (L4): the thresholds arrive as EXPLICIT keyword arguments; the one
 live set of values is pinned in ``app/stages/video/screentext.py`` under that stage's
@@ -37,7 +37,7 @@ from ..budget import ocr_cap, truncate_word
 from ..clip_types import OcrRead
 from .redact import redact
 
-# The frozen role vocabulary (D-07 step 2 / clip_types.OcrRegion.role).
+# The frozen role vocabulary (see ``clip_types.OcrRegion.role``).
 ROLES = (
     "titlebar", "tab", "sidebar", "main", "compose",
     "message", "toolbar", "statusbar", "dialog", "notification",
@@ -57,8 +57,8 @@ def assign_role(bbox: tuple[float, float, float, float]) -> str:
     """Assign a coarse region role from a NORMALIZED (0..1) bbox ``(x0,y0,x1,y1)``.
 
     A position heuristic over the box centroid — model-/engine-asserted, "good enough" to
-    be the semantic 80% of location (A-14), not a substitute for real geometry (which is
-    the parked ``enrichments.text_regions[]``, D-08/§6.2). Deterministic; returns one of
+    be the semantic 80% of location, not a substitute for real geometry (which is
+    geometry, which is never emitted). Deterministic; returns one of
     ``ROLES``. Backends that already carry a role (the ``vlm`` arm's model output) skip
     this and keep theirs."""
     x0, y0, x1, y1 = (_clamp01(c) for c in bbox)
@@ -101,7 +101,7 @@ def assign_role(bbox: tuple[float, float, float, float]) -> str:
 
 def _normalize_text(text: str) -> str:
     """Collapse ALL whitespace (incl. newlines/tabs) to single spaces and strip — this is
-    what structurally guarantees no ``\n`` reaches ``content.text`` (D-12)."""
+    what structurally guarantees no ``\n`` reaches ``content.text``."""
     return _WS_RUN.sub(" ", text).strip()
 
 
@@ -119,7 +119,7 @@ def render(
     dedup_ratio: float,
     chars_per_second: float,
 ) -> tuple[str, int, bool]:
-    """Run D-07 steps 2-6 over the chunk's ``OcrRead``s and return
+    """Run steps 2-6 of the order above over the chunk's ``OcrRead``s and return
     ``(single_line_text, n_redactions, truncated)``. Empty string when nothing
     legible survives — the caller still emits its slot (with ``value == ""``), so
     slot PRESENCE, not absence, is the coverage signal (L11: the honest empty

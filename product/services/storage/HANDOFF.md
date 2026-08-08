@@ -11,12 +11,10 @@
 > | *How did we get here?* | [handoff/worklog.md](handoff/worklog.md) — newest first |
 > | *What did the founders decide?* | [../../DECISIONS.md](../../DECISIONS.md) — the `D-n` register |
 
-**Stage: PROTOTYPE** ([D19](../../DECISIONS.md)) · **Status:** serve loop + capture + the *D18
-expansion live*, and the *D27/D28 joint rows now LIVE* · *Last updated:* 2026-08-07 (the DP
-rebuild cut over at Stage F: `:8083` now serves `created_at`/`updated_at` and the C10 v2
-slot-walk day-log to the live fleet; the `dp-v0-live` worktree retired at the cutover and the
-`/context` store was wiped fresh-forward, OD-2, `/raw` kept. Later that day: §Next row 7 became a
-card, the joint-rows heading was renamed, and the §Day-log cross-reference was repointed at it.)
+**Stage: PROTOTYPE** ([D19](../../DECISIONS.md)) · **Status:** `built` — serve loop, capture,
+the D18 expansion, and the D27/D28 joint rows are all live · *Last updated:* 2026-08-07
+(`:8083` serves `created_at`/`updated_at` and the C10 v2 slot-walk day-log to the live fleet;
+`/context` holds C2 v1 only)
 
 ---
 
@@ -33,12 +31,11 @@ base entry — see §Next) · `GET /health`.
 `blob_ref`, idempotent on `chunk_id`) · `GET /raw/blobs?ref=` (*query* param, because a `blob_ref`
 may contain `/`; 404 also when the blob was since-deleted, which consumers must tolerate) · `POST
 /context/records` (C2-validated, idempotent upsert on `record_id`, assigns storage's own
-`ingest_time`, an audit axis, *not* in C2, preserved across reprocess) · `GET
+`created_at` and `updated_at`, an audit axis *not* in C2) · `GET
 /context/records/{record_id}` · `GET /context/records?user_id=&from=&to=` (half-open `[from, to)`,
 per-user isolation enforced by the mandatory `user_id`).
 
-**The D18 expansion — built 2026-07-27** (the most recent change is the D27/D28 rebuild rows,
-below):
+**The D18 expansion — built 2026-07-27** (extended by the D27/D28 joint rows, below):
 
 - **C12 profile** — `GET/PUT /users/{user_id}/profile`. *404 on absence, no server-side default*,
   so a user without `home_tz` is *not schedulable*: an operational alert, never a silent skip.
@@ -52,11 +49,10 @@ below):
 - Storage is the only minter and the only validator.
 - **Day-log materialization (C10 evolved)** — `GET /training/daylog?user_id=&window_id=`,
   materialized *on demand at fetch* ([D19](../../DECISIONS.md)) rather than by a scheduler.
-- Reprocessed records resolved *latest `ingest_time` wins per `(chunk_id, content.kind,
-  discriminator)`* — on `ingest_time` because `pipeline_version` is a composed string and not
-  orderable, on `kind` because captions and transcripts can share one `pipeline_version`. *(That
-  was the D18 rule; since [D27/D28](../../DECISIONS.md) the live renderer dedups latest
-  `updated_at` per `(chunk_id)` — [§The joint rows with data-processing](#the-joint-rows-with-data-processing-d27d28), below.)* Every
+- Reprocessed records resolve *latest `updated_at` wins per `(chunk_id)`*, rowid tiebreak
+  ([D27/D28](../../DECISIONS.md)) — on `updated_at` because `pipeline_version` is a composed
+  string and not orderable, so the store's own clock is the only axis that orders; on `(chunk_id)`
+  alone because one record per chunk leaves nothing finer to key on. Every
   body is stamped with its `recipe_id` *and* `daylog_format_version`, and continuum *refuses* a
   body whose stamps are not the ones it trains under.
 - **C13 recipe registry** (`GET /recipes/{recipe_id}`, `GET /policies/{policy_id}`) and
@@ -89,26 +85,26 @@ below):
 Two joint rows with data-processing — **D27** and **D28**
 ([../../DECISIONS.md](../../DECISIONS.md)) — are live on `:8083`:
 
-- **D27** — `ingest_time` split into `created_at` + `updated_at` (the byte-compare is the
-  upsert; a no-op re-POST leaves the row untouched); the training-window axis and the
-  day-log dedup key moved to `updated_at`.
+- **D27** — storage carries `created_at` and `updated_at` as separate columns (the byte-compare
+  is the upsert; a no-op re-POST leaves the row untouched), and both the training-window axis and
+  the day-log dedup key run on `updated_at`.
 - **D28** — the day-log renderer walks C2 v1 `content.slots`
   ([../../contracts/c10_daylog.v2.json](../../contracts/c10_daylog.v2.json)); dedup is
   latest `updated_at` per `(chunk_id)`, rowid tiebreak; stamps are
   `daylog_format_version` "2" + `consolidation-v2.0`. D20's parity bar was re-baselined
-  (31 checks, tier A byte-identical over both origins). Proven live at the Stage F soak's
-  train leg — a real v2 day-log rendered and consumed by a continuum night to `published`.
+  (31 checks, tier A byte-identical over both origins). Proven live: a real v2 day-log rendered
+  and consumed by a continuum night through to `published`.
 - E-2 is built whole-record (`DELETE /context/records` by `record_id` / `chunk_id` /
   `pipeline_version`; manifest by `pipeline_version`; day-log cascade; dry-run).
-- The `/context` store was **wiped fresh-forward at the cutover** (OD-2, the D19 license):
-  every v0 record deleted, `/raw` kept — so what `:8083` holds now is C2 v1 only.
+- `/context` holds **C2 v1 records only**; `/raw` is kept in full. The store was emptied rather
+  than migrated, under the [D19](../../DECISIONS.md) license.
 
 ## Next
 
 | # | Item | Why it's open |
 |---|---|---|
-| 0 | **Client live-stream testing (the next phase, seeded).** With the rebuild cut over, the next phase is a real captured day flowing recording → DP → storage → continuum end to end on real client hardware — the live pilot-day shape the Stage F soak proved synthetically. Our part is unchanged (serve C2 v1 writes + the C10 v2 day-log + windows); this row exists so a cold reader knows what the fleet is pointed at next. | real capture beginning (a lifestyle gate) |
-| 1 | **E-2 — BUILT whole-record and LIVE** (rebuild Stage E → cut over at Stage F, [D28](../../DECISIONS.md)); remaining: Platform M2 orchestration, reservoir cascade leg, M5's time-slice delete. | The live `:8083` now has the whole-record retraction; what remains is the orchestration + cascade legs. CHARTER M5 |
+| 0 | **Client live-stream testing (the next phase, seeded).** A real captured day flowing recording → DP → storage → continuum on real client hardware. Our part is unchanged: serve C2 v1 writes, the C10 v2 day-log, and the windows. | real capture beginning (a lifestyle gate) |
+| 1 | **E-2 — whole-record retraction is built and live** ([D28](../../DECISIONS.md)); remaining: Platform M2 orchestration, the reservoir cascade leg, and M5's time-slice delete. | `:8083` has the whole-record retraction; the orchestration and cascade legs are not built. CHARTER M5 |
 | 2 | **C5 registration → the model-directory build** (M3). Three constraints, and they are not documentation: a *three*-value status enum (or `record_gate_failure()` has nowhere to land); *nullable* `adapter_dir` + `base_model_hash` (gate-failed rows carry NULLs); C6 eligibility as a *log replay*, not "latest row wins". | The last would otherwise serve a gate-failed candidate — the exact ungated swap the gate exists to prevent. Waits on the C5 shape pin (deferred by [D19](../../DECISIONS.md)) |
 | 3 | **D9 observability** — `/metrics` (request rate/latency/errors + query latency, rows read/written, DB size) + our Grafana dashboard JSON. | Platform's shared backbone is the blocker; emission is ours. CHARTER M7 |
 | 4 | **Retention mechanism** ([D19](../../DECISIONS.md)) — a versioned per-store retention document, every store `keep_forever`, read and surfaced on `/metrics`, *no sweeper*. Rules mark *eligibility*; a separate explicit sweep acts and writes a manifest. | So a bad config edit can produce a wrong report, never silent data loss |

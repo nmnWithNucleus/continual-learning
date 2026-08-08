@@ -163,7 +163,7 @@ def test_optional_failure_ships_holey_record(client):
 def test_healed_record_byte_identical_to_never_holed_run(monkeypatch, tmp_path):
     """L8 case 4's strongest form: heal fills the hole and the healed record is
     BYTE-IDENTICAL to a never-holed run of the same version — provable because
-    assembly is sorted and no wall-clock field exists in the record (§4)."""
+    assembly is sorted and no wall-clock field exists in the record."""
     from app.main import create_app
     from tests.test_heal_seam import _FlakyAcoustic
 
@@ -223,7 +223,7 @@ def test_heal_exhaustion_fires_metrics_and_skips(client):
 
 
 def test_crash_after_post_before_mark_redelivery_converges(client, monkeypatch):
-    """§4 row: crash after POST, before mark_processed. The redelivery finds no
+    """Crash after POST, before mark_processed. The redelivery finds no
     receipt, reprocesses FULLY, and the re-POST is byte-identical — storage's
     upsert is a no-op and the flow converges (then skips, all green here)."""
     monkeypatch.setattr(

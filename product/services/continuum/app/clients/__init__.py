@@ -27,14 +27,14 @@ Two of them are HTTP-ONLY, deliberately:
   * **`profile_client`** — `home_tz` is declared by the user and stored once. A
     local fallback would be a default timezone, and D17 abolished those.
 
-`http` is the DEFAULT. The cutover is the point of the slice, and the HTTP path is
-the one `scripts/seam_check.py` drives against the real service; a default that
-bypasses the seam ships a configuration nobody exercises.
+`http` is the DEFAULT, because it is the path `scripts/seam_check.py` drives against
+the real service; a default that bypasses the seam ships a configuration nobody
+exercises.
 
-The LOCAL day-log / registry / reservoir backends are NOT dead code and are not
-deleted at the cutover: the local day-log path is the parity reference the
-storage-side differential diff is measured against (storage CHARTER M9, bar
-narrowed 2026-07-27), and it only goes once that diff is green. But note the exact
+The LOCAL day-log / registry / reservoir backends are NOT dead code: the local
+day-log path is the parity reference the storage-side differential diff is measured
+against (storage CHARTER M9), and two independent renderers are the only thing that
+can catch a renderer defect. But note the exact
 shape of what survives — the local day-log client answers **"here are the records,
 render them"** and nothing else. It cannot SOURCE a training day-log; see
 `day_log_client` and `IngestWindowNotReadable` below.
@@ -71,7 +71,7 @@ class IngestWindowNotReadable(RuntimeError):
 
     Why it cannot, stated once so nobody re-adds the query:
 
-      * A training window is `[last_trained_t, now−δ)` on storage's **`ingest_time`**
+      * A training window is `[last_trained_t, now−δ)` on storage's **`updated_at`**
         axis (D18) — that is the completeness axis, the only one on which "everything
         I had" is a guarantee. `GET /context/records?from=&to=` filters `t_start`,
         which is **EVENT** time. Passing ingest bounds to an event-time filter is not
@@ -95,7 +95,7 @@ def day_log_client(settings, recipe, *,
                    record_provider: RecordProvider | None = None) -> DayLogClient:
     """The day-log fetch client.
 
-    `http` (the default, and the cutover): storage materialized it; we GET it.
+    `http` (the default): storage materialized it; we GET it.
 
     An explicit `record_provider` always selects the local backend: it means the
     caller has records in hand (a synthetic day, a test, a Phase-3 replay), which is
@@ -119,7 +119,7 @@ def day_log_client(settings, recipe, *,
                 f"CONTINUUM_STORAGE_CLIENTS={settings.storage_clients!r} selects the "
                 "LOCAL day-log backend, but no records were supplied and the local "
                 "backend cannot source a training window's records: the window is on "
-                "storage's INGEST-time axis and `GET /context/records` filters EVENT "
+                "storage's `updated_at` axis and `GET /context/records` filters EVENT "
                 "time (t_start). This used to yield an EMPTY day-log and a "
                 "'skipped_no_data' night that had trained on nothing. Use "
                 "CONTINUUM_STORAGE_CLIENTS=http (storage materializes the day-log, "

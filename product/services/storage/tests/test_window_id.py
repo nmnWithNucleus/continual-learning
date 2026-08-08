@@ -50,7 +50,7 @@ def test_the_pattern_is_the_one_in_the_decision():
 def test_the_old_local_date_format_is_rejected():
     """`w2026-07-21` was the format before the watermark window. It must not validate:
     mixed formats order correctly only by ASCII accident ('-' 0x2D sorts below '0' 0x30),
-    so the cutover has to be explicit and tested, never trusted."""
+    so the rejection has to be explicit and tested, never trusted."""
     assert not validate_window_id("w2026-07-21")
 
 

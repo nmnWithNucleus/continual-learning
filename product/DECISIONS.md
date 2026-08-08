@@ -74,22 +74,22 @@ That is expected, and this register is built for it:
 | **D27** | The heal ledger, and `created_at`/`updated_at` in storage | 2026-08-06 | ratified | joint row with storage · moves **D18**'s watermark axis | [↓](#d27--the-heal-ledger-and-created_atupdated_at) |
 | **D26** | Machinery/bureaucracy split: models become servers | 2026-08-06 | ratified | retires `isolation.py` · `INGEST_ISOLATION` · `DP_DIALECT_FREEZE` | [↓](#d26--the-machinerybureaucracy-split) |
 | **D25** | The version law: identity carried by code, never by config | 2026-08-06 | ratified | — | [↓](#d25--the-version-law) |
-| **D24** | C2 v1: one record per chunk, built from slots | 2026-08-06 | ratified | supersedes **D10** (shape clause) · partially supersedes D8 (two-record shape) · restates D16 (fan-out clause) · retires D19 (discriminator clause) | [↓](#d24--c2-v1-one-record-per-chunk-built-from-slots) |
-| **D23** | The Slot Law replaces the record-emission law | 2026-08-06 | ratified | retires the WS-VC law (charter section, no D-number) | [↓](#d23--the-slot-law-replaces-the-record-emission-law) |
+| **D24** | C2 v1: one record per chunk, built from slots | 2026-08-06 | ratified | supersedes **D10** (shape clause) · partially supersedes D8 (two-record shape) · restates D16 (fan-out clause) | [↓](#d24--c2-v1-one-record-per-chunk-built-from-slots) |
+| **D23** | The Slot Law: twelve invariants that hold by construction | 2026-08-06 | ratified | the founding law of data-processing | [↓](#d23--the-slot-law) |
 | **D22** | Onboarding teaching views are a sanctioned document type | 2026-07-30 | ratified | — | [↓](#d22--onboarding-teaching-views) |
 | **D21** | STYLE.md is the SOP for every document edit in `product/` | 2026-07-28 | ratified | — | [↓](#d21--the-document-style-sop) |
-| **D20** | The exit bar for the storage↔continuum cutover, and a definition of "done" | 2026-07-27 | **BUILT** 2026-07-27 | parity bar re-baseline ruled by D28 | [↓](#d20--the-cutover-exit-bar) |
-| **D19** | Stage is PROTOTYPE: nothing is set in stone, contracts included | 2026-07-27 | ratified | supersedes **D18** (2 clauses) · discriminator clause retired by D24 | [↓](#d19--stage-prototype) |
+| **D20** | The day-log parity bar: what two renderers must agree on | 2026-07-27 | **BUILT** 2026-07-27 | parity bar re-baseline ruled by D28 | [↓](#d20--the-day-log-parity-bar) |
+| **D19** | Stage is PROTOTYPE: nothing is set in stone, contracts included | 2026-07-27 | ratified | supersedes **D18** (2 clauses) | [↓](#d19--stage-prototype) |
 | **D18** | Storage owns the day-log and training-window custody | 2026-07-26 | **BUILT** 2026-07-27 | 2 clauses superseded by **D19** · watermark axis moved to `updated_at` by D27 | [↓](#d18--storage-owns-the-day-log) |
 | **D17** | Timezone: the device owns the fact, storage owns the policy | 2026-07-26 | **BUILT** 2026-07-26 · 2026-07-27 | supersedes its own first draft | [↓](#d17--timezone-custody) |
 | **D16** | The async `/ingest` reply shape | 2026-07-19 | ratified | fan-out clause restated by **D24** | [↓](#d16--the-async-ingest-reply-shape) |
-| **D15** | DP image/text pipelines deferred until a producing surface exists | 2026-07-19 | ratified | — | [↓](#d15--post-deep-session-build-order) |
+| **D15** | Platform's D9 backbone is the parallel slice; DP image/text deferred | 2026-07-19 | ratified | sequences **D9**'s backbone | [↓](#d15--the-parallel-slice-and-the-imagetext-deferral) |
 | **D14** | Capture transport is segmented HTTP upload on every v0 surface | 2026-07-19 | ratified | — | [↓](#d14--capture-transport) |
 | **D13** | The consent gate is de-prioritized to the back burner | 2026-07-18 | ratified | — | [↓](#d13--consent-gate-de-prioritized) |
 | **D12** | Branching and beta model: a standing `dev` branch for testers | 2026-07-18 | ratified | — | [↓](#d12--branching-and-beta-model) |
 | **D11** | C1 is two legs plus push delivery | 2026-07-09 | ratified | — | [↓](#d11--c1-is-two-legs) |
 | **D10** | The learn-loop skeleton is computer mic → ASR → `/context` | 2026-07-09 | ratified | shape clause superseded by **D24** | [↓](#d10--the-learn-loop-skeleton) |
-| **D9** | Centralized observability: one shared Prometheus and Grafana | 2026-07-09 | ratified | — | [↓](#d9--centralized-observability) |
+| **D9** | Centralized observability: one shared Prometheus and Grafana | 2026-07-09 | ratified | backbone sequenced by **D15** | [↓](#d9--centralized-observability) |
 | **D8** | OCR is decoupled from the base world model | 2026-07-09 | ratified | retires the **D6** caveat · partially superseded by D24 (two-record shape) | [↓](#d8--ocr-decoupled-from-the-bwm) |
 | **D7** | POCs are reference, not source | 2026-07-09 | ratified | — | [↓](#d7--pocs-are-reference-not-source) |
 | **D6** | The base model is Qwen3-VL-32B | 2026-07-09 | ratified | OCR caveat retired by **D8** | [↓](#d6--the-base-model) |
@@ -161,8 +161,8 @@ E-2 retraction is whole-record operations — simpler, and built.
 > [data-processing CHARTER](services/data-processing/CHARTER.md) §Slot Law L7/L8
 
 **In one line.** Failure handling heals instead of freezing holes — the journal's done-row
-learns per-stage status and a heal budget, and storage splits `ingest_time` into
-`created_at`/`updated_at`.
+learns per-stage status and a heal budget, and storage keeps `created_at` and `updated_at`
+as separate columns.
 
 **What was decided**
 
@@ -227,18 +227,18 @@ the DP service is a thin async orchestrator whose stages are clients.
 ### D24 — C2 v1: one record per chunk, built from slots
 
 > `ratified` 2026-08-06 · supersedes **D10**'s C2-shape clause, partially supersedes D8's
-> shipped two-record shape (its specialist-OCR-feeds-the-caption one-liner survives), retires
-> D19's discriminator clause, restates D16's fan-out clause · Full session record: git history.
+> shipped two-record shape (its specialist-OCR-feeds-the-caption one-liner survives), restates
+> D16's fan-out clause · Full session record: git history.
 > · recorded in [ARCHITECTURE.md](ARCHITECTURE.md) §Contracts C2 card;
 > [contracts/c2_processed_record.v1.json](contracts/c2_processed_record.v1.json)
 
 **In one line.** Exactly one C2 record per `(chunk_id, pipeline_version)`, its content a map of
-slots each written by exactly one stage — no discriminator, no `enrichments` block.
+slots each written by exactly one stage.
 
 **What was decided**
 
-- `record_id = sha256(chunk_id ␀ pipeline_version)` — NUL-joined, hex, blind upsert. No
-  discriminator, and one-record-per-chunk is why dropping it is safe.
+- `record_id = sha256(chunk_id ␀ pipeline_version)` — NUL-joined, hex, blind upsert. Two
+  components are enough: one record per chunk leaves no siblings to tell apart.
 - `content.slots` is a map keyed by slot name; a slot is written by its one producing stage and
   never edited.
 - `modality` moves to the record root, because a C1 chunk is strictly single-modality.
@@ -249,24 +249,21 @@ slots each written by exactly one stage — no discriminator, no `enrichments` b
 - D16's fan-out clause is restated strengthened: exactly **one** derivable record id per chunk,
   where the async reply had licensed a `record_ids[]` list.
 
-### D23 — the Slot Law replaces the record-emission law
+### D23 — the Slot Law
 
-> `ratified` 2026-08-06 · retires the WS-VC record-vs-mutation law (charter edit, same
-> ceremony that ratified it) · Full session record: git history.
+> `ratified` 2026-08-06 · the founding law of the data-processing service
 > · recorded in [data-processing CHARTER](services/data-processing/CHARTER.md) §Slot Law
 
-**In one line.** Twelve laws whose invariants hold by construction replace the emission law's
-five ordered tests and five riders — because the capabilities that needed governing are deleted.
+**In one line.** Twelve laws govern data-processing, and each one holds by construction rather
+than by a check somebody has to remember to run.
 
 **What was decided**
 
 - The Slot Law (L1–L12) goes into the DP charter as §Slot Law; that section is its one home,
   cited from everywhere else and restated nowhere.
-- The WS-VC record-vs-mutation law and its riders retire by the same ceremony that ratified
-  them — a charter edit.
-- Retired with their subject matter: primary/mutate/sidecar kinds, the discriminator, SlotView,
-  and the `best_effort` policy machinery.
-- **EXECUTED** — test spine T-1…T-6 enforces it in CI.
+- The invariants are structural, not procedural: the executor can only emit one record, a slot
+  has exactly one producing stage, and no stage can reach another stage's slot.
+- **EXECUTED** — the test spine T-1…T-6 enforces it in CI.
 
 ### D22 — onboarding teaching views
 
@@ -328,40 +325,33 @@ one sanctioned exception to *one fact, one home*.
   - **Payoff** — STYLE.md went 1,950 → ~1,820. The remaining weight is §The ten rules, which is
     the standard itself, so further trimming means dropping a rule.
 
-### D20 — the cutover exit bar
+### D20 — the day-log parity bar
 
-> `ratified` 2026-07-27 · **BUILT** 2026-07-27 · parity bar re-baseline ruled by D28
-> (rebuild Stage E) · re-baselined 2026-08-06 (Stage E WP-E4: the v2 slot-walk over
-> hand-built C2 v1 records vs the untouched v0 reference — 31 checks, both origins,
-> tier A byte-identical)
-> · **full reasoning:** [handoff/engineering.md](handoff/engineering.md#2026-07-27-overnight--the-d18-storage-expansion-is-built-the-seam-is-closed) §Worklog 2026-07-27
+> `ratified` 2026-07-27 · **BUILT** 2026-07-27 · re-baselined 2026-08-06 by **D28**
+> (31 checks over both window origins, tier A byte-identical) · Full session record: git history.
 > · recorded in [ARCHITECTURE.md](ARCHITECTURE.md) §Ownership splits *Day-log: representation vs.
 > content* + §Contracts *C10 card*; [storage CHARTER](services/storage/CHARTER.md) M9;
-> `services/storage/scripts/daylog_parity_diff.py` · `services/continuum/scripts/seam_check.py`
+> `services/storage/scripts/daylog_parity_diff.py`
 
-**In one line.** The exit bar for the storage↔continuum cutover, and a definition of "done" that
-can actually be met.
+**In one line.** Two renderers agree on the artifact that trains the model, and the bar says
+exactly which parts must match byte-for-byte.
 
 **What was decided**
 
-- **(a) M9's parity bar narrowed to three tiers** after the first run failed it:
+- **The parity bar has three tiers**, narrowed after the first run failed a stricter one:
   - byte-identical — block `text`, ordering, `block_id`, `anchors`, `quality`; the artifact that
     trains the model.
   - proven-equivalent — `seg_id`.
   - excluded — `content_fingerprint`.
 - General rule pinned: storage owns the day-log's representation; its **content** is a contract
   neither service may move alone.
-- **(b) "Golden" defined:**
-  - all four suites green.
-  - M9 proof over a real, misaligned window origin.
-  - a live two-process seam with zero blockers.
-  - one adversarial round returning nothing high-severity.
+- The bar is executable, not aspirational: `daylog_parity_diff.py` runs in-process inside a green
+  storage test, so a change to either renderer trips it in CI.
 
 ### D19 — stage: PROTOTYPE
 
-> `ratified` 2026-07-27 · supersedes **D18** (2 clauses) · discriminator clause retired by D24
-> · **full reasoning:** [handoff/engineering.md](handoff/engineering.md#2026-07-27--d19-the-stage-is-prototype-and-the-docs-now-say-so) §Worklog 2026-07-27
-> · recorded in [ARCHITECTURE.md](ARCHITECTURE.md) §Stage + §Contracts (C2 `discriminator`, C12);
+> `ratified` 2026-07-27 · supersedes **D18** (2 clauses) · Full session record: git history.
+> · recorded in [ARCHITECTURE.md](ARCHITECTURE.md) §Stage + §Contracts (C12);
 > [ORG.md](ORG.md) §Stage; every `services/*/CHARTER.md` banner;
 > [storage CHARTER](services/storage/CHARTER.md) §Retention + §Scope ·
 > [continuum CHARTER](services/continuum/CHARTER.md) §OQ10
@@ -374,10 +364,9 @@ can actually be met.
   deferring durability work with the reason written down.
 - Does **not** license skipping ORG's contract-edit order, undocumented decisions, or calling a
   thing `BUILT` when it is only `ratified`.
-- Seven calls taken:
+- Calls taken:
   - retention = keep everything; the mechanism ships, the policy doesn't.
   - storage local now, Postgres+GCS later.
-  - C2 `discriminator` surfaced.
   - existing state wiped, not migrated.
   - cycle trigger = per-user cron, materialization on demand.
   - C5 freeze deferred.
@@ -395,23 +384,22 @@ can actually be met.
 > [storage CHARTER](services/storage/CHARTER.md) §Scope/§Time index/§OQ6-9/M5+M8+M9 ·
 > [continuum CHARTER](services/continuum/CHARTER.md) §Scope/§Contracts/§OQ9-10
 
-**In one line.** Storage owns the day-log and training-window custody; the window axis is
-`updated_at` (**D27**), not ingest time.
+**In one line.** Storage owns the day-log and training-window custody, and the window axis is
+storage's own `updated_at` (**D27**).
 
 **What was decided**
 
 - Day-log materialization moves continuum → storage. Replay would otherwise re-pull every prior day
   nightly, O(days²).
-- At ratification the window was `[last_trained_t, now−δ)` on `ingest_time`; **D27** moved the
-  axis to `updated_at`.
+- The window is `[last_trained_t, now−δ)` on `updated_at` (**D27** sets the axis).
 - `window_id` → opaque `w<YYYYMMDD>T<HHMMSS>Z`, minted once from the end instant, parsed by nobody.
-- C12, C13 and C14 minted; E-2 demoted from cutover blocker.
+- C12, C13 and C14 minted; E-2 demoted from a blocker to a follow-up.
 
 ### D17 — timezone custody
 
 > `ratified` 2026-07-26 · **BUILT** 2026-07-26 (tz split) · watermark clause **BUILT** 2026-07-27
 > · supersedes its own same-day first draft
-> · **full reasoning:** [handoff/engineering.md](handoff/engineering.md#2026-07-26--timezone-decided-then-re-decided-then-built-end-to-end-d17) §Worklog 2026-07-26
+> · Full session record: git history.
 > · recorded in [ARCHITECTURE.md](ARCHITECTURE.md) §Contracts C1+C2 blocks, §Ownership splits
 > *User timezone*, C10 row; [contracts/](contracts/) c1+c2 schemas;
 > [storage](services/storage/CHARTER.md) · [continuum](services/continuum/CHARTER.md) ·
@@ -462,15 +450,20 @@ can actually be met.
   in-slice.
 - **Accepted caveat:** `record_ids=[]` ledger provenance on 202-path chunks. The ids are derivable.
 
-### D15 — DP image/text pipelines deferred
+### D15 — the parallel slice, and the image/text deferral
 
-> `ratified` 2026-07-19 · Full session record: git history.
-> · recorded in [HANDOFF.md](HANDOFF.md); data-processing charter / boards that cite the deferral
+> `ratified` 2026-07-19 · sequences **D9**'s backbone · Full session record: git history.
+> · recorded in [HANDOFF.md](HANDOFF.md);
+> [platform board](services/platform/HANDOFF.md) §Incoming; data-processing charter / boards
+> that cite the deferral
 
-**In one line.** DP image/text pipelines wait until a producing surface exists.
+**In one line.** Platform's D9 backbone runs as the small parallel slice, and DP image/text
+pipelines wait for a producing surface.
 
 **What was decided**
 
+- **Platform's [D9](#d9--centralized-observability) backbone**, the one shared Prometheus and
+  Grafana, runs as the small parallel slice. Still not started; the platform board holds it.
 - **DP image/text pipelines (M2) are deferred until a producing surface exists.** No `image` or
   `text` C1 stream exists on the fleet today.
 
@@ -515,8 +508,7 @@ can actually be met.
 ### D12 — branching and beta model
 
 > `ratified` 2026-07-18
-> · recorded in [HANDOFF.md](HANDOFF.md); [handoff/engineering.md](handoff/engineering.md) worklog;
-> root `README.md` §Branches
+> · recorded in [HANDOFF.md](HANDOFF.md); root `README.md` §Branches
 
 **In one line.** Work happens on branches off `main`; a standing `dev` branch is the beta playground.
 
@@ -554,22 +546,23 @@ can actually be met.
 
 ### D10 — the learn-loop skeleton
 
-> `ratified` 2026-07-09 · shape clause superseded by **D24**
+> `ratified` 2026-07-09 · minting row for C1 and C2 · shape clause superseded by **D24**
 > · recorded in [ARCHITECTURE.md](ARCHITECTURE.md) §Contracts (learn-loop block) +
-> [contracts/](contracts/); [handoff/engineering.md](handoff/engineering.md)
+> [contracts/](contracts/)
 
-**In one line.** Computer mic → ASR → `/context`, and nothing else.
+**In one line.** C1 and C2 were minted here, with the first capture path: computer mic → ASR
+→ `/context`.
 
 **What was decided**
 
-- The first end-to-end capture path is audio-only: ASR producing a transcript and segment
-  timestamps.
-- **No diarization, no enrichment, no vision.**
-- Reuses POC Phase-1 (faster-whisper). C1 and C2 v0 were frozen accordingly.
+- The learn loop starts with one end-to-end audio path, and the two contracts it needs are
+  minted with it.
+- C2's shape clause is superseded by **D24** (one record per chunk, built from slots); this row
+  survives as the contracts' minting record.
 
 ### D9 — centralized observability
 
-> `ratified` 2026-07-09
+> `ratified` 2026-07-09 · backbone sequenced as the parallel slice by **D15**
 > · recorded in [ARCHITECTURE.md](ARCHITECTURE.md) §Observability; [STACK.md](STACK.md);
 > [platform charter](services/platform/CHARTER.md); all service charters
 

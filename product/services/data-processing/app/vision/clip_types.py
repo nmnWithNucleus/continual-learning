@@ -56,7 +56,7 @@ class ClipFrames:
 class OcrRegion:
     """One recognized text region: the string, a coarse role assigned from bbox
     position, the pixel bbox (used internally for reading order + role, then
-    discarded — NOT emitted to C2, see D-08), and the engine confidence."""
+    discarded and never emitted to C2), and the engine confidence."""
 
     text: str
     role: str      # titlebar|tab|sidebar|main|compose|message|toolbar|statusbar|dialog|notification

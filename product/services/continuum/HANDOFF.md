@@ -14,10 +14,8 @@
 > | *Per-workstream detail* | the `ws-*.md` files in [handoff/](handoff/) |
 
 **Stage: PROTOTYPE** ([D19](../../DECISIONS.md)) · **Status:** ✅ *learn loop closed, on storage,
-now training under the C10 v2 day-log* · *Last updated:* 2026-08-07 (the DP rebuild cut over at
-Stage F: we were taught the v2 stamps at WP-F0b and re-pinned to `consolidation-v2.0`; a real
-night consumed a v2 window to `published` at the Stage F train leg — the one licensed continuum
-change and its live proof)
+training under the C10 v2 day-log* · *Last verified against code:* 2026-08-08. A real night has
+consumed a v2 window through to `published`.
 
 ---
 
@@ -25,11 +23,11 @@ change and its live proof)
 
 - **The learn loop is closed end to end and runs on storage's HTTP surface**
   ([D18](../../DECISIONS.md), built 2026-07-27).
-- Five clients sit behind the existing protocols — `HttpDayLogClient` (C10 v1),
+- Five clients sit behind the existing protocols — `HttpDayLogClient` (C10 v2),
   `HttpWindowLedger`, `HttpProfileClient` (C12), `HttpRecipeRegistry` (C13), `HttpReservoirClient`
   (C14), selected by `CONTINUUM_STORAGE_CLIENTS=local|http`, and *`http` is the default*.
-- **Suite: 262 passed + 7 skipped** (re-run 2026-07-27). `app/morpheus/` and `tests/parity/` are
-  *byte-unchanged* by the cutover; the live two-process seam check passes at 10 steps / 151 checks.
+- **Suite: 264 passed + 7 skipped.** `app/morpheus/` and `tests/parity/` are untouched by
+  anything the storage seam did — they answer to the research goldens and to nothing else.
 - **Window arithmetic is gone from this service.** `window_for()`, `closed_window_before()`,
   `Window.local_date` and `ReservoirEntry.local_window_date()` are deleted, along with
   `cycle.py`'s reconstruction of prior windows under tonight's timezone — prior windows now come
@@ -42,11 +40,11 @@ change and its live proof)
   `daylog_format_version` or `recipe_id` is not the one this night trains under, leaves the window
   open and exits 2 — an announcement nobody reads is a silent change.
 - **The local day-log path is retained deliberately** as the parity reference storage's M9 diff is
-  measured against. It refuses to *source* records for a training window (that is an ingest-time
-  question and the local path filters event time).
-- **Recipe `consolidation-v2.0` is what runs** as of the Stage F cutover — the D28 fork of v1.1
-  that bumps `recipe_id` alongside `daylog_format_version` when the day-log renderer moved to the
-  C2 v1 slot walk. Every training/corpus knob is byte-identical to v1.1 (48× amplification, 15%
+  measured against. It refuses to *source* records for a training window: membership is a question
+  about storage's `updated_at` axis, and the local path filters event time.
+- **Recipe `consolidation-v2.0` is what runs** — the D28 fork of v1.1 that bumps `recipe_id`
+  alongside `daylog_format_version`, because the day-log renderer walks C2 v1 slots. Every
+  training/corpus knob is byte-identical to v1.1 (48× amplification, 15%
   deny-then-correct, LoRA r128/α256, 0.30 rawlog replay); nothing about *how* a night trains
   changed. v1.1 and v1.0 are retained (immutable under id) as the recipes their numbers were
   produced under.
@@ -73,25 +71,22 @@ change and its live proof)
 | 2 | **D9 observability** — `/metrics` + a dashboard JSON, off the request path. | platform's shared backbone (founders' §Next item 2) |
 | 3 | **Board ratification of [C-1](DECISIONS.md) and [C-2](DECISIONS.md)** — the serve-time memory harness landing in inference, and DP's data-ownership + caption-spec upgrade. Both re-cut another service's charter, so neither is ours to settle. | a founders' session |
 | 4 | **Recipe/dose finding for Gnandeep** — amplification dose is fixed *per block*, but recall tracks retellings *per unit of block text*, so at our native cadence dose must scale with block-text volume. | cofounder conversation, not code |
-| 5 | **`_UserState.debt` demotion to reporting** — deliberately left out of the transport cutover; it is a cycle-semantics change. | nothing |
+| 5 | **`_UserState.debt` demotion to reporting** — deliberately out of scope when the stores moved behind HTTP; it is a cycle-semantics change. | nothing |
+| 6 | **`scripts/seam_check.py` is owed a v1 rewrite.** It builds `version:"0"` C2 records at four sites against a fleet that schema-gates v1, so it cannot pass as written and its last recorded run predates the current contract. | nothing — ordinary engineering |
 
 ## Cross-service flags
 
-- **the DP rebuild is EXECUTED (D23–D28, 2026-08-07)** — C2 v1 (slots) and the C10 day-log
-  v2 (slot-walk renderer, `(chunk_id)`/`updated_at` dedup) are **live** since the Stage F cutover
+- **data-processing emits C2 v1 and storage serves the C10 v2 day-log** (D23–D28) —
   ([../../contracts/c10_daylog.v2.json](../../contracts/c10_daylog.v2.json); D27/D28 in
-  [../../DECISIONS.md](../../DECISIONS.md)). Our one licensed change — being taught the v2 stamps
-  (WP-F0b) — shipped, and a real night trained on a v2 window to `published` at the Stage F train
-  leg. Our stamp-refusal remains the safety net against a rolled-back renderer; healed records
-  land in the *next* window (accepted double-training, same class as a version bump).
-- **Next phase (seeded): client live-stream testing.** With the rebuild done, the loop is pointed
-  at a real captured day flowing recording → DP → storage → us on real hardware — the live
-  pilot-day shape the Stage F soak proved synthetically. Nothing to build here for it; our night
-  is the same night, now over v2 windows.
+  [../../DECISIONS.md](../../DECISIONS.md)). Our stamp-refusal is the safety net against a
+  rolled-back renderer; a healed record lands in the *next* window, which is accepted
+  double-training of the same class as a version bump.
+- **Next phase (seeded): client live-stream testing.** The loop is pointed at a real captured day
+  flowing recording → DP → storage → us on real hardware. Nothing to build here for it; our night
+  is the same night.
 - **storage** — the day-log, the training-window ledger, the `window_id` minter and C12/C13/C14 are
-  *theirs and built* ([D18](../../DECISIONS.md)). Open on their side: *E-2*, the kind-aware
-  retraction primitive, which must cascade to the day-log and the reservoir — redesigned
-  whole-record by D28.
+  *theirs and built* ([D18](../../DECISIONS.md)). E-2's whole-record retraction is built and
+  cascades to the day-log; the reservoir leg of that cascade is still open on their side.
 - **data-processing** — the caption-spec upgrade (event-verb dense descriptions, quality score,
   eval-only QA field) and later an `amplify` batch stage / slot-generation stage are still queued
   behind board ratification of [C-2](DECISIONS.md).

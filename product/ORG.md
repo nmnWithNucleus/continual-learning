@@ -119,7 +119,7 @@ it twice. (Ratified 2026-07-09, D2; reversible if it fails us.)
 
 **A board is not a log — the two writing modes.** Added 2026-07-27, after `HANDOFF.md` grew to 498
 lines by quietly becoming a *second* worklog: its `§Current state` and `§Next` had accumulated
-~4,800 words of dated history that already lived in `handoff/engineering.md`, and — the tell, the
+~4,800 words of dated history that belonged in an aspect thread's worklog, and — the tell, the
 weaker copy went stale within a day. Nobody deletes from a section called "current state"; they
 append. So the mode is now named, per section:
 

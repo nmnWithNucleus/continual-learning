@@ -1,23 +1,21 @@
 """D28 / C10 v2 — day-log materialization over C2 v1 slots, and the day-log fetch.
 
-The v2 renderer walks ``content.slots`` (rebuild Stage E, WP-E2). This file is organised
-the way its v1 predecessor was, with the heal×window matrix appended:
+The v2 renderer walks ``content.slots``. This file is organised in four parts:
 
   PART 1 — the CHANGED rules, one test each (and then some):
      1. membership is by `updated_at` (D27), not `t_start`;
      2. segment buckets sit on a GLOBAL epoch grid, not relative to the window start;
      3. one record per chunk — latest `updated_at` wins per (chunk_id), rowid tiebreak
-        (D28; the v0 (chunk_id, kind, discriminator) key collapsed with the per-kind
-        record model).
+        (D28; a chunk has no siblings, so (chunk_id) is the whole key).
   PART 2 — slot routing + PRESERVED behaviours: caption→Scene, ocr→World text,
      transcript splits speaker-bucketed by their OWN t_start (both timestamp spellings),
      the RULED asr fallback (spk null) when transcript is absent, holes render as
-     absence, empty values are honest claims, no acoustic route; and the regressions
-     the v1 renderer already held: same-span merge, block grouping and caps, the exact
-     anchor line, `_block_zone`'s preference order, quality handling, travel.
+     absence, empty values are honest claims, no acoustic route; plus same-span merge,
+     block grouping and caps, the exact anchor line, `_block_zone`'s preference order,
+     quality handling, travel.
   PART 3 — the HTTP surface: GET /training/daylog, the C10 v2 body + stamps, the cache
      and its R2 invalidation, and the failure modes.
-  PART 4 — the heal×window matrix (the Stage D close-out law, all THREE shapes):
+  PART 4 — the heal×window matrix, all THREE shapes:
      a filling heal re-windows; a byte-identical still-holey re-POST does not; a
      byte-different-but-NOT-fuller heal (hole migrated between slots) re-windows and
      the renderer shows the new truth.
@@ -434,9 +432,9 @@ def test_transcript_splits_land_in_their_own_buckets_by_their_own_t_start():
 
 
 def test_both_split_timestamp_spellings_bucket_correctly():
-    """The Stage C carry, verbatim: split timestamps arrive in the verbatim C1 root
-    spelling (trailing Z) AND in abs_time's +00:00-microsecond spelling. Both must
-    bucket by instant, not by string."""
+    """Split timestamps arrive in two spellings: the verbatim C1 root span (trailing Z)
+    and the offset-derived `abs_time` form (+00:00, microseconds). Both must bucket by
+    instant, not by string — normalizing either would move a record."""
     base = datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()
     z_spelled = "2026-07-24T12:00:01Z"
     offset_spelled = "2026-07-24T12:00:11.250000+00:00"     # the +00:00-microsecond form
@@ -547,8 +545,8 @@ def test_the_acoustic_slot_has_no_route():
 
 def test_the_anchor_line_and_labels_are_byte_exact():
     """The rendered block is what the model trains on, so its bytes are the interface —
-    including the EN DASH between the clock readings and the label spellings, UNCHANGED
-    from v1 (D20: the block text is contract; WP-E4 re-proves it differentially)."""
+    including the EN DASH between the clock readings and the label spellings (D20: the
+    block text is contract, and the parity bar proves both renderers agree on it)."""
     base = datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC).timestamp()
     block = _build([_cap(_iso(base), "a red door", chunk_id="c1"),
                     _ocr(_iso(base), "EXIT", chunk_id="c2"),
@@ -1043,10 +1041,10 @@ def test_the_day_log_table_appears_on_a_preexisting_db(tmp_path):
 
 
 # =====================================================================================
-# PART 4 — the heal×window matrix (Stage D close-out law: all THREE shapes)
+# PART 4 — the heal×window matrix: all THREE shapes
 # =====================================================================================
 #
-# The DP-side inputs are pinned by Stage D's `test_heal_seam.py`: a still-holey heal
+# The DP-side inputs are pinned by DP's own `test_heal_seam.py`: a still-holey heal
 # re-POSTs BYTE-IDENTICAL wire bytes; a filling heal changes bytes; and a heal can move
 # a hole between slots (byte-different but NOT fuller — the shape a literal
 # "fuller-wins" reading would miss). These tests replay exactly those shapes against
@@ -1098,8 +1096,8 @@ def test_heal_shape_1_a_filling_heal_re_windows_and_renders_the_new_truth(store)
 
 
 def test_heal_shape_2_a_byte_identical_still_holey_repost_does_not_re_window(store):
-    """STILL-HOLEY RE-POST: DP re-POSTs byte-identical bytes (Stage D pins the wire),
-    the D27 upsert touches nothing, the cached day-log SURVIVES and the record stays
+    """STILL-HOLEY RE-POST: DP re-POSTs byte-identical bytes, the D27 upsert touches
+    nothing, the cached day-log SURVIVES and the record stays
     in its window. No re-render, no fingerprint movement, no cache loss."""
     store.put_profile("u1", "UTC")
     t = "2026-07-24T02:00:00Z"

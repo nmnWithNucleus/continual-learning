@@ -4,8 +4,8 @@ Window ids here are minted the way storage mints them (`w<YYYYMMDD>T<HHMMSS>Z`)
 rather than written as the old `w<local-date>` literals. That is not cosmetic:
 `entries()` orders by the id and `before_window` filters on it with a plain string
 comparison, and D18 named the hazard explicitly — mixed formats order correctly
-only by ASCII accident (`-` = 0x2D sorts below `0` = 0x30), so the cutover has to
-be tested under the new format rather than trusted.
+only by ASCII accident (`-` = 0x2D sorts below `0` = 0x30), so the ordering has to
+be tested under the minted format rather than trusted.
 """
 from app.reservoir import Reservoir
 from tests._helpers import make_window

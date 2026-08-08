@@ -7,31 +7,31 @@ the day-log schema: segment rows carry seg_id / t_start / t_end / caption / asr
 quality. The trainer seam renders these to segments.jsonl / blocks.jsonl
 byte-compatible with what the ported research code consumes.
 
-The join is a TIME-WINDOW join, not a per-chunk one: our audio chunks are
-VAD-carved (5–30 s) and video captions are per-keyframe records, so one ~10 s
-segment gathers every C2 record (or diarized sub-span) whose t_start falls in
-its bucket. Records are attributed by t_start (window rule).
+The join is a TIME-WINDOW join, not a per-chunk one: chunk spans and segment
+buckets are independent grids — audio chunks are VAD-carved (5–30 s) while a
+bucket is ~10 s — so one bucket gathers every C2 record, or diarized sub-span,
+whose t_start falls inside it. Records are attributed by t_start.
 
-THE BUCKET GRID IS GLOBAL, NOT WINDOW-RELATIVE (D18 rule 2, adopted here
-2026-07-27 — see `_bucket_index`). This module is the PARITY REFERENCE that
-storage's `materialize_daylog` is diffed against (storage CHARTER M9), and a
-window-relative grid made that diff true only for a window whose origin happened
-to sit on a segment boundary. Real windows are `[watermark, now−δ)` at second
-granularity, so nine origins in ten are misaligned and the two renderers grouped
-records into DIFFERENT segments — different block text, i.e. different training
-text. Measured, not reasoned: with the M9 fixture's origin shifted by 1–9 s,
-tier A failed for every one of the nine.
+THE BUCKET GRID IS GLOBAL, NOT WINDOW-RELATIVE (D18 rule 2 — see
+`_bucket_index`). This module is the PARITY REFERENCE that storage's
+`materialize_daylog` is diffed against (storage CHARTER M9), and a window-relative
+grid would make that diff true only for a window whose origin happened to sit on a
+segment boundary. Real windows are `[watermark, now−δ)` at second granularity, so
+nine origins in ten are misaligned, and under a window-relative grid the two
+renderers group records into DIFFERENT segments — different block text, i.e.
+different training text. Measured, not reasoned: with the M9 fixture's origin
+shifted by 1–9 s, tier A failed for every one of the nine.
 
 ONE deliberate difference from storage's materializer remains, and it is not a
 defect: MEMBERSHIP. This path filters on EVENT time (`in_window(t_start, win)`)
-because its callers hold an event-time window on purpose; storage selects on the
-INGEST axis. That is D18 rule 1, and it is what the M9 fixture neutralises (N1)
-rather than something either side should change.
+because its callers hold an event-time window on purpose; storage selects on its
+own `updated_at` axis. That is D18 rule 1, and it is what the M9 fixture
+neutralises (N1) rather than something either side should change.
 
-v0 renderer note: block text is labeled anchored lines (anchor line + Caption /
-Heard / World text). The research prose renderer (render_block's structured
-fields + in-text anchor weaving) lives in morpheus/blocks.py; the seam and field
-names are already its shape.
+Block text is labelled anchored lines (anchor line + Caption / Heard / World
+text). The research prose renderer (render_block's structured fields + in-text
+anchor weaving) lives in morpheus/blocks.py; the seam and field names are already
+its shape.
 """
 from __future__ import annotations
 
@@ -262,6 +262,7 @@ def _render_block(win: Window, index: int, group: list[Segment]) -> Block:
 def corpus_blocks(daylog: DayLog, quality_min: float) -> list[Block]:
     """Blocks eligible for amplification: the quality gate lives HERE (day log
     keeps everything; low-quality rows are excluded from training, not from the
-    record). Unscored (None) blocks pass — C2 v0 carries no quality yet."""
+    record). Unscored (None) blocks pass — C2 carries no quality field, and
+    unscored is not the same as failing."""
     return [b for b in daylog.blocks
             if b.quality is None or b.quality >= quality_min]

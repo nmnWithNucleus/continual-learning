@@ -55,11 +55,11 @@ dev; the same names carry to real hosts later).
 App service ports (from the serve-loop MVP): input 8081 · inference 8010 · output 8082 ·
 storage 8083 · vLLM 8000. Each also serves `/metrics` on that same port.
 
-Learn-loop additions (recording-led capture, then the DP rebuild): recording 8084 ·
-data-processing 8085 · DP model servers 8121–8152 (whisper/pyannote/ast/ocr, two
-replicas each, `servers/manifest.json` is the source of truth) · captioner vLLM
-**8161** (Qwen3-VL-32B for clipcap, loopback; deliberately distinct from the serve
-loop's user-facing :8000 — the E-3(b) split, Stage F).
+Learn-loop ports: recording 8084 · data-processing 8085 · DP model servers 8121–8152
+(whisper/pyannote/ast/ocr, two replicas each, `servers/manifest.json` is the source of
+truth) · captioner vLLM **8161** (Qwen3-VL-32B for clipcap, loopback; deliberately
+distinct from the serve loop's user-facing :8000, so a captioning burst cannot land in
+the assistant's batch).
 
 ## Cluster / hardware baseline
 

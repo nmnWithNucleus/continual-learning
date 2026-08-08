@@ -6,7 +6,7 @@ components — the discriminator is gone with the multi-record model (L2/L3).
 build_c2 assembles the ONE record: slots map, root-level modality, source
 verbatim from C1 minus modality + transport fields, the D17 trio (incl.
 device_clock) riding source{} verbatim, t_start/t_end carried as VERBATIM C1
-strings (the D-05 rule), no processed_at (ruled 2026-08-06), no enrichments, no
+strings (carried verbatim), no processed_at (ruled 2026-08-06), no enrichments, no
 discriminator, no content.kind.
 
 The mirror moves as one change: contract file + schemas.py validator
@@ -122,7 +122,7 @@ def test_absent_d17_fields_are_omitted_never_null():
 
 
 def test_spans_carried_verbatim_never_reformatted():
-    """The D-05 rule: whatever RFC3339 spelling C1 used rides through
+    """The verbatim-span rule: whatever RFC3339 spelling C1 used rides through
     char-for-char — fractional seconds, offset spelling, all of it."""
     c1 = {**C1, "t_start": "2026-07-19T17:04:10.123456+00:00",
           "t_end": "2026-07-19T17:04:22.000001Z"}

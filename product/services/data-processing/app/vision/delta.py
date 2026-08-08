@@ -1,16 +1,17 @@
-"""The delta gate: change-map math + the OCR-frame selector (D-04 / D-07 selection half).
+"""The delta gate: change-map math, and the OCR-frame selector built on it.
 
 PURE and I/O-FREE. Takes the raw output of clip.py's ffmpeg Pass A (a run of 32x32
 binarized change maps + their true PTS) and turns it into:
 
   * a ``Delta`` — per-analysis-time ``(peak, spread)`` summaries plus the anchor
     accumulator trace (``app/vision/clip_types.py`` shapes, imported, never redefined);
-  * the ``ocr_times`` the delta gate selected (D-07: floor grid ∪ change events, a
+  * the ``ocr_times`` the delta gate selected (floor grid ∪ change events, a
     rank-free even-spaced cap, chunk-local);
   * an ``idle`` flag (no change event fired the whole chunk → the caption uses the
-    idle prompt, per §7.2's "active / idle" split).
+    idle prompt: an idle screen and an active one are different captioning problems).
 
-WHY binarize-at-full-resolution then area-average then MAX (D-04, defect #26): a
+WHY binarize-at-full-resolution then area-average then MAX — this was measured, not
+reasoned: a
 whole-frame *mean* absolute difference is blind to typing at every resolution — one
 growing line of 26 px text on a 3024-wide canvas is ~0.03 % of frame area and a mean
 divides it away. ffmpeg binarizes each pixel (``lutyuv gt(val,24)``) BEFORE the
@@ -19,12 +20,12 @@ real value; taking the MAX over the 1024 cells recovers the signal. The Python s
 here only reduces the already-binarized 32x32 map to ``(peak, spread)`` and runs the
 anchor accumulator — it adds no second decode and no second change metric.
 
-THE FLOOR IS EXACTLY 2 (D-04): on flat black / white / 50 %-gray the change map's max
+THE FLOOR IS EXACTLY 2: on flat black / white / 50 %-gray the change map's max
 cell is a content-independent ``2/255`` — a deterministic artefact of the area
 downscale (verified: identical under lossless ffv1, so it is the scaler, not the
 codec). ``spread`` (cells ≥ ``CELL_THRESHOLD``) is ``0`` there. This is asserted in CI.
 
-DETERMINISM (§4 R4 / §3 D-05): every function here is a pure function of its inputs, so
+DETERMINISM: every function here is a pure function of its inputs, so
 identical bytes+settings yield a byte-identical ``Delta`` and an identical ``ocr_times``
 on any worker. The cap is **rank-free** (even-spaced over time-sorted survivors, never a
 magnitude sort) precisely so two ffmpeg builds ranking a tight cluster differently cannot
@@ -43,9 +44,9 @@ MAP_SIZE = 32                     # the area-downscale target; 32*32 = 1024 cell
 MAP_CELLS = MAP_SIZE * MAP_SIZE
 PIXEL_BINARIZE_THRESHOLD = 24     # ffmpeg lutyuv gt(val,24): a per-pixel change is 0/255
 CELL_THRESHOLD = 13               # a downscaled cell counts toward `spread` at >= this
-                                  # (the D-04 table's "spread = cells >= 13")
+                                  # (the calibration table's "spread = cells >= 13")
 
-# --- OCR event classification (D-07). class = IDLE | LAYOUT | TEXT ---------------------
+# --- OCR event classification. class = IDLE | LAYOUT | TEXT ---------------------
 IDLE = "idle"
 LAYOUT = "layout"
 TEXT = "text"
@@ -80,14 +81,14 @@ def parse_change_maps(raw: bytes) -> list[tuple[int, ...]]:
 
 def summarize_map(cells: tuple[int, ...]) -> DeltaCell:
     """One 32x32 change map -> ``(peak, spread)``: the max cell (0..255) and the count of
-    cells at/over ``CELL_THRESHOLD`` (0..1024). These are the D-04 calibration vectors."""
+    cells at/over ``CELL_THRESHOLD`` (0..1024). These are the calibration vectors."""
     peak = max(cells) if cells else 0
     spread = sum(1 for v in cells if v >= CELL_THRESHOLD)
     return DeltaCell(peak=peak, spread=spread)
 
 
 def classify(peak: int, spread: int, *, idle_peak: int, layout_peak: int) -> str:
-    """D-07 event class from an (accumulated) map's peak/spread. IDLE first: a peak at or
+    """The event class from an (accumulated) map's peak/spread. IDLE first: a peak at or
     below ``idle_peak`` implies no cell reached ``CELL_THRESHOLD`` (spread 0), so it is a
     genuine no-change. Otherwise LAYOUT (a big or wide change) else TEXT."""
     if peak <= idle_peak:
@@ -100,7 +101,7 @@ def classify(peak: int, spread: int, *, idle_peak: int, layout_peak: int) -> str
 def even_spaced_subset(items: list, cap: int) -> list:
     """Keep ``cap`` items evenly spaced across a TIME-SORTED list (the frames.py:133-135
     idiom). Rank-free by construction — the choice depends only on position, never on a
-    magnitude that two decoder builds could order differently (D-07)."""
+    magnitude that two decoder builds could order differently."""
     if cap <= 0:
         return []
     if len(items) <= cap:
@@ -113,7 +114,7 @@ def even_spaced_subset(items: list, cap: int) -> list:
 
 
 def floor_time(times: list[float], t_start_epoch: float, floor_s: float) -> float | None:
-    """D-07 floor grid, pinned convention (no ``t_prev`` ambiguity): the FIRST analysis
+    """The floor grid, pinned convention (no ``t_prev`` ambiguity): the FIRST analysis
     grid point whose ABSOLUTE epoch second is >= the next multiple of ``floor_s`` STRICTLY
     AFTER ``epoch(c1.t_start)``; ``None`` if no such point falls in this chunk.
 

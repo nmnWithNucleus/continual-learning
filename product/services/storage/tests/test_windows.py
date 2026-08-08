@@ -552,7 +552,7 @@ def test_the_open_body_rejects_caller_supplied_bounds(client, store):
 #
 # `contracts/c10_training_window.v1.json` is the AUTHORITY; `models.TrainingWindow` is a
 # second, independent check — the same order `POST /context/records` applies to C2 (schema
-# first, mirror second). The schema is a SIBLING of `c10_daylog.v1.json` rather than an
+# first, mirror second). The schema is a SIBLING of the day-log schema rather than an
 # extension of it because C10 is a family of OPERATIONS: the day-log body and the ledger
 # row are different bodies on different endpoints, and one file could only carry both
 # behind a `oneOf` that hides exactly the distinction the contract is about.
@@ -694,9 +694,9 @@ def test_no_contract_accepts_a_window_id_with_a_trailing_newline():
          "t_end": "2026-07-22T03:59:00Z", "state": "open", "outcome": None,
          "opened_at": "2026-07-22T04:00:00Z", "closed_at": None}
     )
-    # The c10 v2 day-log file is the FOURTH carrier of the width-bounds trap closure
-    # (Stage A carry): valid v2 in every other respect, so the rejection is about the
-    # forged id and nothing else.
+    # The c10 v2 day-log file is the FOURTH schema carrying the width-bounds trap
+    # closure: valid v2 in every other respect, so the rejection is about the forged id
+    # and nothing else.
     assert schemas.validate_c10(
         {"contract": "C10", "version": "2", "user_id": "u1", "window_id": forged,
          "t_start": "2026-07-20T00:00:00Z", "t_end": "2026-07-22T03:59:00Z",

@@ -249,8 +249,8 @@ def create_app() -> FastAPI:
         # E-2 (D28): WHOLE-RECORD retraction — retention / right-to-be-forgotten,
         # never correctness. The day-log cascade rides inside store.retract_context;
         # DP's ledger is untouched BY DESIGN, so a retracted chunk's redelivery still
-        # skips upstream (200 + a record_id this store no longer holds) — rebuild-
-        # after-retraction is the OD-2 /raw replay tool or a version bump.
+        # skips upstream (200 + a record_id this store no longer holds). Recovering the
+        # record means replaying it from /raw or forking the dialect.
         try:
             manifest = store.retract_context(
                 user_id, record_id=record_id, chunk_id=chunk_id,

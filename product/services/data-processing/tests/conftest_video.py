@@ -2,14 +2,14 @@
 
 NOT named ``conftest.py`` on purpose — pytest auto-loads only ``conftest.py``, so nothing
 here runs unless a test imports it. Every fixture is generated at test time by
-``ffmpeg lavfi`` (house rule #5: NO binaries committed, NO GPU, NO network) and cached in
+``ffmpeg lavfi`` — NO binaries committed, NO GPU, NO network — and cached in
 this process so the whole calibration set builds once in a few seconds.
 
-Resolution is pinned to 1440x900: the D-04 area-downscale floor is a content-independent
+Resolution is pinned to 1440x900: the area-downscale floor is a content-independent
 2/255 across the ~1.15–2.3 Mpx band (measured 1 below 1280x800, 3 above 1920x1200), and
 1440x900 sits solidly mid-band, so ``floor == 2`` is a robust CI assertion on this ffmpeg.
 
-The six calibration clips reproduce the D-04 *content classes* (idle / typing / layout /
+The six calibration clips reproduce the *content classes* (idle / typing / layout /
 switch), not the exact real-capture magnitudes (those are O-1 measurements on real screen
 footage, explicitly a pending open question). Each clip's measured signature on this ffmpeg
 build is recorded beside its builder.
@@ -103,7 +103,7 @@ def caret_clip(dur: int = DEFAULT_DUR) -> bytes:
 def typing_clip(dur: int = DEFAULT_DUR) -> bytes:
     """~40 wpm typing (a growing prefix over 33 ``between()`` windows) -> TEXT class:
     measured single-delta peak 18–32, spread 1–2, while the WHOLE-FRAME mean abs-diff is 0
-    (the D-04 claim: a mean is blind to typing; binarize-then-max recovers it)."""
+    (the measured claim: a mean is blind to typing; binarize-then-max recovers it)."""
     def build():
         txt = "the quick brown fox jumps over the lazy dog while typing slowly today"
         n = min(33, len(txt))

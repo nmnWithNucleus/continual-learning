@@ -1,6 +1,6 @@
 """``screentext`` — thin client over the ocr model server → the ``ocr`` slot.
 
-The DP-side half of D-06/D-07/D-08. Consumes ``clipprep``'s transient
+The DP-side half of the screen-text read. Consumes ``clipprep``'s transient
 ``ClipFrames``, sends each delta-gate-selected hi-res frame to the ocr
 server (``ctx.clients["ocr"]``, the framework ``/infer`` envelope: one base64 JPEG
 per call), then runs the client-side pipeline — bbox normalization → assemble
@@ -16,8 +16,8 @@ failure cancels ``clipcap``'s cone (it ``needs`` this stage), so a caption can n
 ship computed from missing OCR — and the record ships with BOTH holes, healed by
 redrive (L8), instead of dead-lettering the chunk.
 
-Ported v0 posture (from the v0 stage adapter, documented there as A-10): per-frame
-server errors are ABSORBED and counted; >50% of a chunk's attempted frames erroring
+Error posture: per-frame server errors are ABSORBED and counted, because one unreadable
+frame is not an unreadable chunk. >50% of a chunk's attempted frames erroring
 RAISES (refusing a corpus with the majority of on-screen text lost) — now a hole +
 heal instead of v0's redelivery.
 
@@ -36,7 +36,7 @@ Code pins below (L4) — the v0 env knobs they replace (v0 defaults carried forw
   VIDEO_OCR_MIN_CONF         MIN_CONF            0.60
   VIDEO_OCR_MIN_CHARS        MIN_CHARS           4
   VIDEO_OCR_DEDUP_RATIO      DEDUP_RATIO         0.92
-  (22 − 16, derived D-11)    OCR_CHARS_PER_SEC   6.0
+  (22 − 16, the caption's)   OCR_CHARS_PER_SEC   6.0
   =========================  ==================  =====
 
 Frame-time matching keeps v0's ``_MATCH_TOL_S = 0.25`` float-jitter tolerance.
@@ -56,11 +56,11 @@ from ...vision.ocr import assemble
 logger = logging.getLogger("data-processing.stages.video.screentext")
 
 # ---- code pins (L4). Editing any of these is a vB bump (they change the ocr slot's
-# bytes AND, injected via D-09, the caption's). ------------------------------------
+# bytes AND, since it is injected into the prompt, the caption's). ------------------
 MIN_CONF = 0.60          # drop server regions below this confidence
 MIN_CHARS = 4            # drop lines shorter than this
 DEDUP_RATIO = 0.92       # drop a line >= this similar to the previous kept (chunk-local)
-OCR_CHARS_PER_SEC = 6.0  # D-11: the OCR share of the 22 chars/second-of-life dose
+OCR_CHARS_PER_SEC = 6.0  # the OCR share of the 22 chars/second-of-life dose
 
 # Match tolerance between an ``ocr_times`` value and a frame's ``t_offset_s`` (they come
 # from the same clipprep pass; this only guards float re-parse jitter). v0 value.
@@ -154,7 +154,7 @@ class ScreentextStage(Stage):
     required = False          # L7: failure = hole + cancelled caption cone, healed later
     server = "ocr"
     # L10: C10 v2 routes slots.ocr to World text lines (D28); clipcap also
-    # consumes it in-run (D-09 injection).
+    # consumes it in-run, injected into the caption prompt.
     consumer = "daylog:world_text"
     # L5/L10 budget: version key + JSON overhead + the digest text. The text is capped at
     # OCR_CHARS_PER_SEC × span (360 chars at the 60 s design max), so 2048 bytes holds
@@ -183,7 +183,7 @@ class ScreentextStage(Stage):
                     "params": {},
                 })
                 reads.append(_regions_to_read(result, frame))
-            except Exception as exc:  # noqa: BLE001 - per-frame errors are absorbed (v0 A-10)
+            except Exception as exc:  # noqa: BLE001 - one bad frame is not a bad chunk
                 errors += 1
                 logger.warning("OCR read failed for chunk %s at t+%.2fs: %s",
                                chunk_id, t, exc)

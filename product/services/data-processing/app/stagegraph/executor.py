@@ -393,7 +393,7 @@ async def run_graph(
 
     # Deterministic assembly order (cleanup round): slots/statuses were inserted
     # in COMPLETION order, so wire bytes varied with replica latency — breaking
-    # §4's reprocess → byte-identical → upsert-no-op chain. Sorted keys make the
+    # The reprocess → byte-identical → upsert-no-op chain. Sorted keys make the
     # serialized record a pure function of content again.
     return GraphResult(slots={k: slots[k] for k in sorted(slots)},
                        statuses={k: statuses[k] for k in sorted(statuses)},

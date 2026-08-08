@@ -73,12 +73,12 @@ class ResolveResponse(_Strict):
     adapter_path: str | None
 
 
-# --- C2 v1 processed record (learn-loop /context; DP rebuild, D24) ---------------
+# --- C2 v1 processed record (learn-loop /context; D24) ---------------------------
 #
-# The branch mirrors C2 **v1** exclusively (founder ruling R1, 2026-08-06): one record
-# per chunk, content is a slots map, and the v0 concepts — content.kind/text,
-# enrichments, discriminator, source.modality, processed_at — do not exist here. The
-# frozen `c2_processed_record.v1.json` stays the authoritative gate; this mirror is the
+# This mirrors C2 **v1** exclusively: one record per chunk, content is a slots map, and
+# the names content.kind/text, enrichments, discriminator, source.modality and
+# processed_at do not exist here and must not be re-added. The
+# `c2_processed_record.v1.json` file stays the authoritative gate; this mirror is the
 # second, independent check, restated from the contract (services do not import each
 # other's code, so DP's own mirror is not imported — the ids.py precedent).
 
@@ -271,7 +271,7 @@ class TrainingWindow(_Strict):
     Mirrors ``contracts/c10_training_window.v1.json`` field-for-field; that schema stays
     the AUTHORITY and this service validates its own output against it before serving
     (``schemas.validate_c10_window``), exactly as it does for C6/C10/C12/C14. The schema
-    is a SIBLING of ``c10_daylog.v1.json`` rather than an extension of it because C10 is
+    is a SIBLING of the day-log schema rather than an extension of it because C10 is
     a family of operations and these are two different bodies on two different endpoints.
 
     Note that the schema is strictly STRONGER than this model, which is the point of

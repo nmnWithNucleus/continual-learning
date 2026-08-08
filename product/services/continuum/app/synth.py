@@ -4,12 +4,11 @@ Produces a plausible mixed-modality day (per-keyframe captions, diarized
 transcripts, OCR rows) inside a consolidation window, plus a few records
 deliberately OUTSIDE it, so window-attribution paths are always exercised.
 
-Dev utility — but `nightly.py --synthetic` DOES import it, so "nothing in the
-nightly path imports it" stopped being true at the cutover and the difference
-mattered: the placement below used to assume the window was a 24 h local day
-(`window_for(date, tz)`, deleted by D18) and hard-coded a 4 h lead-in before the
-first event. Storage's windows are `[last_trained_t, now−delta)` on the INGEST
-clock and are routinely minutes long, so every synthetic event landed past the
+Dev utility, but `nightly.py --synthetic` DOES import it, so its placement rule is
+load-bearing rather than decorative. It must not assume a window is a 24 h local day
+with a lead-in before the first event: storage's windows are
+`[last_trained_t, now−delta)` on the storage clock and are routinely minutes long,
+so an event placed under the old assumption lands past the
 end, `build_daylog` filtered them all out, and the demo night reported
 `skipped_no_data` and exit 0 — a night that trained on nothing and called it
 success. Every offset is now a FRACTION OF THE WINDOW'S OWN SPAN, so the

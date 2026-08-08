@@ -53,7 +53,7 @@ from typing import Any, Optional
 
 # The service's ONE timestamp minter (second-granularity RFC3339 UTC, lexicographically
 # ordered). Imported rather than restated so the reservoir's `admitted_at` can never drift
-# from the format `/context`'s `ingest_time` and the window ledger already use.
+# from the format `/context`'s own stamps and the window ledger already use.
 from .db import _utc_now
 from .ids import validate_path_id
 
@@ -160,7 +160,7 @@ class Reservoir:
         Idempotent on CONTENT: re-admitting the identical corpus under the same key returns
         the existing entry and writes nothing at all — ``admitted_at`` records when the
         artifact landed, not when someone last asked about it (the same rule ``/context``
-        applies to ``ingest_time`` across a reprocess). Admitting different content under a
+        applies to ``created_at`` across a reprocess). Admitting different content under a
         key that already committed raises ``CorpusConflict``.
 
         An admission that was TORN (corpus on disk, meta never written) has not committed,

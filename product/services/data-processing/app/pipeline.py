@@ -11,7 +11,7 @@ redelivery/reprocess/heal re-POST is an idempotent /context upsert; a
 ``pipeline_version`` bump forks a new record BESIDE the old (version-forward, L8
 case 2).
 
-``t_start``/``t_end`` are the C1 span strings carried VERBATIM (the D-05 rule): never
+``t_start``/``t_end`` are the C1 span strings carried VERBATIM: never
 reparsed, reformatted or normalized — a re-rendered timestamp is how a record silently
 moves out of its day-log window. ``source{}`` is provenance verbatim from C1 minus
 ``modality`` (lifted to the record root — a C1 chunk is strictly single-modality) and
@@ -84,7 +84,7 @@ def build_c2(
         "user_id": c1["user_id"],
         "modality": c1["modality"],
         "source": source,
-        "t_start": c1["t_start"],   # VERBATIM C1 strings — the D-05 rule
+        "t_start": c1["t_start"],   # VERBATIM C1 strings, never re-rendered
         "t_end": c1["t_end"],
         "pipeline_version": pipeline_version,
         "content": {"slots": slots},

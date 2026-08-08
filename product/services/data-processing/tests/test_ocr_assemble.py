@@ -34,7 +34,7 @@ def _region(text, bbox=(0.1, 0.4, 0.9, 0.45), conf=0.95, role=""):
     return OcrRegion(text=text, role=role, bbox=bbox, conf=conf)
 
 
-# ============================ redaction (D-07 step 4) ============================
+# ============================== redaction (step 4) ==============================
 
 # The six shapes the exit criteria pin, each -> [redacted:secret] exactly once.
 SECRET_CASES = {
@@ -89,7 +89,7 @@ def test_redaction_leaves_ordinary_text_and_non_luhn_numbers():
     assert n == 0 and out == text
 
 
-# ============================ region role (D-07 step 2) =========================
+# ============================= region role (step 2) =============================
 
 def _load(name):
     return json.loads((_FIXTURES / name).read_text())
@@ -128,7 +128,7 @@ def test_assign_role_covers_every_band():
         assert assign_role(bbox) == want, f"{bbox} -> want {want}"
 
 
-# ============================ render pipeline (D-07 2/3/5/6, D-12) ==============
+# ========================= render pipeline (steps 2/3/5/6) ======================
 
 def test_render_conf_and_minchars_gates_from_fixture():
     data = _load("gmail_compose.json")
@@ -205,7 +205,7 @@ def test_render_keeps_model_supplied_roles_and_coerces_off_vocab_ones():
     assert "titlebar:" not in line
 
 
-# ============================ budget helpers (D-11) =============================
+# ============================ budget helpers =============================
 
 @pytest.mark.parametrize("span,expected", [(10.0, 60), (60.0, 360), (0.0, 0), (2.5, 15)])
 def test_ocr_cap_at_the_pinned_rate(span, expected):

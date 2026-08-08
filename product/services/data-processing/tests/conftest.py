@@ -2,7 +2,7 @@
 
 The service under test runs MOCK DIALECTS: stage sets whose backends are
 client-level fakes, selected the same way real backends are — in code, named in
-the version string (plan §3). ``mock_registry`` installs the default mock audio
+the version string. ``mock_registry`` installs the default mock audio
 set into a clean stage registry (a test module can override the fixture to
 install its own set); ``client`` builds the app on top of it with the
 MockTransport fake storage and an isolated journal dir.

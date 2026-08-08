@@ -19,8 +19,8 @@ serving no one. It existed to de-risk a single link, that an adapter we trained 
 the server that will serve it. Written before D18, it minted `training_window` as `f"w-day{n}"`, a
 free-form literal that never went through a minter because there wasn't one yet.
 
-**Changed** — deleted. D18's build slice had listed moving it onto storage's minter
-(`../../../handoff/engineering.md` §Worklog 2026-07-26) and never did; board item 6 carried the
+**Changed** — deleted. D18's build slice had listed moving it onto storage's minter and never
+did; board item 6 carried the
 open question "should the smoke require storage?". Founders' answer, 2026-07-28: retire it instead.
 
 **Now** — the M0 question it existed to answer is answered, and `scripts/vllm_load_check.py` already
@@ -78,7 +78,7 @@ window, and the wrong-time-axis default)
 ### Next
 1. **Run the Execution steps above** (Phase 0 → 1 → 2 → 3). Phase 1 is the immediate action
    once the founder confirms the cluster data + we have envs/judge creds (lethal-Q4).
-2. **C10 freeze session** with storage (founders ratify) — first contract act, per D15.
+2. **C10 freeze session** with storage (founders ratify) — the first joint contract act.
    Propose: beta range read + `pipeline_version`/modality filters + (t_start, record_id)
    ordering + cursor; watermark/late-data policy rides along (charter OQ9).
 3. **Founders'-board ratification** of the kickoff decisions that re-cut charters/contracts

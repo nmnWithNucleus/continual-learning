@@ -1,7 +1,7 @@
 """The ``screentext`` stage — a thin client over the ocr model server.
 
 The stage is driven directly with a StageContext whose
-``clients["ocr"]`` is a client-level fake (plan §3 — no server spawned). The
+``clients["ocr"]`` is a client-level fake — no server is spawned. The
 centerpiece is the GOLDEN test: the fake returns the REAL ocr server's measured
 ``/infer`` result (servers/ocr/tests/fixtures/golden_regions.json, bit-stable per its
 PROVENANCE.md) for the REAL committed input frame — so the ``ocr`` slot value pinned
@@ -147,7 +147,7 @@ def test_empty_regions_is_ran_and_empty():
     assert len(client.calls) == 1
 
 
-# ------------------------------------------------------------------ error posture (v0 A-10)
+# ---------------------------------------------------------------------- error posture
 
 def test_minority_of_frame_errors_is_absorbed():
     # 1 of 3 frames errors -> absorbed; the digest renders from the other two.

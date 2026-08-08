@@ -1,4 +1,4 @@
-"""Two properties the storage cutover silently lost, each restored with its proof.
+"""Two properties that moving the stores behind HTTP silently lost, each with its proof.
 
 Both share a root cause with the publish tail: the journal's terminal key descends from
 the day-log's `content_fingerprint`, so a legitimate re-materialization re-enters code

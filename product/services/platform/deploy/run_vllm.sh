@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# run_vllm.sh — platform bring-up for the DP captioner VLM (Stage F cutover).
+# run_vllm.sh — platform bring-up for the DP captioner VLM.
 #
 # Serves Qwen/Qwen3-VL-32B-Instruct behind an OpenAI-compatible endpoint for
 # data-processing's clipcap stage (POST /v1/chat/completions with K stills per
-# clip, D-02). One vLLM process, tensor-parallel across two GPUs, loopback only.
+# clip). One vLLM process, tensor-parallel across two GPUs, loopback only.
 #
 # THE PINS ARE CODE, NOT KNOBS. Model name and weights revision are constants
 # here for the same reason clipcap pins the model name and the servers/ manifest
@@ -13,7 +13,7 @@
 # operational placement only (port, GPUs, log/run dirs).
 #
 # This endpoint is deliberately NOT under servers/manifest.json identity
-# verification (Stage C ruling): it speaks the OpenAI wire, not the fleet's
+# verification: it speaks the OpenAI wire, not the fleet's
 # /infer envelope. Its identity check is DP's boot probe — create_app asserts
 # GET /v1/models contains clipcap's pinned model name — plus this script's own
 # health wait, which requires the same thing before reporting "up".
@@ -42,10 +42,10 @@ fi
 # ---------------------------------------------------------------------------
 # Pins (code, reviewed — see header). Assigned AFTER the learn.env sourcing,
 # deliberately: an env-file line must not be able to override what model or
-# revision this launcher serves (GATE 1 verification round, finding 3; the
-# guard test lives in test_cutover_wipe.py). The revision is the exact snapshot
-# the caption first-contact smoke ran against; bumping it is a dialect-adjacent
-# change that re-runs that smoke, not an env edit.
+# revision this launcher serves, because that would change every caption in the
+# training corpus without moving `pipeline_version`. The guard is
+# `test_run_vllm_pins.py`. Bumping the revision is a dialect-adjacent change that
+# re-runs the caption smoke, not an env edit.
 # ---------------------------------------------------------------------------
 VLM_MODEL="Qwen/Qwen3-VL-32B-Instruct"
 VLM_REVISION="0cfaf48183f594c314753d30a4c4974bc75f3ccb"

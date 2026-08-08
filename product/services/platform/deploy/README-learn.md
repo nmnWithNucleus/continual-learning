@@ -24,9 +24,8 @@ storage (8083)  ──►  data-processing (8085, ASR_BACKEND=mock)  ──►  
 Default ASR backend is `mock` (canned transcript + fake segments spanning the
 chunk, **no GPU, no torch** — runs on any box). Contracts:
 [`../../../contracts/c1_raw_stream_envelope.v0.json`](../../../contracts/c1_raw_stream_envelope.v0.json)
-(C1) and [`../../../contracts/c2_processed_record.v0.json`](../../../contracts/c2_processed_record.v0.json)
-(C2). Slice + status: [`../../../handoff/engineering.md`](../../../handoff/engineering.md)
-§ "Learn-loop MVP slice".
+(C1) and [`../../../contracts/c2_processed_record.v1.json`](../../../contracts/c2_processed_record.v1.json)
+(C2). Status: [`../../../HANDOFF.md`](../../../HANDOFF.md) §Service status board.
 
 This is **separate** from the serve loop (`run_all.sh` + `.env` + `README.md`):
 different services, different env file (`learn.env`), different venv
@@ -40,8 +39,8 @@ common to both loops, so only **one loop can be up at a time**.
 | storage | **8083** | `/raw` (blob write/read) + `/context` (C2 write/read) — plus the serve-loop `/sessions` + model dir | existing service, **extended** |
 | recording | **8084** | continuous-source capturer + `POST /capture/run` (carve → `PUT /raw` → push C1) | new |
 | data-processing | **8085** | `POST /ingest` (C1 receiver) → pull blob → ASR → `POST /context/records` | new |
-| DP model servers | 8121–8152 | whisper/pyannote/ast/ocr replicas (`servers/manifest.json` owns the map) | DP rebuild |
-| captioner vLLM | **8161** | Qwen3-VL-32B for clipcap (`run_vllm.sh`; OpenAI wire, loopback) | Stage F |
+| DP model servers | 8121–8152 | whisper/pyannote/ast/ocr replicas (`servers/manifest.json` owns the map) | live |
+| captioner vLLM | **8161** | Qwen3-VL-32B for clipcap (`run_vllm.sh`; OpenAI wire, loopback) | live |
 
 Consistent with [STACK.md](../../../STACK.md) (serve-loop app ports: input 8081 ·
 inference 8010 · output 8082 · storage 8083 · vLLM 8000). The learn loop adds

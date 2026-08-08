@@ -3,12 +3,12 @@
 The one REQUIRED video stage (L7): everything downstream consumes its frames, so an
 undecodable chunk fails the attempt loudly (worker retry → dead-letter) — placeholder
 frames are never emitted as processed truth (the v0 mock synthetic fallback is dead;
-mock dialects are client-level fakes now, plan §3).
+mock dialects are client-level fakes now).
 
 Emits NO record slot: ``StageOutput(value=None, bytes=ClipFrames)``. The frames are
 re-derivable heavy data (a deterministic decode of the ``/raw`` bytes), which defaults
 to not-persisted under L5; the executor hands ``bytes`` to the declared consumers
-(``screentext``, ``clipcap``) and frees them after the last one finishes. The C2 §2
+(``screentext``, ``clipcap``) and frees them after the last one finishes. The C2
 video record carries ``caption`` + ``ocr`` only.
 
 ffmpeg stays a SUBPROCESS (self-isolating, L9 — no model server), so ``run_sync`` in
@@ -51,7 +51,7 @@ CLIP_SETTINGS = ClipSettings(
     seconds_per_frame=2.5,
     max_frames=12,
     min_frames=2,
-    frame_width=768,        # 768 -> exactly 360 Qwen3-VL vision tokens/frame (D-03/A-16)
+    frame_width=768,        # 768 -> exactly 360 Qwen3-VL vision tokens/frame
     ocr_frame_width=1728,   # the mac capture cap — OCR reads native res, no resample
     analysis_period_s=2.0,
     ocr_idle_peak=8,
