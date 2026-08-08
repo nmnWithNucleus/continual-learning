@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -23,372 +23,1186 @@
     --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -14px rgba(0,0,0,.6);
   }
 }
+:root[data-theme="dark"] {
+  --ground:#0E1210; --panel:#161B18; --panel-2:#1C231F; --ink:#DCE3DE; --ink-soft:#9FABA4;
+  --ink-faint:#778279; --line:#2A322D; --line-soft:#232A26; --accent:#A395F0; --accent-soft:#251F3D;
+  --ok:#4CC38A; --ok-soft:#17281F; --warn:#E0A336; --warn-soft:#2C2415; --info:#6FA3D8;
+  --info-soft:#182430; --hot:#F0554F; --hot-soft:#35201F; --code-bg:#121714; --code-ink:#C8D2CB;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -14px rgba(0,0,0,.6);
+}
+:root[data-theme="light"] {
+  --ground:#EEF1EF; --panel:#FFFFFF; --panel-2:#E4E9E6; --ink:#1A201C; --ink-soft:#47524C;
+  --ink-faint:#6B7770; --line:#CDD5D0; --line-soft:#DCE2DE; --accent:#5646C6; --accent-soft:#E9E6F7;
+  --ok:#2F8A5D; --ok-soft:#DFEEE5; --warn:#B77916; --warn-soft:#F4EAD5; --info:#33689C;
+  --info-soft:#E1EAF3; --hot:#C13A3A; --hot-soft:#F6E3E3; --code-bg:#1B211D; --code-ink:#D7DFD9;
+  --shadow:0 1px 2px rgba(20,28,24,.06),0 8px 24px -12px rgba(20,28,24,.14);
+}
 * { box-sizing:border-box; }
 html { scroll-behavior:smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior:auto; } * { transition:none !important; animation:none !important; } }
 body { margin:0; background:var(--ground); color:var(--ink); font-family:var(--sans); font-size:16.5px; line-height:1.65; -webkit-font-smoothing:antialiased; }
 h1,h2,h3,h4 { line-height:1.2; text-wrap:balance; }
 p { max-width:70ch; }
 a { color:var(--info); text-underline-offset:2px; }
 a:hover { color:var(--accent); }
-code { font-family:var(--mono); font-size:.84em; background:var(--panel-2); border-radius:4px; padding:.1em .35em; }
-pre { background:var(--code-bg); color:var(--code-ink); border-radius:10px; padding:16px 18px; overflow-x:auto; font-family:var(--mono); font-size:13px; line-height:1.6; }
-pre code { background:none; padding:0; font-size:inherit; color:inherit; }
+code { font-family:var(--mono); font-size:.84em; background:var(--panel-2); border-radius:4px; padding:.1em .35em; word-break:break-word; }
+pre { background:var(--code-bg); color:var(--code-ink); border-radius:10px; padding:16px 18px; overflow-x:auto; font-family:var(--mono); font-size:12.5px; line-height:1.6; }
+pre code { background:none; padding:0; font-size:inherit; color:inherit; word-break:normal; }
+button { font-family:inherit; color:inherit; }
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
 
-.shell { display:grid; grid-template-columns:236px minmax(0,1fr); max-width:1240px; margin:0 auto; }
-.rail { position:sticky; top:0; align-self:start; height:100dvh; padding:28px 10px 28px 22px; overflow-y:auto; border-right:1px solid var(--line-soft); display:flex; flex-direction:column; gap:2px; }
-.rail-brand { font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:14px; }
-.rail-brand b { color:var(--ink); font-weight:600; display:block; font-size:12px; }
-.rail a.tk { display:flex; gap:10px; align-items:baseline; padding:5px 10px; border-radius:7px; text-decoration:none; color:var(--ink-soft); font-size:13px; border-left:2px solid transparent; }
-.rail a.tk .n { font-family:var(--mono); font-size:10.5px; color:var(--ink-faint); min-width:20px; }
+/* ---------------------------------------------------------------- shell */
+.shell { display:grid; grid-template-columns:250px minmax(0,1fr); max-width:1280px; margin:0 auto; }
+.rail { position:sticky; top:0; align-self:start; height:100dvh; padding:26px 10px 22px 22px; overflow-y:auto; border-right:1px solid var(--line-soft); display:flex; flex-direction:column; gap:1px; }
+.rail-brand { font-family:var(--mono); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:14px; line-height:1.5; }
+.rail-brand b { color:var(--ink); font-weight:600; display:block; font-size:12px; letter-spacing:.1em; }
+.rail a.tk { display:flex; gap:9px; align-items:baseline; padding:4px 9px; border-radius:7px; text-decoration:none; color:var(--ink-soft); font-size:13px; }
+.rail a.tk .n { font-family:var(--mono); font-size:10.5px; color:var(--ink-faint); min-width:18px; font-variant-numeric:tabular-nums; }
 .rail a.tk:hover { background:var(--panel-2); color:var(--ink); }
-.rail-foot { margin-top:auto; padding:14px 10px 0; font-family:var(--mono); font-size:10.5px; color:var(--ink-faint); line-height:1.7; }
-main { min-width:0; padding:0 40px 90px; }
-@media (max-width:960px) {
+.rail a.tk.on { background:var(--accent-soft); color:var(--ink); }
+.rail a.tk.on .n { color:var(--accent); }
+.rail-foot { margin-top:auto; padding:14px 9px 0; font-family:var(--mono); font-size:10px; color:var(--ink-faint); line-height:1.8; border-top:1px solid var(--line-soft); }
+main { min-width:0; padding:0 42px 100px; }
+@media (max-width:980px) {
   .shell { grid-template-columns:1fr; }
-  .rail { position:static; height:auto; flex-direction:row; flex-wrap:wrap; border-right:0; border-bottom:1px solid var(--line-soft); padding:14px 16px; }
+  .rail { position:static; height:auto; flex-direction:row; flex-wrap:wrap; gap:5px; border-right:0; border-bottom:1px solid var(--line-soft); padding:14px 16px; }
   .rail-brand,.rail-foot { display:none; }
-  .rail a.tk { border-left:0; border:1px solid var(--line-soft); }
+  .rail a.tk { border:1px solid var(--line-soft); }
   main { padding:0 18px 70px; }
 }
 
-.hero { padding:46px 0 26px; }
-.hero-card { border:1px solid var(--line); border-radius:14px; background:var(--panel); box-shadow:var(--shadow); padding:30px 26px; }
-.hero h1 { font-size:clamp(29px,4.4vw,44px); font-weight:800; letter-spacing:-.02em; margin:0 0 12px; }
+/* ---------------------------------------------------------------- hero */
+.hero { padding:44px 0 8px; }
+.hero-card { border:1px solid var(--line); border-radius:14px; background:var(--panel); box-shadow:var(--shadow); padding:30px 28px; }
+.hero h1 { font-size:clamp(28px,4.2vw,42px); font-weight:800; letter-spacing:-.022em; margin:0 0 14px; }
 .hero h1 em { font-style:normal; color:var(--accent); }
-.hero .sub { font-size:18px; color:var(--ink-soft); margin:0; max-width:66ch; }
-.stage-chip { display:inline-flex; gap:8px; align-items:center; margin-top:18px; font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; background:var(--warn-soft); color:var(--warn); border:1px solid color-mix(in srgb,var(--warn) 35%,transparent); padding:5px 12px; border-radius:999px; }
-.statrow { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-top:26px; }
+.hero .sub { font-size:17.5px; color:var(--ink-soft); margin:0; max-width:68ch; }
+.chip-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:20px; }
+.stage-chip { display:inline-flex; gap:8px; align-items:center; font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; background:var(--warn-soft); color:var(--warn); border:1px solid color-mix(in srgb,var(--warn) 35%,transparent); padding:5px 12px; border-radius:999px; }
+.live-chip { display:inline-flex; gap:8px; align-items:center; font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; background:var(--ok-soft); color:var(--ok); border:1px solid color-mix(in srgb,var(--ok) 35%,transparent); padding:5px 12px; border-radius:999px; }
+.statrow { display:grid; grid-template-columns:repeat(auto-fit,minmax(158px,1fr)); gap:10px; margin-top:22px; }
 .stat { background:var(--panel); border:1px solid var(--line-soft); border-radius:10px; padding:12px 14px; }
-.stat .v { font-family:var(--mono); font-size:19px; font-weight:600; }
-.stat .k { font-size:12px; color:var(--ink-faint); margin-top:2px; }
+.stat .v { font-family:var(--mono); font-size:17px; font-weight:600; font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
+.stat .k { font-size:12px; color:var(--ink-faint); margin-top:3px; line-height:1.45; }
 
-section.module { padding:54px 0 10px; border-top:1px solid var(--line-soft); margin-top:44px; scroll-margin-top:12px; }
-section.module:first-of-type { border-top:0; margin-top:0; }
-.eyebrow { font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); margin-bottom:8px; }
-section.module h2 { font-size:clamp(23px,3vw,30px); font-weight:800; letter-spacing:-.015em; margin:0 0 6px; }
-.dek { font-size:17px; color:var(--ink-soft); margin:0 0 22px; max-width:66ch; }
-h3 { font-size:18.5px; font-weight:700; margin:34px 0 10px; }
-h4 { font-size:15px; font-weight:700; margin:22px 0 8px; }
+/* ---------------------------------------------------------------- sections */
+section.module { padding:50px 0 8px; border-top:1px solid var(--line-soft); margin-top:40px; scroll-margin-top:12px; }
+section.module:first-of-type { border-top:0; margin-top:14px; }
+.eyebrow { font-family:var(--mono); font-size:10.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); margin-bottom:8px; }
+section.module h2 { font-size:clamp(22px,2.9vw,29px); font-weight:800; letter-spacing:-.016em; margin:0 0 7px; }
+.dek { font-size:17px; color:var(--ink-soft); margin:0 0 20px; max-width:66ch; }
+h3 { font-size:18px; font-weight:700; margin:32px 0 10px; }
+h4 { font-size:14.5px; font-weight:700; margin:20px 0 7px; }
 
 .card { background:var(--panel); border:1px solid var(--line-soft); border-radius:12px; padding:18px 20px; box-shadow:var(--shadow); }
-.grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; }
+.grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(285px,1fr)); gap:14px; }
+.grid3 { display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:12px; }
 
-.note { border-left:3px solid var(--info); background:var(--info-soft); border-radius:0 10px 10px 0; padding:12px 16px; margin:16px 0; }
+.note { border-left:3px solid var(--info); background:var(--info-soft); border-radius:0 10px 10px 0; padding:13px 17px; margin:16px 0; }
 .note.warn { border-left-color:var(--warn); background:var(--warn-soft); }
-.note.hot { border-left-color:var(--hot); background:var(--hot-soft); }
-.note.law { border-left-color:var(--accent); background:var(--accent-soft); }
-.note p { margin:0; max-width:78ch; }
-.note b.tag { font-family:var(--mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; display:block; margin-bottom:3px; }
+.note.hot  { border-left-color:var(--hot);  background:var(--hot-soft); }
+.note.law  { border-left-color:var(--accent); background:var(--accent-soft); }
+.note.ok   { border-left-color:var(--ok); background:var(--ok-soft); }
+.note p { margin:0; max-width:80ch; }
+.note p + p { margin-top:9px; }
+.note b.tag { font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase; display:block; margin-bottom:4px; }
 
-.pill { display:inline-block; font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; border-radius:999px; padding:2px 9px; border:1px solid; vertical-align:1px; }
+.pill { display:inline-block; font-family:var(--mono); font-size:10px; letter-spacing:.07em; text-transform:uppercase; border-radius:999px; padding:2px 8px; border:1px solid; vertical-align:1px; white-space:nowrap; }
 .pill.ok { color:var(--ok); background:var(--ok-soft); border-color:color-mix(in srgb,var(--ok) 40%,transparent); }
 .pill.warn { color:var(--warn); background:var(--warn-soft); border-color:color-mix(in srgb,var(--warn) 40%,transparent); }
 .pill.info { color:var(--info); background:var(--info-soft); border-color:color-mix(in srgb,var(--info) 40%,transparent); }
 .pill.law { color:var(--accent); background:var(--accent-soft); border-color:color-mix(in srgb,var(--accent) 40%,transparent); }
+.pill.hot { color:var(--hot); background:var(--hot-soft); border-color:color-mix(in srgb,var(--hot) 40%,transparent); }
 .pill.dim { color:var(--ink-faint); background:var(--panel-2); border-color:var(--line); }
 
-table { border-collapse:collapse; width:100%; font-size:14px; }
+table { border-collapse:collapse; width:100%; font-size:13.5px; }
 .tblwrap { overflow-x:auto; border:1px solid var(--line-soft); border-radius:10px; background:var(--panel); margin:16px 0; }
-th { text-align:left; font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-faint); padding:10px 14px; border-bottom:1px solid var(--line); white-space:nowrap; }
-td { padding:10px 14px; border-bottom:1px solid var(--line-soft); vertical-align:top; }
+th { text-align:left; font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-faint); padding:10px 13px; border-bottom:1px solid var(--line); white-space:nowrap; }
+td { padding:9px 13px; border-bottom:1px solid var(--line-soft); vertical-align:top; }
+td.num { font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:nowrap; }
 tr:last-child td { border-bottom:0; }
 
-.chips { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:10px 0; }
+ul.tight, ol.tight { max-width:74ch; padding-left:22px; }
+ul.tight li, ol.tight li { margin-bottom:9px; }
+
+.chips { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:12px 0; }
 .chip { font-family:var(--mono); font-size:12px; padding:7px 11px; border-radius:8px; background:var(--panel-2); border:1px solid var(--line); color:var(--ink-soft); white-space:nowrap; }
 .chip.me { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
-.chip.store { border-style:dashed; }
-.arr { color:var(--ink-faint); font-family:var(--mono); }
+.arr { color:var(--ink-faint); font-family:var(--mono); font-size:12px; }
 
-.vocab { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:10px; }
-.vword { background:var(--panel); border:1px solid var(--line-soft); border-radius:10px; padding:12px 14px; }
-.vword .w { font-family:var(--mono); font-weight:600; font-size:14px; color:var(--accent); }
-.vword p { font-size:13.5px; color:var(--ink-soft); margin:6px 0 0; }
+/* ---------------------------------------------------------------- vocabulary */
+.vocab { display:grid; grid-template-columns:repeat(auto-fit,minmax(268px,1fr)); gap:11px; margin:16px 0; }
+.vword { background:var(--panel); border:1px solid var(--line-soft); border-left:3px solid var(--accent); border-radius:0 10px 10px 0; padding:12px 15px; }
+.vword .w { font-family:var(--mono); font-size:13px; font-weight:600; color:var(--ink); display:block; margin-bottom:4px; }
+.vword p { margin:0; font-size:13.5px; color:var(--ink-soft); max-width:none; line-height:1.55; }
 
-.sgraph { background:var(--panel); border:1px solid var(--line-soft); border-radius:12px; padding:16px 18px; overflow-x:auto; margin:16px 0; }
-.sg-title { font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:12px; }
-.sg-lane { font-family:var(--mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-faint); margin:12px 0 8px; }
-.sg-flex { display:flex; flex-wrap:wrap; gap:10px; }
-.sg-stage { font-family:var(--mono); font-size:12px; padding:8px 12px; border-radius:9px; border:1.5px solid var(--line); background:var(--panel-2); max-width:320px; }
-.sg-stage small { display:block; font-size:9.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-faint); margin-top:2px; }
-.sg-stage.slot { border-color:var(--accent); background:var(--accent-soft); }
-.sg-stage.slot small { color:var(--accent); }
-.sg-stage.opt { border-style:dashed; }
+/* ---------------------------------------------------------------- instruments */
+.inst { border:1px solid var(--line); border-radius:13px; background:var(--panel); box-shadow:var(--shadow); margin:20px 0; overflow:hidden; }
+.inst-head { padding:12px 17px; border-bottom:1px solid var(--line-soft); background:var(--panel-2); display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; }
+.inst-title { font-family:var(--mono); font-size:10.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--ink-soft); }
+.inst-body { padding:17px; }
+.btnrow { display:flex; flex-wrap:wrap; gap:7px; }
+.btn { font-family:var(--mono); font-size:11.5px; padding:6px 12px; border-radius:7px; border:1px solid var(--line); background:var(--panel); color:var(--ink-soft); cursor:pointer; transition:background .12s,border-color .12s,color .12s; }
+.btn:hover { border-color:var(--accent); color:var(--ink); }
+.btn.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+.btn.danger.on { background:var(--hot); border-color:var(--hot); }
 
-.tree { font-family:var(--mono); font-size:12.5px; line-height:1.9; background:var(--panel); border:1px solid var(--line-soft); border-radius:12px; padding:16px 18px; overflow-x:auto; }
-.tree .dir { color:var(--info); font-weight:600; }
-.tree .cm { color:var(--ink-faint); }
+/* record explorer */
+.rec-grid { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); gap:15px; }
+@media (max-width:860px) { .rec-grid { grid-template-columns:1fr; } }
+.rec-json { background:var(--code-bg); border-radius:10px; padding:14px 15px; overflow-x:auto; font-family:var(--mono); font-size:12px; line-height:1.62; color:var(--code-ink); }
+.rec-json .row { display:block; width:100%; text-align:left; background:none; border:0; padding:1px 6px; margin:0 -6px; border-radius:4px; color:inherit; font:inherit; white-space:pre; cursor:pointer; }
+.rec-json button.row:hover { background:rgba(255,255,255,.08); }
+.rec-json button.row.on { background:color-mix(in srgb,var(--accent) 42%,transparent); }
+.rec-json .k { color:#9FD3FF; } .rec-json .s { color:#C8E6A0; } .rec-json .n { color:#F0C674; } .rec-json .c { color:#7C8B82; font-style:italic; }
+.rec-side { background:var(--panel-2); border:1px solid var(--line-soft); border-radius:10px; padding:14px 16px; align-self:start; position:sticky; top:14px; }
+.rec-side h4 { margin:0 0 6px; font-family:var(--mono); font-size:12px; letter-spacing:.04em; }
+.rec-side p { margin:0; font-size:13.5px; color:var(--ink-soft); max-width:none; line-height:1.6; }
+.rec-side p + p { margin-top:8px; }
 
-.board { display:grid; grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); gap:12px; }
-.bd-item { background:var(--panel); border:1px solid var(--line-soft); border-radius:11px; padding:14px 16px; }
-.bd-item .hd { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:6px; }
-.bd-item .hd b { font-size:14.5px; }
-.bd-item p { font-size:13.5px; color:var(--ink-soft); margin:0; }
-ul.tight { padding-left:20px; margin:10px 0; }
-ul.tight li { margin-bottom:8px; max-width:72ch; }
+/* graph lanes */
+.lanes { display:flex; flex-direction:column; gap:4px; }
+.lane-label { font-family:var(--mono); font-size:9.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--ink-faint); margin:12px 0 5px; }
+.lanes .lane-label:first-child { margin-top:0; }
+.lane { display:flex; flex-wrap:wrap; gap:9px; }
+.nd { border:1.5px solid var(--line); background:var(--panel-2); border-radius:9px; padding:9px 12px; font-family:var(--mono); font-size:12px; min-width:150px; max-width:270px; transition:opacity .15s,border-color .15s,background .15s; }
+.nd .nm { font-weight:600; display:flex; gap:6px; align-items:baseline; flex-wrap:wrap; }
+.nd .meta { display:block; font-size:9.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-faint); margin-top:3px; line-height:1.5; }
+.nd.req { border-color:var(--accent); background:var(--accent-soft); }
+.nd.st-failed { border-color:var(--hot); background:var(--hot-soft); border-style:dashed; }
+.nd.st-cancelled { opacity:.45; border-style:dotted; }
+.nd.st-ok { border-color:var(--ok); background:var(--ok-soft); }
+.outbox { margin-top:14px; padding-top:13px; border-top:1px dashed var(--line); }
+.slotpill { display:inline-block; font-family:var(--mono); font-size:11.5px; padding:5px 10px; border-radius:7px; margin:0 6px 6px 0; border:1px solid; }
+.slotpill.present { color:var(--ok); background:var(--ok-soft); border-color:color-mix(in srgb,var(--ok) 45%,transparent); }
+.slotpill.hole { color:var(--warn); background:var(--warn-soft); border-color:color-mix(in srgb,var(--warn) 45%,transparent); border-style:dashed; }
+.verdict { margin-top:12px; font-size:14px; line-height:1.6; color:var(--ink-soft); max-width:76ch; }
+.verdict b { color:var(--ink); }
+
+/* claim tree */
+.tree { display:flex; flex-direction:column; gap:8px; }
+.tnode { border:1px solid var(--line-soft); border-radius:9px; padding:11px 14px; background:var(--panel-2); transition:border-color .15s,background .15s,opacity .15s; }
+.tnode.on { border-color:var(--accent); background:var(--accent-soft); }
+.tnode .tq { font-family:var(--mono); font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-faint); }
+.tnode .tv { font-size:14px; margin-top:3px; }
+.tnode.on .tv { color:var(--ink); }
+.tnode .tv b { font-family:var(--mono); font-size:13px; }
+
+/* honesty reader */
+.hon-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:11px; margin-top:6px; }
+.hon { border:1px solid var(--line-soft); border-radius:10px; padding:13px 15px; background:var(--panel-2); }
+.hon .hh { font-family:var(--mono); font-size:11px; letter-spacing:.06em; font-weight:600; margin-bottom:5px; display:block; }
+.hon.a { border-left:3px solid var(--ok); } .hon.a .hh { color:var(--ok); }
+.hon.b { border-left:3px solid var(--warn); } .hon.b .hh { color:var(--warn); }
+.hon.c { border-left:3px solid var(--ink-faint); } .hon.c .hh { color:var(--ink-faint); }
+.hon p { margin:0; font-size:13px; color:var(--ink-soft); max-width:none; line-height:1.55; }
+.hon code { font-size:11.5px; }
+
+.quiz-q { font-size:15.5px; margin:0 0 11px; max-width:76ch; }
+.quiz-fb { margin-top:12px; font-size:14px; line-height:1.62; color:var(--ink-soft); max-width:78ch; min-height:1px; }
+.quiz-fb.good { color:var(--ok); } .quiz-fb.bad { color:var(--hot); }
+.quiz-fb .why { color:var(--ink-soft); display:block; margin-top:6px; }
+.prog { font-family:var(--mono); font-size:11px; color:var(--ink-faint); }
+
+.kv { font-family:var(--mono); font-size:12.5px; line-height:1.9; }
+.kv .kk { color:var(--ink-faint); }
+.srcline { font-family:var(--mono); font-size:11px; color:var(--ink-faint); margin-top:9px; }
 </style>
 </head>
 <body>
 <div class="shell">
-<nav class="rail" aria-label="Modules">
-  <div class="rail-brand"><b>NUCLEUS · DATA PROCESSING</b>field guide</div>
-  <a class="tk" href="#m0"><span class="n">00</span> Briefing</a>
-  <a class="tk" href="#m1"><span class="n">01</span> Why DP exists</a>
-  <a class="tk" href="#m2"><span class="n">02</span> Vocabulary</a>
-  <a class="tk" href="#m3"><span class="n">03</span> One record, built from slots</a>
-  <a class="tk" href="#m4"><span class="n">04</span> The version law</a>
-  <a class="tk" href="#m5"><span class="n">05</span> Machinery &amp; bureaucracy</a>
-  <a class="tk" href="#m6"><span class="n">06</span> Slots in practice</a>
-  <a class="tk" href="#m7"><span class="n">07</span> Failure &amp; healing</a>
-  <a class="tk" href="#m8"><span class="n">08</span> Crash safety</a>
-  <a class="tk" href="#m9"><span class="n">09</span> Real vs unbuilt</a>
-  <a class="tk" href="#m10"><span class="n">10</span> Day one</a>
-  <div class="rail-foot">stage: PROTOTYPE (D19)<br>derived teaching view (D22) —<br>the repo wins on disagreement<br>sources: CHARTER · HANDOFF ·<br>ARCHITECTURE · DECISIONS · app/ · tests/</div>
+
+<nav class="rail" aria-label="Sections">
+  <div class="rail-brand"><b>Nucleus · Data Processing</b>field guide</div>
+  <a class="tk" href="#s00"><span class="n">00</span> How to read this</a>
+  <a class="tk" href="#s01"><span class="n">01</span> What the service is for</a>
+  <a class="tk" href="#s02"><span class="n">02</span> Vocabulary</a>
+  <a class="tk" href="#s03"><span class="n">03</span> One chunk, one record</a>
+  <a class="tk" href="#s04"><span class="n">04</span> Identity</a>
+  <a class="tk" href="#s05"><span class="n">05</span> The version law</a>
+  <a class="tk" href="#s06"><span class="n">06</span> The graph</a>
+  <a class="tk" href="#s07"><span class="n">07</span> Machinery &amp; bureaucracy</a>
+  <a class="tk" href="#s08"><span class="n">08</span> Durability &amp; healing</a>
+  <a class="tk" href="#s09"><span class="n">09</span> Storage &amp; the day-log</a>
+  <a class="tk" href="#s10"><span class="n">10</span> Working on it</a>
+  <a class="tk" href="#s11"><span class="n">11</span> What is not built</a>
+  <div class="rail-foot">
+    derived teaching view (D22)<br>the repo wins on disagreement<br>
+    stage: PROTOTYPE (D19)<br>
+    live readings: 2026-08-08
+  </div>
 </nav>
 
 <main>
 
 <header class="hero">
   <div class="hero-card">
-    <h1>The Data Processing Service is where a captured life becomes <em>language</em>.</h1>
-    <p class="sub">Raw audio and video chunks flow in from recording; one structured, timestamped record per chunk flows out to storage. Every token the per-user model is ever trained on passes through this pipeline, so the quality ceiling of the whole product is set here. This guide teaches the service <strong>as it runs today</strong>: one record per chunk, assembled from slots that are each written exactly once.</p>
-    <span class="stage-chip">⚠ Stage: PROTOTYPE (D19) — the docs speak in a production voice; the build is a prototype</span>
+    <h1>Every sentence the model ever learns about a person <em>passes through here</em>.</h1>
+    <p class="sub">Data processing takes a few seconds of someone's captured life and writes down what it contained — the words spoken, who spoke them, the scene on screen, the text in it — as one structured, timestamped record. This guide teaches the service as it runs today, and it is written so that when you finish you can follow a single chunk from a device all the way to a line of the day-log the trainer reads, and say at every step what is guaranteed and what is merely likely.</p>
+    <div class="chip-row">
+      <span class="stage-chip">Stage: PROTOTYPE (D19)</span>
+      <span class="live-chip">Live readings taken 2026-08-08</span>
+    </div>
     <div class="note law" style="margin-top:20px">
-      <b class="tag">Derived teaching view · D22</b>
-      <p>This page is <strong>derived and non-authoritative</strong>. It exists to teach; it is not a source of truth. Wherever this page and the repository disagree, <strong>the repository wins</strong> — read the <a href="../CHARTER.md">data-processing charter</a> and the <a href="../../../ARCHITECTURE.md">system architecture</a> first, then come back. It is linked from the charter and corrected in the same session as the change it teaches (the D22 bargain).</p>
+      <b class="tag">A derived teaching view (D22)</b>
+      <p>This page exists to teach, and it is <strong>not a source of truth</strong>. (Bracketed codes like D22 throughout are entries in the founders' decision register, <a href="../../../DECISIONS.md">DECISIONS.md</a> — each one a dated ruling. The meaning always comes before the code, so you never have to look one up mid-sentence.) Wherever it and the repository disagree, <strong>the repository wins</strong> — the law's one home is the <a href="../CHARTER.md">service charter</a>, in its Slot Law section, and the contracts live in <a href="../../../ARCHITECTURE.md">ARCHITECTURE.md</a> and <a href="../../../contracts/c2_processed_record.v1.json">the C2 schema</a>. It is linked from the charter and corrected in the same session as any change it teaches.</p>
     </div>
     <div class="statrow">
-      <div class="stat"><div class="v">1 chunk → 1 record</div><div class="k">C2 v1: one record per chunk, built from slots (Slot Law L2)</div></div>
-      <div class="stat"><div class="v">569 + 4</div><div class="k">DP tests green / skipped</div></div>
-      <div class="stat"><div class="v">:8085</div><div class="k">our port (storage :8083 · recording :8084 · captioner :8161)</div></div>
-      <div class="stat"><div class="v">C1 → C2</div><div class="k">the two contracts we live between (C8 is designed, unbuilt)</div></div>
+      <div class="stat"><div class="v">1 chunk → 1 record</div><div class="k">exactly one C2 record per chunk, built from named slots</div></div>
+      <div class="stat"><div class="v">569 passed · 4 skipped</div><div class="k">the service suite, run 2026-08-08 05:17Z in 55.03 s</div></div>
+      <div class="stat"><div class="v">8 model servers</div><div class="k">four models, two replicas each, on ports 8121–8152</div></div>
+      <div class="stat"><div class="v">:8085</div><div class="k">our port — storage :8083 · recording :8084</div></div>
     </div>
   </div>
 </header>
 
-<!-- ===================================================== 00 -->
-<section class="module" id="m0">
-  <div class="eyebrow">Module 00 · Briefing</div>
-  <h2>What you're joining, in ninety seconds</h2>
-  <p class="dek">The shortest true description of the service, before any detail.</p>
-  <p>Data processing takes a few seconds of someone's captured life — a slice of audio, a slice of screen or camera video — and writes down what it contained: the words spoken, the scene described, the text on the screen, each stamped with the wall-clock time it happened. Recording hands us those slices over HTTP; we pull the raw bytes from storage, run them through a small graph of processing steps, and write one record back to storage's <code>/context</code> store. Tonight, the continuum service reads those records and trains the user's personal model on them.</p>
-  <p>Good behaviour holds <strong>by construction</strong>: one slice becomes exactly one record, each field written by exactly one step and never edited. The Slot Law (D23–D28) is what the running service enforces — module 03 is where that shape lives.</p>
+<!-- ============================================================= 00 -->
+<section class="module" id="s00">
+  <div class="eyebrow">Section 00 · Orientation</div>
+  <h2>How to read this, and what you should be able to do at the end</h2>
+  <p class="dek">About forty minutes of reading, and a promise about what it buys you.</p>
+
+  <p>Read this straight through in order. Each section assumes the one before it and nothing after it, so skipping forward mostly produces confusion rather than speed. Sections 01 to 05 are the shape of the thing and are not optional; 06 to 09 are the machinery; 10 and 11 are what to do on your first day and what is honestly still missing.</p>
+
+  <p>The guide is written against the running system. Every version string, port number, byte budget and test count in it was taken from the code or from a live request on <b>2026-08-08</b>, and where a number is the kind that goes stale, the reading is dated in place. When you read this months from now, treat the dated numbers as a snapshot and re-check them — the section on working on the service tells you the commands.</p>
+
+  <p>When you reach the end you should be able to answer these four questions without looking anything up. They are the questions this service is built around, and every one of them has a section that answers it.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h4>Why can a record's identity be recomputed from its own contents?</h4>
+      <p style="font-size:13.5px;color:var(--ink-soft);margin:0">Because identity is a hash of two things the record itself carries. Section 04.</p>
+    </div>
+    <div class="card">
+      <h4>Why is delivering the same chunk twice safe?</h4>
+      <p style="font-size:13.5px;color:var(--ink-soft);margin:0">Because the same chunk under the same processing produces byte-identical output at a stable address. Sections 04 and 08.</p>
+    </div>
+    <div class="card">
+      <h4>What happens when one model server dies mid-chunk?</h4>
+      <p style="font-size:13.5px;color:var(--ink-soft);margin:0">It depends entirely on whether the stage that was calling it was required or optional. Sections 06 and 07.</p>
+    </div>
+    <div class="card">
+      <h4>How can you tell "nothing was there" from "we failed" from "we never tried"?</h4>
+      <p style="font-size:13.5px;color:var(--ink-soft);margin:0">From the record together with the string naming the processing that produced it — the <em>dialect</em>, defined in section 02. The distinction is the point of the whole design. Section 06.</p>
+    </div>
+  </div>
 </section>
 
-<!-- ===================================================== 01 -->
-<section class="module" id="m1">
-  <div class="eyebrow">Module 01 · Orientation</div>
-  <h2>Why Nucleus exists, and where DP sits</h2>
-  <p class="dek">The product promise, and our one job inside it.</p>
-  <p>Nucleus is building a personal model that genuinely knows you — trained, night after night, on your own captured life. For that to work, someone has to turn the raw capture into clean, timestamped, structured text the model can learn from. That is us. We sit between two neighbours and speak to each through one contract apiece:</p>
+<!-- ============================================================= 01 -->
+<section class="module" id="s01">
+  <div class="eyebrow">Section 01 · The job</div>
+  <h2>What the service is for, and the two boundaries it lives between</h2>
+  <p class="dek">One job, two contracts, and a quality ceiling for the entire product.</p>
+
+  <p>Nucleus is building a model of one person, trained night after night on that person's own captured life. Something has to stand between the raw capture — an audio blob, a screen recording — and a trainer that can only learn from language. That is this service. We turn bytes into sentences with timestamps on them.</p>
+
+  <p>The consequence is worth sitting with before you read any code. Every token the personal model is ever trained on passed through this pipeline. If we transcribe a sentence wrongly, the model learns it wrongly, and nothing downstream can detect that it happened. There is no reviewer between us and the training set. That is why so much of what follows is about being able to tell, later and from the data alone, exactly what we did and did not do.</p>
+
   <div class="chips">
-    <span class="chip">recording</span><span class="arr">— C1 →</span>
+    <span class="chip">recording :8084</span><span class="arr">— C1 →</span>
     <span class="chip me">data-processing :8085</span><span class="arr">— C2 →</span>
-    <span class="chip store">storage /context</span><span class="arr">→</span>
-    <span class="chip">continuum (nightly training)</span>
+    <span class="chip">storage /context :8083</span><span class="arr">→</span>
+    <span class="chip">continuum · nightly training</span>
   </div>
-  <ul class="tight">
-    <li><strong>C1 in</strong> — recording pushes a small envelope per chunk: who and which device, the wall-clock span, the modality and codec, and a <code>blob_ref</code> pointing at the raw bytes it already stored in storage's <code>/raw</code>. We pull the bytes by that ref.</li>
-    <li><strong>C2 out</strong> — we write one processed record per chunk to storage's <code>/context</code>. That record, and how it is built, is the heart of this guide (module 03).</li>
-    <li><strong>C8 — designed, not built.</strong> The same pipeline is meant to be offered synchronously to the input service, so an interactive request (you paste a screenshot into chat) is normalised by the exact same code as the life stream. Nothing is built yet; the inline ingest path is kept alive deliberately as C8's skeleton, which is why you will see it beside the async path in module 08.</li>
-  </ul>
-  <p>We own no capture devices, no storage engine, and no training. Recording owns the first; storage owns <code>/raw</code>, <code>/context</code> and the day-log; continuum owns the nightly fine-tune. Our contract with quality is simple and total: if we write it wrong, the model learns it wrong.</p>
+
+  <h3>C1 comes in: an envelope, and bytes somewhere else</h3>
+  <p>Recording carves a captured stream into <b>chunks</b> of a few seconds each. For every chunk it does two separate things: it writes the raw bytes to storage's <code>/raw</code> store first, and then it pushes us a small JSON envelope describing them. That envelope is contract C1. It carries who the user is, which device and which stream, a sequence number, the chunk's own id, the modality and codec, the wall-clock span, and a <code>blob_ref</code> pointing at the bytes recording already stored. We pull the bytes by that reference. That sequence number is <em>dense</em>: the first chunk of a stream is numbered zero and each later one adds exactly one, so a number that never arrives means a chunk was lost rather than never sent.</p>
+  <p>Two properties of this arrangement matter more than the rest. Delivery is <b>at-least-once</b>, which means recording may hand us the same chunk again — after a timeout, after a restart, after an operator asks it to — and it is our job to make that harmless rather than duplicative. And the device's own clock discipline rides along in the envelope: the timezone it believed it was in, its offset, and a flag saying whether its clock was synchronized. We copy all three onto the record verbatim and perform no timezone arithmetic of any kind (D17). A zone is a fact about where a person physically was, knowable only at the device and only at the moment of capture; anything we reconstructed later would be a guess wearing the costume of data.</p>
+
+  <h3>C2 goes out: exactly one record</h3>
+  <p>For each chunk we write exactly one processed record to storage's <code>/context</code> store. That record is contract C2, currently at version 1, and the next three sections are about almost nothing else. It carries provenance back to the chunk, the wall-clock span copied verbatim from the envelope, a string naming the processing that produced it, and a map of named <b>slots</b> holding what we actually found.</p>
+
+  <div class="note">
+    <p><b class="tag">There is a third contract, and it is not built</b>The charter also promises C8: the same pipeline offered synchronously to the input service, so that an interactive request — you paste a screenshot into a conversation — is normalized by the identical code that normalizes the life stream. No C8 surface exists today. What does exist is the inline ingest path described in section 08, kept deliberately as C8's skeleton; deleting it would orphan the contract before anybody builds it.</p>
+  </div>
+
+  <p>Everything else belongs to a neighbour. Recording owns capture and the devices. Storage owns <code>/raw</code>, <code>/context</code> and the day-log it renders for the trainer. Continuum owns the nightly fine-tune. We own the middle, and our obligation to all of them is the same: write down what was really there, and make it possible to tell afterwards what we did.</p>
 </section>
 
-<!-- ===================================================== 02 -->
-<section class="module" id="m2">
-  <div class="eyebrow">Module 02 · Vocabulary</div>
-  <h2>Speak DP before you read DP</h2>
-  <p class="dek">Ten words. The rest of the guide assumes them. None is optional.</p>
+<!-- ============================================================= 02 -->
+<section class="module" id="s02">
+  <div class="eyebrow">Section 02 · Language</div>
+  <h2>Vocabulary — the twelve words the rest of this assumes</h2>
+  <p class="dek">Each is defined here and used precisely everywhere after. None is decorative.</p>
+
   <div class="vocab">
-    <div class="vword"><span class="w">chunk</span><p>A few seconds of one captured stream — the unit everything is keyed on. Recording carves the stream into chunks; we dedup on the chunk's id.</p></div>
-    <div class="vword"><span class="w">record</span><p>The one C2 object we write per chunk. It carries provenance, the time span, the dialect string, and a <code>content.slots</code> map. Exactly one per chunk (Slot Law L2).</p></div>
-    <div class="vword"><span class="w">slot</span><p>One named field inside a record's <code>content.slots</code> — <code>asr</code>, <code>transcript</code>, <code>caption</code>, <code>ocr</code>, <code>acoustic</code>. Each is written by exactly one step and never edited.</p></div>
-    <div class="vword"><span class="w">stage</span><p>One processing step in the graph — e.g. <code>asr</code>, <code>diarize</code>, <code>clipcap</code>. It declares what it needs, which one slot it produces, and whether it is required.</p></div>
-    <div class="vword"><span class="w">backend</span><p>The concrete implementation a stage runs — a model and its settings (<code>fw</code> for faster-whisper, <code>vlm</code> for the captioner, <code>mock</code> in tests). Named in the dialect.</p></div>
-    <div class="vword"><span class="w">pipeline_version <span class="pill dim">the dialect</span></span><p>A plain string naming every enabled stage and its versions, e.g. <code>asr.v1-fw.v1+diarize.v1-pyannote.v1+…</code>. It states which processing produced a record. The trainer must see one dialect per chunk.</p></div>
-    <div class="vword"><span class="w">hole</span><p>A slot that was <em>attempted and failed</em> — so it is simply absent from the record. Distinct from a slot present with an empty value (an honest "nothing there").</p></div>
-    <div class="vword"><span class="w">heal</span><p>Re-running a chunk's whole graph on redelivery to fill a hole, re-writing the <em>same</em> record. Convergence, not monotonicity, is the promise (module 07).</p></div>
-    <div class="vword"><span class="w">machinery / bureaucracy</span><p>The split at the centre of the design: models are long-lived <em>machinery</em> (server processes); the DP service is thin <em>bureaucracy</em> (an async orchestrator that calls them). No model loads inside DP.</p></div>
-    <div class="vword"><span class="w">model server</span><p>One replicated, GPU-pinned process per model (<code>servers/whisper</code>, <code>pyannote</code>, <code>ast</code>, <code>ocr</code>), health-checked and restarted by a supervisor that lives in DP.</p></div>
+    <div class="vword"><span class="w">chunk</span><p>A few seconds of one captured stream, and the unit everything is keyed on. Recording carves streams into chunks; each has an id, and that id is how we recognise it again.</p></div>
+    <div class="vword"><span class="w">record</span><p>The one C2 object we write per chunk. Provenance, the time span, the dialect string, and a map of slots. Exactly one per chunk, and the machinery can only produce one.</p></div>
+    <div class="vword"><span class="w">slot</span><p>One named entry in a record's <code>content.slots</code> map — <code>asr</code>, <code>diarization</code>, <code>transcript</code>, <code>acoustic</code>, <code>caption</code>, <code>ocr</code>. Written by exactly one stage, exactly once, and never edited afterwards by anyone.</p></div>
+    <div class="vword"><span class="w">executor</span><p>The machinery that runs one chunk's stages: it works out which may start, runs them, collects each slot, and assembles the single record. When this guide says something holds "by construction", the executor is usually what constructs it.</p></div>
+    <div class="vword"><span class="w">stage</span><p>One processing step, declared in one file. It says what other stages it needs, which single slot it produces, whether it is required, and how many bytes its slot may occupy.</p></div>
+    <div class="vword"><span class="w">backend</span><p>The concrete implementation behind a stage — a model and the way it is called. Selected in code, never by configuration, and named in the version string so you can always see which one ran.</p></div>
+    <div class="vword"><span class="w">pipeline_version</span><p>Also called the <b>dialect</b>. A plain string naming every stage that was enabled and the versions it ran at, joined with plus signs in sorted order. It states what was <em>attempted</em>, and it is half of a record's identity.</p></div>
+    <div class="vword"><span class="w">segment</span><p>One stage's own piece of the dialect string, shaped <code>&lt;stage&gt;.v&lt;S&gt;-&lt;backend&gt;.v&lt;B&gt;</code>. Each slot carries a copy of its producer's segment, so a slot can name what made it without anyone re-parsing the whole dialect.</p></div>
+    <div class="vword"><span class="w">hole</span><p>A slot that was attempted and failed, and is therefore simply absent from the record. Distinct from a slot that is present and empty, which is a claim that we looked and found nothing.</p></div>
+    <div class="vword"><span class="w">heal</span><p>Re-running a chunk's whole graph on a later delivery to try to fill its holes, writing to the same record address. Bounded by a budget of three.</p></div>
+    <div class="vword"><span class="w">model server</span><p>A long-lived process that holds one model in memory and answers requests over HTTP. Four such models run under this service's own supervisor, two replicas each, and no model is ever loaded inside this service itself.</p></div>
+    <div class="vword"><span class="w">day-log</span><p>The rendered account of a span of someone's life that storage builds from our records, and the thing the trainer actually reads. Ours to feed, storage's to render.</p></div>
   </div>
-  <p style="margin-top:14px">Two more you will meet from the neighbours: the <strong>day-log</strong> is the account of a day that storage renders from our records for the trainer, and a <strong>window</strong> is the span one night's training covers. Both are storage's, not ours — but our records are what they are built from.</p>
 </section>
 
-<!-- ===================================================== 03 -->
-<section class="module" id="m3">
-  <div class="eyebrow">Module 03 · The core</div>
-  <h2>One record per chunk, built from slots</h2>
-  <p class="dek">If you remember one thing from this guide, remember this shape.</p>
-  <p>A C2 v1 record is one object per chunk. Its identity is a hash of exactly two things — the chunk id and the dialect — and writing it to storage is a blind upsert on that id. Its content is a <strong>map of slots</strong>: each key is a slot name, each value was written by one stage, and no stage ever edits another stage's slot.</p>
-  <pre><code>{
-  "contract": "C2", "version": "1",
-  "record_id": "sha256(chunk_id ␀ pipeline_version)",
-  "user_id": "nmn",
-  "modality": "audio",
-  "source": { "device_id": "...", "stream_id": "...", "chunk_id": "...",
-              "blob_ref": "raw/...", "device_tz": "Asia/Tokyo" },
-  "t_start": "2026-07-19T17:04:10Z",
-  "t_end":   "2026-07-19T17:04:22Z",
-  "pipeline_version": "asr.v1-fw.v1+diarize.v1-pyannote.v1+speaker_align.v1-builtin.v1+acoustic.v1-ast.v1",
-  "content": {
-    "slots": {
-      "asr":         { "version": "asr.v1-fw.v1", "language": "en", "value": "...", "splits": [ ... ] },
-      "diarization": { "version": "diarize.v1-pyannote.v1", "splits": [ ... ] },
-      "transcript":  { "version": "speaker_align.v1-builtin.v1", "splits": [ ... ] },
-      "acoustic":    { "version": "acoustic.v1-ast.v1", "values": ["keyboard typing"], "confidence": 0.87 }
-    }
-  }
-}</code></pre>
-  <div class="note law"><b class="tag">Slot Law L2 · L3 · L5</b><p><strong>One record per <code>(chunk_id, pipeline_version)</code></strong>, the executor structurally emits one and a test asserts it (L2). <strong>Identity is two components</strong>, NUL-joined and hashed — there is no third identity component, because with one record per chunk there are no siblings to tell apart (L3). <strong>Content is a slot map</strong>, one producer per slot, each written once and never edited (L5). A speaker-aligned transcript is not an edit of the raw ASR — it is a <em>new</em> slot from an ordinary stage whose inputs are the ASR and diarization slots.</p></div>
-  <p>A video chunk has the same shape: one record with a <code>caption</code> slot and an <code>ocr</code> slot. Storage assigns the durable timestamps (<code>created_at</code>, <code>updated_at</code>) — there is deliberately no wall-clock inside the record, so a re-run under the same dialect is byte-identical.</p>
-</section>
+<!-- ============================================================= 03 -->
+<section class="module" id="s03">
+  <div class="eyebrow">Section 03 · The core</div>
+  <h2>One chunk, one record, built from slots</h2>
+  <p class="dek">If you keep one shape from this guide, keep this one. Everything else is machinery that protects it.</p>
 
-<!-- ===================================================== 04 -->
-<section class="module" id="m4">
-  <div class="eyebrow">Module 04 · Identity</div>
-  <h2>The version law — identity lives in code, never in config</h2>
-  <p class="dek">Why there is no knob that changes what a record says.</p>
-  <p>The dialect string is the <code>+</code>-joined, sorted list of every enabled stage's segment <code>&lt;stage&gt;.v&lt;S&gt;-&lt;backend&gt;.v&lt;B&gt;</code>, resolved before any stage runs. It states the <em>attempted</em> dialect, and it is the second half of every record's identity. Two rules keep it honest:</p>
-  <ul class="tight">
-    <li><strong>Stage version <code>vS</code></strong> bumps on a contract change — the stage's needs, its slot's name or shape, its emit semantics, its byte budget. <strong>Backend version <code>vB</code></strong> bumps on an implementation change — the model, its weights, its prompts, its thresholds, any behaviour.</li>
-    <li><strong>No output-affecting env knob exists.</strong> Every environment variable is operational only — endpoints, replica counts, timeouts, log levels. A determinism test in CI proves it: fixed bytes and fixed versions produce a byte-identical record across the whole settings matrix. If a knob could move one byte of a record, the test goes red.</li>
-  </ul>
-  <div class="note"><p><b class="tag">A worked example</b>When a prompt pack's content-addressed digest changes, a registration guard welds that digest to the captioner's backend version and forces a <code>vB</code> bump — e.g. <code>clipcap.v1-vlm.v1</code> → <code>clipcap.v1-vlm.v2</code>. The bump is code-true immediately and wire-true only after the next deliberate fleet restart deploys it (module 09). Nobody can quietly change a model-facing prompt without the dialect forking; that is the law working.</p></div>
-  <p><strong>Experiments fork the dialect too.</strong> An in-code A/B must surface its treatment in the string as <code>.exp-&lt;code&gt;</code> — invisible-to-identity experimentation is forbidden, so an experimental caption can never be mistaken for a real one in the training corpus.</p>
-</section>
+  <p>A chunk of captured life becomes exactly one record — precisely, one record per chunk <em>per dialect</em>, which is the qualifier that makes reprocessing under a new version safe rather than destructive, as the next two sections show. That record's content is not prose and not a fixed set of fields — it is a <b>map of named slots</b>, where each slot was written by exactly one stage, written once, and never touched again by anything else. Adding a second record for the same chunk is not a thing anyone can do by writing code carelessly; it would require changing the contract itself.</p>
 
-<!-- ===================================================== 05 -->
-<section class="module" id="m5">
-  <div class="eyebrow">Module 05 · Architecture</div>
-  <h2>Machinery and bureaucracy — the split at the centre</h2>
-  <p class="dek">Where the models live, and why not inside DP.</p>
-  <p>Every model — ASR, diarization, acoustic tagging, OCR, the video captioner — runs as a <strong>long-lived server process</strong>: loaded once, kept warm, GPU-pinned, health-checked, and restarted on crash. Those are the <em>machinery</em>. The DP service itself is <em>bureaucracy</em>: a thin async orchestrator that, per chunk, prepares a request, calls a model server over HTTP, and folds the reply into a slot. <strong>No model loads inside the DP process</strong>, and there are no per-chunk child processes.</p>
-  <div class="sgraph">
-    <div class="sg-title">one chunk through the service</div>
-    <div class="sg-lane">bureaucracy — DP :8085 (one async process)</div>
-    <div class="sg-flex">
-      <div class="sg-stage">/ingest<small>accept · dedup · journal</small></div>
-      <div class="sg-stage">worker<small>one asyncio task per chunk</small></div>
-      <div class="sg-stage slot">assemble<small>slots → one C2 → POST /context</small></div>
+  <p>Below is a real record, fetched from the running storage service on 2026-08-08. The pipeline that produced it is entirely real; the life inside it is not, because no captured day has yet flowed through this system (section 11) — this chunk comes from a synthetic soak feed reading a novel aloud, which is why its device is called <code>mac-a</code>. Click any line to learn what it is and why it looks that way.</p>
+
+  <div class="inst">
+    <div class="inst-head">
+      <span class="inst-title">A real C2 record · live from storage :8083</span>
+      <div class="btnrow">
+        <button class="btn on" data-rec="audio">audio chunk</button>
+        <button class="btn" data-rec="video">video chunk</button>
+      </div>
     </div>
-    <div class="sg-lane">machinery — the supervised model-server fleet</div>
-    <div class="sg-flex">
-      <div class="sg-stage">servers/whisper<small>ASR · GPU</small></div>
-      <div class="sg-stage">servers/pyannote<small>diarization · GPU</small></div>
-      <div class="sg-stage">servers/ast<small>acoustic · GPU</small></div>
-      <div class="sg-stage">servers/ocr<small>screen text · CPU</small></div>
-      <div class="sg-stage opt">captioner :8161<small>Qwen3-VL · external endpoint</small></div>
+    <div class="inst-body">
+      <div class="rec-grid">
+        <div class="rec-json" id="recJson" role="listbox" aria-label="Record fields"></div>
+        <aside class="rec-side" id="recSide"><h4>Click a line</h4><p>Every part of this record is doing a specific job. Select any line to see which.</p></aside>
+      </div>
     </div>
   </div>
-  <p>The <strong>supervisor</strong> is not a process of its own: it is a task inside DP, which means the DP process is the direct parent of every replica. It reads a manifest — which servers, how many replicas, which GPU each pins to — and spawns, health-checks and restarts them. A stage talks to a server through a thin client that picks a replica, enforces a per-call timeout, and retries a transient failure on another replica. When a replica dies, the supervisor brings it back; when all replicas fail one input the same way, that is a real failure and the next module owns what happens.</p>
-  <div class="note"><p>This split is why the old subprocess isolation shield is gone: it existed to contain a model crash <em>inside</em> the DP process. With the models outside, a poison chunk fails one stage client and the supervisor restarts a dead replica — there is nothing left in DP to isolate.</p></div>
-  <div class="note"><p><b class="tag">Know this before you kill anything</b>How DP's death reaches the fleet depends on <em>how</em> it dies. Replicas are spawned into their own sessions, so they do not die with their parent. A <strong>graceful stop</strong> — <code>SIGTERM</code>, or any shutdown that runs the lifespan — takes the fleet down with DP. A <strong><code>kill -9</code></strong> does not: the lifespan never runs, and all eight replicas survive as orphans still holding their ports and GPU memory. You reap those by hand, and a restarted DP cannot bind those ports until you do. This is why the crash drill in module 08 hard-kills DP and still finds a fleet running.</p></div>
+
+  <div class="note law">
+    <p><b class="tag">Why a map of slots, and not fields</b>A fixed set of fields would mean that adding a capability — acoustic tagging, on-screen text — reshapes the contract for everybody, and that two steps writing near each other eventually write over each other. A map removes both problems at once. A new capability adds a key; nothing existing changes shape. And because each key has exactly one writer, "who wrote this" is answerable from the record alone, forever. The rule that makes it hold is that no stage may edit another stage's slot. When you want a view that combines two slots — a transcript with speakers attached to it — you do not edit either one. You add a stage that reads both and produces a <em>third</em> slot, which is exactly what <code>transcript</code> is in the record above.</p>
+  </div>
+
+  <p>Look again at the <code>acoustic</code> slot in the audio record. Its value is an empty list. That is not a bug and not missing data: it is the acoustic stage saying, on the record, that it ran and found no events worth naming. A slot that is <em>present and empty</em> is a claim. A slot that is <em>absent</em> is a different thing entirely, and section 06 is where that distinction gets its full weight.</p>
 </section>
 
-<!-- ===================================================== 06 -->
-<section class="module" id="m6">
-  <div class="eyebrow">Module 06 · The two modalities</div>
-  <h2>Slots in practice — audio and video</h2>
-  <p class="dek">Which stages produce which slots, and how a chunk becomes a record.</p>
-  <h3>Audio</h3>
-  <p>An audio chunk runs a VAD-gated ASR plus diarization and acoustic tagging. Four stages, four slots — and a fifth stage, <code>speaker_align</code>, that reads two of them to produce a derived one:</p>
+<!-- ============================================================= 04 -->
+<section class="module" id="s04">
+  <div class="eyebrow">Section 04 · Identity</div>
+  <h2>Why a record's address can be recomputed from the record itself</h2>
+  <p class="dek">Two components, one hash, and the reason at-least-once delivery stops being frightening.</p>
+
+  <p>A record's <code>record_id</code> is the SHA-256 of exactly two things joined by a zero byte: the chunk id, and the dialect string.</p>
+
+  <pre><code>record_id = sha256( chunk_id + NUL + pipeline_version )</code></pre>
+
+  <p>Both inputs are printed inside the record — <code>source.chunk_id</code> and <code>pipeline_version</code> — so anyone holding a record can recompute its address and check it. Here is that computation on the very record shown above, with its actual values — and the digest it produces is the <code>record_id</code> printed at the top of that record, which you can check for yourself:</p>
+
+  <div class="inst">
+    <div class="inst-head"><span class="inst-title">Recomputing a live record's identity</span></div>
+    <div class="inst-body">
+      <div class="kv">
+        <div><span class="kk">chunk_id       </span> 01KZDHFJGFA0CWYJQY4BST5JHA</div>
+        <div><span class="kk">separator      </span> a single NUL byte (0x00)</div>
+        <div><span class="kk">pipeline_version</span> acoustic.v1-ast.v1+asr.v1-fw.v1+diarize.v1-pyannote.v1+speaker_align.v1-builtin.v1</div>
+        <div style="margin-top:8px"><span class="kk">sha256         </span> <span style="color:var(--accent)">d613aabfd56d93522f2432ab842d1c61452beb6da50bc843ad32c9ca284cd382</span></div>
+      </div>
+      <p class="srcline">Verified 2026-08-08 against both the record storage served and the service journal row for that chunk, which stores the same id.</p>
+    </div>
+  </div>
+
+  <p>Why a zero byte in the middle? Because without a separator that cannot appear in either component, two different pairs could concatenate into the same string and collide. Chunk ids and dialect strings are both text; a NUL byte is not text, so nothing can smuggle one across the boundary.</p>
+
+  <h3>What determinism buys: exactly-once effects on an at-least-once wire</h3>
+  <p>Now put the pieces together, because this is the single most useful idea in the service. Writing to storage is a <b>blind upsert</b> on <code>record_id</code> — storage does not ask whether it has seen the record, it simply writes it at that address. And the same chunk processed under the same dialect produces byte-identical output, because nothing time-varying is allowed inside a record. There is deliberately no "processed at" timestamp: a wall-clock field would make every reprocess differ, and the determinism test would go red.</p>
+
+  <p>So: deliver a chunk twice and the second pass computes the same address and writes the same bytes to it. The wire is at-least-once; the <em>effect</em> is exactly-once. Nobody has to coordinate, no locks are held across services, and a redelivery — from a retry, a restart, or an operator re-pushing a day — is simply harmless. Most of the durability machinery in section 08 exists to exploit this property rather than to work around its absence.</p>
+
+  <div class="note ok">
+    <p><b class="tag">The corollary you will use constantly</b>Change the dialect and you change the address. A record processed under a new version does not overwrite the old one — it lands <em>beside</em> it, at a different id, and both exist in storage. That is what "version-forward" means everywhere in this service, and it is why bumping a version is a safe act rather than a destructive one.</p>
+  </div>
+</section>
+
+<!-- ============================================================= 05 -->
+<section class="module" id="s05">
+  <div class="eyebrow">Section 05 · The version law</div>
+  <h2>The dialect: what ran, stated before anything runs</h2>
+  <p class="dek">How the string is built, why no environment variable may ever change a record, and a live example of code and fleet disagreeing.</p>
+
+  <p>Every stage declares two version numbers. The <b>stage version</b> covers its contract — what it needs, what its slot is called and what shape that slot has, what it means to emit it, and its byte budget. The <b>backend version</b> covers its implementation — the model, the weights, the prompts, the thresholds, any behaviour at all. Together with their names they form the stage's <b>segment</b>:</p>
+
+  <pre><code>&lt;stage&gt;.v&lt;S&gt;-&lt;backend&gt;.v&lt;B&gt;          asr.v1-fw.v1
+                                     diarize.v1-pyannote.v1</code></pre>
+
+  <p>The dialect for a run is every enabled stage's segment, sorted, joined with plus signs. It is composed during graph resolution — cheap string work over a handful of stages — <em>before any stage executes</em>. That ordering is not an implementation detail: it is what lets the string mean "attempted". A dialect naming four stages tells you four stages were tried. It never tells you four stages succeeded.</p>
+
+  <div class="inst">
+    <div class="inst-head">
+      <span class="inst-title">Compose a dialect · bump a version and watch identity move</span>
+      <div class="btnrow" id="dialModality">
+        <button class="btn on" data-mod="audio">audio</button>
+        <button class="btn" data-mod="video">video</button>
+      </div>
+    </div>
+    <div class="inst-body">
+      <div id="dialStages" class="btnrow" style="margin-bottom:12px"></div>
+      <div class="kv">
+        <div><span class="kk">segments, sorted →</span></div>
+        <div id="dialOut" style="color:var(--accent);word-break:break-all"></div>
+        <div style="margin-top:9px"><span class="kk">record_id this chunk would get under that dialect →</span></div>
+        <div id="dialHash" style="word-break:break-all"></div>
+      </div>
+      <div class="verdict" id="dialNote"></div>
+    </div>
+  </div>
+
+  <h3>No environment variable may change what a record says</h3>
+  <p>This is the part that surprises people who have worked on services where a knob tunes the output. Here, behaviour lives in code or it does not exist. A stage is never even handed the settings object: the context it receives carries the envelope, the raw bytes, its inputs and its clients, and no configuration at all. Environment variables do exist — twenty of them are declared — but every one is operational rather than output-affecting: where storage lives, which endpoint to call, how many workers to run, how long to wait, whether metrics are on.</p>
+
+  <p>This is enforced rather than encouraged. A determinism test runs the same fixed bytes through the pipeline across a matrix of environments and asserts the produced record is byte-identical every time, and a second check reads every environment variable the code touches and fails if a new name appears that has not been declared operational. If you find yourself reaching for a configuration value to change what a record contains, you are writing a code change, and it needs a version bump.</p>
+
+  <div class="note law">
+    <p><b class="tag">Which number do I bump?</b>Change what the stage <em>promises</em> — its dependencies, its slot's name or shape, what emitting it means, its byte budget — and that is the stage version. Change how it <em>keeps</em> that promise — a different model, new weights, a reworded prompt, a moved threshold — and that is the backend version. If you are running an experiment, it must surface in the string as a <code>.exp-</code> suffix; an A/B that is invisible to identity is forbidden outright, because it would mean two records claiming to be the same thing while containing different answers.</p>
+  </div>
+
+  <h3>A live example: what the code says, and what the fleet is serving</h3>
+  <p>The dialect is resolved from the stage declarations that the running process loaded when it started. Python reads a module once; editing the file afterwards changes nothing until something restarts. That produces a situation you can see right now on this fleet, and it is worth understanding because it will happen to you.</p>
+
   <div class="tblwrap"><table>
-    <tr><th>stage</th><th>slot</th><th>required?</th><th>what it writes</th></tr>
-    <tr><td><code>asr</code> (faster-whisper)</td><td><code>asr</code></td><td>required</td><td>the transcript text, with per-span <code>splits[]</code>; empty on a silent chunk (honest, not a failure)</td></tr>
-    <tr><td><code>diarize</code> (pyannote)</td><td><code>diarization</code></td><td>optional</td><td>who spoke when — speaker-labelled spans</td></tr>
-    <tr><td><code>speaker_align</code></td><td><code>transcript</code></td><td>optional</td><td>a <em>derived</em> slot: ASR text bucketed by diarization speaker</td></tr>
-    <tr><td><code>acoustic</code> (AST)</td><td><code>acoustic</code></td><td>optional</td><td>non-speech tags — "keyboard typing", "running water"</td></tr>
+    <thead><tr><th>Video dialect</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td>What the code declares</td><td class="num">clipcap.v1-vlm.<b style="color:var(--accent)">v2</b>+clipprep.v1-ffmpeg.v1+screentext.v1-ppocr.v1</td></tr>
+      <tr><td>What the running service serves</td><td class="num">clipcap.v1-vlm.<b style="color:var(--warn)">v1</b>+clipprep.v1-ffmpeg.v1+screentext.v1-ppocr.v1</td></tr>
+    </tbody>
   </table></div>
-  <h3>Video (screen)</h3>
-  <p>A screen-video chunk becomes one record with two slots. Frame prep is a self-isolating ffmpeg subprocess; the OCR server reads the on-screen text; the captioner writes the scene, with the OCR text injected into its prompt for grounding.</p>
-  <div class="sgraph">
-    <div class="sg-title">video graph — one chunk → one record</div>
-    <div class="sg-flex">
-      <div class="sg-stage">clipprep<small>ffmpeg frames + delta gate</small></div>
-      <div class="sg-stage slot">screentext → ocr slot<small>servers/ocr · PP-OCRv4 CPU</small></div>
-      <div class="sg-stage slot">clipcap → caption slot<small>captioner :8161 · one call</small></div>
+
+  <p>The service process started at 07:46 on 2026-08-07. The commit bumping the captioner's backend version from <code>vlm.v1</code> to <code>vlm.v2</code> landed at 08:28 the same morning, forty-two minutes later. The process has been serving the code it imported at boot ever since, and it will keep doing so until somebody deliberately restarts it. Requesting <code>/health</code> repeatedly will never show <code>v2</code>, and not because the endpoint is serving a cached answer: it honestly re-resolves the dialect on every single call. It re-resolves it from the stage classes already sitting in memory, and those are the ones imported at boot.</p>
+
+  <p>Nothing here is broken, and the caption bytes themselves are unchanged by the bump. But it means that until that restart happens, video records land under the older address, and the guide's own advice applies: when you need to know what a running service is actually doing, ask the service, not the source tree.</p>
+</section>
+
+<!-- ============================================================= 06 -->
+<section class="module" id="s06">
+  <div class="eyebrow">Section 06 · The graph</div>
+  <h2>Stages, readiness, and the three answers a record can give</h2>
+  <p class="dek">How work is scheduled, what happens when a step fails, and the distinction the whole design exists to protect.</p>
+
+  <p>A stage is one file. It declares what it needs, what single slot it produces, whether it is required, how many bytes its slot may occupy, and who consumes it. Then it defines exactly one method: a synchronous one, which the executor runs in a worker thread so blocking work can never freeze the event loop, or an asynchronous one for stages that only make network calls. Inside this service, adding a processing step is adding one file: there is no registry to edit and no wiring to update. If the new stage emits a slot the record has never carried before, one thing does happen outside the file — the slot's name and shape are added to the C2 contract, because unknown slot names fail closed by design. Section 10 walks that through.</p>
+
+  <p>Here is the entire declared surface of the stages that run today, straight from the stage files. One thing to expect before you open the directory: the audio folder holds six stage files and only four of them appear here. Speech translation and an injected-caption stage used for replay work are both fully written and tested, and both are deliberately left unregistered — so they are absent from the dialect and never run.</p>
+
+  <div class="tblwrap"><table>
+    <thead><tr><th>Stage</th><th>Slot</th><th>Needs</th><th>Policy</th><th>Budget</th><th>Calls</th><th>Consumer</th></tr></thead>
+    <tbody>
+      <tr><td class="num">asr.v1-fw.v1</td><td class="num">asr</td><td class="num">—</td><td><span class="pill law">required</span></td><td class="num">32768</td><td class="num">whisper</td><td class="num">daylog:heard</td></tr>
+      <tr><td class="num">diarize.v1-pyannote.v1</td><td class="num">diarization</td><td class="num">—</td><td><span class="pill dim">optional</span></td><td class="num">8192</td><td class="num">pyannote</td><td class="num">stage:speaker_align</td></tr>
+      <tr><td class="num">acoustic.v1-ast.v1</td><td class="num">acoustic</td><td class="num">—</td><td><span class="pill dim">optional</span></td><td class="num">2048</td><td class="num">ast</td><td class="num">speculative</td></tr>
+      <tr><td class="num">speaker_align.v1-builtin.v1</td><td class="num">transcript</td><td class="num">asr, diarize</td><td><span class="pill dim">optional</span></td><td class="num">49152</td><td class="num">— (CPU)</td><td class="num">daylog:heard</td></tr>
+      <tr><td class="num">clipprep.v1-ffmpeg.v1</td><td class="num">— (no slot)</td><td class="num">—</td><td><span class="pill law">required</span></td><td class="num">1</td><td class="num">— (ffmpeg)</td><td class="num">stage:screentext+clipcap</td></tr>
+      <tr><td class="num">screentext.v1-ppocr.v1</td><td class="num">ocr</td><td class="num">clipprep</td><td><span class="pill dim">optional</span></td><td class="num">2048</td><td class="num">ocr</td><td class="num">daylog:world_text</td></tr>
+      <tr><td class="num">clipcap.v1-vlm.v2</td><td class="num">caption</td><td class="num">clipprep, screentext</td><td><span class="pill dim">optional</span></td><td class="num">4096</td><td class="num">— (captioner)</td><td class="num">daylog:scene</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>The consumer column is a declaration every stage is required to make, and its prefix is part of the grammar: <code>daylog:</code> names a line the day-log renderer builds from the slot, <code>stage:</code> names another stage that consumes it during the run, and <code>speculative:</code> is an explicit admission that nothing reads it yet. A stage that cannot fill this in does not register at all.</p>
+
+  <p>Three further details in that table repay a second look. <b>Needs names stages, not slots</b> — <code>speaker_align</code> needs <code>diarize</code>, even though the slot it reads is called <code>diarization</code>. Naming the slot there is the most common first mistake and fails immediately with "needs unknown stage". <b>A stage need not produce a slot at all</b>: <code>clipprep</code> decodes video into frames that live only for the duration of the run and are freed the moment the last consumer finishes, so no bytes ever reach the record. And <b>the byte budget is a hard ceiling, not a target</b>: exceeding it is a stage failure, never a silent truncation, because a quietly shortened transcript is a lie that nothing downstream can detect. The budget of 1 on <code>clipprep</code> is not a typo and can never fire — every stage is required to declare a positive budget, and a stage that emits no slot gives the check nothing to measure.</p>
+
+  <h3>A stage starts the moment the stages it needs have finished</h3>
+  <p>There is no ordering attribute and no topological loop. Every stage becomes one task, all inside a single task group, and each task awaits exactly the futures of the stages it declared and nothing else. A stage with no dependencies starts immediately; a stage with dependencies starts the instant they finish. The graph therefore runs itself, and a slow step only ever delays the steps that genuinely need it.</p>
+
+  <div class="inst">
+    <div class="inst-head">
+      <span class="inst-title">Run the graph · click any stage to fail it</span>
+      <div class="btnrow" id="gModality">
+        <button class="btn on" data-gm="audio">audio</button>
+        <button class="btn" data-gm="video">video</button>
+        <button class="btn" id="gReset">reset</button>
+      </div>
+    </div>
+    <div class="inst-body">
+      <div class="lanes" id="gLanes"></div>
+      <div class="outbox">
+        <div class="lane-label">The record that ships</div>
+        <div id="gSlots"></div>
+        <div class="verdict" id="gVerdict"></div>
+      </div>
     </div>
   </div>
-  <div class="note"><p><b class="tag">L11 · one witness, two channels</b>The OCR text is both its own <code>ocr</code> slot and injected into the caption prompt. A reader must not treat the caption agreeing with the OCR as corroboration — it is one source rendered on two channels, not two independent witnesses.</p></div>
-</section>
 
-<!-- ===================================================== 07 -->
-<section class="module" id="m7">
-  <div class="eyebrow">Module 07 · Failure</div>
-  <h2>Failure and healing — required, optional, holes</h2>
-  <p class="dek">What happens when a stage cannot do its job.</p>
-  <p>Every stage declares whether it is <strong>required</strong>. The two failure paths are different by construction:</p>
-  <ul class="tight">
-    <li><strong>A required stage fails ⇒ no record.</strong> The chunk attempt fails, the worker retries it, and if it keeps failing it is durably dead-lettered — which storage's neighbour, recording, sees as <em>gaps</em>, never as a falsely-clean day.</li>
-    <li><strong>An optional stage fails ⇒ a hole.</strong> Its slot is simply absent, the steps that depended on it are cancelled, and the record ships with the slots that succeeded. A reader can tell a hole (stage in the dialect, slot absent) from an honest empty value (stage ran, found nothing) from a stage that never ran (not in the dialect at all). That is Slot Law L11.</li>
-  </ul>
-  <h3>Healing</h3>
-  <p>The journal keeps a done-row per chunk: its dialect, its record id, each stage's status, and how many heals it has spent. When a chunk is redelivered, the row decides what happens — no row means process fresh; a different dialect means reprocess and land a new record <em>beside</em> the old; the same dialect all-green means skip (return the record id); the same dialect with holes and budget left means <strong>heal</strong>. A heal re-runs the whole graph and re-writes the <em>same</em> record id, so a hole that the fleet can now fill converges. The promise is convergence, not monotonicity: the re-run writes whatever it produced, and the ledger — not the record — carries the truth about which holes remain.</p>
-  <div class="note"><p>This has been proven against the live fleet: an optional stage was killed so a chunk shipped with a hole, the supervisor restarted the model, and the chunk's redelivery healed the record to be byte-identical to a clean-fleet twin — then a further redelivery was a pure skip.</p></div>
-</section>
+  <h3>Required and optional differ by construction, not by convention</h3>
+  <p>When a <b>required</b> stage fails, there is no record. The task group cancels and awaits every sibling, the original exception is dug back out and re-raised, and the chunk attempt fails — which hands it to the worker's retry and dead-letter path, described in section 08. Nothing partial is ever written. When an <b>optional</b> stage fails, its slot is simply never written, every stage downstream of it is marked cancelled without running, and <em>the record ships anyway</em> carrying whatever else succeeded.</p>
 
-<!-- ===================================================== 08 -->
-<section class="module" id="m8">
-  <div class="eyebrow">Module 08 · Reliability</div>
-  <h2>Crash safety — async ingest and the durable journal</h2>
-  <p class="dek">How the service refuses to lose a chunk silently.</p>
-  <p>Ingest is <strong>async</strong> today: recording pushes a chunk, DP writes it durably to a journal and answers <code>202 Accepted</code> immediately, and a bounded pool of workers drains the queue. Capture never blocks on model latency, and a full queue answers <code>503</code> so overload is visible backpressure rather than a silent drop. A redelivery of a finished chunk returns its record id with a <code>200</code>; an in-flight one re-acknowledges <code>202</code>.</p>
-  <p>The safety net is a shared, honest accounting between us and recording. DP's <code>/continuity</code> reports, per stream, which chunks are processed and which were dead-lettered; recording marks a chunk truly confirmed only when DP says <em>processed</em>. So an accepted-then-lost chunk reads as <em>recording</em> or <em>gaps</em> in recording's report — never a false <em>clean</em>.</p>
-  <div class="note"><p><b class="tag">Proven in crash-recovery soak</b>The service was hard-killed (<code>SIGKILL</code>) with 27 chunks durably accepted-but-unprocessed in its journal. On restart the boot re-drive re-enqueued all 27 and every one reached <code>processed</code> — zero in-flight loss across a crash. The durable journal is what makes that true. Note what a hard kill does <em>not</em> do: the model servers survive it as orphans (module 05), so the restarted service found its fleet already up.</p></div>
-  <p><strong>The inline path is kept alive on purpose.</strong> It is byte-identical to async for a single chunk and it is C8's skeleton — the synchronous shape the input service will call one day. Do not delete it "because async exists"; that has been proposed and refused on exactly this ground.</p>
-</section>
+  <p>Because those two behaviours are so different, the resolver refuses outright to build a graph in which a required stage sits anywhere downstream of an optional one. If it allowed that, the optional stage's failure would cancel a required stage, which would mean no record — making the "optional" stage required in fact while claiming otherwise. Resolution happens the first time a modality is actually used rather than at boot, so a graph malformed in this way surfaces on the first chunk of that modality, not when the process starts.</p>
 
-<!-- ===================================================== 09 -->
-<section class="module" id="m9">
-  <div class="eyebrow">Module 09 · Honesty</div>
-  <h2>What is real, and what is not</h2>
-  <p class="dek">A teaching view that hides the gaps misleads the reader who cannot yet see them. So here they are.</p>
-  <div class="board">
-    <div class="bd-item"><div class="hd"><span class="pill ok">real</span><b>Audio &amp; video, end to end</b></div><p>Real faster-whisper, pyannote, AST and PP-OCR servers, and a real Qwen3-VL captioner, all ran a synthetic multi-hour soak through the live fleet. Records are C2 v1, one per chunk.</p></div>
-    <div class="bd-item"><div class="hd"><span class="pill ok">real</span><b>Crash safety</b></div><p>The durable journal, async ingest, heal-on-redrive and the zero-silent-loss accounting are built and drilled, including a live in-flight-kill recovery.</p></div>
-    <div class="bd-item"><div class="hd"><span class="pill warn">partial</span><b>Backfill by version</b></div><p>Reprocessing a whole day under a new dialect from the kept <code>/raw</code> bytes is designed (the owed reprocess-by-version tool) but not built. Kill/restart recovery is done; the replay tool is owed.</p></div>
-    <div class="bd-item"><div class="hd"><span class="pill dim">designed</span><b>C8 — the synchronous API</b></div><p>Offering the pipeline to the input service for interactive requests. Nothing is built; the inline path is its skeleton.</p></div>
-    <div class="bd-item"><div class="hd"><span class="pill dim">designed</span><b>World-data enrichment</b></div><p>Known-faces, geolocation, place/object tags (charter M5). Not built; slots make it an additive change when it lands.</p></div>
-    <div class="bd-item"><div class="hd"><span class="pill warn">watch</span><b>Video throughput</b></div><p>CPU OCR plus a 32B captioner per video chunk is the slow leg; there is no per-modality fairness cap yet, so a video burst can starve audio. Named at the soak, tuned later.</p></div>
-    <div class="bd-item"><div class="hd"><span class="pill warn">pending</span><b>The vlm.v2 dialect flip</b></div><p>Code pins <code>clipcap.v1-vlm.v2</code>; the running fleet may still stamp <code>vlm.v1</code> until the next deliberate restart deploys the bump (module 04's worked example).</p></div>
+  <h3>The three states, and why they must stay distinguishable</h3>
+  <p>This is the idea the entire service is arranged around. Given a record and its dialect, a consumer can distinguish three completely different situations — and if they ever collapsed into a single notion of "missing data", the model would be trained on inferences nobody is entitled to make.</p>
+
+  <div class="hon-grid">
+    <div class="hon a"><span class="hh">We looked, there was nothing</span><p>Stage named in the dialect, slot <b>present</b>, value empty. <code>"acoustic": {"values": []}</code> — the tagger ran and heard nothing worth naming. A positive claim about silence.</p></div>
+    <div class="hon b"><span class="hh">We tried and failed</span><p>Stage named in the dialect, slot <b>absent</b>. A hole. Something went wrong — a model server was down, a budget was blown — and we are saying so rather than pretending.</p></div>
+    <div class="hon c"><span class="hh">We never tried</span><p>Stage <b>not named in the dialect</b> at all. This chunk was processed by a pipeline that did not include that step, so the record is silent about it and no conclusion may be drawn.</p></div>
   </div>
-  <p style="margin-top:16px">This guide teaches the running world only. Depth and law live in the <a href="../CHARTER.md">charter</a> §Slot Law.</p>
+
+  <p style="margin-top:16px">The rule that falls out of this is short and absolute: a consumer may never infer a negative from an absent slot under a dialect that did not attempt it. If the on-screen-text stage is not in the dialect, the correct reading is not "there was no text on the screen" — it is "nobody looked". Get this wrong downstream and the trainer learns that a person's screen was blank during hours it was never examined.</p>
+
+  <div class="inst">
+    <div class="inst-head">
+      <span class="inst-title">Read the record · which of the three is it?</span>
+      <span class="prog" id="honProg"></span>
+    </div>
+    <div class="inst-body">
+      <p class="quiz-q" id="honQ"></p>
+      <div class="btnrow" id="honOpts"></div>
+      <div class="quiz-fb" id="honFb"></div>
+      <div class="btnrow" style="margin-top:14px"><button class="btn" id="honNext">next case →</button></div>
+    </div>
+  </div>
 </section>
 
-<!-- ===================================================== 10 -->
-<section class="module" id="m10">
-  <div class="eyebrow">Module 10 · Day one</div>
-  <h2>The codebase, and where to start reading</h2>
-  <p class="dek">A map, so your first hour is spent reading the right files.</p>
-  <div class="tree">
-<span class="dir">app/</span>              <span class="cm"># the bureaucracy — the async orchestrator</span>
-  main.py         <span class="cm"># /ingest, the lifespan, the supervisor + boot re-drive</span>
-  ingest_core.py  <span class="cm"># process one chunk: pull → graph → assemble → POST /context</span>
-  ingest_queue.py <span class="cm"># the async worker pool + backpressure</span>
-  journal.py      <span class="cm"># the durable done-ledger (dp.db) — dedup, heal, redrive</span>
-  dedup.py        <span class="cm"># the L8 claim tree: fresh / version-forward / skip / heal</span>
-  pipeline.py     <span class="cm"># build_c2: slots → one C2 v1 record, id from two components</span>
-  model_client.py <span class="cm"># thin client to a model server: replica pick, timeout, retry</span>
-  supervisor.py   <span class="cm"># spawn / health-check / restart the model-server fleet</span>
-  <span class="dir">stagegraph/</span>     <span class="cm"># stage.py (uniform Stage) + executor.py (resolve + run)</span>
-  <span class="dir">stages/</span>         <span class="cm"># audio/ and video/ — the thin clients, one per slot</span>
-  <span class="dir">vision/</span>         <span class="cm"># clipprep internals + the versioned prompt pack</span>
-<span class="dir">servers/</span>          <span class="cm"># the machinery — one dir per model, each its own venv</span>
-  whisper/ pyannote/ ast/ ocr/ common/
-<span class="dir">tests/</span>            <span class="cm"># the executable law: T-1…T-6 plus the kept suites</span>
-<span class="dir">onboarding/</span>       <span class="cm"># this guide, and the review checklist</span>
+<!-- ============================================================= 07 -->
+<section class="module" id="s07">
+  <div class="eyebrow">Section 07 · The fleet</div>
+  <h2>Machinery and bureaucracy: where the models actually live</h2>
+  <p class="dek">Four supervised models in eight processes, a fifth reached over the network, one supervisor that lives inside this service — and the shutdown behaviour you must get right.</p>
+
+  <p>The split at the centre of the design is between <b>machinery</b> and <b>bureaucracy</b>. Models are machinery: heavy, slow to load, and worth keeping warm. This service is bureaucracy: a thin asynchronous orchestrator that decides what to do, calls other people to do it, and writes down the result. <em>No model is ever loaded inside this process.</em> Every model runs as its own long-lived server process, holding its weights in memory, answering HTTP requests, and reporting what it is at <code>/health</code>. A stage is a client.</p>
+
+  <p>Four models run under this service's own supervisor, two replicas each, eight processes in total. Here is the live map, read from the manifest and confirmed against every replica on 2026-08-08. A fifth model, the video captioner, is reached over the network instead, for the reason the paragraph after the table gives.</p>
+
+  <div class="tblwrap"><table>
+    <thead><tr><th>Server</th><th>Model</th><th>Ports</th><th>Device</th><th>Call timeout</th></tr></thead>
+    <tbody>
+      <tr><td class="num">whisper</td><td>Systran/faster-whisper-large-v3</td><td class="num">8121, 8122</td><td class="num">GPU 4, GPU 5</td><td class="num">120 s</td></tr>
+      <tr><td class="num">pyannote</td><td>pyannote/speaker-diarization-3.1</td><td class="num">8131, 8132</td><td class="num">GPU 2, GPU 3</td><td class="num">120 s</td></tr>
+      <tr><td class="num">ast</td><td>MIT/ast-finetuned-audioset-10-10-0.4593</td><td class="num">8141, 8142</td><td class="num">GPU 6, GPU 7</td><td class="num">60 s</td></tr>
+      <tr><td class="num">ocr</td><td>rapidocr-onnxruntime PP-OCRv4 det+rec</td><td class="num">8151, 8152</td><td class="num">CPU only</td><td class="num">30 s</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>The video captioner is a separate arrangement: a self-hosted vision-language model reached over an OpenAI-compatible endpoint rather than one of these four servers, which is why the <code>clipcap</code> row in the previous section lists no fleet server.</p>
+
+  <h3>A server says what it is, and the client checks</h3>
+  <p>Every server's <code>/health</code> returns an <b>identity</b> — the model name, the exact weight revisions, the framework versions, the device. The manifest records what each server is <em>expected</em> to be, and the client compares the two. A mismatch is not a warning to be logged and stepped over; the call fails with an identity error and a metric fires. This is what stops the most frightening class of silent corruption in a system like this: a replica quietly restarting onto different weights and producing subtly different transcripts under an unchanged dialect string, forever, with nothing in the data to reveal it.</p>
+
+  <div class="inst">
+    <div class="inst-head"><span class="inst-title">A real identity blob · whisper :8121, read 2026-08-08 05:15Z</span></div>
+    <div class="inst-body">
+<pre><code>{"ok": true, "status": "ready", "server": "whisper",
+ "identity": {
+   "model_name": "Systran/faster-whisper-large-v3",
+   "weights": {"revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478"},
+   "frameworks": {"faster_whisper": "1.2.1", "ctranslate2": "4.8.1",
+                  "av": "18.0.0", "onnxruntime": "1.28.0"},
+   "device": "cuda", "compute_type": "float16"}}</code></pre>
+      <p class="srcline">The manifest pins <code>model_name</code> and <code>weights.revision</code>; the client refuses any replica that answers differently.</p>
+    </div>
   </div>
-  <h4>A sensible first hour</h4>
-  <ol class="tight" style="padding-left:22px">
-    <li>Read the <a href="../CHARTER.md">charter</a> §Slot Law (L1–L12) — the twelve laws this service enforces.</li>
-    <li>Read <code>app/pipeline.py</code> <code>build_c2</code> and <code>app/stagegraph/executor.py</code> — the record is assembled here, and the one-record law is structural here.</li>
-    <li>Read one audio stage (<code>app/stages/audio/asr.py</code>) and one video stage (<code>app/stages/video/clipcap.py</code>) to see the thin-client shape.</li>
-    <li>Run the suite (<code>tests/</code>): the law is executable, so watching T-1…T-6 pass is the fastest way to trust it.</li>
-  </ol>
-  <div class="note law"><p>Whenever this guide and the code disagree, the code is right and this page is a bug — fix the page in the same session (D22). Start again from the charter; it is the stable doc, and this is only the door into it.</p></div>
+
+  <h3>What happens when a server dies mid-chunk</h3>
+  <p>Two layers respond, and they respond to different things. The <b>client</b> handles the single call: it has a small budget of transient retries — three attempts in total by default — and it deals them round-robin across the server's replicas, which is the entire reason two of each exist. So one replica dying during a call is usually invisible: the second attempt lands on its twin and the chunk finishes normally. With two replicas the third attempt comes back round to the first, so the budget buys one genuine alternative and then one more try at each.</p>
+
+  <p>The <b>supervisor</b> handles the process. It polls each replica's health every five seconds, and after three consecutive failures it declares the replica down and restarts it, backing off along a ladder of one, two, five, ten and thirty seconds, resetting once a replica has been healthy for a minute. If the replica cannot be brought back before the retry budget is spent, the call fails — and then everything depends on the policy of the stage that made it. Diarization is optional, so its slot becomes a hole and the record still ships with a transcript. Speech recognition is required, so the chunk attempt fails and goes to the retry machinery instead.</p>
+
+  <h3>The supervisor lives inside this process, and that has consequences</h3>
+  <p>The supervisor is not a separate program. It is a task running inside the service's own event loop, started at startup when the deployment opts in, which makes this service the <b>direct parent</b> of all eight replicas. You can see it on the running node: when this was checked on 2026-08-08 the service was process 632026, and all eight model servers reported that process as their parent. The numbers change on every restart; the parentage does not.</p>
+
+  <p>How the fleet dies depends entirely on how this service dies, and the difference has bitten people:</p>
+
+  <div class="grid2">
+    <div class="card" style="border-left:3px solid var(--ok)">
+      <h4>A graceful stop takes the fleet with it</h4>
+      <p style="font-size:13.5px;color:var(--ink-soft);margin:0">On a normal shutdown the service drains its queue, then walks the replicas and signals each one to terminate, waiting up to ten seconds before forcing it. The fleet goes down. Because replicas are reaped one at a time, a worst-case orderly shutdown takes a while — roughly the drain timeout plus ten seconds per replica.</p>
+    </div>
+    <div class="card" style="border-left:3px solid var(--hot)">
+      <h4>A hard kill leaves all eight running</h4>
+      <p style="font-size:13.5px;color:var(--ink-soft);margin:0">Kill the service with an unblockable signal and the shutdown code never executes, so nothing ever signals the replicas. All eight survive as orphans still holding their ports; six of them also still hold GPU memory, the two OCR replicas being CPU-only. A restarted service will fail to bind those ports until somebody reaps them by hand.</p>
+    </div>
+  </div>
+
+  <div class="note warn">
+    <p><b class="tag">Get the reason right, because the obvious reason is wrong</b>It is tempting to explain the orphans by saying the replicas are started in their own sessions, so they do not die with their parent — and you will meet that explanation, compressed into a single clause, in the charter's own summary of this law. The observation about sessions is true, but it is not the cause. On Linux <em>nothing</em> kills a child when its parent dies — an orphan is simply re-parented and keeps running, session or no session. There is no parent-death signal configured anywhere in this codebase and no per-service control group to sweep. The actual reason the fleet survives is narrower and more useful to remember: <strong>an unblockable kill cannot be handled, so the shutdown path never runs, so nothing ever signals the replicas.</strong> The separate sessions exist for a different purpose entirely — they let the supervisor signal a replica's whole process tree without signalling itself.</p>
+  </div>
+</section>
+
+<!-- ============================================================= 08 -->
+<section class="module" id="s08">
+  <div class="eyebrow">Section 08 · Durability</div>
+  <h2>The journal, the five verdicts, and healing</h2>
+  <p class="dek">What survives a crash, how a redelivery is judged, and why a successful heal is never charged.</p>
+
+  <p>A chunk arrives at <code>/ingest</code>. The service can run it two ways, and both are real code paths. <b>Inline</b> means the whole pipeline runs inside the request and the reply carries the finished record's id. <b>Async</b> means the chunk is written down durably, acknowledged with a 202, and processed by a worker afterwards. Async is what the deployment runs; inline is kept deliberately as the skeleton of the synchronous contract that section 01 mentioned, and for a single chunk the two produce identical bytes.</p>
+
+  <p>Before any of that, the request passes a short sequence of gates in a fixed order — is this valid JSON, does it satisfy the C1 schema, do we have a pipeline registered for this modality — and each answers with its own status code: malformed JSON is a 400, an envelope that fails the C1 schema is a 422, and a modality we have no pipeline for is a 501. These are deterministic rejections, and they are answered synchronously in both modes, because a request that can never succeed should be told so immediately rather than accepted and then quietly dead-lettered later.</p>
+
+  <h3>The claim tree: five verdicts on every delivery</h3>
+  <p>Once a delivery is real work, the service asks the durable journal what it already knows about this chunk. That question has exactly five answers, and understanding them is understanding why redelivery is safe. The widget below offers six situations rather than five, because two quite different roads arrive at the same verdict of skip — one where everything succeeded the first time, and one where the budget for repair has run out.</p>
+
+  <div class="inst">
+    <div class="inst-head">
+      <span class="inst-title">Deliver a chunk · walk the claim tree</span>
+      <div class="btnrow" id="ctBtns"></div>
+    </div>
+    <div class="inst-body">
+      <div class="tree" id="ctTree"></div>
+      <div class="verdict" id="ctVerdict"></div>
+    </div>
+  </div>
+
+  <h3>Healing, and the budget that bounds it</h3>
+  <p>A heal is a full re-run of the chunk's graph, writing to the <em>same</em> record address — the dialect has not changed, so the identity has not changed either. The redelivery itself carries the original envelope, so nothing needed to be stored to make this possible.</p>
+
+  <p>Two rules govern the budget, and the second one is the subtle one. A heal that ends with holes still in it costs one attempt from a budget of three; when the budget is spent the holes are declared permanent, the row is marked final, and future deliveries of that chunk skip forever under that dialect. But <b>a heal that comes back completely green is never charged</b>. The budget exists to stop a chunk whose holes are structural from being re-run against the fleet forever; a heal that actually worked is not evidence of that pathology, so it does not consume the allowance.</p>
+
+  <div class="note warn">
+    <p><b class="tag">A heal does not always make a record fuller</b>It is tempting to read healing as "the record only ever gets fuller". It does not. A heal re-posts whatever the re-run produced, so a heal that happens to run during a different server's outage can leave a record with a slot that was previously filled now missing. The guarantee is that repeated healing converges on a complete record, not that every individual step improves it. The hole truth lives in the journal's per-stage statuses, not in the record — which is why the journal, and not the record, is what you read when you want to know what has failed.</p>
+  </div>
+
+  <h3>What survives a crash</h3>
+  <p>The journal is a small SQLite database with two tables. A <b>pending</b> row is written before the 202 goes out, which is the whole reason the acknowledgement can be trusted: if the box dies a microsecond later, the row is still on disk and startup re-drives it. A <b>processed</b> row is the durable receipt, and it carries the per-stage statuses, the heal count, and the dialect the record was written under.</p>
+
+  <div class="tblwrap"><table>
+    <thead><tr><th>Killed at this moment</th><th>What survives</th><th>What happens next</th></tr></thead>
+    <tbody>
+      <tr><td>Before the pending row is written</td><td>Nothing on our side</td><td>Recording never got an acknowledgement, so it re-pushes. Processed as fresh.</td></tr>
+      <tr><td>After the pending row, before the 202</td><td>The pending row</td><td>Startup finds it and re-drives it. Recording may also re-push; the two converge because the address is deterministic.</td></tr>
+      <tr><td>Mid-processing, after the 202</td><td>The pending row</td><td>Startup re-drives the chunk and the whole graph runs again. Nothing partial was written to storage, because there is exactly one write per attempt.</td></tr>
+      <tr><td>After storage confirms, before the receipt is written</td><td>The record, in storage</td><td>The re-drive processes it again and writes byte-identical bytes to the same address. Harmless.</td></tr>
+      <tr><td>After the receipt is written</td><td>Everything</td><td>A later delivery reads the receipt. If every stage was green it skips; if the receipt records holes and the repair budget is not spent, it heals instead.</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>When a required stage fails, the chunk does not go straight to a dead letter. The worker classifies the failure first. A <b>transient</b> one — a model server timing out, storage answering with a server error — is retried, a small number of times with a lengthening pause between attempts, and a chunk waiting out that pause gives up its slot so it cannot block the pool behind it. A <b>terminal</b> one — an envelope that produced an invalid record, a graph that cannot be resolved — is not retried at all, because trying the same thing again with the same code cannot possibly help. When the retries are exhausted, or immediately in the terminal case, the chunk is durably dead-lettered.</p>
+
+  <p>Two protections keep that table honest. Every acceptance bumps an <b>epoch</b> on the row, and terminal writes are guarded on it, so a worker that wakes up late and finishes a chunk a newer delivery has already re-accepted cannot clobber the fresh attempt. And the startup re-drive counts how many times it has automatically re-driven each chunk, so that a chunk which crashes the service on every attempt cannot crash-loop the box forever. Past the cap it takes one of two exits, and which one depends on whether a record already exists. A chunk that has never produced a record is dead-lettered. A chunk that already has a durable record — a repair attempt or a reprocess that keeps dying — is instead marked finished with its holes made permanent, because dead-lettering a chunk whose record is sitting in storage would report a loss that did not happen. A dead letter is durable and reported on <code>/continuity</code>, which is how recording learns that a chunk it handed us is genuinely lost rather than merely slow — so a lost chunk reads as a gap on its side, never as clean.</p>
+</section>
+
+<!-- ============================================================= 09 -->
+<section class="module" id="s09">
+  <div class="eyebrow">Section 09 · Downstream</div>
+  <h2>Storage's side, and the line the trainer finally reads</h2>
+  <p class="dek">Where the record lands, what makes it move between training windows, and how slots become sentences.</p>
+
+  <p>We make exactly one write per completed attempt: a single atomic POST of the whole record to storage's context store. Partial writes are forbidden — there is no state in which half a record exists.</p>
+
+  <p>Be careful about what the acknowledgement means, because the two ingest modes differ here and it is the difference that governs how you reason about crash windows. Inline, the reply is withheld until storage has confirmed the write, so a success reply really does mean the record is durable. Async — which is what the deployment runs — returns its 202 as soon as the chunk is safely journalled, long before any stage has run. That 202 promises only that we have durably taken responsibility for the chunk. What tells recording a chunk is genuinely <em>done</em> is not the acknowledgement at all: it is the chunk appearing as processed on <code>/continuity</code>, which happens only after storage has confirmed.</p>
+
+  <p>Storage keeps two timestamps that we never see and never set. <b>created_at</b> is the first time that record address was ever written. <b>updated_at</b> moves only when the newly posted record differs <em>byte for byte</em> from what is already stored. That comparison is the quiet hero of the whole redelivery story: a duplicate delivery re-posts identical bytes, the comparison finds no difference, and the record is not touched at all. It does not move to a new training window; it does not get re-learned. Meanwhile a heal that genuinely changed something does differ, so it does move — and flows into the next window to be trained on, which is a cost the design accepts deliberately.</p>
+
+  <h3>Slots become lines</h3>
+  <p>The day-log is storage's rendering of a span of life for the trainer, and it walks our slots by name. The routing is direct: the caption slot becomes a Scene line, the on-screen-text slot becomes a World text line, and the speaker-aligned transcript becomes speaker-bucketed Heard lines. If the aligned transcript is missing, the renderer falls back to the raw speech slot and renders it without speaker labels.</p>
+
+  <p>Which gives the honesty rules from section 06 their final consequence. A hole renders as <b>absence</b> — the line simply is not there. An empty value renders as nothing to say. Neither produces a sentence claiming the opposite, and neither is distinguishable from the other in the rendered text, which is exactly why the record and its dialect, not the day-log, are where you go to ask what actually happened.</p>
+
+  <p>Here is a real block from the live system, rendered from the same soak data as the record in section 03:</p>
+
+  <div class="inst">
+    <div class="inst-head"><span class="inst-title">A rendered day-log block · storage :8083, window w20260807T080154Z, read 2026-08-08</span></div>
+    <div class="inst-body">
+<pre><code>On 2026-08-06, around 20:00–20:03 local time:
+Heard: speaker-0: you're rich enough scrooge having no better answer
+ready on the spur of the moment said bah again and followed it up with
+humbug don't be cross uncle said the nephew what else can i be returned
+the uncle | speaker-0: ...</code></pre>
+      <p class="srcline">That window rendered 246 day-log segments — time slices of the window, an unrelated use of the word to the dialect segments of section 02 — into 23 blocks, in day-log format version 2 under recipe consolidation-v2.0.</p>
+    </div>
+  </div>
+
+  <p>Trace it backwards and you have the whole service. Those words were spoken into a microphone; recording carved them into a chunk and stored the bytes; we pulled the bytes, sent them to a speech model on port 8121, sent the same bytes to a diarization model on 8131, combined the two answers into a third slot, and wrote one record at an address derived from the chunk id and the dialect; storage compared it byte for byte with what it had, kept it, and rendered its transcript slot into that Heard line. Tonight the trainer reads the line.</p>
+</section>
+
+<!-- ============================================================= 10 -->
+<section class="module" id="s10">
+  <div class="eyebrow">Section 10 · Day one</div>
+  <h2>Working on it</h2>
+  <p class="dek">Adding a stage, running the suites, and the two traps that will cost you an afternoon.</p>
+
+  <h3>Adding a stage is adding one file</h3>
+  <p>Drop a file under the stage directory for your modality, subclass the stage base, decorate it so it registers itself, declare the surface, and write one run method. Discovery walks that directory and imports every module in it, so there is no registry to edit — though note that importing a file is not the same as enabling it. Only classes carrying the registration decorator enter the registry, which is how two of the six files in the audio directory sit there fully written and deliberately switched off. The declaration is checked hard at import: an invalid version number, a missing byte budget, a consumer that does not name who reads the slot, a dependency naming a stage nobody registered, or defining both run methods — each of these fails loudly at boot rather than mysteriously in production.</p>
+
+  <p>Then the checks the rest of the system will demand of you. Your slot name must be added to the C2 contract, because unknown slot names fail closed by design — that edit <em>is</em> the ceremony. Your byte budget must be a real number you can defend. Your consumer must be a real consumer today, or explicitly marked speculative. And if your stage changes what any existing record would contain, you have a version bump to make.</p>
+
+  <h3>Running the suites</h3>
+  <p>From the service root, with the service's own virtual environment:</p>
+  <pre><code>cd product/services/data-processing
+./.venv/bin/python -m pytest -q</code></pre>
+  <p>On 2026-08-08 that run took 55.03 seconds and reported <b>569 passed, 4 skipped</b>. The four skips are the drills that need real hardware — they spawn the model fleet on GPUs and only run when you ask for them explicitly.</p>
+
+  <p>Six test files carry the law itself, one per area: determinism against an environment matrix, one-record-per-chunk, dialect composition together with a snapshot of every stage's declared surface, the slot rules, the failure and ledger flows, and the honesty distinction from section 06. When you change the executor or a stage declaration, these are the ones that will tell you what you actually did.</p>
+
+  <div class="note hot">
+    <p><b class="tag">Trap one: never run a hand-picked subset of the law tests</b>Running the determinism file and the composition file together produces two failures that do not exist in the full suite. The determinism tests import the stage modules for the first time under a deliberately emptied registry; Python caches modules, so the registration side effects can never fire again in that process, and the composition test then finds an empty registry and reports that the contract surface moved. The full suite stays green because other files import those stage modules earlier and normally, so by the time the determinism tests run, registration has already happened for real. A newcomer who "just runs the law files" gets a red on the exact test that guards the contract surface, and goes hunting in entirely the wrong place. Run the whole suite. If you must narrow it, know that the result is not trustworthy.</p>
+  </div>
+
+  <div class="note warn">
+    <p><b class="tag">Trap two: nothing runs these for you</b>The charter describes the law as enforced in continuous integration. Today the only automated workflow in the repository checks the style of markdown files; no runner executes this suite. The discipline is yours, before you push. This is listed again in the next section, because it is the kind of gap that quietly becomes untrue in both directions.</p>
+  </div>
+
+  <h3>Goldens and drills</h3>
+  <p>Each model server keeps a golden: a recorded output of the real model on real bytes, with a written record of how its determinism was established. The stage tests replay that golden through a fake client and pin the resulting slot. The value of the two-hop arrangement is that a red test tells you <em>which</em> thing broke — the model stack, or your mapping of its output into a slot — because they live in different files. There is no regeneration script, deliberately: re-blessing a golden is a decision, and it rewrites the provenance note in the same commit.</p>
+
+  <p>The drills are the tests that need the real fleet, and they are worth reading even before you can run them, because they encode the operational discipline: the service is healthy before and after, no port is left listening, and GPU memory is checked as a delta rather than as an absolute.</p>
+</section>
+
+<!-- ============================================================= 11 -->
+<section class="module" id="s11">
+  <div class="eyebrow">Section 11 · Honesty</div>
+  <h2>What is not built</h2>
+  <p class="dek">Checked item by item against the tree and the running fleet on 2026-08-08. A guide that teaches the system we intend rather than the one we have misleads exactly the reader who cannot yet tell the difference.</p>
+
+  <div class="tblwrap"><table>
+    <thead><tr><th>Gap</th><th>Where it actually stands</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>The captioner version bump has not reached the fleet</b></td>
+        <td>Confirmed, not suspected. The code pins <code>vlm.v2</code>; the running service serves <code>vlm.v1</code> and will until a deliberate restart. Section 05 explains the mechanism. Caption bytes are unchanged by the bump.</td>
+      </tr>
+      <tr>
+        <td><b>No full captured day has flowed end to end</b></td>
+        <td>Real device captures have run: all three client surfaces were each driven on real hardware and verified. What has never happened is a complete captured day flowing through capture, processing, storage and training as one continuous piece. The streams visible on <code>/continuity</code> today have device names like <code>phone-a</code> and <code>mac-a</code>, but they are a synthetic soak feed built from fixtures — do not read them as real phones.</td>
+      </tr>
+      <tr>
+        <td><b>No real-GPU training run has consumed a current day-log</b></td>
+        <td>One full training cycle has run over a current-format day-log, but with the mock trainer backend — the deterministic no-GPU path. Real-GPU training has certainly happened on this project; what has not happened is a real-GPU run consuming a day-log in the current format. The real trainer path is a scheduled cluster job.</td>
+      </tr>
+      <tr>
+        <td><b>The cross-service seam check cannot pass</b></td>
+        <td>True, and precisely diagnosable: every record the script builds comes from one helper that stamps an older shape, and storage validates the current contract exclusively, so every write it attempts is rejected. Fixing the helper alone is not enough — the record id, the dialect string, where the modality sits and the whole content body all have to change. It is owed a rewrite; nothing blocks it.</td>
+      </tr>
+      <tr>
+        <td><b>One model server's dependencies are not fully pinned</b></td>
+        <td>True. The acoustic server's requirements pin the framework but not the model-hub library, so rebuilding that environment from requirements alone does not reproduce what is running. Its two sibling servers do pin it. Worse than it first looks. The client's identity check compares only what the manifest pins — the model name and its weight revisions — so the framework versions a server reports are informational and are not compared at all. A drift in that library would therefore pass the identity check untouched.</td>
+      </tr>
+      <tr>
+        <td><b>The comparison apparatus for the older record shape is still retained</b></td>
+        <td>True, and deliberately. It is a storage-owned executable check with 31 binding assertions, retained by a follow-up item on storage's board rather than by any capture milestone, and it can only be retired in one coordinated act rather than piecemeal, because more than one service leans on it.</td>
+      </tr>
+      <tr>
+        <td><b>No backfill-by-version tool exists</b></td>
+        <td>True. Reprocessing <em>semantics</em> are fully built — the claim tree's version-forward branch works — but the operator tool that replays a day from kept raw bytes under a new dialect does not exist. Do not mistake one for the other.</td>
+      </tr>
+      <tr>
+        <td><b><code>/continuity</code> reports dead letters but not holes</b></td>
+        <td>True. The endpoint reports what was received, what is missing, what was processed and what was dead-lettered. Hole truth lives only in the journal's per-stage statuses, so a record that shipped with a failed optional stage is not visible on the wire.</td>
+      </tr>
+      <tr>
+        <td><b>Adapter hot-swap is designed, not built</b></td>
+        <td>True at both ends. Storage resolves an adapter path and inference reads it and then never uses it; no adapter is ever loaded. Nothing in this service depends on it, but it is the reason the loop is not yet closed.</td>
+      </tr>
+      <tr>
+        <td><b>Nothing automatically runs the test suite</b></td>
+        <td>Found while writing this guide. The charter and the board both describe the law as enforced in continuous integration; the only workflow in the repository checks markdown style. The law is executable and the tests are real — but a human has to run them.</td>
+      </tr>
+    </tbody>
+  </table></div>
+
+  <h3>Where to look next</h3>
+  <p>Read the <a href="../CHARTER.md">charter's Slot Law section</a> in full — it is short, it is the law's only home, and every test file is written assuming you have read it. It is twelve numbered laws, and that matters practically: the code cites them by number constantly, so a comment reading "one enabled producer per slot (L5)" points at a specific paragraph of the charter rather than waving at a principle. Then the <a href="../HANDOFF.md">service board</a> for what is open right now. Then the code, in this order: the stage base and the executor, which are the two files everything else orbits; then identity; then the journal. If you want one file that will hook you, read the honesty test — it implements a consumer reading a record from the record alone, and it is the clearest single expression of what this service is for.</p>
+
+  <div class="note law">
+    <p><b class="tag">If you remember five things</b>One chunk becomes one record. Its content is a map of slots, each written once by exactly one stage. Its address is a hash of the chunk id and the dialect, so redelivery is harmless. Behaviour lives in code, never in configuration, and a change to it moves a version number. And an absent slot, an empty slot and an unattempted stage are three different statements — keeping them distinguishable is the job.</p>
+  </div>
 </section>
 
 </main>
 </div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+
+  /* ---------------------------------------------------------- rail highlight */
+  var links = $$(".rail a.tk");
+  var secs = links.map(function (a) { return document.getElementById(a.getAttribute("href").slice(1)); });
+  function mark() {
+    var best = 0, top = 140;
+    secs.forEach(function (s, i) { if (s && s.getBoundingClientRect().top <= top) best = i; });
+    links.forEach(function (a, i) { a.classList.toggle("on", i === best); });
+  }
+  window.addEventListener("scroll", mark, { passive: true }); mark();
+
+  /* ---------------------------------------------------------- 03 record explorer */
+  var WHY = {
+    contract:  ["contract + version", "Names the wire this object speaks: the processed-record contract, at version 1. Both sides validate every record against that schema, and an unknown field anywhere fails closed rather than being quietly carried."],
+    rid:       ["record_id", "The address. Section 04 recomputes this exact value: the SHA-256 of the chunk id, a NUL byte, and the dialect string. Writing to storage is a blind upsert on it, which is what turns an at-least-once wire into an exactly-once effect."],
+    uid:       ["user_id", "Whose life this is. Every read downstream is scoped by it."],
+    mod:       ["modality", "At the record root rather than inside provenance, because a chunk is strictly one modality — so this is a fact about the record itself, not merely about where it came from."],
+    src:       ["source", "Provenance back to the raw chunk, copied verbatim from the envelope. Transport details that are not provenance — the sequence number, the codec, the byte count — deliberately do not appear."],
+    chunk:     ["source.chunk_id", "The chunk this record was made from, and one of the two inputs to the address above. Printing it here is what makes the identity self-checkable."],
+    blob:      ["source.blob_ref", "Where the raw bytes live in storage. Opaque to us — never parsed, only passed. The bytes remain the source of truth if anything ever needs reprocessing."],
+    tz:        ["device_tz / device_utc_offset_minutes", "The civil-time context the device reported, carried through untouched. This service performs no timezone logic whatsoever: a zone is a fact about where the person physically was, knowable only at the device, and anything reconstructed later would be a guess dressed as data."],
+    span:      ["t_start / t_end", "The wall-clock span, copied verbatim as strings from the envelope — never reparsed, never reformatted. Re-rendering a timestamp is exactly how a record silently moves into the wrong window downstream."],
+    pv:        ["pipeline_version", "The dialect: every enabled stage's segment, sorted, joined with plus signs, and resolved before any stage ran. It states what was attempted — never what succeeded. It is also the second input to the address."],
+    slots:     ["content.slots", "The whole body of the record. A map keyed by slot name, one producing stage per slot, each written once and never edited. Nothing else lives in content."],
+    asr:       ["the asr slot", "Produced by the speech stage, a thin client over the whisper server. Carries the full text, the detected language, and finer-grained timings. An empty string here would be the honest empty claim: speech recognition ran and the chunk carried no speech."],
+    diar:      ["the diarization slot", "Produced by the diarization stage over the pyannote server. Speaker turns only, with anonymous labels that mean nothing outside this chunk: every stage output here is a pure function of this one chunk's bytes and the code, and no stage may carry state from one chunk to the next, so "speaker-0" in two different records is not a claim that the same person spoke twice. Joining identities across chunks is deliberately somebody else's job. Note what is NOT here: the speaker-attributed transcript, because writing it here would mean editing another stage's slot."],
+    tr:        ["the transcript slot", "The derived view: a separate stage reads the speech and diarization slots and produces this third slot, with a speaker on each line. This is the shape every derived view takes in this service — a new slot from an ordinary stage, never an edit."],
+    aco:       ["the acoustic slot — empty, on purpose", "An empty list is a claim, not a gap: the acoustic tagger ran and found no events worth naming. Compare that with the slot being absent, which would mean the stage was tried and failed, and with the stage being missing from the dialect, which would mean nobody looked."],
+    ver:       ["the slot's version", "Each slot carries a copy of its producer's segment. The executor stamps it — a stage cannot supply or forge its own. It means a consumer holding one slot can name what produced it without re-parsing the dialect."],
+    cap:       ["the caption slot", "One dense description of the clip, from a single call to the vision-language captioner. Note its version says vlm.v1: this record was written by the running fleet, which still serves the older pin described in section 05. Read this slot together with the one below it rather than as independent evidence — the on-screen text is fed into the captioner's prompt, so where the two agree about words on the screen, that agreement is one witness speaking twice, not corroboration."],
+    ocr:       ["the ocr slot", "On-screen text, in reading order, from the CPU text-recognition server. Region geometry is used inside the backend to order the text and then discarded — it is not emitted, because nothing downstream reads it yet."]
+  };
+  var RECS = {
+    audio: [
+      ['{'],
+      ['  "contract": "C2",', 'contract'],
+      ['  "version": "1",', 'contract'],
+      ['  "record_id": "d613aabfd56d93522f2432ab842d1c61452beb6da50bc843ad32c9ca284cd382",', 'rid'],
+      ['  "user_id": "u-soak",', 'uid'],
+      ['  "modality": "audio",', 'mod'],
+      ['  "source": {', 'src'],
+      ['    "device_id": "mac-a",', 'src'],
+      ['    "stream_id": "01KZDHFJAF76J4S5ME6NKA34QQ",', 'src'],
+      ['    "chunk_id": "01KZDHFJGFA0CWYJQY4BST5JHA",', 'chunk'],
+      ['    "blob_ref": "e4/8d/e48ddf448d7a9d2f3daaa6b6ed0a...",', 'blob'],
+      ['    "device_tz": "America/Los_Angeles",', 'tz'],
+      ['    "device_utc_offset_minutes": -420', 'tz'],
+      ['  },'],
+      ['  "t_start": "2026-08-07T03:00:00Z",', 'span'],
+      ['  "t_end": "2026-08-07T03:00:17.808Z",', 'span'],
+      ['  "pipeline_version": "acoustic.v1-ast.v1+asr.v1-fw.v1', 'pv'],
+      ['                      +diarize.v1-pyannote.v1', 'pv'],
+      ['                      +speaker_align.v1-builtin.v1",', 'pv'],
+      ['  "content": {'],
+      ['    "slots": {', 'slots'],
+      ['      "acoustic": {', 'aco'],
+      ['        "version": "acoustic.v1-ast.v1",', 'ver'],
+      ['        "values": []', 'aco'],
+      ['      },'],
+      ['      "asr": {', 'asr'],
+      ['        "version": "asr.v1-fw.v1",', 'ver'],
+      ['        "language": "en",', 'asr'],
+      ['        "value": "you\'re rich enough scrooge having no', 'asr'],
+      ['                  better answer ready on the spur of the', 'asr'],
+      ['                  moment said bah again ...",', 'asr'],
+      ['        "splits": [ { "t_start": …, "t_end": …, "value": … } ]', 'asr'],
+      ['      },'],
+      ['      "diarization": {', 'diar'],
+      ['        "version": "diarize.v1-pyannote.v1",', 'ver'],
+      ['        "splits": [', 'diar'],
+      ['          { "t_start": "2026-08-07T03:00:00.030969+00:00",', 'diar'],
+      ['            "t_end":   "2026-08-07T03:00:01.094094+00:00",', 'diar'],
+      ['            "speaker": "speaker-0" }, …  ]', 'diar'],
+      ['      },'],
+      ['      "transcript": {', 'tr'],
+      ['        "version": "speaker_align.v1-builtin.v1",', 'ver'],
+      ['        "splits": [', 'tr'],
+      ['          { "t_start": …, "t_end": …,', 'tr'],
+      ['            "value": "you\'re rich enough scrooge …",', 'tr'],
+      ['            "speaker": "speaker-0" } ]', 'tr'],
+      ['      }'],
+      ['    }'],
+      ['  }'],
+      ['}']
+    ],
+    video: [
+      ['{'],
+      ['  "contract": "C2",', 'contract'],
+      ['  "version": "1",', 'contract'],
+      ['  "record_id": "f86e1a080c63e4e6c86d500c14eafd2dcd06a804104fea2884cadc799724ec65",', 'rid'],
+      ['  "user_id": "u-soak",', 'uid'],
+      ['  "modality": "video",', 'mod'],
+      ['  "source": {', 'src'],
+      ['    "device_id": "phone-a",', 'src'],
+      ['    "stream_id": "01KZDHH4RBXMR9AYE8GAHW1MB0",', 'src'],
+      ['    "chunk_id": "01KZDHH4XYCEB9T208TFTW9A08",', 'chunk'],
+      ['    "blob_ref": "75/80/7580a4da73deca3d1e28486c4ff18...",', 'blob'],
+      ['    "device_tz": "America/Los_Angeles",', 'tz'],
+      ['    "device_utc_offset_minutes": -420', 'tz'],
+      ['  },'],
+      ['  "t_start": "2026-08-07T05:44:15Z",', 'span'],
+      ['  "t_end": "2026-08-07T05:44:23Z",', 'span'],
+      ['  "pipeline_version": "clipcap.v1-vlm.v1', 'pv'],
+      ['                      +clipprep.v1-ffmpeg.v1', 'pv'],
+      ['                      +screentext.v1-ppocr.v1",', 'pv'],
+      ['  "content": {'],
+      ['    "slots": {', 'slots'],
+      ['      "caption": {', 'cap'],
+      ['        "version": "clipcap.v1-vlm.v1",', 'ver'],
+      ['        "value": "an unidentified presentation application', 'cap'],
+      ['                  — switching between slides."', 'cap'],
+      ['      },'],
+      ['      "ocr": {', 'ocr'],
+      ['        "version": "screentext.v1-ppocr.v1",', 'ver'],
+      ['        "value": "+2s main: SLIDE42Q3revenue · +4s main:"', 'ocr'],
+      ['      }'],
+      ['    }'],
+      ['  }'],
+      ['}']
+    ]
+  };
+  var recJson = $("#recJson"), recSide = $("#recSide");
+  function esc(t) { return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function paint(t) {
+    return esc(t)
+      .replace(/&quot;/g, '"')
+      .replace(/"([a-z_]+)":/g, '<span class="k">"$1"</span>:')
+      .replace(/: "([^"]*)"/g, ': <span class="s">"$1"</span>')
+      .replace(/: (-?\d+)/g, ': <span class="n">$1</span>');
+  }
+  function drawRec(which) {
+    recJson.innerHTML = RECS[which].map(function (r) {
+      var txt = paint(r[0]);
+      if (!r[1]) return '<span class="row" style="cursor:default">' + txt + "</span>";
+      return '<button class="row" data-k="' + r[1] + '" role="option">' + txt + "</button>";
+    }).join("");
+  }
+  recJson.addEventListener("click", function (e) {
+    var row = e.target.closest("button.row"); if (!row) return;
+    $$(".row", recJson).forEach(function (r) { r.classList.remove("on"); });
+    row.classList.add("on");
+    var w = WHY[row.dataset.k];
+    recSide.innerHTML = "<h4>" + w[0] + "</h4><p>" + w[1] + "</p>";
+  });
+  $$("[data-rec]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      $$("[data-rec]").forEach(function (x) { x.classList.remove("on"); });
+      b.classList.add("on"); drawRec(b.dataset.rec);
+      recSide.innerHTML = "<h4>Click a line</h4><p>Every part of this record is doing a specific job. Select any line to see which.</p>";
+    });
+  });
+  drawRec("audio");
+
+  /* ---------------------------------------------------------- 05 dialect composer */
+  var DIAL = {
+    audio: [
+      { st: "acoustic", vS: 1, be: "ast", vB: 1 },
+      { st: "asr", vS: 1, be: "fw", vB: 1 },
+      { st: "diarize", vS: 1, be: "pyannote", vB: 1 },
+      { st: "speaker_align", vS: 1, be: "builtin", vB: 1 }
+    ],
+    video: [
+      { st: "clipcap", vS: 1, be: "vlm", vB: 2 },
+      { st: "clipprep", vS: 1, be: "ffmpeg", vB: 1 },
+      { st: "screentext", vS: 1, be: "ppocr", vB: 1 }
+    ]
+  };
+  var CHUNK = "01KZDHFJGFA0CWYJQY4BST5JHA";
+  var dialMod = "audio", bumped = {};
+  function seg(s) { return s.st + ".v" + s.vS + "-" + s.be + ".v" + (s.vB + (bumped[dialMod + s.st] || 0)); }
+  async function sha256Hex(str) {
+    var enc = new TextEncoder().encode(str);
+    if (!(window.crypto && window.crypto.subtle)) return null;
+    var buf = await window.crypto.subtle.digest("SHA-256", enc);
+    return Array.prototype.map.call(new Uint8Array(buf), function (b) {
+      return ("00" + b.toString(16)).slice(-2);
+    }).join("");
+  }
+  async function drawDial() {
+    var stages = DIAL[dialMod];
+    $("#dialStages").innerHTML = stages.map(function (s) {
+      var n = bumped[dialMod + s.st] || 0;
+      return '<button class="btn' + (n ? " on" : "") + '" data-bump="' + s.st + '">' +
+        (n ? "↑ " : "bump ") + s.st + " backend</button>";
+    }).join("");
+    var pv = stages.map(seg).sort().join("+");
+    $("#dialOut").textContent = pv;
+    var h = await sha256Hex(CHUNK + "\u0000" + pv);
+    $("#dialHash").textContent = h || "(needs a secure context to hash in-page)";
+    var anyBump = stages.some(function (s) { return bumped[dialMod + s.st]; });
+    $("#dialNote").innerHTML = anyBump
+      ? "You just forked the dialect. The record for this chunk now has a <b>different address</b>, so reprocessing writes a new record <b>beside</b> the old one rather than over it — both exist in storage, each honestly labelled with the processing that produced it."
+      : "This is the dialect as declared in code today. Bump any backend version and watch the address change — that is the whole of version-forward reprocessing.";
+  }
+  $("#dialStages").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-bump]"); if (!b) return;
+    var k = dialMod + b.dataset.bump;
+    bumped[k] = bumped[k] ? 0 : 1;
+    drawDial();
+  });
+  $$("#dialModality [data-mod]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      $$("#dialModality [data-mod]").forEach(function (x) { x.classList.remove("on"); });
+      b.classList.add("on"); dialMod = b.dataset.mod; drawDial();
+    });
+  });
+  drawDial();
+
+  /* ---------------------------------------------------------- 06 graph runner */
+  var GRAPH = {
+    audio: [
+      { n: "asr", slot: "asr", needs: [], req: true, be: "whisper server" },
+      { n: "diarize", slot: "diarization", needs: [], req: false, be: "pyannote server" },
+      { n: "acoustic", slot: "acoustic", needs: [], req: false, be: "ast server" },
+      { n: "speaker_align", slot: "transcript", needs: ["asr", "diarize"], req: false, be: "in-process, CPU" }
+    ],
+    video: [
+      { n: "clipprep", slot: null, needs: [], req: true, be: "ffmpeg subprocess" },
+      { n: "screentext", slot: "ocr", needs: ["clipprep"], req: false, be: "ocr server" },
+      { n: "clipcap", slot: "caption", needs: ["clipprep", "screentext"], req: false, be: "captioner" }
+    ]
+  };
+  var gMod = "audio", failed = {};
+  function lanesOf(stages) {
+    var lanes = [], placed = {}, left = stages.slice(), guard = 0;
+    while (left.length && guard++ < 10) {
+      var ready = left.filter(function (s) { return s.needs.every(function (n) { return placed[n]; }); });
+      if (!ready.length) break;
+      ready.forEach(function (s) { placed[s.n] = true; });
+      lanes.push(ready);
+      left = left.filter(function (s) { return !placed[s.n]; });
+    }
+    return lanes;
+  }
+  function statuses(stages) {
+    var st = {}, changed = true, guard = 0;
+    stages.forEach(function (s) { st[s.n] = failed[gMod + s.n] ? "failed" : "ok"; });
+    while (changed && guard++ < 10) {
+      changed = false;
+      stages.forEach(function (s) {
+        if (st[s.n] === "ok" && s.needs.some(function (n) { return st[n] === "failed" || st[n] === "cancelled"; })) {
+          st[s.n] = "cancelled"; changed = true;
+        }
+      });
+    }
+    return st;
+  }
+  function drawGraph() {
+    var stages = GRAPH[gMod], st = statuses(stages), lanes = lanesOf(stages);
+    var reqFail = stages.some(function (s) { return s.req && st[s.n] !== "ok"; });
+    $("#gLanes").innerHTML = lanes.map(function (lane, i) {
+      var label = i === 0 ? "Start line — these need nothing, so they all begin together"
+        : "Waits for " + lane.map(function (s) { return s.needs.join(" + "); }).filter(Boolean)[0];
+      return '<div class="lane-label">' + label + "</div><div class=\"lane\">" + lane.map(function (s) {
+        return '<button class="nd ' + (s.req ? "req " : "") + "st-" + st[s.n] + '" data-fail="' + s.n + '">' +
+          '<span class="nm">' + s.n + " " +
+          '<span class="pill ' + (s.req ? "law" : "dim") + '">' + (s.req ? "required" : "optional") + "</span></span>" +
+          '<span class="meta">' + (s.slot ? "slot: " + s.slot : "no slot — transient bytes") + " · " + s.be +
+          " · <b>" + st[s.n] + "</b></span></button>";
+      }).join("") + "</div>";
+    }).join("");
+    if (reqFail) {
+      $("#gSlots").innerHTML = '<span class="slotpill hole">no record at all</span>';
+      $("#gVerdict").innerHTML = "A <b>required</b> stage failed, so the chunk attempt fails and <b>nothing is written</b>. " +
+        "Every sibling is cancelled and awaited, the original exception is re-raised, and the chunk goes to the retry machinery — " +
+        "retried a few times, then durably dead-lettered and reported on <code>/continuity</code>, so recording sees a gap rather than false success.";
+    } else {
+      var present = stages.filter(function (s) { return s.slot && st[s.n] === "ok"; });
+      var holes = stages.filter(function (s) { return s.slot && st[s.n] !== "ok"; });
+      $("#gSlots").innerHTML =
+        present.map(function (s) { return '<span class="slotpill present">' + s.slot + " ✓</span>"; }).join("") +
+        holes.map(function (s) { return '<span class="slotpill hole">' + s.slot + " — hole (" + st[s.n] + ")</span>"; }).join("");
+      $("#gVerdict").innerHTML = holes.length
+        ? "The record <b>ships anyway</b>, carrying the slots that succeeded. Each missing slot is a <b>hole</b>: the dialect still names its stage, so a reader can tell it was attempted and failed — not that there was nothing to find. " +
+          "The journal records the per-stage statuses, and a later delivery of this chunk can <b>heal</b> it (section 08)."
+        : "Every stage succeeded, so the record carries every slot. Click any stage above to fail it and watch what changes.";
+    }
+  }
+  $("#gLanes").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-fail]"); if (!b) return;
+    var k = gMod + b.dataset.fail; failed[k] = !failed[k]; drawGraph();
+  });
+  $$("#gModality [data-gm]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      $$("#gModality [data-gm]").forEach(function (x) { x.classList.remove("on"); });
+      b.classList.add("on"); gMod = b.dataset.gm; drawGraph();
+    });
+  });
+  $("#gReset").addEventListener("click", function () { failed = {}; drawGraph(); });
+  drawGraph();
+
+  /* ---------------------------------------------------------- 06 honesty quiz */
+  var HON = [
+    {
+      q: 'A record\'s dialect is <code>acoustic.v1-ast.v1+asr.v1-fw.v1+diarize.v1-pyannote.v1+speaker_align.v1-builtin.v1</code>, and its slots map contains <code>"acoustic": {"version": "acoustic.v1-ast.v1", "values": []}</code>. What does that say about ambient sound?',
+      a: 0,
+      why: "The stage is named in the dialect and the slot is present, so the stage ran; the empty list is its answer. This is a positive claim: nothing worth tagging was heard. A consumer may legitimately act on it."
+    },
+    {
+      q: 'Same dialect. This time the slots map contains <code>asr</code> and <code>diarization</code>, but there is no <code>acoustic</code> key at all. What happened?',
+      a: 1,
+      why: "The dialect names the acoustic stage, so it was attempted — but no slot was written, which only happens on the failure path. That is a hole. Perhaps its server was down. A later delivery can heal it, and until then no conclusion about ambient sound is available."
+    },
+    {
+      q: 'A record\'s dialect is <code>asr.v1-fw.v1</code> alone, and the slots map contains only <code>asr</code>. Was there any ambient sound in that chunk?',
+      a: 2,
+      why: "Unknowable from this record. The acoustic stage is not in the dialect, so it was never attempted. Reading the missing slot as \"it was quiet\" is exactly the inference the law forbids — the honest answer is that nobody listened for it."
+    },
+    {
+      q: 'A video record carries <code>"ocr": {"version": "screentext.v1-ppocr.v1", "value": ""}</code>. Should a consumer conclude the screen had no readable text?',
+      a: 0,
+      why: "Yes — this one is a genuine claim. The stage is in the dialect and the slot is present; the empty string is text recognition reporting that it looked at the frames and found nothing legible. That is different in kind from the slot being absent."
+    }
+  ];
+  var HON_OPTS = [
+    "We looked, there was nothing",
+    "We tried and failed (a hole)",
+    "We never tried"
+  ];
+  var honI = 0, honDone = false;
+  function drawHon() {
+    var c = HON[honI]; honDone = false;
+    $("#honQ").innerHTML = c.q;
+    $("#honProg").textContent = "case " + (honI + 1) + " / " + HON.length;
+    $("#honOpts").innerHTML = HON_OPTS.map(function (o, i) {
+      return '<button class="btn" data-h="' + i + '">' + o + "</button>";
+    }).join("");
+    $("#honFb").textContent = ""; $("#honFb").className = "quiz-fb";
+  }
+  $("#honOpts").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-h]"); if (!b || honDone) return;
+    honDone = true;
+    var c = HON[honI], pick = +b.dataset.h, ok = pick === c.a;
+    $$("#honOpts .btn").forEach(function (x, i) {
+      if (i === c.a) x.classList.add("on");
+      else if (i === pick) x.classList.add("on", "danger");
+    });
+    $("#honFb").className = "quiz-fb " + (ok ? "good" : "bad");
+    $("#honFb").innerHTML = (ok ? "Correct. " : "Not quite — the answer is “" + HON_OPTS[c.a] + "”. ") +
+      '<span class="why">' + c.why + "</span>";
+  });
+  $("#honNext").addEventListener("click", function () { honI = (honI + 1) % HON.length; drawHon(); });
+  drawHon();
+
+  /* ---------------------------------------------------------- 08 claim tree */
+  var CASES = {
+    fresh: {
+      label: "never seen before",
+      steps: [1, 0, 0, 0],
+      verdict: "<b>fresh</b> — no row exists for this chunk, so it is processed from the start. In async mode it is written to the journal as pending, acknowledged with a 202, and handed to a worker."
+    },
+    version_forward: {
+      label: "seen, but we have since changed the pipeline",
+      steps: [2, 1, 0, 0],
+      verdict: "<b>version-forward</b> — a row exists but it was written under a different dialect. The chunk is reprocessed, and because the dialect is half of the address, the new record lands <b>beside</b> the old one rather than over it. Both remain in storage, each labelled with the processing that produced it."
+    },
+    skip: {
+      label: "seen, same pipeline, everything succeeded",
+      steps: [2, 2, 1, 0],
+      verdict: "<b>skip</b> — the row matches today's dialect and every stage was green. Nothing is recomputed; the stored record id is returned with a 200. This is the ordinary answer to a routine redelivery, and it costs a single lookup."
+    },
+    heal: {
+      label: "seen, same pipeline, but it has holes",
+      steps: [2, 2, 2, 1],
+      verdict: "<b>heal</b> — the row matches today's dialect but some stage failed last time, and the heal budget is not spent. The whole graph runs again and re-posts to the <b>same</b> address, trying to fill the holes. A heal that comes back fully green is never charged against the budget."
+    },
+    exhausted: {
+      label: "holes, but the heal budget is spent",
+      steps: [2, 2, 2, 2],
+      verdict: "<b>skip</b>, permanently. Three non-green heals have been spent, so the holes are declared permanent and the row is marked final. Future deliveries under this dialect skip forever, and a metric records that a record was finalized with permanent holes. A new dialect would still reprocess it."
+    },
+    inflight: {
+      label: "a delivery of this chunk is being processed right now",
+      steps: [3, 0, 0, 0],
+      verdict: "<b>in-flight</b> — another delivery already owns this chunk. The duplicate is acknowledged with a 202 marked as such and does no work, so two simultaneous deliveries can never both enqueue the same chunk."
+    }
+  };
+  var CT_Q = [
+    ["Is a delivery of this chunk already in flight?", ["—", "no", "—", "yes → in-flight"]],
+    ["Does the journal have a row for this chunk?", ["—", "no → fresh", "yes", "—"]],
+    ["Does the stored dialect match today's?", ["—", "no → version-forward", "yes", "—"]],
+    ["Was every stage green — or is the heal budget spent?", ["—", "green → skip", "holes, budget left → heal", "budget spent → skip, final"]]
+  ];
+  var ctKey = "fresh";
+  function drawCT() {
+    var c = CASES[ctKey];
+    $("#ctBtns").innerHTML = Object.keys(CASES).map(function (k) {
+      return '<button class="btn' + (k === ctKey ? " on" : "") + '" data-ct="' + k + '">' + CASES[k].label + "</button>";
+    }).join("");
+    $("#ctTree").innerHTML = CT_Q.map(function (q, i) {
+      var s = c.steps[i];
+      var txt = s === 0 ? "not reached" : q[1][s] === "—" ? "…" : q[1][s];
+      return '<div class="tnode' + (s ? " on" : "") + '"><div class="tq">' + q[0] +
+        '</div><div class="tv">' + (s ? "<b>" + txt + "</b>" : '<span style="opacity:.5">not reached</span>') + "</div></div>";
+    }).join("");
+    $("#ctVerdict").innerHTML = c.verdict;
+  }
+  $("#ctBtns").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-ct]"); if (!b) return;
+    ctKey = b.dataset.ct; drawCT();
+  });
+  drawCT();
+})();
+</script>
 </body>
 </html>

@@ -39,6 +39,62 @@ Open items only. Finished work leaves the board.
 | 5 | **D9 observability backbone** — the shared Prometheus + Grafana. Emission shipped; the backbone is platform's. | platform's §Next |
 | 6 | **Parity-apparatus retirement** — pointer only; the owed one-act retirement lives on the [storage board](../storage/HANDOFF.md) §Next 7. | storage-led |
 | 7 | **Pin `huggingface-hub` in `servers/ast/requirements.txt`** — see [the card below](#pinning-huggingface-hub-for-the-ast-server). | a deliberate pin decision |
+| 8 | **L9's shutdown clause names the wrong cause.** [Card below](#l9s-shutdown-clause-names-the-wrong-cause). | a charter edit; founders' call |
+| 9 | **"Enforced in CI" is not true yet.** Nothing runs `pytest`; the only workflow is `docs-style.yml`. [Card below](#enforced-in-ci-is-not-true-yet). | wire a runner, or reword |
+| 10 | **T-1 and T-3 are order-dependent in isolation.** [Card below](#t-1-and-t-3-are-order-dependent-in-isolation). | nothing; needs a registry-restoring fixture |
+
+### "Enforced in CI" is not true yet
+
+> `designed` 2026-08-08 · surfaced while rewriting the onboarding field guide
+
+**In one line.** [CHARTER.md](CHARTER.md) §Slot Law and this file's Gotchas both say the T-spine is
+enforced in CI, and nothing runs it.
+
+**Why it's this way** — the repository's only workflow is `docs-style.yml`, which runs
+`product/scripts/style_check.py` over markdown. No runner executes `pytest` for this service, so the
+law is enforced by whoever remembers to run the suite before pushing. The tests themselves are real
+and green; the claim about who runs them is what is wrong.
+
+**Watch out for** — closing this by wiring a runner and closing it by rewording the two documents
+are both honest, but they are different decisions. Pick one deliberately rather than letting the
+sentence stand.
+
+### T-1 and T-3 are order-dependent in isolation
+
+> `designed` 2026-08-08 · surfaced while rewriting the onboarding field guide
+
+**In one line.** Running only `tests/test_t1_determinism.py` and
+`tests/test_t3_version_composition.py` produces two failures that do not exist in the full suite.
+
+**Why it's this way** — T-1's helpers first-import `app/stages/**` under a deliberately emptied
+registry. Python caches those modules, so their `@register_stage` side effects can never fire again
+in that process, and T-3 then reads an empty registry and reports that the contract surface moved.
+The full suite stays green because other files import the stage modules earlier and normally.
+
+**Watch out for** — the false red lands on the one test that guards the registered contract surface,
+which is exactly the test a newcomer would trust. Verified 2026-08-08: full suite 569 passed and
+4 skipped; the two-file subset 2 failed and 77 passed.
+
+### L9's shutdown clause names the wrong cause
+
+> `designed` 2026-08-08 · surfaced while rewriting the onboarding field guide
+
+**In one line.** [CHARTER.md](CHARTER.md) §Slot Law L9 says a `kill -9` leaves the fleet running
+*"because replicas own their sessions"*, and that causal claim is wrong.
+
+**Why it's this way** — nothing on Linux kills a child when its parent dies; an orphan is
+re-parented and keeps running whether or not it has its own session. There is no `PR_SET_PDEATHSIG`
+anywhere in `app/`, and DP shares one user-session scope with every replica, so no cgroup teardown
+would sweep them either. The real cause is narrower: `SIGKILL` cannot be handled, so the lifespan
+shutdown never runs and `Supervisor.stop()` never signals anyone. `start_new_session=True`
+(`app/supervisor.py:170`) exists for a different purpose — it lets `_kill` `killpg` a replica's whole
+tree without signalling the supervisor itself, which the code comment at `:165-169` states correctly.
+
+**Watch out for** — the same imprecise clause is repeated in `app/supervisor.py:14-21`,
+[HANDOFF.md](HANDOFF.md) above, and `product/HANDOFF.md`; all four want the same edit. A second error
+rides along in the charter and `product/HANDOFF.md`: they say all eight orphans hold GPU memory, but
+the two `ocr` replicas are declared `gpu: null` and pinned to CPU, so the true figure is eight
+holding ports and six holding GPU memory (confirmed against `nvidia-smi`, 2026-08-08).
 
 ### Pinning huggingface-hub for the ast server
 
@@ -53,8 +109,11 @@ against the installed 1.26.0. That repair worked around it with a pip constraint
 from the running venv, which fixes the instance and not the cause.
 
 **Watch out for** — pinning is a deliberate act, not a tidy-up. Package versions are reported
-in `/health.frameworks` and feed the identity the model client verifies, so choosing the pin
-means choosing what the ast server declares itself to be. Decide the version first, then pin.
+in `/health.frameworks`, so choosing the pin means choosing what the ast server declares itself
+to be. Decide the version first, then pin. Note that the identity check does not cover this. The
+client compares only what the manifest's `expected_identity` pins, which is `model_name` plus the
+weight revisions, so a `huggingface-hub` drift passes unnoticed rather than being caught
+(verified 2026-08-08).
 
 ## Gotchas
 

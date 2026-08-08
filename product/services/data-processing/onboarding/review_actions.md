@@ -5,14 +5,27 @@
 > durable outcome lands in its proper home — code, the board, or the charter — and this file
 > tracks only what is still open.
 
-**Last updated:** 2026-08-07
+**Last updated:** 2026-08-08
 
 ## Active
 
-- **First review of the v1 guide — pending.** Eleven modules (00–10) teach one record per chunk,
- slots, the version law, the machinery/bureaucracy split, heal, and an honest real-vs-unbuilt
- board. It wants a fresh read against the running service. Anything a fresh read surfaces about
- the code goes to the [service board](../HANDOFF.md) §Next, not here.
+- **First reader review of the rewritten guide — pending.** Twelve sections (00–11), five
+  interactive instruments, and an unbuilt list checked item by item. It wants a fresh read
+  against the running service.
+
+- **Re-check the dated live readings when they move.** Every volatile figure is dated in place
+  and all were taken 2026-08-08. The served video dialect and the suite count will go stale
+  first.
+
+The guide teaches one record per chunk, slots, identity, the version law, the graph and the three
+honesty states, the model-server fleet, durability and healing, the downstream day-log, the day-one
+workflow, and what is not built. Its instruments are a live record explorer, a dialect composer that
+recomputes a real `record_id`, a graph runner that fails stages to show the resulting holes, an
+honesty quiz, and a claim-tree walker.
+
+Anything a fresh read surfaces about the code goes to the [service board](../HANDOFF.md) §Next, not
+here. The 2026-08-08 rewrite sent three items there: L9's shutdown clause naming the wrong cause,
+the untrue "enforced in CI" claim, and the T-1/T-3 order dependence.
 
 ## How to edit the guide
 
