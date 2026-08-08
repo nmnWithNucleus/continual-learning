@@ -40,41 +40,47 @@ Open items only. Finished work leaves the board.
 | 6 | **Parity-apparatus retirement** — pointer only; the owed one-act retirement lives on the [storage board](../storage/HANDOFF.md) §Next 7. | storage-led |
 | 7 | **Pin `huggingface-hub` in `servers/ast/requirements.txt`** — see [the card below](#pinning-huggingface-hub-for-the-ast-server). | a deliberate pin decision |
 | 8 | **L9's shutdown clause names the wrong cause.** [Card below](#l9s-shutdown-clause-names-the-wrong-cause). | a charter edit; founders' call |
-| 9 | **`dp-tests.yml` has never run on GitHub.** The runner is wired; today's green is local. [Card below](#dp-testsyml-has-never-run-on-github). | the next push |
+| 9 | **The runner's first red never reproduced.** `dp-tests.yml` is green now; run 1 was not. [Card below](#the-first-red-run-has-never-reproduced). | a recurrence |
 | 10 | **T-1 and T-3 are order-dependent in isolation.** [Card below](#t-1-and-t-3-are-order-dependent-in-isolation). | nothing; needs a registry-restoring fixture |
 
-### `dp-tests.yml` has never run on GitHub
+### The first red run has never reproduced
 
 > `built` 2026-08-08
 
-**In one line.** The suite has a runner,
-[`.github/workflows/dp-tests.yml`](../../../.github/workflows/dp-tests.yml), and it first executes
-on the next push — the green standing behind the charter's claim is still a local one.
+**In one line.** [`dp-tests.yml`](../../../.github/workflows/dp-tests.yml) is live and green, and
+the one thing still open is its very first run, whose suite step failed once and has not failed
+since.
 
 **Why it's this way**
 
-- The open choice was to wire a runner or to reword the two documents, and the suite decided it:
-  it is hermetic. A clean venv holding only `requirements.txt` runs 569 passed and 4 skipped in
-  55 seconds, with no GPU, no model fleet, no secrets and no network (measured 2026-08-08).
-- The real-fleet drills stay behind `DP_E2E=1` and skip on a runner, which is the whole reason the
-  rest of the suite is cheap enough to run on every push.
-- Rewording would have left the law enforced by whoever remembered to run `pytest`, which is the
-  habit [D23](../../DECISIONS.md) made a test spine to abolish.
-- Rewording also reaches further than two service documents: [D23](../../DECISIONS.md) and
+- Wiring a runner beat rewording because the suite is hermetic: a clean venv holding only
+  `requirements.txt` runs 569 passed and 4 skipped in under a minute, with no GPU, no model fleet,
+  no secrets and no network. The real-fleet drills stay behind `DP_E2E=1` and skip.
+- Rewording also reached further than two service documents. [D23](../../DECISIONS.md) and
   [D25](../../DECISIONS.md) each assert CI enforcement in the ratified register, and editing a
   ratified row is a founders' act rather than a service one.
+- Run 1's suite step went red at 70 seconds and reported nothing but an exit code, because job
+  logs need a token this repository does not hand out. Runs 2 and 3 passed that same step with the
+  tests unchanged.
+- Nothing reproduces it. The same commit is green on the box and green in an `ubuntu-24.04`
+  container carrying the runner's own ffmpeg, at 208, 4 and 1 visible CPUs.
 
 **Watch out for**
 
+- **A recurrence is now self-diagnosing.** Each failing test is re-emitted as an `::error::` line,
+  which lands as a check-run annotation and is readable from the public API. Keep that wrapper.
+- **The scope question is settled** ([D30](../../DECISIONS.md)): a service owns the runner for its
+  own suite and platform's CI/CD claim is parked until its M4. This file is a migration target for
+  that day, not a rival standard.
 - **The runner pins `ubuntu-24.04`**, not `ubuntu-latest`: the video fixtures assert exact ffmpeg
   output, so the decoder version is under test. Verified against three independent builds
   (conda-forge 7.1, BtbN static n7.1.5 and n6.1.2), so a runner-image bump is a deliberate act.
-- **CI/CD is platform's** ([charter](../platform/CHARTER.md)) and their M4 is unbuilt. This follows
-  `docs-style.yml`'s precedent rather than inventing a convention, and it is a migration target for
-  M4. A founder who reads it otherwise deletes one file.
 - `product/contracts/**` is in the trigger because `app/schemas.py` validates against those files.
   A contract edit that reds this suite is the break most worth catching, and a service-only path
   filter would have missed it.
+- The framework step builds `servers/common/.venv` first. `test_supervisor.py` spawns replicas
+  through that interpreter, so on a fresh checkout, without it, all eight supervisor tests die on
+  `FileNotFoundError`.
 
 ### T-1 and T-3 are order-dependent in isolation
 
