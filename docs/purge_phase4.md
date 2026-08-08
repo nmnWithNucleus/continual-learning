@@ -198,20 +198,34 @@ appears.
 
 Census-clean apart from their own workstream ids. The serve loop was never rebuilt, and it shows.
 
-### The top-level canvas — found by the fresh-eyes read, not by the census
+### The top-level canvas — raised by the fresh-eyes read, and ruled on
 
 `ARCHITECTURE.md`'s **System High-Level Diagram** — the second document in the cold-start read
-order — described a service that does not exist:
+order — draws stages that do not exist:
 
-> `RS["Recording Service<br/>(computer + wearable capture; no mobile capture)"]`
+> `RS["Recording Service<br/>(computer + wearable capture; …)"]`
 > `DPS["…audio: denoise→diarize→ASR→translate<br/>image/video: proc→dense caption→world data…"]`
 
-No wearable exists; the phone web client *does* capture; there is no denoise stage and `translate`
-is deliberately unregistered; the video leg is `clipprep → screentext → clipcap`. The §Day
-walkthrough opened the same way. Both now describe the running fleet, with world-data enrichment
-named as designed-not-built rather than drawn as if wired.
+No wearable exists, there is no denoise stage, `translate` is deliberately unregistered, and the
+video leg is `clipprep → screentext → clipcap`. I rewrote the diagram and the §Day walkthrough to
+the running fleet.
 
-Not a single census token appears in either. It took reading the document as a newcomer.
+**The founder reversed that: the diagram states the target system, and those stages are coming.**
+Reverted. This is not old-world residue — it is a canvas describing where the product is going,
+which is a legitimate thing for an architecture diagram to do.
+
+One clause did not survive the revert, because it was wrong in the *other* direction:
+"no mobile capture" said less than the truth. The phone web client captures mic and camera today,
+and [D5](../product/DECISIONS.md) defers only mobile **screen** capture — which is what the line
+now says.
+
+**The open question this leaves** is on the decision list: nothing in the diagram distinguishes a
+built stage from a planned one, and this repo has already paid for that once. LEARN_LOOP §8 item
+12 records the cost — three documents asserted a training *intent* in the voice of the *build*,
+and a newcomer read the charter and believed vision towers were being adapted.
+
+Not a single census token appears in any of those lines. It took reading the document as a
+newcomer.
 
 ---
 
@@ -278,8 +292,9 @@ Opened the repo as a day-one engineer: `README.md` → `product/README.md` → `
 
 1. It reads as **one world**. No document introduces a term another retires, and no card describes
    a build in the voice of an intention.
-2. The single thing still teaching a prior world was `ARCHITECTURE.md`'s own system diagram —
-   second in the read order, and invisible to every token the census greps. Fixed above.
+2. `ARCHITECTURE.md`'s system diagram — second in the read order, invisible to every census
+   token — draws stages that do not exist. Ruled by the founder as target state, and kept. It
+   carries no marking that separates built from planned; see the decision list.
 3. **What a newcomer still cannot parse:** 35 references across 20 data-processing files to a
    rebuild plan's sections — `plan §3`, `§5.3`, `§4 R4`, `the ratified §2 dialect`. The plan lived
    in `services/data-processing/docs/`, which phase 2 deleted. The sentences make sense; the

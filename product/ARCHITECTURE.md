@@ -54,8 +54,8 @@ flowchart TD
   U((Users))
 
   subgraph capture [Life capture — learn loop]
-    RS["Recording Service<br/>(mac CLI · phone web · browser extension;<br/>wearable and mobile screen capture deferred)"]
-    DPS["Data Processing Service<br/>audio: acoustic → ASR → diarize → speaker-align<br/>video: clip prep → screen text (OCR) → clip caption<br/>one record per chunk, built from slots"]
+    RS["Recording Service<br/>(computer + wearable capture; mobile screen capture deferred)"]
+    DPS["Data Processing Service<br/>audio: denoise→diarize→ASR→translate<br/>image/video: proc→dense caption→world data<br/>+ timestamp injection (all modalities)"]
   end
 
   subgraph interact [Interaction — serve loop]
@@ -1191,10 +1191,9 @@ The **designed** flow. C8, C11 and C7 are `designed`, not built — a v0 turn to
 
 Built end to end as of 2026-07-27, with one designed-not-built leg named below.
 
-1. **All day:** the mac CLI, phone web client and browser extension stream via C1.
-   Data-processing tags acoustics, transcribes, diarizes and speaker-aligns audio; on video it
-   reads screen text and captions the clip. One record per chunk lands in `/context` (C2).
-   - World-data enrichment (known faces, geolocation, place tags) is designed, not built.
+1. **All day:** wearable and computer stream via C1. Data-processing denoises, diarizes, transcribes
+   and captions, injects timestamps, and enriches with world data (known faces, geolocation, place
+   tags); records land in `/context` (C2).
 2. **Nightly:** continuum opens tonight's training window and fetches the day-log (C10), then
    curates it into a training mixture with anti-forgetting replay, trains the user's LoRA, runs
    the eval gates (personal recall + general-capability forgetting), and publishes or rolls back
