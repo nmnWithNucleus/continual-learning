@@ -83,13 +83,13 @@ That is expected, and this register is built for it:
 | **D18** | Storage owns the day-log and training-window custody | 2026-07-26 | **BUILT** 2026-07-27 | 2 clauses superseded by **D19** · watermark axis moved to `updated_at` by D27 | [↓](#d18--storage-owns-the-day-log) |
 | **D17** | Timezone: the device owns the fact, storage owns the policy | 2026-07-26 | **BUILT** 2026-07-26 · 2026-07-27 | supersedes its own first draft | [↓](#d17--timezone-custody) |
 | **D16** | The async `/ingest` reply shape | 2026-07-19 | ratified | fan-out clause restated by **D24** | [↓](#d16--the-async-ingest-reply-shape) |
-| **D15** | DP image/text pipelines deferred until a producing surface exists | 2026-07-19 | ratified | — | [↓](#d15--dp-imagetext-pipelines-deferred) |
+| **D15** | Platform's D9 backbone is the parallel slice; DP image/text deferred | 2026-07-19 | ratified | sequences **D9**'s backbone | [↓](#d15--the-parallel-slice-and-the-imagetext-deferral) |
 | **D14** | Capture transport is segmented HTTP upload on every v0 surface | 2026-07-19 | ratified | — | [↓](#d14--capture-transport) |
 | **D13** | The consent gate is de-prioritized to the back burner | 2026-07-18 | ratified | — | [↓](#d13--consent-gate-de-prioritized) |
 | **D12** | Branching and beta model: a standing `dev` branch for testers | 2026-07-18 | ratified | — | [↓](#d12--branching-and-beta-model) |
 | **D11** | C1 is two legs plus push delivery | 2026-07-09 | ratified | — | [↓](#d11--c1-is-two-legs) |
 | **D10** | The learn-loop skeleton is computer mic → ASR → `/context` | 2026-07-09 | ratified | shape clause superseded by **D24** | [↓](#d10--the-learn-loop-skeleton) |
-| **D9** | Centralized observability: one shared Prometheus and Grafana | 2026-07-09 | ratified | — | [↓](#d9--centralized-observability) |
+| **D9** | Centralized observability: one shared Prometheus and Grafana | 2026-07-09 | ratified | backbone sequenced by **D15** | [↓](#d9--centralized-observability) |
 | **D8** | OCR is decoupled from the base world model | 2026-07-09 | ratified | retires the **D6** caveat · partially superseded by D24 (two-record shape) | [↓](#d8--ocr-decoupled-from-the-bwm) |
 | **D7** | POCs are reference, not source | 2026-07-09 | ratified | — | [↓](#d7--pocs-are-reference-not-source) |
 | **D6** | The base model is Qwen3-VL-32B | 2026-07-09 | ratified | OCR caveat retired by **D8** | [↓](#d6--the-base-model) |
@@ -364,7 +364,7 @@ exactly which parts must match byte-for-byte.
   deferring durability work with the reason written down.
 - Does **not** license skipping ORG's contract-edit order, undocumented decisions, or calling a
   thing `BUILT` when it is only `ratified`.
-- Seven calls taken:
+- Calls taken:
   - retention = keep everything; the mechanism ships, the policy doesn't.
   - storage local now, Postgres+GCS later.
   - existing state wiped, not migrated.
@@ -450,15 +450,20 @@ storage's own `updated_at` (**D27**).
   in-slice.
 - **Accepted caveat:** `record_ids=[]` ledger provenance on 202-path chunks. The ids are derivable.
 
-### D15 — DP image/text pipelines deferred
+### D15 — the parallel slice, and the image/text deferral
 
-> `ratified` 2026-07-19 · Full session record: git history.
-> · recorded in [HANDOFF.md](HANDOFF.md); data-processing charter / boards that cite the deferral
+> `ratified` 2026-07-19 · sequences **D9**'s backbone · Full session record: git history.
+> · recorded in [HANDOFF.md](HANDOFF.md);
+> [platform board](services/platform/HANDOFF.md) §Incoming; data-processing charter / boards
+> that cite the deferral
 
-**In one line.** DP image/text pipelines wait until a producing surface exists.
+**In one line.** Platform's D9 backbone runs as the small parallel slice, and DP image/text
+pipelines wait for a producing surface.
 
 **What was decided**
 
+- **Platform's [D9](#d9--centralized-observability) backbone**, the one shared Prometheus and
+  Grafana, runs as the small parallel slice. Still not started; the platform board holds it.
 - **DP image/text pipelines (M2) are deferred until a producing surface exists.** No `image` or
   `text` C1 stream exists on the fleet today.
 
@@ -557,7 +562,7 @@ storage's own `updated_at` (**D27**).
 
 ### D9 — centralized observability
 
-> `ratified` 2026-07-09
+> `ratified` 2026-07-09 · backbone sequenced as the parallel slice by **D15**
 > · recorded in [ARCHITECTURE.md](ARCHITECTURE.md) §Observability; [STACK.md](STACK.md);
 > [platform charter](services/platform/CHARTER.md); all service charters
 

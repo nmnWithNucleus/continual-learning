@@ -78,7 +78,7 @@ window, and the wrong-time-axis default)
 ### Next
 1. **Run the Execution steps above** (Phase 0 → 1 → 2 → 3). Phase 1 is the immediate action
    once the founder confirms the cluster data + we have envs/judge creds (lethal-Q4).
-2. **C10 freeze session** with storage (founders ratify) — first contract act, per D15.
+2. **C10 freeze session** with storage (founders ratify) — the first joint contract act.
    Propose: beta range read + `pipeline_version`/modality filters + (t_start, record_id)
    ordering + cursor; watermark/late-data policy rides along (charter OQ9).
 3. **Founders'-board ratification** of the kickoff decisions that re-cut charters/contracts

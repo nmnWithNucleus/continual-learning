@@ -343,7 +343,7 @@ async ingest, DP's 202-accepted chunks sit as `accepted` (verdict `recording`, n
 it safe, a done-claim returns `200 {record_ids}` and the chunk is confirmed
 (`emitter.py:137-179`, `ledger.py:468-486`).
 
-**State:** alpha complete + async seam + `/metrics` (133 tests). Open: **E-1** (segment-seconds
+**State:** alpha complete + async seam + `/metrics` (144 tests). Open: **E-1** (segment-seconds
 10→60 — the single largest cost lever, 5.8× on video GPU; joint call with DP-audio since demux
 moves both legs), *E-6* (a DP 503 becomes a terminal `failed` segment in 1.5 s of retries,
 recoverable only by manual `/retry`), consent gate (D13), streaming-transport leg (D14, deferred
@@ -370,7 +370,8 @@ dialect forks a new record beside the old), or **in-flight** (re-ACK the 202). A
 fleet's operating default; the inline path stays byte-identical and is C8's skeleton.
 
 A chunk that can never produce a record dead-letters visibly, so recording's gap report can see
-it. There is no per-chunk subprocess shield, because models no longer run inside this process.
+it. There is no per-chunk subprocess shield: every model runs in a server process of its own, so
+there is nothing inside this one to shield.
 
 #### The stage graph
 
@@ -435,7 +436,10 @@ its own durable user data (ownership split, ARCHITECTURE §Ownership). One FastA
 - `/context` (`main.py:149-183`): schema-gate C2 (authoritative JSON Schema + pydantic mirror
   check), persist verbatim, blind upsert on `record_id`, time-indexed `(user_id, t_start)`. The
   range read `GET /context/records?user_id=&from=&to=` is half-open `[from,to)` ordered
-  `t_start ASC, rowid ASC` (`db.py:330-355`) — today's C10.
+  `t_start ASC, rowid ASC` (`db.py:330-355`).
+- **The training-window ledger and the day-log** (D18): `POST /training/windows` is the sole
+  `window_id` minter, and `GET /training/daylog` serves the day-log storage materializes — what
+  C10 names today. C12 profiles, the C13 registry and the C14 reservoir landed with it.
 - **Model directory** (`db.py:176-202`): a table seeded with the base entry
   (`Qwen/Qwen3-VL-32B-Instruct`, adapter `base`, `adapter_path` null — `db.py:44-46`); `resolve`
   returns a per-user override row if present, else base. This is C6's server; it is *not* where
@@ -446,8 +450,8 @@ its own durable user data (ownership split, ARCHITECTURE §Ownership). One FastA
 One record per chunk is what makes it expressible in one sentence — there is no finer unit to
 delete. The remaining legs are Platform's orchestration and the reservoir cascade (E-2, §6).
 
-**State:** v0.0 + capture M0, built + integrated (26 tests). Deliberately thin — by design the
-last unexpanded learn-loop service; its expansion is the named next founders' act.
+**State:** built + integrated (354 tests), carrying the D18 expansion — the training-window
+ledger, the day-log materializer, the C13 registry and the C14 reservoir.
 
 ### 4.4 Continuum — the nightly consolidation ("Morpheus") and the gate
 
@@ -515,12 +519,12 @@ probes through `adapter.base_only()`.
 **Proof points (2026-07-25):** **M0** — a 32B adapter our pipeline trained → gate → C5 → loaded in
 vLLM and answered (recall 0.267). *Phase-3 dogfood* — 209.7 h of real Speed audio (629 chunks)
 replayed through the actual recording→DP→storage→continuum services (a replay `ChunkSource` + an
-injected-caption DP sidecar; no contract changes); the decomposition run with parity block content
+injected-caption DP stage; no contract changes); the decomposition run with parity block content
 reproduced the baseline separation (0.137 vs 0.179, permutation p=0.148, same distribution;
 p=0.018 above the no-consolidation control). *Verdict: the real services carry the learn loop
 without losing learnability.*
 
-**State:** 185 tests passing (+7 skipped). Open: the storage/C10 board ratification; the
+**State:** 264 tests passing (+7 skipped). Open: the
 **recipe/dose finding** (amplification dose is fixed per block, but recall depends on retellings
 per unit of text — at our native cadence dose must scale with block-text volume; for Gnandeep);
 the *E-4* renderer asks (per-fragment local timestamps in `_render_block`, *without them "at
@@ -606,19 +610,18 @@ Platform owns the fleet bring-up (`run_learn.sh` starts storage :8083 · DP :808
 health-gated, in that order; the cloudflared capture tunnel is *not* part of it — that is
 recording's own `run_tunnel.sh`), the D9 observability backbone (one shared Prometheus + Grafana;
 services emit `/metrics` + own dashboards, DP and recording already emit), consent policy custody
-(D13, deferred), deletion orchestration, and the unresolved **GPU allocation policy** that E-3(b)
-forces: today DP's captioner URL and inference's serving URL both default to the *same*
-Qwen3-VL-32B instance on node-7, and DP's nightly prefill bursts would sit in the same continuous
-batch as a user's chat decode. Note the running node-7 fleet predates the three DP merges — restart
-pending (behavior unchanged; knobs off by default).
+(D13, deferred), deletion orchestration, and the **GPU allocation policy** E-3(b) forces. The
+captioner has its own instance: `run_vllm.sh` serves it on `:8161` across GPUs 0-1 and `learn.env`
+pins DP's `VLM_URL` there, so DP's prefill bursts no longer share a continuous batch with a user's
+chat decode. Both services' *code* defaults still name `:8000`, so the separation
+lives in the deployment, and the policy that says which service may claim which GPU is unwritten.
 
 ---
 
 ## 5. A chunk's journey — one mac screen-recording segment, capture → adapter
 
-The concrete data shapes at every hop, for the **video path** (the
-gated-off target path — under today's default the same journey emits ~4 keyframe captions at step
-5 instead of 2 records).
+The concrete data shapes at every hop, for the **video path** — the dialect the fleet runs:
+`clipprep` → `screentext` → `clipcap`, landing one record per chunk.
 
 ```mermaid
 sequenceDiagram
@@ -627,8 +630,8 @@ sequenceDiagram
     participant REC as Recording :8084
     participant STO as Storage :8083
     participant DP as Data Processing :8085
-    participant OCR as OCR sidecar (CPU)
-    participant VLM as Captioner VLM
+    participant OCR as OCR server :8151/:8152 (CPU)
+    participant VLM as Captioner VLM :8161
     participant CON as Continuum (nightly)
 
     MAC->>REC: seg-000042.mp4 (10 s screen+mic, ≤1728 px)
@@ -671,10 +674,10 @@ sequenceDiagram
      floor = 2, typing 11–19, app switch 255); pass B extracts K = clamp(⌈span/2.5⌉, 2, 12) frames
      at true PTS, split-scaled to 768 px (caption) and 1728 px (OCR).
    - Slots: `clip_frames`, `delta`.
-   - `screentext` (order 15): OCRs the changed/floor frames at native res through the sidecar
+   - `screentext` (order 15): OCRs the changed/floor frames at native res through the OCR server
      (`POST /ocr` → `[(text, bbox, conf)]`), then confidence-gate (≥0.60), reading-order sort +
      **region role words** (`titlebar|compose|main|…` — the useful 80 % of geometry at zero
-     contract cost; the bbox is then discarded), min-chars, *deterministic secret redaction*
+     contract cost; the bbox is discarded), min-chars, *deterministic secret redaction*
      (AWS/sk-/ghp_/PEM/Luhn shapes → `[redacted:secret]`), within-chunk dedup, budget → one
      single-line block.
    - Writes the `ocr` slot.
@@ -726,15 +729,15 @@ sequenceDiagram
 
 | Piece | Evidence |
 |---|---|
-| Capture M1 + 3 real clients (mac CLI / phone web / extension), checked continuity | verified `clean` on real hardware 2026-07-19; 133 recording tests |
+| Capture M1 + 3 real clients (mac CLI / phone web / extension), checked continuity | verified `clean` on real hardware 2026-07-19; 144 recording tests |
 | DP: one C2 record per chunk from `content.slots`, durable journal with heal-on-redrive, models as supervised servers | 569 tests (+4 skipped); audio and video both live against the real fleet |
 | DP screen-video path (clipprep → screentext → clipcap, versioned prompt pack, eval harness) | built and live; `caption` and `ocr` slots on every video record |
 | Storage v0.0: /raw, /context, /sessions, C6 resolve | integrated since 2026-07-09 |
-| **Storage D18 expansion (2026-07-27): C12 profile · training-window ledger + the sole `window_id` minter · day-log materialization (C10 evolved) · C13 registry · C14 reservoir** | **310 tests.** The day-log storage renders is proven *byte-identical* to continuum's over *two window origins including a misaligned one* (`storage/scripts/daylog_parity_diff.py`, 31 binding checks) |
+| **Storage D18 expansion (2026-07-27): C12 profile · training-window ledger + the sole `window_id` minter · day-log materialization (C10 evolved) · C13 registry · C14 reservoir** | **354 tests.** The day-log storage renders is proven *byte-identical* to continuum's over *two window origins including a misaligned one* (`storage/scripts/daylog_parity_diff.py`, 31 binding checks) |
 | Continuum consumes storage's HTTP surface | **264 tests** (+7 skipped). The window comes from storage and the zone from the C12 profile read; continuum derives neither |
 | **The seam proven live, two processes over HTTP** | `continuum/scripts/seam_check.py` — 10 steps, 152 checks, 0 blockers. Plus a real fleet run: capture → faster-whisper → `/context` → a nightly to **published**, with the watermark advancing only on publish and exactly one active C5 row |
-| Continuum: Morpheus port (parity-proven) + lean cycle + gate v1.1 + C5 publish/rollback + reservoir | M0 met (32B adapter → gate → C5 → vLLM); 185 tests |
-| Phase-3 dogfood: real data through the real services reproduces baseline learnability | *pipeline sOUND (p=0.018 vs no-consolidation control) |
+| Continuum: Morpheus port (parity-proven) + lean cycle + gate v1.1 + C5 publish/rollback + reservoir | M0 met: our own 32B adapter trained → gated → published as C5 → loaded and answered in vLLM |
+| Phase-3 dogfood: real data through the real services reproduces baseline learnability | *pipeline sound* (p=0.018 against the no-consolidation control) |
 | Serve loop v0.0 on real Qwen3-VL-32B (the learn loop's landing zone) | closed 2026-07-09 |
 
 ### Gated (built, but a named gate stands before "live")
@@ -917,14 +920,13 @@ that costs, not as a list to tick off.
    - The M0 "served in vLLM" claim is true but was proven
    continuum-side (adapter load check), not through the C6 path. This is *known* pending the C5
    pin — but the system diagram reads as if the wire exists.
-2. **The day-log, recipe registry, and reservoir live in continuum, not storage.**
-   ARCHITECTURE's C10 row and the storage charter expansion describe storage materializing the
-   day-log; as built, `build_daylog` runs in-process in continuum behind `LocalDayLogClient`
-   (`continuum/app/clients/daylog_client.py:65+`), and C10-as-consumed is storage's beta
-   `/context` range read.
-   - The ARCHITECTURE row does flag the evolution as "proposed, pending founders' board", which is
-     consistent, but the HANDOFF service-board phrasing "C10 day-log fetch" can read as landed. It
-     is not.
+2. **The day-log, recipe registry and reservoir were described as storage's while they ran in
+   continuum — closed by the D18 build.** The documents promised storage materializing the
+   day-log; the code rendered it in-process behind `LocalDayLogClient`, and what continuum
+   actually consumed was storage's `/context` range read.
+   - Storage now serves `GET /training/daylog` and continuum trains from it, so the documents and
+     the code agree. The gap is the record here: a row can say "C10 day-log fetch" for weeks
+     before anything fetches, and only a code read catches it.
 3. **C5 as-built ≠ C5 as prose, in four places — fixed 2026-07-26 (review item O-2). Kept as the
    record of what the shape is and what the founders decided about describing it.**
 
@@ -1011,11 +1013,9 @@ that costs, not as a list to tick off.
    never ran), and Phase-3 passed a real per-day zone.
 
    **Two things this decided that live elsewhere:** `nightly.py --tz` is now **required** (there is
-   no default timezone anywhere), and the cycle window is specified to become the watermark range
-   `[last_trained_t, now−δ)` on storage's *ingest* axis rather than continuum's local-date
-   `window_for()` — *BUILT 2026-07-27 (D18); `window_for()` is deleted.* *(Original note: specified, not yet
-   built**, and part of the storage/C10 board session along with moving day-log materialization to
-   storage (see item 2).
+   no default timezone anywhere), and the cycle window is the watermark range
+   `[last_trained_t, now−δ)` on storage's `updated_at` axis (D27) rather than continuum's
+   local-date `window_for()`, which is deleted.
 
 5. **ARCHITECTURE's system diagram is stale on capture surfaces** ("computer + wearable capture;
    no mobile capture", "Last updated 2026-07-08"): the landed fleet is mac CLI + *phone web*
@@ -1026,9 +1026,9 @@ that costs, not as a list to tick off.
    `rapidocr-onnxruntime` bundles), file-swappable, with its det/rec sha256 pins in
    `servers/manifest.json` and asserted at `/health`. Treat any `-ppv6-` mention as a design
    name, not provenance.
-7. **`continuum/app/daylog.py:11-12` docstring** still describes video captions as "per-keyframe
-   records" — true of the default keyframe pipeline, stale w.r.t. the clip path (which emits one
-   chunk-span caption). Cosmetic; the join itself is kind-based and handles both.
+7. **`continuum/app/daylog.py`'s docstring** described video captions as "per-keyframe records"
+   and the join as kind-based. Both were true of an earlier record shape and neither is now: the
+   video path emits one chunk-span caption, and the join walks slots on `(chunk_id)`.
 8. **Ledger vocabulary drift (minor):** recording's dp_state comment (`ledger.py:76`) and the D16
    text use `accepted`/`processed`; a fresh reader of the C1 schema alone won't find dp_state —
    it's an internal ledger column, not a contract field.
@@ -1093,13 +1093,11 @@ that costs, not as a list to tick off.
     - Those places were the founders' board service row *and* recording's own canvas status line,
       which collected 133. The delta is the Phase-3 replay-source tests.
 
-**Verification limits.** Suites re-run independently on 2026-07-26: **DP 765 passed + 21 skipped**
-(786 collected), *continuum 185 passed + 7 skipped* (192 collected: 108 non-parity + 84 parity),
-*recording 133 collected*, *storage 26*. Those are the numbers to quote. (An earlier pass
-reported continuum as "187 passed + 4 environment errors"; that does not reproduce here — the
-HF-dependent parity tests skip rather than error in a headless environment.) The Phase-3/parity
-*statistics* are quoted from their reports, not re-computed; the live node-7 fleet state was not
-probed; no real capture or GPU path was exercised in either verification session.
+**Verification limits.** The suite counts quoted throughout are the ones this document was last
+verified against; re-run them rather than trusting the numbers, since a stale count is the
+cheapest kind of false claim to leave behind. The Phase-3 and parity *statistics* are quoted from
+their reports, not re-computed. What no verification pass here has exercised: a real capture on
+client hardware and a real GPU training run — `TRAINER_BACKEND=mock` throughout.
 
 ---
 

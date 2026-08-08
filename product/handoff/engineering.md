@@ -1,6 +1,6 @@
 # Founders' thread — Engineering
 
-> Running canvas for founders' engineering sessions (launch: [../PROMPTS.md](../PROMPTS.md) §E).
+> Running canvas for founders' engineering sessions (launch: [../PROMPTS.md](../PROMPTS.md) §D).
 > Cross-service build sequencing, integration plans, infra calls. Service-local build state lives
 > in each service's own `HANDOFF.md`; ratified decisions live in
 > [../DECISIONS.md](../DECISIONS.md).

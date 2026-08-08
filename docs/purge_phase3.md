@@ -345,3 +345,69 @@ DP is the same process throughout. No service was restarted or POSTed to.
    §Next 7 in phase 2, still open, still a deliberate act because pins feed `/health` identity.
 
 Phase 4 **not started**. Not pushed.
+
+---
+
+## Corrections — appended 2026-08-08 (founder ruling, phase-4 session)
+
+This worklog is append-only. Two claims above are wrong; both are quoted and corrected here
+rather than edited in place.
+
+### Correction 1 — the D15 row was checked against the wrong clause
+
+Above, in §Founder ruling 4 — corrections already landed, this table row:
+
+> | D15 keeps the platform-cited deferral clause | already correct |
+
+**That is wrong.** It checked the M2 image/text deferral, which the card did keep. The clause the
+platform board actually cites is a different one, and it had been removed:
+
+> - **Platform's D9 backbone**, the one shared Prometheus + Grafana, runs as the small parallel slice.
+
+`platform/HANDOFF.md:9` names "the D9 observability backbone D15 assigned to platform", and `:55`
+sources its **not started** Incoming row to "**D9** (2026-07-09) + *D15* (2026-07-19), which named
+it *the small parallel slice*". A row that has not started is current-world content, so removing
+its assigning clause deleted live material and orphaned two citations.
+
+The ratified classification judged it spent — "*The sequencing (continuum kickoff next, C10 v0
+freeze gate, D9 parallel slice) is spent history*" (`purge_classification.md:396`). The founder
+overruled that on the evidence of the board, and this correction follows the ruling, not the
+classification.
+
+**Restored to D15, not moved to D9**, because the board's own attribution splits them exactly that
+way: D9 decided the backbone, D15 sequenced it. Moving the clause would have falsified
+`platform/HANDOFF.md:55`'s parenthetical and required repointing a board this phase was not
+touching. The card is retitled *the parallel slice, and the image/text deferral* so the heading
+covers both clauses; the index row, its anchor and D9's lineage column move with it.
+
+### Correction 2 — the phase-4 per-service numbers are estimates, not a gate
+
+Above, §Phase-4 remainder — per service, and §Owed to phase 4 item 1, both give per-service hit
+counts as bare figures:
+
+> | storage | 125 |
+> 1. **The four service trees**, in descending size: storage 125 · platform 81 · continuum 73 ·
+>    recording 38, plus input 7 · output 4 · inference 4.
+
+**Read every one of those as an estimate.** They were produced by a census whose token list has
+since been widened — bare `rebuild`/`cutover`, spaced and capitalised forms such as `Ingest time`,
+and `.json` bodies — and an independent run diverges in **both** directions:
+
+| Service | Phase-3 figure | Re-run 2026-08-08 |
+|---|---|---|
+| storage | 125 | 138 |
+| platform | 81 | 49 |
+| continuum | 73 | 94 |
+| recording | 38 | 38 |
+| input | 7 | 7 |
+| output | 4 | 4 |
+| inference | 4 | 4 |
+| data-processing | 6 | 10 |
+
+Divergence up is the widened tokens finding more; divergence down is the narrower `--exclude-dir`
+walk of phase 3 counting matches inside files the tracked-file walk never reads. Either way, a
+number that moves when the instrument moves is fine for sizing the work and unfit as a gate.
+
+The instrument is now committed as `docs/census.sh`, so any figure in these worklogs can be
+reproduced or contradicted by running it. The gate is the adjudicated residue in
+`docs/purge_phase4.md`, not a count.
