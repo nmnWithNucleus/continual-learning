@@ -9,23 +9,25 @@
 
 ## Active
 
-- **First reader review of the rewritten guide — pending.** Twelve sections (00–11), five
-  interactive instruments, and an unbuilt list checked item by item. It wants a fresh read
-  against the running service.
+- **First reader review of the rewritten guide — pending.** Fifteen modules (00–14) in the house
+  style the recording guide set. It wants a fresh read against the running service.
 
-- **Re-check the dated live readings when they move.** Every volatile figure is dated in place
-  and all were taken 2026-08-08. The served video dialect and the suite count will go stale
-  first.
+- **Re-check the dated live readings when they move.** Every volatile figure is dated in place and
+  all were taken 2026-08-08. The served video dialect and the suite count go stale first.
 
-- **The instruments have no check.** All five share one `<script>` block, so a single syntax error
-  kills every one of them silently. That happened once, fixed 2026-08-08; nothing in the repo
-  would have caught it.
+- **Run `check-widgets.js` after any edit.** Every instrument shares one `<script>`, so a single
+  syntax error silently kills them all. That happened once, on 2026-08-08.
 
-The guide teaches one record per chunk, slots, identity, the version law, the graph and the three
-honesty states, the model-server fleet, durability and healing, the downstream day-log, the day-one
-workflow, and what is not built. Its instruments are a live record explorer, a dialect composer that
-recomputes a real `record_id`, a graph runner that fails stages to show the resulting holes, an
-honesty quiz, and a claim-tree walker.
+  ```
+  cd product/services/data-processing/onboarding && deno run --allow-read check-widgets.js
+  ```
+
+The guide teaches one record per chunk, slots, identity, the version law, stages and the three
+honesty states, the model fleet, crash safety and healing, the downstream day-log, the decisions and
+their ripples, an honest board, day-one workflow, and a closing quiz. Its instruments are an animated
+slot-ribbon hero, twelve vocabulary accordions, a clickable record explorer, a dialect composer that
+recomputes a real `record_id`, an eight-scenario life-of-a-chunk stepper, six flip cards, a claim-tree
+walker, a decisions timeline, and seven quiz questions.
 
 Anything a fresh read surfaces about the code goes to the [service board](../HANDOFF.md) §Next, not
 here. The 2026-08-08 rewrite sent three items there: L9's shutdown clause naming the wrong cause,
