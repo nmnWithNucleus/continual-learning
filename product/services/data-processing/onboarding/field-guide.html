@@ -940,7 +940,7 @@ the uncle | speaker-0: ...</code></pre>
     <tr><td><b>No backfill-by-version tool exists</b></td><td>True. Reprocessing <i>semantics</i> are fully built &mdash; the claim tree's version-forward branch works &mdash; but the operator tool that replays a day from kept raw bytes under a new dialect does not. Do not mistake one for the other.</td></tr>
     <tr><td><b><code>/continuity</code> reports dead letters but not holes</b></td><td>True. It reports what was received, missing, processed and dead-lettered. Hole truth lives only in the journal, so a record that shipped with a failed optional stage is invisible on the wire.</td></tr>
     <tr><td><b>Adapter hot-swap is designed, not built</b></td><td>True at both ends. Storage resolves an adapter path and inference reads it and never uses it; no adapter is ever loaded. Nothing here depends on it, but it is why the loop is not yet closed.</td></tr>
-    <tr><td><b>Nothing automatically runs the test suite</b></td><td>Found while writing this guide. The charter and the board both describe the law as enforced in continuous integration; the only workflow in the repository checks markdown style. The law is executable and the tests are real &mdash; but a human has to run them.</td></tr>
+    <tr><td><b>The new test runner has never run on GitHub</b></td><td>Until 2026-08-08 the charter described the law as enforced in continuous integration and nothing actually ran the suite. A runner was wired that same day, so the claim is now true in the repository &mdash; but it has not yet executed on a real push, and a workflow that has never run once is a promise rather than a fact. The suite turns out to be hermetic: no GPU, no model fleet, no network.</td></tr>
   </table></div>
 
   <div class="note">
@@ -988,8 +988,9 @@ the uncle | speaker-0: ...</code></pre>
   </div>
 
   <div class="note warn">
-    <b class="tag">Trap two &mdash; nothing runs these for you</b>
-    <p>The charter describes the law as enforced in continuous integration. Today the only automated workflow checks markdown style; no runner executes this suite. The discipline is yours, before you push.</p>
+    <b class="tag">Trap two &mdash; the runner is new, so still run it yourself</b>
+    <p>A workflow now runs this suite on every push that touches the service or the contracts, which is what finally makes the charter's "enforced in continuous integration" true. It was wired on 2026-08-08 and has not yet executed on a real push, so treat it as unproven for now and keep running the suite locally before you push.</p>
+    <p>The contracts directory is in its trigger on purpose: the service validates records against those files, so a contract edit can turn this suite red. That is the break most worth catching automatically.</p>
   </div>
 
   <h3>Goldens and drills</h3>
