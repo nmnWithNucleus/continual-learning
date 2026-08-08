@@ -50,6 +50,7 @@ interactive requests (synchronous, C8), so the model always sees data in one dia
 | /context writes | emit processed records to storage per **C2** |
 | Sync pipeline API | expose the whole pipeline synchronously to QueryBuilder per **C8** |
 | Observability | expose `/metrics` (Prometheus text) and own a Grafana dashboard JSON; the shared backbone is Platform's ([↓](#observability)) |
+| CI | own the workflow that runs this service's suite ([D30](../../DECISIONS.md)); shared CI/CD stays Platform's |
 
 #### Observability
 > `built` (M8) · [D9](../../DECISIONS.md)
@@ -74,7 +75,7 @@ dashboard JSON (`dashboards/*.json`); Platform owns the shared backbone.
 | Model serving, agentic harness, mentor protocol | Inference Service (`inference`) |
 | Response delivery to devices | Output Service (`output`) |
 | Fine-tuning cadence, adapters (entries published to the model directory via C5) | Continuum Service (`continuum`) |
-| Shared infra: SLURM, GCS, CI/CD, observability | Platform Service (`platform`) |
+| Shared infra: SLURM, GCS, CI/CD conventions, the observability backbone | Platform Service (`platform`) |
 
 ---
 

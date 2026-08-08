@@ -75,17 +75,24 @@ jobs:
             exit 1
           }
 
-      # A separate process from its own directory, on purpose. The framework tests
-      # reach the DP app/ modules through their own conftest and reach
-      # dp_servers_common through the cwd that `python -m pytest` puts on sys.path,
-      # so this is the one invocation that works without installing the package into
-      # the suite's environment — which is how the DP suite stays byte-identical.
+      # The framework tests spawn real replica processes through
+      # servers/common/.venv/bin/python — test_supervisor.py pins that path, and
+      # the manifest names the same shape. A fresh checkout has no .venv, so build
+      # it from the file that declares it; its `-e .` is also what puts
+      # dp_servers_common on the path.
+      - name: Build the model-server framework venv
+        if: always()
+        working-directory: product/services/data-processing/servers/common
+        run: |
+          python -m venv .venv
+          ./.venv/bin/pip install -q -r requirements.txt
+
       - name: Run the model-server framework tests
         if: always()
         working-directory: product/services/data-processing/servers/common
         run: |
           set -o pipefail
-          python -m pytest -q -rf --tb=short 2>&1 | tee /tmp/dp-framework.log || {
+          ./.venv/bin/python -m pytest -q -rf --tb=short 2>&1 | tee /tmp/dp-framework.log || {
             grep -E '^(FAILED|ERROR) ' /tmp/dp-framework.log \
               | while IFS= read -r line; do echo "::error::$line"; done
             exit 1

@@ -69,6 +69,7 @@ That is expected, and this register is built for it:
 
 | # | Decision | Date | Status | Lineage | Card |
 |---|---|---|---|---|---|
+| **D30** | Every service wires its own CI runner; platform absorbs CI/CD at M4 | 2026-08-08 | ratified | parks platform's CI/CD claim until its M4 is built · does not move it | [↓](#d30--every-service-wires-its-own-runner) |
 | **D29** | Purge license at PROTOTYPE: append-only suspended for this stage | 2026-08-07 | ratified | suspends roll-never-prune / never-edited-away *for this stage only* · does not overrule them | [↓](#d29--purge-license-at-prototype) |
 | **D28** | C10 v2 + whole-record retraction | 2026-08-06 | ratified | joint row with storage · re-baselines **D20**'s parity bar | [↓](#d28--c10-v2--whole-record-retraction) |
 | **D27** | The heal ledger, and `created_at`/`updated_at` in storage | 2026-08-06 | ratified | joint row with storage · moves **D18**'s watermark axis | [↓](#d27--the-heal-ledger-and-created_atupdated_at) |
@@ -97,6 +98,37 @@ That is expected, and this register is built for it:
 | **D4** | The wearable is camera and mic only, with no speaker | 2026-07-09 | ratified | — | [↓](#d4--the-wearable-has-no-speaker) |
 | **D2** | Single-markdown doc protocol | 2026-07-09 | ratified | — | [↓](#d2--single-markdown-doc-protocol) |
 | **D1** | Platform is a ratified service | 2026-07-09 | ratified | — | [↓](#d1--platform-is-a-service) |
+
+### D30 — every service wires its own runner
+
+> `ratified` 2026-08-08 · parks the CI/CD clause of the
+> [platform CHARTER](services/platform/CHARTER.md) until its M4 is built
+> · recorded in [data-processing CHARTER](services/data-processing/CHARTER.md) §Scope
+> · first instance: `.github/workflows/dp-tests.yml`
+
+**In one line.** A service owns the runner for its own test suite, and platform's claim on CI/CD is
+parked until platform exists to exercise it.
+
+**What was decided**
+
+- Each service wires and owns a workflow that runs its own suite. That is service-local work, not
+  an escalation, and it needs no founders' ratification per service.
+- Platform keeps CI/CD in its charter. Its **M4** may absorb or replace these runners the day it is
+  built; until then the claim is parked rather than exercised.
+- This is where the architecture is heading regardless: services that deploy independently carry
+  their own pipelines, and one shared runner would be the coupling we are trying to avoid.
+- `docs-style.yml` and `dp-tests.yml` are the shape to copy.
+
+**Watch out for**
+
+- **Parked is not transferred.** Shared conventions, secrets and environments are still platform's
+  the day M4 lands, and every service runner is a migration target rather than a rival standard.
+- A suite needing a GPU, a model fleet or a secret does not belong on a hosted runner. DP's runs
+  because it is hermetic, which was checked before the file was written — check yours before
+  copying it.
+- **A runner is only as good as its readable failure.** DP's first red run reported nothing but an
+  exit code, because job logs need a token the repo does not hand out. Re-emit failures as
+  `::error::` lines so they land as annotations.
 
 ### D29 — purge license at PROTOTYPE
 
