@@ -17,6 +17,10 @@
   and all were taken 2026-08-08. The served video dialect and the suite count will go stale
   first.
 
+- **The instruments have no check.** All five share one `<script>` block, so a single syntax error
+  kills every one of them silently. That happened once, fixed 2026-08-08; nothing in the repo
+  would have caught it.
+
 The guide teaches one record per chunk, slots, identity, the version law, the graph and the three
 honesty states, the model-server fleet, durability and healing, the downstream day-log, the day-one
 workflow, and what is not built. Its instruments are a live record explorer, a dialect composer that

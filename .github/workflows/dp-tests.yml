@@ -1,0 +1,75 @@
+name: dp-tests
+
+# The Slot Law (D23) is executable: T-1…T-6 in the data-processing suite are its
+# teeth. This workflow runs them, so "a violation is a red test" is a fact about
+# the repository rather than about whoever remembered to run pytest before pushing.
+# Same shape as docs-style.yml: the rules, then the enforcement.
+#
+# Hermetic by construction — no GPU, no model fleet, no secrets, no network at test
+# time. The real-fleet e2e drills stay behind DP_E2E=1 and skip here; everything
+# else runs. Measured 2026-08-08: 569 passed, 4 skipped, ~55s.
+#
+# product/contracts/** is in the trigger because app/schemas.py validates against
+# those files: a contract edit can red this suite, and that is the break most worth
+# catching.
+
+on:
+  push:
+    paths:
+      - 'product/services/data-processing/**'
+      - 'product/contracts/**'
+      - '.github/workflows/dp-tests.yml'
+  pull_request:
+    paths:
+      - 'product/services/data-processing/**'
+      - 'product/contracts/**'
+      - '.github/workflows/dp-tests.yml'
+
+defaults:
+  run:
+    working-directory: product/services/data-processing
+
+jobs:
+  suite:
+    # Pinned, not ubuntu-latest: the video calibration fixtures assert exact
+    # ffmpeg output, so the decoder version is part of what is under test. The
+    # assertions were verified against three independent builds (conda-forge 7.1,
+    # BtbN static n7.1.5 and n6.1.2) on 2026-08-08, which is the range this pin
+    # sits inside — but a runner-image bump is still a deliberate act.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: product/services/data-processing/requirements.txt
+
+      # ffmpeg is the single canonical decoder (clipprep, delta, the clip fixtures);
+      # drawtext needs a fontconfig default for the typing calibration clips. Absent
+      # either, tests skip or error instead of running — install both.
+      - name: Install ffmpeg and a drawtext-capable font
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core
+          ffmpeg -version | head -1
+
+      # requirements.txt as declared, not a trimmed list: CI should fail if the
+      # file the service publishes no longer installs. faster-whisper is lazy-imported
+      # and no test loads it — installing it is what makes T-1's ASR_BACKEND cells a
+      # real claim that the knob is dead even when the backend is available.
+      - name: Install service requirements
+        run: pip install -r requirements.txt
+
+      - name: Run the suite — T-1…T-6 plus every unit and seam test
+        run: pytest -q
+
+      # A separate process from its own directory, on purpose. The framework tests
+      # reach the DP app/ modules through their own conftest and reach
+      # dp_servers_common through the cwd that `python -m pytest` puts on sys.path,
+      # so this is the one invocation that works without installing the package into
+      # the suite's environment — which is how the DP suite stays byte-identical.
+      - name: Run the model-server framework tests
+        working-directory: product/services/data-processing/servers/common
+        run: python -m pytest -q tests

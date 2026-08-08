@@ -723,7 +723,7 @@ the uncle | speaker-0: ...</code></pre>
   </div>
 
   <div class="note warn">
-    <p><b class="tag">Trap two: nothing runs these for you</b>The charter describes the law as enforced in continuous integration. Today the only automated workflow in the repository checks the style of markdown files; no runner executes this suite. The discipline is yours, before you push. This is listed again in the next section, because it is the kind of gap that quietly becomes untrue in both directions.</p>
+    <p><b class="tag">Trap two: the runner does not run everything</b>A workflow now runs this suite on every push that touches the service or the shared contracts, so the charter's "enforced" describes something real. What it deliberately does not run is the drills that need the real fleet, which skip on a machine with no GPUs, or the per-server suites, which need the model weights on disk. Those two are still yours, on the box, before you trust a change to a model server. And because the whole suite takes under a minute, waiting for a runner to tell you what you broke is a worse habit than asking it yourself.</p>
   </div>
 
   <h3>Goldens and drills</h3>
@@ -778,8 +778,8 @@ the uncle | speaker-0: ...</code></pre>
         <td>True at both ends. Storage resolves an adapter path and inference reads it and then never uses it; no adapter is ever loaded. Nothing in this service depends on it, but it is the reason the loop is not yet closed.</td>
       </tr>
       <tr>
-        <td><b>Nothing automatically runs the test suite</b></td>
-        <td>Found while writing this guide. The charter and the board both describe the law as enforced in continuous integration; the only workflow in the repository checks markdown style. The law is executable and the tests are real — but a human has to run them.</td>
+        <td><b>The suite's runner has never run</b></td>
+        <td>Found while writing this guide and closed the same day: a workflow now runs the suite on every push touching the service or the shared contracts. It has not executed on GitHub yet, so the green standing behind the charter's claim is still one somebody produced on the box.</td>
       </tr>
     </tbody>
   </table></div>

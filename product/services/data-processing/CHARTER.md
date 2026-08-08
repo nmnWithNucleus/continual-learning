@@ -143,8 +143,10 @@ reprocess is an upsert and not a duplicate.
 ## Slot Law (governance — the twelve laws of the pipeline)
 
 > **The law ([D23](../../DECISIONS.md)), executable via T-1…T-6 (`tests/`):** the test spine
-> enforces it in CI, the executor structurally emits one record per chunk, and the schema states
-> it — a violation is a red test, not a review note.
+> enforces it, the executor structurally emits one record per chunk, and the schema states it —
+> a violation is a red test, not a review note. The spine runs on every push touching this
+> service or the shared contracts
+> ([`dp-tests.yml`](../../../.github/workflows/dp-tests.yml)).
 
 - **L1 — Chunk purity.** A stage output is a pure function of this chunk's bytes plus code.
   Cross-chunk work belongs to continuum. No cross-chunk state in DP, ever.

@@ -4,7 +4,7 @@
 > Read [CHARTER.md](CHARTER.md) first (mission/scope/interfaces), then this file — the
 > volatile working record. Conventions: [../../ORG.md](../../ORG.md) § Documentation protocol.
 
-**Status:** built — v1 live on `main` · DP suite green · *Last updated:* 2026-08-07
+**Status:** built — v1 live on `main` · DP suite green · *Last updated:* 2026-08-08
 
 **Where we are.** The service ingests C1 chunks and writes **one C2 v1 record per chunk** —
 built from `content.slots`, one stage per slot, never edited ([CHARTER.md](CHARTER.md)
@@ -40,24 +40,41 @@ Open items only. Finished work leaves the board.
 | 6 | **Parity-apparatus retirement** — pointer only; the owed one-act retirement lives on the [storage board](../storage/HANDOFF.md) §Next 7. | storage-led |
 | 7 | **Pin `huggingface-hub` in `servers/ast/requirements.txt`** — see [the card below](#pinning-huggingface-hub-for-the-ast-server). | a deliberate pin decision |
 | 8 | **L9's shutdown clause names the wrong cause.** [Card below](#l9s-shutdown-clause-names-the-wrong-cause). | a charter edit; founders' call |
-| 9 | **"Enforced in CI" is not true yet.** Nothing runs `pytest`; the only workflow is `docs-style.yml`. [Card below](#enforced-in-ci-is-not-true-yet). | wire a runner, or reword |
+| 9 | **`dp-tests.yml` has never run on GitHub.** The runner is wired; today's green is local. [Card below](#dp-testsyml-has-never-run-on-github). | the next push |
 | 10 | **T-1 and T-3 are order-dependent in isolation.** [Card below](#t-1-and-t-3-are-order-dependent-in-isolation). | nothing; needs a registry-restoring fixture |
 
-### "Enforced in CI" is not true yet
+### `dp-tests.yml` has never run on GitHub
 
-> `designed` 2026-08-08 · surfaced while rewriting the onboarding field guide
+> `built` 2026-08-08
 
-**In one line.** [CHARTER.md](CHARTER.md) §Slot Law and this file's Gotchas both say the T-spine is
-enforced in CI, and nothing runs it.
+**In one line.** The suite has a runner,
+[`.github/workflows/dp-tests.yml`](../../../.github/workflows/dp-tests.yml), and it first executes
+on the next push — the green standing behind the charter's claim is still a local one.
 
-**Why it's this way** — the repository's only workflow is `docs-style.yml`, which runs
-`product/scripts/style_check.py` over markdown. No runner executes `pytest` for this service, so the
-law is enforced by whoever remembers to run the suite before pushing. The tests themselves are real
-and green; the claim about who runs them is what is wrong.
+**Why it's this way**
 
-**Watch out for** — closing this by wiring a runner and closing it by rewording the two documents
-are both honest, but they are different decisions. Pick one deliberately rather than letting the
-sentence stand.
+- The open choice was to wire a runner or to reword the two documents, and the suite decided it:
+  it is hermetic. A clean venv holding only `requirements.txt` runs 569 passed and 4 skipped in
+  55 seconds, with no GPU, no model fleet, no secrets and no network (measured 2026-08-08).
+- The real-fleet drills stay behind `DP_E2E=1` and skip on a runner, which is the whole reason the
+  rest of the suite is cheap enough to run on every push.
+- Rewording would have left the law enforced by whoever remembered to run `pytest`, which is the
+  habit [D23](../../DECISIONS.md) made a test spine to abolish.
+- Rewording also reaches further than two service documents: [D23](../../DECISIONS.md) and
+  [D25](../../DECISIONS.md) each assert CI enforcement in the ratified register, and editing a
+  ratified row is a founders' act rather than a service one.
+
+**Watch out for**
+
+- **The runner pins `ubuntu-24.04`**, not `ubuntu-latest`: the video fixtures assert exact ffmpeg
+  output, so the decoder version is under test. Verified against three independent builds
+  (conda-forge 7.1, BtbN static n7.1.5 and n6.1.2), so a runner-image bump is a deliberate act.
+- **CI/CD is platform's** ([charter](../platform/CHARTER.md)) and their M4 is unbuilt. This follows
+  `docs-style.yml`'s precedent rather than inventing a convention, and it is a migration target for
+  M4. A founder who reads it otherwise deletes one file.
+- `product/contracts/**` is in the trigger because `app/schemas.py` validates against those files.
+  A contract edit that reds this suite is the break most worth catching, and a service-only path
+  filter would have missed it.
 
 ### T-1 and T-3 are order-dependent in isolation
 
@@ -117,8 +134,9 @@ weight revisions, so a `huggingface-hub` drift passes unnoticed rather than bein
 
 ## Gotchas
 
-- **The law is executable.** `tests/` (T-1…T-6) enforce the Slot Law in CI; a violation is a red
-  test, not a review note. Run the suite before trusting a change to the executor or a stage.
+- **The law is executable.** `tests/` (T-1…T-6) enforce the Slot Law, and
+  [`dp-tests.yml`](../../../.github/workflows/dp-tests.yml) runs them on every push touching the
+  service. Run the suite locally too — the runner is the backstop, not the first reader.
 - **No output-affecting env knob exists** (L4). If you reach for an env var to change what a record
   says, stop — that is a code change (a `vS`/`vB` bump), and the determinism test will catch it.
 - **The inline ingest path is kept on purpose** as C8's skeleton; it is byte-identical to async for
