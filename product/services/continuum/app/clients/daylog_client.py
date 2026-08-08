@@ -7,20 +7,19 @@ the evolved C10). This client is where that boundary lives.
 
 Two implementations, one interface:
 
-  LocalDayLogClient   builds the day-log HERE, exactly as before — records from a
-                      provider (synthetic day, or the beta /context range read)
-                      through the same `build_daylog` + renderer. Byte-identical
-                      to the pre-2c inline path; the parity contract is unchanged.
+  LocalDayLogClient   builds the day-log HERE — records from a provider (a synthetic
+                      day, or the `/context` range read) through this service's own
+                      `build_daylog` + renderer.
   HttpDayLogClient    GETs the already-materialized day-log from storage
                       (`GET /training/daylog?user_id=&window_id=`, C10 v2).
 
 The `RecordProvider` seam is why the local client can stand in for storage without
 continuum knowing which it is talking to: records→day-log is fully behind the
-interface. **The local path is NOT deleted at the cutover** — it is the parity
-reference the storage-side differential diff is measured against (storage CHARTER
-M9, bar narrowed 2026-07-27), and it only goes once that diff is green. Which
-backend runs is a settings choice (`CONTINUUM_STORAGE_CLIENTS`), never a code
-change in the cycle.
+interface. **The local path is retained deliberately** — it is the parity reference
+the storage-side differential diff is measured against (storage CHARTER M9), and two
+independent renderers are the only thing that can catch a renderer defect. Which
+backend runs is a settings choice (`CONTINUUM_STORAGE_CLIENTS`), never a code change
+in the cycle.
 """
 from __future__ import annotations
 
@@ -133,15 +132,12 @@ class DayLogUnavailable(RuntimeError):
 # Widening this set is a code edit, reviewed alongside a re-run of storage's M9
 # differential proof, and the set is a TUPLE rather than a single value so a
 # deliberate two-dialect transition can be expressed here and nowhere else.
-# Widened "1" -> "2" at the Stage F cutover teaching (2026-08-07, the one licensed
-# continuum change of the DP rebuild): storage's slot-walk renderer ships
-# daylog_format_version "2" + recipe consolidation-v2.0 (D28), and the acceptance
-# evidence is the re-run of exactly the proof this comment demands — the D20/M9
-# differential re-baselined against the v2 renderer, 31 checks green over both
-# origins (storage/scripts/daylog_parity_diff.out.txt, committed at Stage E WP-E4).
-# "1" LEAVES the tuple in the same edit: the cutover wipe is fresh-forward (OD-2),
-# so a v1 body post-cutover can only be a stale or rolled-back storage — refusing
-# it is the net working, not a transition hazard.
+# The set is "2" alone. Storage's slot-walk renderer ships daylog_format_version "2"
+# with recipe consolidation-v2.0 (D28), and the acceptance evidence is exactly the
+# proof this comment demands: the D20/M9 differential, 31 checks green over both
+# window origins (storage/scripts/daylog_parity_diff.out.txt). An older format arriving
+# here can only mean a stale or rolled-back storage, and refusing it is the net
+# working rather than a hazard.
 SUPPORTED_DAYLOG_FORMAT_VERSIONS: tuple[str, ...] = ("2",)
 
 
@@ -312,8 +308,8 @@ class HttpDayLogClient:
 
         Re-hashing here would answer a different question ("do OUR bytes match")
         with the same name, and the field is defined as a self-comparison across
-        runs. At the cutover it changes once and that night re-runs, which is
-        correct: the input source genuinely changed."""
+        runs. When the renderer changes it moves once and that night re-runs, which
+        is correct: the input genuinely changed."""
         if daylog.content_fingerprint:
             return daylog.content_fingerprint
         return daylog_fingerprint(daylog)

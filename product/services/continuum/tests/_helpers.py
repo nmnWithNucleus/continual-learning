@@ -1,6 +1,6 @@
 """Shared test helpers.
 
-Two of them, and the second one is the D18 cutover's whole shape in miniature.
+Two of them, and the second one is the D18 seam's whole shape in miniature.
 
 `consolidate` — run one night from a fixed record list. `run_cycle` consumes a
 day-log CLIENT rather than raw records: continuum fetches the day-log, it does not

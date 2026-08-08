@@ -51,12 +51,12 @@ class Settings:
     storage_url: str       # every storage surface: C10 day-log + windows, C12, C13, C14
     http_timeout: float    # inter-service httpx timeout (seconds)
     # Which backend the three swappable storage seams use — day-log, recipe
-    # registry, reservoir. **"http" is the DEFAULT**: the D18 cutover IS continuum
+    # registry, reservoir. **"http" is the DEFAULT**: D18 makes continuum
     # talking to storage over the seam, and that is the path `scripts/seam_check.py`
     # proves end to end against the real service. A default that bypasses the seam
     # ships a configuration nobody exercises.
     # "local" is still selectable and is NOT dead code — it is the parity reference
-    # storage's narrowed M9 differential diff is measured against — but it only
+    # storage's M9 differential diff is measured against — but it only
     # answers "here are the records, render them" (an explicit `record_provider`).
     # It cannot source a TRAINING day-log itself: see `clients.day_log_client`.
     # The window ledger and the C12 profile read have no local backend and ignore

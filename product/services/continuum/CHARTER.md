@@ -16,9 +16,8 @@
 > unrecorded, silent breakage, or calling a thing BUILT when it is only ratified.
 > Full posture + what changes at dev/prod: [ARCHITECTURE.md](../../ARCHITECTURE.md) §Stage.
 
-**Status:** chartered · kicked off · learn-loop integration proven end to end, M0 met and the
-Phase-3 data-processing dogfood returned *pipeline sound* · **Last updated:** 2026-07-25.
-Lineage: [§How this charter got here](#how-this-charter-got-here).
+**Status:** chartered · the learn loop is proven end to end, M0 is met and the Phase-3
+data-processing dogfood returned *pipeline sound* · **Last verified against code:** 2026-08-08.
 
 ## Mission
 
@@ -226,8 +225,8 @@ Upstream: **Storage Service** (we read via C10). Downstream: **model directory �
 segment/block rows back. We no longer build it, and we no longer pull raw records to do so. Also
 consumed: window **enumeration** — which windows has this user consolidated, today inferred from
 the reservoir ledger (`cycle.py:204`), and the window-ledger open/close calls. The window itself
-is storage's `[last_trained_t, now−δ)` ingest-time watermark, so we no longer compute it from a
-local date, and `window_for()` / `closed_window_before()` are deleted. The `/sessions`
+is storage's `[last_trained_t, now−δ)` watermark on its own `updated_at` axis, so this service
+computes no window arithmetic at all: there is no `window_for()` and no local date. The `/sessions`
 (mentor-trace) leg of this row is unchanged and remains *unbuilt*.
 
 **On C12.** We use it for **nothing but** the scheduler's fire time. The window arithmetic needs no
@@ -338,16 +337,16 @@ published via C5 and **loaded in vLLM**, recall 0.267.
 **Engineering**
 
 9. ~~**Watermark semantics (part of C10's design).** Late-arriving or reprocessed records
-   (pipeline-version bumps) — does a cycle window close by wall-clock, by ingestion time, or both?~~
-   *Resolved ([D18](../../DECISIONS.md), 2026-07-26), by ingestion time.*
+   (pipeline-version bumps) — does a cycle window close by wall-clock, by the storage clock, or
+   both?~~ *Resolved ([D18](../../DECISIONS.md), 2026-07-26), on the storage clock.*
 
    **Why it's this way**
 
-   - The window is `[last_trained_t, now−δ)` on **storage's `ingest_time`**, which dissolves the
-     late-data question instead of answering it: a record's `ingest_time` is assigned at write, so
-     it can never land below a closed boundary. *Late data cannot exist on this axis*, and a
-     chunk captured Tuesday but uploaded Friday simply trains in Friday's window, in a block
-     anchored to Tuesday.
+   - The window is `[last_trained_t, now−δ)` on **storage's `updated_at`** ([D27](../../DECISIONS.md)),
+     which dissolves the late-data question instead of answering it: the stamp is assigned at
+     write, so a record can never land below a closed boundary. *Late data cannot exist on this
+     axis*, and a chunk captured Tuesday but uploaded Friday trains in Friday's window, in a
+     block anchored to Tuesday.
    - What we own downstream of that: **`last_trained_t` advances if and only if we publish**
      *(refined 2026-07-27)*. Gate failure, freeze, crash, no data and *too little* data all leave
      it, so the next window is a strict superset of the failed one.
@@ -368,15 +367,14 @@ published via C5 and **loaded in vLLM**, recall 0.267.
       `[last_trained_t, now)` — a plain UTC duration query, which retires
       `window_for(user, local_date, tz)` and its whole local-date-arithmetic class of bugs (23 h and
       25 h days, a repeated local date across the dateline colliding `window_id`).
-    - **That window change is `built` 2026-07-27** (`a5a48fb` storage · `1757efb` continuum ·
-      `2698b63` data-processing): `window_for()` and `closed_window_before()` are deleted,
-      `nightly.py` no longer calls them, and the window is storage's ingest-time watermark.
+    - **That window change is `built`** (2026-07-27): no window arithmetic exists in this
+      service, and the window is storage's `updated_at` watermark.
     - **`window_id` was settled by [D18](../../DECISIONS.md)** (2026-07-26): an opaque, path-safe,
       lexicographically-ordered token `w<YYYYMMDD>T<HHMMSS>Z`, minted once from the window's end
       instant, minted *only* by storage, and *parsed by nobody*.
-    - That deletes `Window.local_date` and `ReservoirEntry.local_window_date()` and, with them,
-      `cycle.py:217`'s reconstruction of prior windows under *tonight's* timezone. Prior windows are
-      enumerated from storage instead. Also `built` 2026-07-27.
+    - So there is no `Window.local_date`, no `local_window_date()`, and no reconstruction of a
+      prior window under *tonight's* timezone. Prior windows are enumerated from storage's ledger,
+      which is the only place their bounds exist. Also `built` 2026-07-27.
     - **Rendering** local times is not a scheduling concern at all — each record carries its own
       `device_tz`, so anchor lines are correct even for a day spent in another zone.
     - **Partly settled 2026-07-27 ([D19](../../DECISIONS.md)):** the trigger is a *cron per user at
@@ -462,29 +460,5 @@ protocol (manager notes + running logs) per [../../ORG.md](../../ORG.md).
   STaR/ReST-family filtered self-training; multi-LoRA serving (vLLM, S-LoRA, Punica) — serving side
   is Inference's, but adapter artifact shape must stay compatible.
 
-## How this charter got here
-
-- **2026-07-27 — the D18 re-cut is `built`.**
-  - **Was** — the storage re-cut and the C10 evolution were ratified and not built, and this
-    charter's status line said so.
-  - **Changed** — C10-evolved, C12, C13 and C14 all landed.
-  - **Now** — day-log construction, the recipe registry and the reservoir are storage's, and we
-    consume them.
-  - **Payoff** — continuum is the 5-verb loop the slimming described, rather than a service
-    describing an intention.
-- **2026-07-26 — D18 ratified the storage re-cut and the C10 evolution.**
-  - **Was** — the 2026-07-23 slimming was a proposal with no contract ids behind it.
-  - **Changed** — the founders' storage/C10 board ratified it and pinned C10-evolved, C12, C13 and
-    C14.
-  - **Now** — the counterpart data jobs sit in storage's scope, named by contract.
-  - **Payoff** — the boundary is a contract rather than a convention.
-- **2026-07-25 — the learn loop closed end to end.**
-  - **Was** — Morpheus was ported but the loop had never run through the real services.
-  - **Changed** — M0 was met, and the Phase-3 data-processing dogfood ran real data through
-    recording → DP → storage → continuum.
-  - **Now** — the Morpheus core is our nightly-consolidation engine
-    ([handoff/ws-morpheus-port.md](handoff/ws-morpheus-port.md)); the serve-time memory harness went
-    to inference; the day-log build, recipe registry and reservoir went to storage; and continuum is
-    a 5-verb loop.
-  - **Payoff** — the verdict was *pipeline sound*: our real services carry the learn loop without
-    losing learnability.
+*This charter's own history is in git. What it decided is in the cards above, in
+[DECISIONS.md](DECISIONS.md) and in [../../DECISIONS.md](../../DECISIONS.md).*

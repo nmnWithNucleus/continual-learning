@@ -62,12 +62,11 @@ class ReservoirEntry:
     path: str        # local backend only; the C14 ledger serves no bodies and no paths
     sha: str = ""   # corpus content hash — replay-mix stage keys hang off this
 
-    # `local_window_date()` was DELETED at the D18 cutover. It parsed the window id
-    # back into a date so a prior window could be *reconstructed* for a raw-day-log
-    # replay fetch — under tonight's timezone, which was wrong the moment a user
-    # travelled, and impossible the moment a window stopped being a local day (it
-    # can span 23 h, 25 h or 47 h). Prior windows are no longer reconstructed at
-    # all: they are ENUMERATED from storage's ledger
+    # There is deliberately NO `local_window_date()` here. Parsing a window id back
+    # into a date to *reconstruct* a prior window would resolve it under tonight's
+    # timezone — wrong the moment a user travels — and is impossible anyway, since a
+    # window can span 23 h, 25 h or 47 h. Prior windows are never reconstructed:
+    # they are ENUMERATED from storage's ledger
     # (`GET /training/windows?user_id=&state=consolidated`), which is why that read
     # is load-bearing rather than a convenience.
 

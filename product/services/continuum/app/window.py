@@ -1,7 +1,7 @@
 """The consolidation window — a value object storage RETURNS, never one we compute.
 
 D18 (2026-07-26) moved the window out of continuum entirely. The window is
-`[last_trained_t, now−δ)` on **storage's `ingest_time` axis**: storage owns the
+`[last_trained_t, now−δ)` on **storage's `updated_at` axis** (D27): storage owns the
 per-user watermark, mints the window durably and idempotently
 (`POST /training/windows` is a get-or-create of the user's open window), and
 serves the day-log for it. Continuum fetches; it does not derive.
@@ -11,7 +11,7 @@ What that deleted from this module, and why each deletion is load-bearing:
   * `window_for(user, local_day, tz)` — there is no local day any more. Under a
     watermark window a night can span 23 h, 25 h, or (after a missed night) 47 h,
     so naming a window by a local date would mean *synthesising* one, which both
-    reintroduces the timezone dependency the ingest-time query does not need and
+    reintroduces the timezone dependency the watermark query does not need and
     makes the id lie about the window's extent.
   * `closed_window_before(user, now, tz)` — "the most recent fully closed window"
     was continuum recomputing `now`. That is exactly what breaks crash-safe
@@ -44,15 +44,15 @@ class Window:
 
     Mirrors what `POST /training/windows` / `GET /training/windows` return, plus
     the C12 `home_tz` stamped on beside them (storage's ledger row does not carry
-    a zone — the window needs none, which is the whole point of the ingest-time
+    a zone — the window needs none, which is the whole point of a storage-clock
     watermark; the renderer's fallback does).
     """
 
     window_id: str        # OPAQUE token minted by storage. Compare with < / >=, never parse.
     user_id: str          # window_id is a PER-USER token, so it never travels alone
     tz: str               # the user's C12 home_tz — RENDER FALLBACK ONLY
-    start_utc: datetime   # ingest-time lower bound, inclusive
-    end_utc: datetime     # ingest-time upper bound, exclusive (half-open)
+    start_utc: datetime   # `updated_at` lower bound, inclusive
+    end_utc: datetime     # `updated_at` upper bound, exclusive (half-open)
     state: str = "open"   # "open" | "consolidated"
     outcome: str | None = None   # the cycle outcome recorded at close, if any
 
@@ -62,8 +62,8 @@ def in_window(t_start_utc: datetime, win: Window) -> bool:
 
     Used by the LOCAL day-log build (the parity reference), which buckets records
     it was handed by a provider. Storage's own materialization applies the same
-    half-open rule on its `ingest_time` axis; on that axis late data cannot exist,
-    because `ingest_time` is assigned at write and can never land below an
+    half-open rule on its `updated_at` axis; on that axis late data cannot exist,
+    because `updated_at` is assigned at write and can never land below an
     already-closed boundary.
     """
     return win.start_utc <= t_start_utc < win.end_utc

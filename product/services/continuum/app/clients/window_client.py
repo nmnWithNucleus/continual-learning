@@ -14,9 +14,8 @@ local arithmetic left a hole that only storage can fill:
                     admission.
   enumerate()       `GET /training/windows?user_id=&state=` — "which windows has
                     this user consolidated?". LOAD-BEARING, not a convenience:
-                    it is where prior windows come from now that
-                    `ReservoirEntry.local_window_date()` no longer rebuilds them
-                    from a parsed id under tonight's timezone.
+                    it is the only place prior windows can come from, since a
+                    window id is opaque and cannot be parsed back into bounds.
   close()           `POST /training/windows/{window_id}/close {outcome}` —
                     advances the watermark **iff the outcome is `published`**.
                     Gate failure, freeze, crash, no data and too-little data all
@@ -169,10 +168,10 @@ class HttpWindowLedger:
         same time — measured at 50% of the replay budget spent re-teaching text
         already in tonight's corpus.
 
-        This was the pre-cutover behaviour and it was lost by accident: the pool
-        used to come from `reservoir.entries()`, and `reservoir.admit()` is only
-        reached inside the gate-PASSED branch, so "published only" was implicit in
-        the source. Substituting the ledger made the filter explicit work.
+        The filter has to be EXPLICIT here. Sourcing the pool from
+        `reservoir.entries()` made "published only" implicit, because
+        `reservoir.admit()` is reached only inside the gate-PASSED branch; reading
+        the ledger instead means nothing enforces it unless this code does.
 
         `<` on the opaque id is the ONLY operation performed on it — the same
         comparison the reservoir's `before_window` filter and publish's alias

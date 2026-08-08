@@ -3,9 +3,9 @@
 `run_cycle`'s gate-passed tail is a sequence of side effects — `directory.publish()`,
 `state.record_pass()` / `state.strike()`, `reservoir.admit()` — and only THEN the
 journal's terminal record. Anything failing in that gap keeps every side effect and
-loses the record, so the retry re-enters the tail. The cutover made that likelier, not
-rarer: `reservoir.admit` became an HTTP POST to storage where it had been a local atomic
-file write.
+loses the record, so the retry re-enters the tail. Putting the reservoir behind HTTP
+makes that likelier rather than rarer: `reservoir.admit` is a POST to another service
+where a local write would have been atomic.
 
 The guard that was supposed to make re-entry safe is the journal's terminal key — but it
 descends from the day-log's `content_fingerprint`, so ANY legitimate re-materialization
